@@ -1,0 +1,255 @@
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+import psycopg2
+import os
+
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL is missing in .env file")
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+def get_connection():
+    return psycopg2.connect(DATABASE_URL)
+
+def init_db():
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS patients (
+        id SERIAL PRIMARY KEY,
+        patient_code TEXT NOT NULL,
+        name TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        age TEXT,
+        gender TEXT,
+        diagnosis TEXT NOT NULL,
+        condition TEXT,
+        status TEXT NOT NULL
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS results (
+        id SERIAL PRIMARY KEY,
+        patient_id TEXT NOT NULL,
+        test TEXT NOT NULL,
+        score REAL NOT NULL
+    );
+    """)
+
+    conn.commit()
+    conn.close()
+
+init_db()
+
+@app.get("/")
+def root():
+    return {"message": "Creative Motion Backend Running on PostgreSQL 🚀"}
+
+class Result(BaseModel):
+    patient_id: str
+    test: str
+    score: float
+
+class Patient(BaseModel):
+    patient_code: str
+    name: str
+    phone: str
+    age: str | None = ""
+    gender: str | None = ""
+    diagnosis: str
+    condition: str | None = ""
+    status: str = "Active"
+
+@app.post("/results")
+def save_result(result: Result):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        "INSERT INTO results (patient_id, test, score) VALUES (%s, %s, %s)",
+        (result.patient_id, result.test, result.score)
+    )
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "status": "saved_to_postgresql",
+        "data": result.dict()
+    }
+
+@app.get("/results")
+def get_results():
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, patient_id, test, score
+        FROM results
+        ORDER BY id DESC
+    """)
+    rows = cursor.fetchall()
+
+    conn.close()
+
+    return [
+        {
+            "id": row[0],
+            "patient_id": row[1],
+            "test": row[2],
+            "score": float(row[3]),
+        }
+        for row in rows
+    ]
+
+@app.get("/results/{patient_id}")
+def get_results_by_patient(patient_id: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, patient_id, test, score
+        FROM results
+        WHERE patient_id = %s
+        ORDER BY id DESC
+    """, (patient_id,))
+    rows = cursor.fetchall()
+
+    conn.close()
+
+    return [
+        {
+            "id": row[0],
+            "patient_id": row[1],
+            "test": row[2],
+            "score": float(row[3]),
+        }
+        for row in rows
+    ]
+
+@app.post("/patients")
+def save_patient(patient: Patient):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO patients (
+            patient_code, name, phone, age, gender, diagnosis, condition, status
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """,
+        (
+            patient.patient_code,
+            patient.name,
+            patient.phone,
+            patient.age,
+            patient.gender,
+            patient.diagnosis,
+            patient.condition,
+            patient.status
+        )
+    )
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "status": "patient_saved_to_postgresql",
+        "data": patient.dict()
+    }
+
+@app.get("/patients")
+def get_patients():
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, patient_code, name, phone, age, gender, diagnosis, condition, status
+        FROM patients
+        ORDER BY id DESC
+    """)
+    rows = cursor.fetchall()
+
+    conn.close()
+
+    return [
+        {
+            "id": row[0],
+            "patient_code": row[1],
+            "name": row[2],
+            "phone": row[3],
+            "age": row[4] or "",
+            "gender": row[5] or "",
+            "diagnosis": row[6],
+            "condition": row[7] or "",
+            "status": row[8],
+        }
+        for row in rows
+    ]
+
+@app.get("/patients/{patient_code}")
+def get_patient_by_code(patient_code: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT id, patient_code, name, phone, age, gender, diagnosis, condition, status
+        FROM patients
+        WHERE patient_code = %s
+    """, (patient_code,))
+    row = cursor.fetchone()
+
+    conn.close()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Patient not found")
+
+    return {
+        "id": row[0],
+        "patient_code": row[1],
+        "name": row[2],
+        "phone": row[3],
+        "age": row[4] or "",
+        "gender": row[5] or "",
+        "diagnosis": row[6],
+        "condition": row[7] or "",
+        "status": row[8],
+    }
+
+@app.delete("/cleanup/patients")
+def cleanup_fake_patients():
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        DELETE FROM patients
+        WHERE patient_code = 'string'
+           OR name = 'string'
+           OR phone = 'string'
+    """)
+
+    deleted_count = cursor.rowcount
+
+    conn.commit()
+    conn.close()
+
+    return {
+        "status": "cleanup_done",
+        "deleted_patients": deleted_count
+    }

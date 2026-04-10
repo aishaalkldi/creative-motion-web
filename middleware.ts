@@ -1,0 +1,38 @@
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+export function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl;
+  const authCookie = request.cookies.get("cm_auth")?.value;
+
+  const protectedRoutes = [
+    "/clinician",
+    "/live-results",
+    "/library",
+    "/sessions",
+  ];
+
+  const isProtected = protectedRoutes.some((route) =>
+    pathname.startsWith(route)
+  );
+
+  if (isProtected && authCookie !== "logged_in") {
+    return NextResponse.redirect(new URL("/login", request.url));
+  }
+
+  if (pathname === "/login" && authCookie === "logged_in") {
+    return NextResponse.redirect(new URL("/clinician", request.url));
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: [
+    "/clinician/:path*",
+    "/live-results",
+    "/library",
+    "/sessions",
+    "/login",
+  ],
+};
