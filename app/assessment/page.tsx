@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 
-export default function PatientAssessmentPage() {
+function PatientAssessmentContent() {
   const searchParams = useSearchParams();
 
   const patientId = searchParams.get("patientId") || "";
   const assessmentId = searchParams.get("assessmentId") || "";
 
-  const canStart = patientId && assessmentId;
+  const canStart = Boolean(patientId && assessmentId);
 
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
@@ -24,8 +25,8 @@ export default function PatientAssessmentPage() {
           </h1>
 
           <p className="mt-4 max-w-2xl text-sm leading-7 text-white/75 md:text-base">
-            Your clinician has sent you a movement assessment request.
-            Please complete this session using your phone, tablet, or computer.
+            Your clinician has sent you a movement assessment request. Please
+            complete this session using your phone, tablet, or computer.
           </p>
 
           <div className="mt-8 grid gap-4 md:grid-cols-2">
@@ -70,6 +71,34 @@ export default function PatientAssessmentPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function PatientAssessmentPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
+          <div className="mx-auto max-w-4xl">
+            <div className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-8 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+              <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-100">
+                Patient Assessment
+              </div>
+
+              <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
+                Loading Assessment...
+              </h1>
+
+              <p className="mt-4 text-sm leading-7 text-white/70 md:text-base">
+                Please wait while we load your assessment session.
+              </p>
+            </div>
+          </div>
+        </main>
+      }
+    >
+      <PatientAssessmentContent />
+    </Suspense>
   );
 }
 
