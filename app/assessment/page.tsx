@@ -21,7 +21,7 @@ function PatientAssessmentContent() {
           </div>
 
           <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
-            Complete Your Assessment
+            Assessment Session
           </h1>
 
           <p className="mt-4 max-w-2xl text-sm leading-7 text-white/75 md:text-base">
@@ -30,43 +30,38 @@ function PatientAssessmentContent() {
           </p>
 
           <div className="mt-8 grid gap-4 md:grid-cols-2">
-            <InfoCard label="Patient ID" value={patientId || "Not available"} />
+            <InfoCard label="Patient ID" value={patientId || "Not provided"} />
             <InfoCard
               label="Assessment ID"
-              value={assessmentId || "Not available"}
+              value={assessmentId || "Not provided"}
             />
           </div>
 
-          <div className="mt-8 rounded-[22px] border border-white/10 bg-white/[0.03] p-5">
-            <h2 className="text-xl font-semibold text-white">
-              Before you begin
-            </h2>
-
-            <ul className="mt-4 space-y-2 text-sm leading-7 text-white/70">
-              <li>• Make sure you have enough space to move safely.</li>
-              <li>• Place your device where your body can be seen clearly.</li>
-              <li>• Allow camera access when requested.</li>
-              <li>• Follow the on-screen instructions carefully.</li>
-            </ul>
-          </div>
-
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             {canStart ? (
               <Link
-                href={`/body-axis-ai?patientId=${patientId}&assessmentId=${assessmentId}`}
-                className="rounded-2xl bg-cyan-400 px-6 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
+                href={`/body-axis-ai?patientId=${encodeURIComponent(
+                  patientId
+                )}&assessmentId=${encodeURIComponent(assessmentId)}`}
+                className="rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 text-center font-semibold text-black transition hover:scale-[1.02]"
               >
                 Start Assessment
               </Link>
             ) : (
               <button
-                type="button"
                 disabled
-                className="rounded-2xl bg-white/10 px-6 py-3 font-semibold text-white/50"
+                className="cursor-not-allowed rounded-xl bg-white/10 px-5 py-3 text-center font-semibold text-white/50"
               >
                 Missing Assessment Data
               </button>
             )}
+
+            <Link
+              href="/login"
+              className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-center font-semibold text-white transition hover:bg-white/10"
+            >
+              Back to Login
+            </Link>
           </div>
         </div>
       </div>
@@ -110,9 +105,9 @@ function InfoCard({
   value: string;
 }) {
   return (
-    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-      <p className="text-sm text-white/60">{label}</p>
-      <p className="mt-2 text-base font-semibold text-white">{value}</p>
+    <div className="rounded-2xl border border-white/10 bg-[#0F172A] p-4">
+      <p className="text-sm text-slate-400">{label}</p>
+      <p className="mt-2 font-medium text-white">{value}</p>
     </div>
   );
 }

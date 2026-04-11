@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   getAssessmentById,
@@ -13,7 +13,7 @@ type RemoteAssessmentType =
   | "Outcome Measures"
   | "Voice Intake";
 
-export default function RemoteRequestPage() {
+function RemoteRequestContent() {
   const searchParams = useSearchParams();
 
   const patientId = searchParams.get("patientId") || "";
@@ -29,7 +29,7 @@ export default function RemoteRequestPage() {
   const [generatedLink, setGeneratedLink] = useState("");
 
   const patientAccessLink = useMemo(() => {
-    if (!patientId || !assessmentId) return "";
+    if (!patientId || !assessmentId || typeof window === "undefined") return "";
     return `${window.location.origin}/assessment?patientId=${patientId}&assessmentId=${assessmentId}`;
   }, [patientId, assessmentId]);
 
@@ -47,9 +47,11 @@ export default function RemoteRequestPage() {
       bodyRegion: existingAssessment?.bodyRegion || "Full Body",
       side: existingAssessment?.side || "Not Applicable",
       visitType: existingAssessment?.visitType || "Follow-Up",
-      sessionLabel: existingAssessment?.sessionLabel || "Remote Assessment Request",
+      sessionLabel:
+        existingAssessment?.sessionLabel || "Remote Assessment Request",
       status: "pending_review",
       createdAt: existingAssessment?.createdAt || new Date().toISOString(),
+      score: existingAssessment?.score,
     });
 
     setGeneratedLink(patientAccessLink);
@@ -188,6 +190,26 @@ export default function RemoteRequestPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+export default function RemoteRequestPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
+          <div className="mx-auto max-w-7xl">
+            <div className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6">
+              <h1 className="text-2xl font-bold text-cyan-300">
+                Loading request...
+              </h1>
+            </div>
+          </div>
+        </main>
+      }
+    >
+      <RemoteRequestContent />
+    </Suspense>
   );
 }
 
