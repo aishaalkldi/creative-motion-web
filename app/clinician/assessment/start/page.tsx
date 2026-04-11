@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   createAssessmentId,
   saveAssessmentToStorage,
 } from "../../../lib/assessments-storage";
 
-export default function StartAssessmentPage() {
+function StartAssessmentPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -221,5 +222,13 @@ function SummaryCard({
       <p className="text-sm text-white/60">{label}</p>
       <p className="mt-2 text-base font-semibold text-white">{value}</p>
     </div>
+  );
+}
+
+export default function StartAssessmentPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-white">Loading...</div>}>
+      <StartAssessmentPageContent />
+    </Suspense>
   );
 }

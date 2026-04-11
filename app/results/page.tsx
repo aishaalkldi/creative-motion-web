@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { getAssessmentById } from "../lib/assessments-storage";
 
-export default function ResultsPage() {
+function ResultsPageContent() {
   const searchParams = useSearchParams();
 
   const patientId = searchParams.get("patientId") || "—";
@@ -42,7 +43,8 @@ export default function ResultsPage() {
             </h1>
 
             <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70 md:text-base">
-              Review findings, confirm the linked assessment session, and continue to the next clinical decision.
+              Review findings, confirm the linked assessment session, and continue
+              to the next clinical decision.
             </p>
           </div>
 
@@ -66,7 +68,9 @@ export default function ResultsPage() {
         <section className="grid gap-6 xl:grid-cols-[1.2fr_0.85fr]">
           <div className="space-y-6">
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-              <h2 className="text-2xl font-bold text-white">Assessment Summary</h2>
+              <h2 className="text-2xl font-bold text-white">
+                Assessment Summary
+              </h2>
 
               <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 <InfoCard label="Patient ID" value={patientId} />
@@ -95,19 +99,25 @@ export default function ResultsPage() {
                     </span>
                   ))
                 ) : (
-                  <p className="text-sm text-white/60">No tests were selected.</p>
+                  <p className="text-sm text-white/60">
+                    No tests were selected.
+                  </p>
                 )}
               </div>
             </section>
 
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-              <h2 className="text-2xl font-bold text-white">Clinical Interpretation</h2>
+              <h2 className="text-2xl font-bold text-white">
+                Clinical Interpretation
+              </h2>
 
               <div className="mt-5 rounded-[20px] border border-white/10 bg-white/[0.03] p-5">
                 <p className="text-sm leading-8 text-white/75">
-                  This page is now linked to the actual assessment session created for the selected patient.
-                  The saved setup confirms the selected tests, the visit context, and the clinical mode used for this evaluation.
-                  The next step is to review findings, assign the appropriate program, and track progress across future sessions.
+                  This page is now linked to the actual assessment session created
+                  for the selected patient. The saved setup confirms the selected
+                  tests, the visit context, and the clinical mode used for this
+                  evaluation. The next step is to review findings, assign the
+                  appropriate program, and track progress across future sessions.
                 </p>
               </div>
             </section>
@@ -117,8 +127,12 @@ export default function ResultsPage() {
 
               <div className="mt-5 rounded-[20px] border border-white/10 bg-white/[0.03] p-5">
                 <p className="text-sm leading-8 text-white/70">
-                  Session type: {mode}. Body region: {bodyRegion}. Side: {side}. Visit type: {visitType}.
-                  This result record is tied to assessment <span className="font-semibold text-white">{assessmentId}</span> for patient{" "}
+                  Session type: {mode}. Body region: {bodyRegion}. Side: {side}.
+                  Visit type: {visitType}. This result record is tied to assessment{" "}
+                  <span className="font-semibold text-white">
+                    {assessmentId}
+                  </span>{" "}
+                  for patient{" "}
                   <span className="font-semibold text-white">{patientId}</span>.
                 </p>
               </div>
@@ -140,7 +154,9 @@ export default function ResultsPage() {
             </section>
 
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-              <h2 className="text-2xl font-bold text-white">Recommended Next Actions</h2>
+              <h2 className="text-2xl font-bold text-white">
+                Recommended Next Actions
+              </h2>
 
               <div className="mt-5 space-y-3">
                 <ActionBox text="Review assessment findings and confirm clinical interpretation" />
@@ -172,21 +188,6 @@ export default function ResultsPage() {
   );
 }
 
-function formatTestLabel(test: string) {
-  switch (test) {
-    case "observation":
-      return "Observation";
-    case "rom":
-      return "ROM Assessment";
-    case "functional":
-      return "Functional Assessment";
-    case "ai-vision":
-      return "AI Vision Assessment";
-    default:
-      return test;
-  }
-}
-
 function InfoCard({
   label,
   value,
@@ -204,8 +205,35 @@ function InfoCard({
 
 function ActionBox({ text }: { text: string }) {
   return (
-    <div className="rounded-[18px] border border-white/10 bg-white/[0.03] px-4 py-4 text-sm leading-6 text-white/75">
-      {text}
+    <div className="rounded-[18px] border border-white/10 bg-white/[0.03] p-4">
+      <p className="text-sm leading-7 text-white/75">{text}</p>
     </div>
+  );
+}
+
+function formatTestLabel(test: string) {
+  switch (test) {
+    case "squat":
+      return "Squat Analysis";
+    case "balance":
+      return "Balance Test";
+    case "gait":
+      return "Gait Screening";
+    case "posture":
+      return "Posture Analysis";
+    case "rom":
+      return "Range of Motion";
+    case "voice":
+      return "Voice Intake";
+    default:
+      return test;
+  }
+}
+
+export default function ResultsPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-white">Loading results...</div>}>
+      <ResultsPageContent />
+    </Suspense>
   );
 }

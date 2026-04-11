@@ -1,290 +1,136 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import {
-  getAssessmentById,
-  saveAssessmentToStorage,
-  type StoredAssessment,
-} from "../lib/assessments-storage";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
-export default function BodyAxisAIPage() {
-  const router = useRouter();
+function BodyAxisAIPageContent() {
   const searchParams = useSearchParams();
 
-  const patientId = searchParams.get("patientId") || "";
-  const assessmentId = searchParams.get("assessmentId") || "";
+  const patientId = searchParams.get("patientId") || "UNKNOWN";
+  const patientName = searchParams.get("patientName") || "Unknown Patient";
+  const test = searchParams.get("test") || "squat";
+  const assessmentId = searchParams.get("assessmentId") || "AX-1001";
 
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  const [assessment, setAssessment] = useState<StoredAssessment | null>(null);
-  const [cameraStarted, setCameraStarted] = useState(false);
-  const [cameraError, setCameraError] = useState("");
-  const [captured, setCaptured] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [loadingCamera, setLoadingCamera] = useState(false);
+  const finalScore = 85;
 
-  useEffect(() => {
-    if (!assessmentId) return;
-    const found = getAssessmentById(assessmentId);
-    if (found) setAssessment(found);
-  }, [assessmentId]);
-
-  useEffect(() => {
-    return () => {
-      stopCamera();
-    };
-  }, []);
-
-  async function startCamera() {
-    setCameraError("");
-    setLoadingCamera(true);
-
+  const handleGenerateMockResult = async () => {
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error("Camera API is not supported in this browser.");
-      }
+      setLoading(true);
 
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: false,
+      const response = await fetch("http://127.0.0.1:8000/results", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          patient_id: patientId,
+          test,
+          score: finalScore,
+        }),
       });
 
-      streamRef.current = stream;
-
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.muted = true;
-        videoRef.current.playsInline = true;
-        await videoRef.current.play();
+      if (!response.ok) {
+        throw new Error("Failed to save result");
       }
 
-      setCameraStarted(true);
-    } catch {
-      setCameraError(
-        "Unable to access camera. Please allow camera permission and refresh the page."
-      );
-      setCameraStarted(false);
+      await response.json();
+      setSaved(true);
+      alert(`Assessment saved to file number ${patientId} ✅`);
+    } catch (error) {
+      console.error(error);
+      alert("Failed to save result ❌");
     } finally {
-      setLoadingCamera(false);
+      setLoading(false);
     }
-  }
-
-  function stopCamera() {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-
-    setCameraStarted(false);
-  }
-
-  function handleCaptureComplete() {
-    if (!cameraStarted) {
-      alert("Start the camera first");
-      return;
-    }
-
-    setCaptured(true);
-    alert("Capture marked as completed");
-  }
-
-  function generateMockScore() {
-    return Math.floor(70 + Math.random() * 26);
-  }
-
-  function handleSubmitResult() {
-    if (!patientId || !assessmentId) {
-      alert("Missing patient or assessment ID");
-      return;
-    }
-
-    if (!assessment) {
-      alert("Assessment not found");
-      return;
-    }
-
-    setSubmitting(true);
-
-    const mockScore = generateMockScore();
-
-    const updatedAssessment: StoredAssessment = {
-      ...assessment,
-      status: "completed",
-      score: mockScore,
-      selectedTests:
-        assessment.selectedTests.length > 0
-          ? assessment.selectedTests
-          : ["AI Vision Assessment"],
-    };
-
-    saveAssessmentToStorage(updatedAssessment);
-
-    stopCamera();
-
-    setTimeout(() => {
-      router.push(
-        `/assessment/success?patientId=${patientId}&assessmentId=${assessmentId}`
-      );
-    }, 400);
-  }
+  };
 
   return (
-    <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
+    <main className="min-h-screen bg-[#0B1220] px-6 py-20 text-white">
       <div className="mx-auto max-w-6xl">
-        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-100">
-              Body Axis AI
-            </div>
-
-            <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
-              AI Vision Assessment
-            </h1>
-
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70 md:text-base">
-              Follow the instructions below and complete your movement capture.
-            </p>
-
-            <p className="mt-3 text-sm text-white/60">
-              Patient ID: {patientId || "—"} | Assessment ID: {assessmentId || "—"}
-            </p>
-          </div>
-
-          <Link
-            href={
-              patientId && assessmentId
-                ? `/assessment?patientId=${patientId}&assessmentId=${assessmentId}`
-                : "/assessment"
-            }
-            className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-          >
-            ← Back
-          </Link>
+        <div className="mb-8">
+          <p className="mb-3 inline-block rounded-full bg-cyan-400/10 px-4 py-1 text-sm text-cyan-300">
+            Body Axis AI
+          </p>
+          <h1 className="text-4xl font-bold text-cyan-300">
+            {formatTestTitle(test)}
+          </h1>
+          <p className="mt-2 max-w-3xl leading-7 text-slate-300">
+            AI-assisted assessment linked directly to the patient file number for
+            structured clinical review and progress tracking.
+          </p>
         </div>
 
-        <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-            <h2 className="text-2xl font-bold text-white">Camera Capture</h2>
+        <div className="grid gap-6 lg:grid-cols-[1.3fr_0.55fr]">
+          <section className="rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-md">
+            <h2 className="mb-5 text-2xl font-semibold text-white">
+              Assessment Instructions
+            </h2>
 
-            <div className="mt-6 overflow-hidden rounded-[24px] border border-white/10 bg-black/30">
-              <div className="relative h-[360px] w-full">
-                {!cameraStarted && !loadingCamera && (
-                  <div className="absolute inset-0 flex items-center justify-center text-white/50">
-                    Camera not started
-                  </div>
-                )}
-
-                {loadingCamera && (
-                  <div className="absolute inset-0 flex items-center justify-center text-white/60">
-                    Starting camera...
-                  </div>
-                )}
-
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="h-full w-full object-cover"
-                />
-              </div>
+            <div className="rounded-2xl border border-white/10 bg-[#0F172A] p-5">
+              <p className="text-slate-300">{getInstructionByTest(test)}</p>
             </div>
 
-            {cameraError && (
-              <div className="mt-4 rounded-2xl border border-red-300/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">
-                {cameraError}
+            <div className="mt-6 rounded-2xl border border-dashed border-cyan-400/30 bg-cyan-400/5 p-10 text-center">
+              <p className="text-lg font-semibold text-cyan-300">
+                Camera / Video Input Placeholder
+              </p>
+              <p className="mt-2 text-sm text-slate-400">
+                In the next stage, this section can connect to live camera, uploaded
+                video, or AI motion analysis output.
+              </p>
+            </div>
+          </section>
+
+          <aside className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md">
+            <h2 className="mb-5 text-2xl font-semibold text-white">
+              Assessment Info
+            </h2>
+
+            <div className="space-y-4">
+              <InfoBox label="Patient Name" value={patientName} />
+              <InfoBox label="File Number" value={patientId} />
+              <InfoBox label="Assessment ID" value={assessmentId} />
+              <InfoBox label="Test Type" value={formatTestTitle(test)} />
+            </div>
+
+            <button
+              onClick={handleGenerateMockResult}
+              disabled={loading}
+              className="mt-6 w-full rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 font-semibold text-black transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {loading ? "Saving Result..." : "Generate Mock Result"}
+            </button>
+
+            <Link
+              href={`/clinician/patients/${encodeURIComponent(patientId)}`}
+              className="mt-3 block w-full rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-center font-semibold text-white transition hover:bg-white/10"
+            >
+              Back to Patient Profile
+            </Link>
+
+            {saved && (
+              <div className="mt-4 rounded-2xl border border-green-400/20 bg-green-400/10 p-4">
+                <p className="text-sm text-green-300">
+                  Result saved successfully to file number {patientId}.
+                </p>
+                <p className="mt-2 text-sm text-slate-300">
+                  Score:{" "}
+                  <span className="font-semibold text-white">{finalScore}%</span>
+                </p>
               </div>
             )}
-
-            <div className="mt-6 flex flex-wrap gap-3">
-              {!cameraStarted ? (
-                <button
-                  type="button"
-                  onClick={startCamera}
-                  className="rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
-                >
-                  Start Camera
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={stopCamera}
-                  className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 font-semibold text-white transition hover:bg-white/10"
-                >
-                  Stop Camera
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={handleCaptureComplete}
-                className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 font-semibold text-white transition hover:bg-white/10"
-              >
-                Mark Capture Complete
-              </button>
-
-              <button
-                type="button"
-                onClick={handleSubmitResult}
-                disabled={!captured || submitting}
-                className="rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:bg-white/15 disabled:text-white/45"
-              >
-                {submitting ? "Submitting..." : "Submit Result"}
-              </button>
-            </div>
-          </div>
-
-          <aside className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-            <h2 className="text-2xl font-bold text-white">Assessment Guidance</h2>
-
-            <div className="mt-5 space-y-4">
-              <InfoCard
-                label="Assessment Type"
-                value={
-                  assessment?.selectedTests?.[0]
-                    ? assessment.selectedTests[0]
-                    : "AI Vision Assessment"
-                }
-              />
-              <InfoCard
-                label="Session Label"
-                value={assessment?.sessionLabel || "Remote Assessment"}
-              />
-              <InfoCard
-                label="Status"
-                value={captured ? "Capture Completed" : "Pending Capture"}
-              />
-            </div>
-
-            <div className="mt-6 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-              <h3 className="text-base font-semibold text-cyan-300">
-                Instructions
-              </h3>
-
-              <ol className="mt-4 space-y-2 text-sm leading-7 text-white/70">
-                <li>1. Place your device where your body is clearly visible.</li>
-                <li>2. Press Start Camera.</li>
-                <li>3. Allow camera permission if the browser asks.</li>
-                <li>4. Perform the requested movement.</li>
-                <li>5. Mark capture complete.</li>
-                <li>6. Submit the result.</li>
-              </ol>
-            </div>
           </aside>
-        </section>
+        </div>
       </div>
     </main>
   );
 }
 
-function InfoCard({
+function InfoBox({
   label,
   value,
 }: {
@@ -292,9 +138,47 @@ function InfoCard({
   value: string;
 }) {
   return (
-    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-      <p className="text-sm text-white/60">{label}</p>
-      <p className="mt-2 text-base font-semibold text-white">{value}</p>
+    <div className="rounded-2xl border border-white/10 bg-[#0F172A] p-4">
+      <p className="text-sm text-slate-400">{label}</p>
+      <p className="mt-2 font-medium text-white">{value}</p>
     </div>
+  );
+}
+
+function formatTestTitle(test: string) {
+  switch (test) {
+    case "gait":
+      return "Gait Screening";
+    case "balance":
+      return "Balance Test";
+    case "squat":
+      return "Squat Analysis";
+    case "posture":
+      return "Posture Analysis";
+    default:
+      return "Assessment";
+  }
+}
+
+function getInstructionByTest(test: string) {
+  switch (test) {
+    case "gait":
+      return "Ask the patient to walk naturally while the system evaluates gait pattern and lower-limb control.";
+    case "balance":
+      return "Ask the patient to maintain balance in the required position while stability and postural control are reviewed.";
+    case "squat":
+      return "Ask the patient to perform a controlled squat while alignment, compensation, and movement quality are reviewed.";
+    case "posture":
+      return "Ask the patient to stand naturally while posture alignment and body symmetry are assessed.";
+    default:
+      return "Ask the patient to follow the assessment instructions while the system captures movement performance.";
+  }
+}
+
+export default function BodyAxisAIPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-white">Loading...</div>}>
+      <BodyAxisAIPageContent />
+    </Suspense>
   );
 }
