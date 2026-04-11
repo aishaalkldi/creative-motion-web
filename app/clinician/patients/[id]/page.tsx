@@ -1,110 +1,107 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-
-type Patient = {
-  id: number;
-  patient_code: string;
-  name: string;
-  phone: string;
-  age?: string;
-  gender?: string;
-  diagnosis: string;
-  condition?: string;
-  status: string;
-};
-
-type PatientResult = {
-  id: number;
-  patient_id: string;
-  test: string;
-  score: number;
-};
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import {
+  getStoredPatients,
+  type StoredPatient,
+} from "../../../lib/patients-storage";
+import {
+  createAssessmentId,
+  getAssessmentsByPatientId,
+  saveAssessmentToStorage,
+  type StoredAssessment,
+} from "../../../lib/assessments-storage";
 
 export default function PatientProfilePage() {
   const params = useParams();
-  const patientCode = String(params.id || "");
+  const router = useRouter();
+  const id = String(params.id || "");
 
-  const [patient, setPatient] = useState<Patient | null>(null);
-  const [results, setResults] = useState<PatientResult[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [patient, setPatient] = useState<StoredPatient | null>(null);
+  const [assessments, setAssessments] = useState<StoredAssessment[]>([]);
 
   useEffect(() => {
-    if (!patientCode) return;
+    const patients = getStoredPatients();
+    const foundPatient = patients.find((p) => p.id === id) || null;
+    setPatient(foundPatient);
 
-    async function loadPageData() {
-      try {
-        const patientRes = await fetch(
-          `http://127.0.0.1:8000/patients/${patientCode}`
-        );
+    const patientAssessments = getAssessmentsByPatientId(id);
+    setAssessments(patientAssessments);
+  }, [id]);
 
-        if (!patientRes.ok) {
-          throw new Error("Patient not found");
-        }
+  const latestAssessment = useMemo(() => {
+    if (assessments.length === 0) return null;
+    return assessments[0];
+  }, [assessments]);
 
-        const patientData = await patientRes.json();
-        setPatient(patientData);
+  const latestRemoteAssessment = useMemo(() => {
+    return assessments.find((item) => item.mode === "remote") || null;
+  }, [assessments]);
 
-        const resultsRes = await fetch("http://127.0.0.1:8000/results");
-
-        if (resultsRes.ok) {
-          const allResults = await resultsRes.json();
-
-          const patientResults = allResults
-            .filter((r: PatientResult) => r.patient_id === patientCode)
-            .sort((a: PatientResult, b: PatientResult) => b.id - a.id);
-
-          setResults(patientResults);
-        } else {
-          setResults([]);
-        }
-      } catch (error) {
-        console.error("Failed to load patient page:", error);
-        setPatient(null);
-        setResults([]);
-      } finally {
-        setLoading(false);
-      }
+  function handleCreateRemoteRequest() {
+    if (!patient) {
+      alert("Patient not found");
+      return;
     }
 
-    loadPageData();
-  }, [patientCode]);
+    const assessmentId = createAssessmentId();
 
-  const latestResult = useMemo(() => {
-    if (!results.length) return null;
-    return results[0];
-  }, [results]);
+    saveAssessmentToStorage({
+      id: assessmentId,
+      patientId: patient.id,
+      mode: "remote",
+      selectedTests: [],
+      bodyRegion: "Full Body",
+      side: "Not Applicable",
+      visitType: "Follow-Up",
+      sessionLabel: "Remote Assessment Request",
+      status: "draft",
+      createdAt: new Date().toISOString(),
+    });
 
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-[#0B1220] px-6 py-20 text-white">
-        <div className="mx-auto max-w-6xl">
-          <p className="text-slate-300">Loading patient profile...</p>
-        </div>
-      </main>
+    router.push(
+      `/clinician/request?patientId=${patient.id}&assessmentId=${assessmentId}`
     );
+  }
+
+  async function handleCopyLatestLink() {
+    if (!latestRemoteAssessment || !patient) {
+      alert("No remote assessment link available");
+      return;
+    }
+
+    const link = `${window.location.origin}/assessment?patientId=${patient.id}&assessmentId=${latestRemoteAssessment.id}`;
+
+    try {
+      await navigator.clipboard.writeText(link);
+      alert("Latest link copied successfully");
+    } catch {
+      alert("Failed to copy link");
+    }
   }
 
   if (!patient) {
     return (
-      <main className="min-h-screen bg-[#0B1220] px-6 py-20 text-white">
-        <div className="mx-auto max-w-6xl">
-          <Link
-            href="/clinician/patients"
-            className="mb-6 inline-block text-cyan-300 hover:text-cyan-200"
-          >
-            ← Back to All Patients
-          </Link>
-
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-8">
-            <h1 className="text-3xl font-bold text-red-300">
-              Patient Not Found
+      <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
+        <div className="mx-auto max-w-5xl">
+          <div className="rounded-[28px] border border-white/10 bg-white/[0.04] p-8">
+            <h1 className="text-3xl font-bold text-cyan-300">
+              Patient not found
             </h1>
-            <p className="mt-3 text-slate-300">
+            <p className="mt-3 text-white/70">
               No patient record was found for this ID.
             </p>
+
+            <div className="mt-6">
+              <Link
+                href="/clinician/patients"
+                className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                ← Back to Patients
+              </Link>
+            </div>
           </div>
         </div>
       </main>
@@ -112,191 +109,295 @@ export default function PatientProfilePage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#0B1220] px-6 py-20 text-white">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-8">
+    <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-100">
+              Patient Profile
+            </div>
+
+            <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
+              {patient.fullName}
+            </h1>
+
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70 md:text-base">
+              Review patient context, choose the assessment path, and continue the rehabilitation workflow from one central clinical page.
+            </p>
+          </div>
+
           <Link
             href="/clinician/patients"
-            className="inline-block text-cyan-300 transition hover:text-cyan-200"
+            className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
           >
-            ← Back to All Patients
+            ← Back to Patients
           </Link>
         </div>
 
-        <section className="mb-8 rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-md">
-          <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-            <div>
-              <p className="mb-3 inline-block rounded-full bg-cyan-400/10 px-4 py-1 text-sm text-cyan-300">
-                Patient Profile
+        <section className="grid gap-6 xl:grid-cols-[1.35fr_0.85fr]">
+          <div className="space-y-6">
+            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Patient Header</h2>
+                  <p className="mt-2 text-sm text-white/70">
+                    Core patient identity and current case context.
+                  </p>
+                </div>
+
+                <span className="rounded-full border border-cyan-300/15 bg-cyan-400/10 px-4 py-2 text-sm text-cyan-100">
+                  {patient.status}
+                </span>
+              </div>
+
+              <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <InfoCard label="Patient ID" value={patient.id} />
+                <InfoCard
+                  label="Age / Sex"
+                  value={`${patient.age || "—"} / ${patient.gender || "—"}`}
+                />
+                <InfoCard
+                  label="Primary Complaint"
+                  value={patient.diagnosis || "—"}
+                />
+                <InfoCard
+                  label="Last Assessment"
+                  value={
+                    latestAssessment?.createdAt
+                      ? new Date(latestAssessment.createdAt).toLocaleDateString()
+                      : "—"
+                  }
+                />
+                <InfoCard
+                  label="Current Phase"
+                  value={latestAssessment ? "Assessment Recorded" : "Initial Setup"}
+                />
+                <InfoCard label="Case Status" value={patient.status} />
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+              <h2 className="text-2xl font-bold text-white">Assessment Actions</h2>
+              <p className="mt-2 text-sm leading-7 text-white/70">
+                Choose the next clinical action for this patient.
               </p>
-              <h1 className="text-4xl font-bold text-cyan-300">
-                {patient.name}
-              </h1>
-              <p className="mt-2 text-slate-300">
-                {patient.patient_code} • {patient.diagnosis}
-              </p>
-            </div>
 
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Link
-                href={`/body-axis-ai?patientId=${encodeURIComponent(
-                  patient.patient_code
-                )}&patientName=${encodeURIComponent(
-                  patient.name
-                )}&test=posture&assessmentId=AX-1001`}
-                className="rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 text-center font-semibold text-black transition hover:scale-[1.02]"
-              >
-                Start Assessment
-              </Link>
+              <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <Link
+                  href={`/clinician/assessment/start?patientId=${patient.id}`}
+                  className="rounded-[22px] border border-cyan-300/18 bg-[#123a8a]/25 p-4 transition hover:border-cyan-300/35 hover:bg-[#123a8a]/35"
+                >
+                  <h3 className="text-base font-semibold text-white">
+                    Start Assessment
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-white/70">
+                    Continue with in-clinic or remote assessment workflow.
+                  </p>
+                </Link>
 
-              <Link
-                href="/sessions"
-                className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-center font-semibold text-white transition hover:bg-white/10"
-              >
-                View Sessions
-              </Link>
-            </div>
-          </div>
-        </section>
+                <button
+                  type="button"
+                  onClick={handleCreateRemoteRequest}
+                  className="rounded-[22px] border border-cyan-300/18 bg-[#123a8a]/25 p-4 text-left transition hover:border-cyan-300/35 hover:bg-[#123a8a]/35"
+                >
+                  <h3 className="text-base font-semibold text-white">
+                    Create Remote Assessment Request
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-white/70">
+                    Generate a secure link for patient completion on any device.
+                  </p>
+                </button>
 
-        <div className="grid gap-6 lg:grid-cols-3">
-          <section className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md lg:col-span-2">
-            <h2 className="mb-5 text-2xl font-semibold text-white">
-              Patient Information
-            </h2>
+                <Link
+                  href={
+                    latestAssessment
+                      ? `/results?patientId=${patient.id}&assessmentId=${latestAssessment.id}`
+                      : "#"
+                  }
+                  className="rounded-[22px] border border-cyan-300/18 bg-[#123a8a]/25 p-4 transition hover:border-cyan-300/35 hover:bg-[#123a8a]/35"
+                >
+                  <h3 className="text-base font-semibold text-white">
+                    View Results
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-white/70">
+                    Open the latest assessment findings and review outcomes.
+                  </p>
+                </Link>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <InfoCard label="Patient Code" value={patient.patient_code} />
-              <InfoCard label="Phone" value={patient.phone} />
-              <InfoCard label="Age" value={patient.age || "-"} />
-              <InfoCard label="Gender" value={patient.gender || "-"} />
-              <InfoCard label="Diagnosis" value={patient.diagnosis} />
-              <InfoCard label="Status" value={patient.status} />
-              <InfoCard label="Condition" value={patient.condition || "-"} />
-            </div>
-          </section>
+                <Link
+                  href="/library"
+                  className="rounded-[22px] border border-cyan-300/18 bg-[#123a8a]/25 p-4 transition hover:border-cyan-300/35 hover:bg-[#123a8a]/35"
+                >
+                  <h3 className="text-base font-semibold text-white">
+                    Assign Program
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-white/70">
+                    Select the appropriate rehab pathway or treatment program.
+                  </p>
+                </Link>
 
-          <section className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md">
-            <h2 className="mb-5 text-2xl font-semibold text-white">
-              Quick Actions
-            </h2>
+                <Link
+                  href={
+                    latestAssessment
+                      ? `/results?patientId=${patient.id}&assessmentId=${latestAssessment.id}`
+                      : "#"
+                  }
+                  className="rounded-[22px] border border-cyan-300/18 bg-[#123a8a]/25 p-4 transition hover:border-cyan-300/35 hover:bg-[#123a8a]/35"
+                >
+                  <h3 className="text-base font-semibold text-white">
+                    Track Progress
+                  </h3>
+                  <p className="mt-2 text-sm leading-6 text-white/70">
+                    Review progress trends, reassessments, and next milestones.
+                  </p>
+                </Link>
+              </div>
+            </section>
 
-            <div className="space-y-3">
-              <Link
-                href={`/body-axis-ai?patientId=${encodeURIComponent(
-                  patient.patient_code
-                )}&patientName=${encodeURIComponent(
-                  patient.name
-                )}&test=balance&assessmentId=AX-2001`}
-                className="block rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-slate-200 transition hover:bg-white/10"
-              >
-                Balance Test
-              </Link>
+            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+              <h2 className="text-2xl font-bold text-white">Latest Assessment Result</h2>
 
-              <Link
-                href={`/body-axis-ai?patientId=${encodeURIComponent(
-                  patient.patient_code
-                )}&patientName=${encodeURIComponent(
-                  patient.name
-                )}&test=squat&assessmentId=AX-2002`}
-                className="block rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-slate-200 transition hover:bg-white/10"
-              >
-                Squat Analysis
-              </Link>
-
-              <Link
-                href={`/body-axis-ai?patientId=${encodeURIComponent(
-                  patient.patient_code
-                )}&patientName=${encodeURIComponent(
-                  patient.name
-                )}&test=gait&assessmentId=AX-2003`}
-                className="block rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-slate-200 transition hover:bg-white/10"
-              >
-                Gait Screening
-              </Link>
-            </div>
-          </section>
-        </div>
-
-        <section className="mt-6 grid gap-6 lg:grid-cols-3">
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md lg:col-span-2">
-            <h2 className="mb-4 text-2xl font-semibold text-white">
-              Clinical Notes
-            </h2>
-            <p className="leading-7 text-slate-300">
-              {patient.condition || "No notes available yet."}
-            </p>
-
-            <div className="mt-6">
-              <h3 className="mb-4 text-xl font-semibold text-white">
-                Assessment History
-              </h3>
-
-              {results.length > 0 ? (
-                <div className="space-y-3">
-                  {results.map((result) => (
-                    <div
-                      key={result.id}
-                      className="rounded-2xl border border-white/10 bg-[#0F172A] p-4"
-                    >
-                      <p className="text-sm text-slate-400">
-                        Test:{" "}
-                        <span className="font-medium capitalize text-white">
-                          {result.test}
-                        </span>
-                      </p>
-                      <p className="mt-2 text-sm text-slate-400">
-                        Score:{" "}
-                        <span className="font-medium text-cyan-300">
-                          {result.score}%
-                        </span>
-                      </p>
-                    </div>
-                  ))}
+              {latestAssessment ? (
+                <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <InfoCard label="Assessment ID" value={latestAssessment.id} />
+                  <InfoCard label="Mode" value={latestAssessment.mode} />
+                  <InfoCard label="Status" value={latestAssessment.status} />
+                  <InfoCard
+                    label="Score"
+                    value={
+                      typeof latestAssessment.score === "number"
+                        ? `${latestAssessment.score}%`
+                        : "—"
+                    }
+                  />
+                  <InfoCard label="Body Region" value={latestAssessment.bodyRegion} />
+                  <InfoCard label="Side" value={latestAssessment.side} />
+                  <InfoCard label="Visit Type" value={latestAssessment.visitType} />
+                  <InfoCard
+                    label="Tests"
+                    value={
+                      latestAssessment.selectedTests.length > 0
+                        ? latestAssessment.selectedTests.join(", ")
+                        : "—"
+                    }
+                  />
                 </div>
               ) : (
-                <p className="text-slate-400">No assessment history yet.</p>
+                <div className="mt-5 rounded-[20px] border border-white/10 bg-white/[0.03] p-5 text-sm text-white/65">
+                  No saved assessment yet for this patient.
+                </div>
               )}
-            </div>
+            </section>
+
+            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+              <h2 className="text-2xl font-bold text-white">Assessment Timeline</h2>
+
+              <div className="mt-5 space-y-4">
+                {assessments.length > 0 ? (
+                  assessments.map((item) => (
+                    <div
+                      key={item.id}
+                      className="rounded-[22px] border border-white/10 bg-white/[0.03] p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-base font-semibold text-white">
+                            {item.mode === "remote"
+                              ? "Remote Assessment"
+                              : "In-Clinic Assessment"}
+                          </h3>
+                          <p className="mt-1 text-sm text-white/60">
+                            {new Date(item.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          {typeof item.score === "number" && (
+                            <span className="rounded-full border border-cyan-300/15 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100">
+                              Score: {item.score}%
+                            </span>
+                          )}
+                          <span className="rounded-full border border-cyan-300/15 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100">
+                            {item.status}
+                          </span>
+                        </div>
+                      </div>
+
+                      <p className="mt-3 text-sm leading-6 text-white/70">
+                        {item.selectedTests.length > 0
+                          ? `Tests: ${item.selectedTests.join(", ")}`
+                          : "No tests selected"}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-5 text-sm text-white/65">
+                    No assessment history yet.
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
 
-          <div className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md">
-            <h2 className="mb-4 text-2xl font-semibold text-white">
-              Latest Result
-            </h2>
+          <aside className="space-y-6">
+            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+              <h2 className="text-2xl font-bold text-white">Remote Assessment</h2>
 
-            <div className="rounded-2xl border border-cyan-400/20 bg-cyan-400/10 p-4">
-              <p className="text-sm text-slate-300">Latest Assessment Score</p>
+              <div className="mt-5 space-y-4">
+                <InfoCard
+                  label="Request Status"
+                  value={latestRemoteAssessment?.status || "No remote request yet"}
+                />
+                <InfoCard
+                  label="Last Completed Request"
+                  value={
+                    latestRemoteAssessment?.status === "completed"
+                      ? `${latestRemoteAssessment.id} • ${new Date(
+                          latestRemoteAssessment.createdAt
+                        ).toLocaleDateString()}`
+                      : "No completed request yet"
+                  }
+                />
+                <InfoCard label="Delivery Method" value="Secure Link" />
+                <InfoCard label="Access" value="Phone / Tablet / Computer" />
+              </div>
 
-              <p className="mt-2 text-3xl font-bold text-cyan-300">
-                {latestResult ? `${latestResult.score}%` : "Pending"}
-              </p>
+              <div className="mt-6 flex flex-col gap-3">
+                <button
+                  type="button"
+                  onClick={handleCreateRemoteRequest}
+                  className="rounded-2xl bg-cyan-400 px-5 py-3 text-center font-semibold text-slate-950 transition hover:bg-cyan-300"
+                >
+                  Create Assessment Request
+                </button>
 
-              <p className="mt-2 text-sm text-slate-400">
-                {latestResult
-                  ? `Latest test: ${latestResult.test}`
-                  : "Waiting for first connected result"}
-              </p>
-            </div>
-
-            <Link
-              href="/live-results"
-              className="mt-4 block rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 text-center font-semibold text-black transition hover:scale-[1.02]"
-            >
-              View Live Results
-            </Link>
-          </div>
+                <button
+                  type="button"
+                  onClick={handleCopyLatestLink}
+                  className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                >
+                  Copy Latest Link
+                </button>
+              </div>
+            </section>
+          </aside>
         </section>
       </div>
     </main>
   );
 }
 
-function InfoCard({ label, value }: { label: string; value: string }) {
+function InfoCard({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#0F172A] p-4">
-      <p className="text-sm text-slate-400">{label}</p>
-      <p className="mt-2 font-medium text-white">{value}</p>
+    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+      <p className="text-sm text-white/60">{label}</p>
+      <p className="mt-2 text-base font-semibold text-white">{value}</p>
     </div>
   );
 }
