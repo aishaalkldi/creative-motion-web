@@ -15,9 +15,9 @@ function PatientAssessmentContent() {
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
       <div className="mx-auto max-w-4xl">
-        <div className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-8 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-          <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-100">
-            Patient Assessment
+        <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-6 shadow-2xl backdrop-blur md:p-8">
+          <div className="inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-4 py-1 text-sm font-medium text-cyan-300">
+            Creative Motion Assessment
           </div>
 
           <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
@@ -25,8 +25,8 @@ function PatientAssessmentContent() {
           </h1>
 
           <p className="mt-4 max-w-2xl text-sm leading-7 text-white/75 md:text-base">
-            Your clinician has sent you a movement assessment request. Please
-            complete this session using your phone, tablet, or computer.
+            Please review your session details below, then begin the assessment when
+            you are ready.
           </p>
 
           <div className="mt-8 grid gap-4 md:grid-cols-2">
@@ -35,6 +35,16 @@ function PatientAssessmentContent() {
               label="Assessment ID"
               value={assessmentId || "Not provided"}
             />
+          </div>
+
+          <div className="mt-8 rounded-[22px] border border-white/10 bg-white/[0.03] p-5">
+            <h2 className="text-xl font-semibold text-white">Before you begin</h2>
+            <ul className="mt-4 space-y-2 text-sm leading-7 text-white/70">
+              <li>• Make sure you have enough space to move safely.</li>
+              <li>• Place your device where your body can be seen clearly.</li>
+              <li>• Allow camera access when requested.</li>
+              <li>• Follow the on-screen instructions carefully.</li>
+            </ul>
           </div>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -49,6 +59,7 @@ function PatientAssessmentContent() {
               </Link>
             ) : (
               <button
+                type="button"
                 disabled
                 className="cursor-not-allowed rounded-xl bg-white/10 px-5 py-3 text-center font-semibold text-white/50"
               >
@@ -69,34 +80,6 @@ function PatientAssessmentContent() {
   );
 }
 
-export default function PatientAssessmentPage() {
-  return (
-    <Suspense
-      fallback={
-        <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
-          <div className="mx-auto max-w-4xl">
-            <div className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-8 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-              <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-100">
-                Patient Assessment
-              </div>
-
-              <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
-                Loading Assessment...
-              </h1>
-
-              <p className="mt-4 text-sm leading-7 text-white/70 md:text-base">
-                Please wait while we load your assessment session.
-              </p>
-            </div>
-          </div>
-        </main>
-      }
-    >
-      <PatientAssessmentContent />
-    </Suspense>
-  );
-}
-
 function InfoCard({
   label,
   value,
@@ -109,5 +92,13 @@ function InfoCard({
       <p className="text-sm text-slate-400">{label}</p>
       <p className="mt-2 font-medium text-white">{value}</p>
     </div>
+  );
+}
+
+export default function PatientAssessmentPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-white">Loading assessment...</div>}>
+      <PatientAssessmentContent />
+    </Suspense>
   );
 }
