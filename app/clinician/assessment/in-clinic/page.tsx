@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   getAssessmentById,
@@ -9,140 +9,34 @@ import {
   type StoredAssessment,
 } from "../../../lib/assessments-storage";
 
-type AssessmentTestId =
-  | "observation"
-  | "rom"
-  | "functional"
-  | "ai-vision";
-
-type VisionCategory =
-  | "Posture & Alignment"
-  | "Functional Movement"
-  | "Balance & Control"
-  | "Gait"
-  | "ROM Estimation";
-
-type TestOutputs = Record<string, string[]>;
-
-const assessmentTests: {
-  id: AssessmentTestId;
-  title: string;
-  description: string;
-}[] = [
+const AVAILABLE_TESTS = [
   {
-    id: "observation",
+    key: "Observation",
     title: "Observation",
     description:
       "Visual clinical review for posture, swelling, asymmetry, and movement quality.",
   },
   {
-    id: "rom",
+    key: "ROM Assessment",
     title: "ROM Assessment",
     description:
       "Document active and passive range of motion findings for the selected joint.",
   },
   {
-    id: "functional",
+    key: "Functional Assessment",
     title: "Functional Assessment",
     description:
       "Review squat, sit-to-stand, balance, gait, and task-based movement performance.",
   },
   {
-    id: "ai-vision",
+    key: "AI Vision Assessment",
     title: "AI Vision Assessment",
     description:
       "Use camera-based movement analysis through Body Axis AI for guided assessment.",
   },
-];
+] as const;
 
-const visionTestConfig: Record<VisionCategory, string[]> = {
-  "Posture & Alignment": [
-    "Standing Posture Scan",
-    "Single-Leg Posture Check",
-  ],
-  "Functional Movement": [
-    "Squat Analysis",
-    "Sit-to-Stand Test",
-    "Step Task",
-  ],
-  "Balance & Control": ["Single Leg Balance", "Tandem Balance"],
-  Gait: ["Basic Gait Screen", "March-in-Place Test"],
-  "ROM Estimation": [
-    "Knee ROM Estimation",
-    "Shoulder ROM Estimation",
-    "Trunk Flexion Screen",
-  ],
-};
-
-const visionOutputsConfig: Record<string, TestOutputs> = {
-  "Standing Posture Scan": {
-    Alignment: [
-      "Head Alignment",
-      "Shoulder Symmetry",
-      "Pelvic Level",
-      "Knee Alignment Tendency",
-    ],
-    Summary: ["Weight Shift Pattern"],
-  },
-  "Single-Leg Posture Check": {
-    Alignment: ["Pelvic Drop Tendency", "Trunk Lean"],
-    Control: ["Knee Stability", "Balance Control"],
-  },
-  "Squat Analysis": {
-    Mobility: ["Depth"],
-    Alignment: ["Knee Alignment"],
-    Control: ["Trunk Control"],
-    Symmetry: ["Left-Right Symmetry"],
-    Summary: ["Movement Quality Score"],
-  },
-  "Sit-to-Stand Test": {
-    Performance: ["Completion Time", "Repetition Count"],
-    Control: ["Trunk Lean"],
-    Symmetry: ["Symmetry"],
-    Summary: ["Functional Control Score"],
-  },
-  "Step Task": {
-    Alignment: ["Alignment"],
-    Control: ["Step Control", "Weight Transfer"],
-    Summary: ["Balance Response"],
-  },
-  "Single Leg Balance": {
-    Performance: ["Hold Time"],
-    Control: ["Postural Sway", "Pelvic Stability", "Knee Control"],
-    Summary: ["Balance Score"],
-  },
-  "Tandem Balance": {
-    Performance: ["Hold Time"],
-    Control: ["Trunk Stability", "Sway Pattern"],
-    Summary: ["Balance Quality"],
-  },
-  "Basic Gait Screen": {
-    Symmetry: ["Step Symmetry"],
-    Alignment: ["Trunk Lean"],
-    Performance: ["Step Width Estimate"],
-    Summary: ["Overall Gait Quality"],
-  },
-  "March-in-Place Test": {
-    Performance: ["Rhythm", "Coordination"],
-    Control: ["Balance Control"],
-    Summary: ["Movement Consistency"],
-  },
-  "Knee ROM Estimation": {
-    Mobility: ["Flexion Estimate", "Extension Deficit Indicator"],
-    Symmetry: ["Side-to-Side Comparison"],
-  },
-  "Shoulder ROM Estimation": {
-    Mobility: ["Flexion Estimate", "Abduction Estimate"],
-    Control: ["Compensatory Trunk Motion"],
-  },
-  "Trunk Flexion Screen": {
-    Mobility: ["Flexion Range Estimate"],
-    Symmetry: ["Symmetry"],
-    Control: ["Control Pattern"],
-  },
-};
-
-export default function InClinicAssessmentPage() {
+function InClinicAssessmentContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -150,97 +44,123 @@ export default function InClinicAssessmentPage() {
   const assessmentId = searchParams.get("assessmentId") || "";
 
   const [assessment, setAssessment] = useState<StoredAssessment | null>(null);
-
-  const [selectedTests, setSelectedTests] = useState<AssessmentTestId[]>([
-    "rom",
-    "ai-vision",
+  const [selectedTests, setSelectedTests] = useState<string[]>([
+    "ROM Assessment",
+    "AI Vision Assessment",
   ]);
   const [bodyRegion, setBodyRegion] = useState("Knee");
   const [side, setSide] = useState("Right");
   const [visitType, setVisitType] = useState("Follow-Up");
-  const [sessionLabel, setSessionLabel] = useState(
-    "New Assessment"
-  );
-
-  const [visionCategory, setVisionCategory] =
-    useState<VisionCategory>("Functional Movement");
+  const [sessionLabel, setSessionLabel] = useState("New Assessment");
+  const [testCategory, setTestCategory] = useState("Functional Movement");
   const [specificTest, setSpecificTest] = useState("Squat Analysis");
 
   useEffect(() => {
     if (!assessmentId) return;
 
-    const found = getAssessmentById(assessmentId);
-    if (!found) return;
+    const existing = getAssessmentById(assessmentId);
+    if (!existing) return;
 
-    setAssessment(found);
-    setBodyRegion(found.bodyRegion || "Knee");
-    setSide(found.side || "Right");
-    setVisitType(found.visitType || "Follow-Up");
-    setSessionLabel(found.sessionLabel || "New Assessment");
-
-    if (found.selectedTests && found.selectedTests.length > 0) {
-      const mapped = found.selectedTests.filter((test): test is AssessmentTestId =>
-        ["observation", "rom", "functional", "ai-vision"].includes(test)
-      );
-      if (mapped.length > 0) setSelectedTests(mapped);
-    }
+    setAssessment(existing);
+    setSelectedTests(
+      existing.selectedTests?.length
+        ? existing.selectedTests
+        : ["ROM Assessment", "AI Vision Assessment"]
+    );
+    setBodyRegion(existing.bodyRegion || "Knee");
+    setSide(existing.side || "Right");
+    setVisitType(existing.visitType || "Follow-Up");
+    setSessionLabel(existing.sessionLabel || "New Assessment");
   }, [assessmentId]);
 
-  const hasAiVision = selectedTests.includes("ai-vision");
-  const availableSpecificTests = visionTestConfig[visionCategory];
+  const selectedCount = selectedTests.length;
 
-  useEffect(() => {
-    if (!availableSpecificTests.includes(specificTest)) {
-      setSpecificTest(availableSpecificTests[0]);
+  const metricsPreview = useMemo(() => {
+    if (specificTest === "Squat Analysis") {
+      return [
+        "Mobility • Depth",
+        "Alignment • Knee Alignment",
+        "Control • Trunk Control",
+        "Symmetry • Left-Right Symmetry",
+        "Summary • Movement Quality Score",
+      ];
     }
-  }, [visionCategory, availableSpecificTests, specificTest]);
 
-  const currentOutputs = useMemo(() => {
-    if (!hasAiVision) return null;
-    return visionOutputsConfig[specificTest] || null;
-  }, [hasAiVision, specificTest]);
+    if (specificTest === "Single Leg Balance") {
+      return [
+        "Balance • Stability Time",
+        "Control • Trunk Control",
+        "Symmetry • Side Comparison",
+        "Summary • Balance Quality Score",
+      ];
+    }
 
-  function toggleTest(testId: AssessmentTestId) {
+    return [
+      "Mobility • Range",
+      "Control • Movement Control",
+      "Symmetry • Side Comparison",
+      "Summary • Performance Score",
+    ];
+  }, [specificTest]);
+
+  function toggleTest(testName: string) {
     setSelectedTests((prev) =>
-      prev.includes(testId)
-        ? prev.filter((id) => id !== testId)
-        : [...prev, testId]
+      prev.includes(testName)
+        ? prev.filter((item) => item !== testName)
+        : [...prev, testName]
     );
   }
 
-  function buildAssessment(status: StoredAssessment["status"]): StoredAssessment {
-    return {
+  function buildUpdatedAssessment(status: StoredAssessment["status"]) {
+    if (!patientId || !assessmentId) return null;
+
+    const base: StoredAssessment = assessment || {
       id: assessmentId,
       patientId,
       mode: "in_clinic",
+      selectedTests: [],
+      bodyRegion: "Knee",
+      side: "Right",
+      visitType: "Follow-Up",
+      sessionLabel: "New Assessment",
+      status: "draft",
+      createdAt: new Date().toISOString(),
+    };
+
+    return {
+      ...base,
       selectedTests,
       bodyRegion,
       side,
       visitType,
       sessionLabel,
       status,
-      createdAt: assessment?.createdAt || new Date().toISOString(),
-    };
+    } satisfies StoredAssessment;
   }
 
   function handleSaveDraft() {
-    if (!assessmentId || !patientId) {
+    const updated = buildUpdatedAssessment("draft");
+    if (!updated) {
       alert("Missing patient or assessment ID");
       return;
     }
 
-    saveAssessmentToStorage(buildAssessment("draft"));
-    alert("Assessment draft saved");
+    saveAssessmentToStorage(updated);
+    alert("Assessment saved as draft");
   }
 
-  function handleSaveAndReturn() {
-    if (!assessmentId || !patientId) {
+  function handleContinue() {
+    const updated = buildUpdatedAssessment("completed");
+    if (!updated) {
       alert("Missing patient or assessment ID");
       return;
     }
 
-    saveAssessmentToStorage(buildAssessment("completed"));
-    router.push(`/clinician/patients/${patientId}`);
+    saveAssessmentToStorage(updated);
+
+    router.push(
+      `/results?patientId=${patientId}&assessmentId=${assessmentId}`
+    );
   }
 
   return (
@@ -266,53 +186,62 @@ export default function InClinicAssessmentPage() {
           </div>
 
           <Link
-            href={`/clinician/assessment/start?patientId=${patientId}`}
+            href={
+              patientId
+                ? `/clinician/assessment/start?patientId=${patientId}`
+                : "/clinician/patients"
+            }
             className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
           >
             ← Back to Assessment Mode
           </Link>
         </div>
 
-        <section className="grid gap-6 xl:grid-cols-[1.25fr_0.85fr]">
+        <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <div className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold text-white">
-                1. Select Assessment Tests
-              </h2>
-              <p className="mt-2 text-sm text-white/70">
-                You can include more than one test in the same in-clinic session.
-              </p>
-            </div>
+            <h2 className="text-2xl font-bold text-white">
+              1. Select Assessment Tests
+            </h2>
+            <p className="mt-2 text-sm text-white/70">
+              You can include more than one test in the same in-clinic session.
+            </p>
 
-            <div className="space-y-4">
-              {assessmentTests.map((item) => {
-                const checked = selectedTests.includes(item.id);
+            <div className="mt-5 space-y-4">
+              {AVAILABLE_TESTS.map((test) => {
+                const checked = selectedTests.includes(test.key);
 
                 return (
-                  <label
-                    key={item.id}
-                    className={`flex cursor-pointer items-start gap-4 rounded-[22px] border p-4 transition ${
+                  <button
+                    key={test.key}
+                    type="button"
+                    onClick={() => toggleTest(test.key)}
+                    className={`w-full rounded-[22px] border p-5 text-left transition ${
                       checked
-                        ? "border-cyan-300/40 bg-cyan-400/10"
+                        ? "border-cyan-300/45 bg-cyan-400/10"
                         : "border-white/10 bg-white/[0.03] hover:bg-white/[0.05]"
                     }`}
                   >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleTest(item.id)}
-                      className="mt-1 h-5 w-5 accent-cyan-400"
-                    />
+                    <div className="flex items-start gap-3">
+                      <div
+                        className={`mt-1 flex h-5 w-5 items-center justify-center rounded border text-xs ${
+                          checked
+                            ? "border-cyan-300 bg-cyan-400 text-slate-950"
+                            : "border-white/20 text-transparent"
+                        }`}
+                      >
+                        ✓
+                      </div>
 
-                    <div className="flex-1">
-                      <h3 className="text-base font-semibold text-white">
-                        {item.title}
-                      </h3>
-                      <p className="mt-2 text-sm leading-6 text-white/70">
-                        {item.description}
-                      </p>
+                      <div>
+                        <h3 className="text-lg font-semibold text-white">
+                          {test.title}
+                        </h3>
+                        <p className="mt-1 text-sm leading-6 text-white/70">
+                          {test.description}
+                        </p>
+                      </div>
                     </div>
-                  </label>
+                  </button>
                 );
               })}
             </div>
@@ -330,9 +259,9 @@ export default function InClinicAssessmentPage() {
                     className="w-full rounded-2xl border border-white/10 bg-[#123a8a]/35 px-4 py-3 text-white outline-none"
                   >
                     <option>Knee</option>
-                    <option>Hip</option>
-                    <option>Ankle</option>
                     <option>Shoulder</option>
+                    <option>Ankle</option>
+                    <option>Hip</option>
                     <option>Spine</option>
                     <option>Full Body</option>
                   </select>
@@ -357,8 +286,8 @@ export default function InClinicAssessmentPage() {
                     onChange={(e) => setVisitType(e.target.value)}
                     className="w-full rounded-2xl border border-white/10 bg-[#123a8a]/35 px-4 py-3 text-white outline-none"
                   >
-                    <option>Initial</option>
                     <option>Follow-Up</option>
+                    <option>Initial Evaluation</option>
                     <option>Reassessment</option>
                   </select>
                 </Field>
@@ -373,58 +302,56 @@ export default function InClinicAssessmentPage() {
               </div>
             </div>
 
-            {hasAiVision && (
-              <div className="mt-8">
-                <h2 className="text-2xl font-bold text-white">
-                  3. AI Vision Task Configuration
-                </h2>
+            <div className="mt-8">
+              <h2 className="text-2xl font-bold text-white">
+                3. AI Vision Task Configuration
+              </h2>
 
-                <div className="mt-5 grid gap-4 md:grid-cols-2">
-                  <Field label="Test Category">
-                    <select
-                      value={visionCategory}
-                      onChange={(e) =>
-                        setVisionCategory(e.target.value as VisionCategory)
-                      }
-                      className="w-full rounded-2xl border border-white/10 bg-[#123a8a]/35 px-4 py-3 text-white outline-none"
-                    >
-                      {Object.keys(visionTestConfig).map((category) => (
-                        <option key={category}>{category}</option>
-                      ))}
-                    </select>
-                  </Field>
+              <div className="mt-5 grid gap-4 md:grid-cols-2">
+                <Field label="Test Category">
+                  <select
+                    value={testCategory}
+                    onChange={(e) => setTestCategory(e.target.value)}
+                    className="w-full rounded-2xl border border-white/10 bg-[#123a8a]/35 px-4 py-3 text-white outline-none"
+                  >
+                    <option>Functional Movement</option>
+                    <option>Balance</option>
+                    <option>Posture</option>
+                    <option>Mobility</option>
+                  </select>
+                </Field>
 
-                  <Field label="Specific Test">
-                    <select
-                      value={specificTest}
-                      onChange={(e) => setSpecificTest(e.target.value)}
-                      className="w-full rounded-2xl border border-white/10 bg-[#123a8a]/35 px-4 py-3 text-white outline-none"
-                    >
-                      {availableSpecificTests.map((test) => (
-                        <option key={test}>{test}</option>
-                      ))}
-                    </select>
-                  </Field>
-                </div>
+                <Field label="Specific Test">
+                  <select
+                    value={specificTest}
+                    onChange={(e) => setSpecificTest(e.target.value)}
+                    className="w-full rounded-2xl border border-white/10 bg-[#123a8a]/35 px-4 py-3 text-white outline-none"
+                  >
+                    <option>Squat Analysis</option>
+                    <option>Single Leg Balance</option>
+                    <option>Gait Screening</option>
+                    <option>Reach Test</option>
+                  </select>
+                </Field>
               </div>
-            )}
 
-            <div className="mt-8 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={handleSaveDraft}
-                className="rounded-2xl border border-white/15 bg-white/5 px-6 py-3 font-semibold text-white transition hover:bg-white/10"
-              >
-                Save as Draft
-              </button>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={handleSaveDraft}
+                  className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 font-semibold text-white transition hover:bg-white/10"
+                >
+                  Save as Draft
+                </button>
 
-              <button
-                type="button"
-                onClick={handleSaveAndReturn}
-                className="rounded-2xl bg-cyan-400 px-6 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
-              >
-                Save & Return to Patient Profile
-              </button>
+                <button
+                  type="button"
+                  onClick={handleContinue}
+                  className="rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
+                >
+                  Continue to Results
+                </button>
+              </div>
             </div>
           </div>
 
@@ -432,60 +359,55 @@ export default function InClinicAssessmentPage() {
             <h2 className="text-2xl font-bold text-white">Session Summary</h2>
 
             <div className="mt-5 space-y-4">
-              <SummaryCard label="Patient ID" value={patientId || "—"} />
-              <SummaryCard label="Assessment ID" value={assessmentId || "—"} />
-              <SummaryCard
-                label="Selected Tests"
-                value={`${selectedTests.length} selected`}
-              />
-              <SummaryCard
+              <InfoCard label="Patient ID" value={patientId || "—"} />
+              <InfoCard label="Assessment ID" value={assessmentId || "—"} />
+              <InfoCard label="Selected Tests" value={`${selectedCount} selected`} />
+              <InfoCard
                 label="Tests Included"
-                value={
-                  selectedTests.length > 0
-                    ? selectedTests
-                        .map((test) => {
-                          const found = assessmentTests.find((t) => t.id === test);
-                          return found ? found.title : test;
-                        })
-                        .join(" • ")
-                    : "No tests selected"
-                }
+                value={selectedTests.length ? selectedTests.join(" • ") : "—"}
               />
-              <SummaryCard label="Body Region" value={bodyRegion} />
-              <SummaryCard label="Side" value={side} />
-              <SummaryCard label="Visit Type" value={visitType} />
-              {hasAiVision && (
-                <>
-                  <SummaryCard label="Test Category" value={visionCategory} />
-                  <SummaryCard label="Specific Test" value={specificTest} />
-                </>
-              )}
+              <InfoCard label="Body Region" value={bodyRegion} />
+              <InfoCard label="Side" value={side} />
+              <InfoCard label="Visit Type" value={visitType} />
+              <InfoCard label="Test Category" value={testCategory} />
+              <InfoCard label="Specific Test" value={specificTest} />
             </div>
 
-            {hasAiVision && currentOutputs && (
-              <div className="mt-6 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-                <h3 className="text-base font-semibold text-cyan-300">
-                  Metrics Preview
-                </h3>
+            <div className="mt-6 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+              <h3 className="text-base font-semibold text-cyan-300">
+                Metrics Preview
+              </h3>
 
-                <div className="mt-4 space-y-3">
-                  {Object.entries(currentOutputs).map(([group, values]) => (
-                    <div key={group}>
-                      <p className="text-sm font-semibold text-white">{group}</p>
-                      <ul className="mt-2 space-y-1 text-sm text-white/70">
-                        {values.map((value) => (
-                          <li key={value}>• {value}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+              <ul className="mt-4 space-y-2 text-sm leading-6 text-white/70">
+                {metricsPreview.map((item) => (
+                  <li key={item}>• {item}</li>
+                ))}
+              </ul>
+            </div>
           </aside>
         </section>
       </div>
     </main>
+  );
+}
+
+export default function InClinicAssessmentPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
+          <div className="mx-auto max-w-7xl">
+            <div className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6">
+              <h1 className="text-2xl font-bold text-cyan-300">
+                Loading in-clinic assessment...
+              </h1>
+            </div>
+          </div>
+        </main>
+      }
+    >
+      <InClinicAssessmentContent />
+    </Suspense>
   );
 }
 
@@ -504,7 +426,7 @@ function Field({
   );
 }
 
-function SummaryCard({
+function InfoCard({
   label,
   value,
 }: {
