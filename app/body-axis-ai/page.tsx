@@ -2,15 +2,20 @@
 
 import Link from "next/link";
 import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import {
+  getAssessmentById,
+  saveAssessmentToStorage,
+} from "../lib/assessments-storage";
 
 function BodyAxisAIPageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   const patientId = searchParams.get("patientId") || "UNKNOWN";
   const patientName = searchParams.get("patientName") || "Unknown Patient";
   const test = searchParams.get("test") || "squat";
-  const assessmentId = searchParams.get("assessmentId") || "AX-1001";
+  const assessmentId = searchParams.get("assessmentId") || "";
 
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -21,25 +26,39 @@ function BodyAxisAIPageContent() {
     try {
       setLoading(true);
 
-      const response = await fetch("http://127.0.0.1:8000/results", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          patient_id: patientId,
-          test,
-          score: finalScore,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to save result");
+      if (!assessmentId) {
+        throw new Error("Missing assessmentId");
       }
 
-      await response.json();
+      const existingAssessment = getAssessmentById(assessmentId);
+
+      if (!existingAssessment) {
+        throw new Error(`Assessment not found: ${assessmentId}`);
+      }
+
+      const existingTests = Array.isArray(existingAssessment.selectedTests)
+        ? existingAssessment.selectedTests
+        : [];
+
+      const updatedTests = existingTests.includes(test)
+        ? existingTests
+        : [...existingTests, test];
+
+      saveAssessmentToStorage({
+        ...existingAssessment,
+        patientId,
+        status: "completed",
+        selectedTests: updatedTests,
+        score: finalScore,
+      });
+
       setSaved(true);
-      alert(`Assessment saved to file number ${patientId} ✅`);
+
+      router.push(
+        `/results?patientId=${encodeURIComponent(
+          patientId
+        )}&assessmentId=${encodeURIComponent(assessmentId)}`
+      );
     } catch (error) {
       console.error(error);
       alert("Failed to save result ❌");
@@ -79,8 +98,8 @@ function BodyAxisAIPageContent() {
                 Camera / Video Input Placeholder
               </p>
               <p className="mt-2 text-sm text-slate-400">
-                In the next stage, this section can connect to live camera, uploaded
-                video, or AI motion analysis output.
+                In the next stage, this section can connect to live camera,
+                uploaded video, or AI motion analysis output.
               </p>
             </div>
           </section>
@@ -93,7 +112,7 @@ function BodyAxisAIPageContent() {
             <div className="space-y-4">
               <InfoBox label="Patient Name" value={patientName} />
               <InfoBox label="File Number" value={patientId} />
-              <InfoBox label="Assessment ID" value={assessmentId} />
+              <InfoBox label="Assessment ID" value={assessmentId || "Not provided"} />
               <InfoBox label="Test Type" value={formatTestTitle(test)} />
             </div>
 
@@ -118,8 +137,7 @@ function BodyAxisAIPageContent() {
                   Result saved successfully to file number {patientId}.
                 </p>
                 <p className="mt-2 text-sm text-slate-300">
-                  Score:{" "}
-                  <span className="font-semibold text-white">{finalScore}%</span>
+                  Score: <span className="font-semibold text-white">{finalScore}%</span>
                 </p>
               </div>
             )}
