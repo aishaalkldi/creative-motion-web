@@ -52,6 +52,17 @@ export function getAssessmentById(id: string): StoredAssessment | null {
   return items.find((item) => item.id === id) || null;
 }
 
+export function getAssessmentsByPatientId(
+  patientId: string
+): StoredAssessment[] {
+  return readAssessments()
+    .filter((item) => item.patientId === patientId)
+    .sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+}
+
 export function saveAssessmentToStorage(assessment: StoredAssessment) {
   const items = readAssessments();
   const existingIndex = items.findIndex((item) => item.id === assessment.id);
@@ -68,15 +79,10 @@ export function saveAssessmentToStorage(assessment: StoredAssessment) {
 export function getLatestAssessmentForPatient(
   patientId: string
 ): StoredAssessment | null {
-  const items = readAssessments().filter((item) => item.patientId === patientId);
-
-  if (items.length === 0) return null;
-
-  return items.sort(
-    (a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  )[0];
+  const items = getAssessmentsByPatientId(patientId);
+  return items.length > 0 ? items[0] : null;
 }
+
 export function createAssessmentId() {
   return `AS-${Math.floor(10000 + Math.random() * 90000)}`;
 }
