@@ -1,40 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   getAssessmentById,
   saveAssessmentToStorage,
-  type StoredAssessment,
 } from "../../../lib/assessments-storage";
 
 const AVAILABLE_TESTS = [
-  {
-    key: "Observation",
-    title: "Observation",
-    description:
-      "Visual clinical review for posture, swelling, asymmetry, and movement quality.",
-  },
-  {
-    key: "ROM Assessment",
-    title: "ROM Assessment",
-    description:
-      "Document active and passive range of motion findings for the selected joint.",
-  },
-  {
-    key: "Functional Assessment",
-    title: "Functional Assessment",
-    description:
-      "Review squat, sit-to-stand, balance, gait, and task-based movement performance.",
-  },
-  {
-    key: "AI Vision Assessment",
-    title: "AI Vision Assessment",
-    description:
-      "Use camera-based movement analysis through Body Axis AI for guided assessment.",
-  },
-] as const;
+  { key: "squat", label: "Squat Analysis" },
+  { key: "balance", label: "Single Leg Balance" },
+  { key: "gait", label: "Gait Screening" },
+  { key: "posture", label: "Reach Test" },
+];
 
 function InClinicAssessmentContent() {
   const router = useRouter();
@@ -42,124 +21,94 @@ function InClinicAssessmentContent() {
 
   const patientId = searchParams.get("patientId") || "";
   const assessmentId = searchParams.get("assessmentId") || "";
+  const patientName = searchParams.get("patientName") || "";
 
-  const [assessment, setAssessment] = useState<StoredAssessment | null>(null);
-  const [selectedTests, setSelectedTests] = useState<string[]>([
-    "ROM Assessment",
-    "AI Vision Assessment",
-  ]);
-  const [bodyRegion, setBodyRegion] = useState("Knee");
-  const [side, setSide] = useState("Right");
-  const [visitType, setVisitType] = useState("Follow-Up");
-  const [sessionLabel, setSessionLabel] = useState("New Assessment");
-  const [testCategory, setTestCategory] = useState("Functional Movement");
-  const [specificTest, setSpecificTest] = useState("Squat Analysis");
-
-  useEffect(() => {
-    if (!assessmentId) return;
-
-    const existing = getAssessmentById(assessmentId);
-    if (!existing) return;
-
-    setAssessment(existing);
-    setSelectedTests(
-      existing.selectedTests?.length
-        ? existing.selectedTests
-        : ["ROM Assessment", "AI Vision Assessment"]
-    );
-    setBodyRegion(existing.bodyRegion || "Knee");
-    setSide(existing.side || "Right");
-    setVisitType(existing.visitType || "Follow-Up");
-    setSessionLabel(existing.sessionLabel || "New Assessment");
+  const existingAssessment = useMemo(() => {
+    if (!assessmentId) return null;
+    return getAssessmentById(assessmentId);
   }, [assessmentId]);
 
-  const selectedCount = selectedTests.length;
+  const [selectedTests, setSelectedTests] = useState<string[]>(
+    existingAssessment?.selectedTests || []
+  );
 
-  const metricsPreview = useMemo(() => {
-    if (specificTest === "Squat Analysis") {
-      return [
-        "Mobility • Depth",
-        "Alignment • Knee Alignment",
-        "Control • Trunk Control",
-        "Symmetry • Left-Right Symmetry",
-        "Summary • Movement Quality Score",
-      ];
-    }
+  const [bodyRegion, setBodyRegion] = useState(
+    existingAssessment?.bodyRegion || "Knee"
+  );
+  const [side, setSide] = useState(existingAssessment?.side || "Right");
+  const [visitType, setVisitType] = useState(
+    existingAssessment?.visitType || "Follow-Up"
+  );
+  const [sessionLabel, setSessionLabel] = useState(
+    existingAssessment?.sessionLabel || "New Assessment"
+  );
 
-    if (specificTest === "Single Leg Balance") {
-      return [
-        "Balance • Stability Time",
-        "Control • Trunk Control",
-        "Symmetry • Side Comparison",
-        "Summary • Balance Quality Score",
-      ];
-    }
-
-    return [
-      "Mobility • Range",
-      "Control • Movement Control",
-      "Symmetry • Side Comparison",
-      "Summary • Performance Score",
-    ];
-  }, [specificTest]);
-
-  function toggleTest(testName: string) {
+  function toggleTest(testKey: string) {
     setSelectedTests((prev) =>
-      prev.includes(testName)
-        ? prev.filter((item) => item !== testName)
-        : [...prev, testName]
+      prev.includes(testKey)
+        ? prev.filter((item) => item !== testKey)
+        : [...prev, testKey]
     );
   }
 
-  function buildUpdatedAssessment(status: StoredAssessment["status"]) {
+  function buildUpdatedAssessment(
+    status: "draft" | "completed" | "pending_review"
+  ) {
     if (!patientId || !assessmentId) return null;
 
-    const base: StoredAssessment = assessment || {
-      id: assessmentId,
-      patientId,
-      mode: "in_clinic",
-      selectedTests: [],
-      bodyRegion: "Knee",
-      side: "Right",
-      visitType: "Follow-Up",
-      sessionLabel: "New Assessment",
-      status: "draft",
-      createdAt: new Date().toISOString(),
-    };
+    const base =
+      existingAssessment ||
+      getAssessmentById(assessmentId) || {
+        id: assessmentId,
+        patientId,
+        mode: "in_clinic" as const,
+        selectedTests: [],
+        bodyRegion: "Knee",
+        side: "Right",
+        visitType: "Follow-Up",
+        sessionLabel: "New Assessment",
+        status: "draft" as const,
+        createdAt: new Date().toISOString(),
+      };
 
     return {
       ...base,
+      patientId,
+      mode: "in_clinic" as const,
       selectedTests,
       bodyRegion,
       side,
       visitType,
       sessionLabel,
       status,
-    } satisfies StoredAssessment;
-  }
-
-  function handleSaveDraft() {
-    const updated = buildUpdatedAssessment("draft");
-    if (!updated) {
-      alert("Missing patient or assessment ID");
-      return;
-    }
-
-    saveAssessmentToStorage(updated);
-    alert("Assessment saved as draft");
+    };
   }
 
   function handleContinue() {
-    const updated = buildUpdatedAssessment("completed");
+    const updated = buildUpdatedAssessment("draft");
+
     if (!updated) {
       alert("Missing patient or assessment ID");
       return;
     }
 
+    if (!selectedTests.length) {
+      alert("Please select at least one assessment test");
+      return;
+    }
+
     saveAssessmentToStorage(updated);
 
+    const nextTest = selectedTests[0] || "squat";
+
     router.push(
-      `/results?patientId=${patientId}&assessmentId=${assessmentId}`
+      `/body-axis-ai?patientId=${encodeURIComponent(
+        patientId
+      )}&assessmentId=${encodeURIComponent(
+        assessmentId
+      )}&patientName=${encodeURIComponent(
+        patientName || ""
+      )}&test=${encodeURIComponent(nextTest)}`
     );
   }
 
@@ -177,212 +126,160 @@ function InClinicAssessmentContent() {
             </h1>
 
             <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70 md:text-base">
-              Configure one or more tests for this clinic session.
-            </p>
-
-            <p className="mt-3 text-sm text-white/60">
-              Patient ID: {patientId || "—"} | Assessment ID: {assessmentId || "—"}
+              Configure the assessment session, select the clinical test, then
+              continue to the active test screen.
             </p>
           </div>
 
           <Link
-            href={
-              patientId
-                ? `/clinician/assessment/start?patientId=${patientId}`
-                : "/clinician/patients"
-            }
+            href={patientId ? `/clinician/patients/${patientId}` : "/clinician/patients"}
             className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
           >
-            ← Back to Assessment Mode
+            ← Back to Patient Profile
           </Link>
         </div>
 
-        <section className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+        <section className="grid gap-6 xl:grid-cols-[1.2fr_0.85fr]">
           <div className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
             <h2 className="text-2xl font-bold text-white">
-              1. Select Assessment Tests
+              Select Assessment Test
             </h2>
-            <p className="mt-2 text-sm text-white/70">
-              You can include more than one test in the same in-clinic session.
+
+            <p className="mt-2 text-sm leading-7 text-white/70">
+              Choose one or more tests for this visit. The first selected test
+              will open in Body Axis AI.
             </p>
 
-            <div className="mt-5 space-y-4">
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
               {AVAILABLE_TESTS.map((test) => {
-                const checked = selectedTests.includes(test.key);
+                const active = selectedTests.includes(test.key);
 
                 return (
                   <button
                     key={test.key}
                     type="button"
                     onClick={() => toggleTest(test.key)}
-                    className={`w-full rounded-[22px] border p-5 text-left transition ${
-                      checked
+                    className={`rounded-[24px] border p-5 text-left transition ${
+                      active
                         ? "border-cyan-300/45 bg-cyan-400/10"
-                        : "border-white/10 bg-white/[0.03] hover:bg-white/[0.05]"
+                        : "border-cyan-300/18 bg-[#123a8a]/25 hover:border-cyan-300/35 hover:bg-[#123a8a]/35"
                     }`}
                   >
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={`mt-1 flex h-5 w-5 items-center justify-center rounded border text-xs ${
-                          checked
-                            ? "border-cyan-300 bg-cyan-400 text-slate-950"
-                            : "border-white/20 text-transparent"
-                        }`}
-                      >
-                        ✓
-                      </div>
-
-                      <div>
-                        <h3 className="text-lg font-semibold text-white">
-                          {test.title}
-                        </h3>
-                        <p className="mt-1 text-sm leading-6 text-white/70">
-                          {test.description}
-                        </p>
-                      </div>
+                    <div className="mb-3 inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100">
+                      Test
                     </div>
+
+                    <h3 className="text-xl font-bold text-white">
+                      {test.label}
+                    </h3>
+
+                    <p className="mt-3 text-sm leading-7 text-white/70">
+                      {active
+                        ? "Selected for this assessment session."
+                        : "Tap to include this test in the current session."}
+                    </p>
                   </button>
                 );
               })}
             </div>
 
-            <div className="mt-8">
-              <h2 className="text-2xl font-bold text-white">
-                2. Assessment Setup
-              </h2>
+            <div className="mt-8 grid gap-4 md:grid-cols-2">
+              <Field>
+                <label className="mb-2 block text-sm text-white/70">
+                  Body Region
+                </label>
+                <input
+                  value={bodyRegion}
+                  onChange={(e) => setBodyRegion(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-white outline-none"
+                />
+              </Field>
 
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <Field label="Body Region">
-                  <select
-                    value={bodyRegion}
-                    onChange={(e) => setBodyRegion(e.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-[#123a8a]/35 px-4 py-3 text-white outline-none"
-                  >
-                    <option>Knee</option>
-                    <option>Shoulder</option>
-                    <option>Ankle</option>
-                    <option>Hip</option>
-                    <option>Spine</option>
-                    <option>Full Body</option>
-                  </select>
-                </Field>
+              <Field>
+                <label className="mb-2 block text-sm text-white/70">Side</label>
+                <input
+                  value={side}
+                  onChange={(e) => setSide(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-white outline-none"
+                />
+              </Field>
 
-                <Field label="Side">
-                  <select
-                    value={side}
-                    onChange={(e) => setSide(e.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-[#123a8a]/35 px-4 py-3 text-white outline-none"
-                  >
-                    <option>Right</option>
-                    <option>Left</option>
-                    <option>Bilateral</option>
-                    <option>Not Applicable</option>
-                  </select>
-                </Field>
+              <Field>
+                <label className="mb-2 block text-sm text-white/70">
+                  Visit Type
+                </label>
+                <input
+                  value={visitType}
+                  onChange={(e) => setVisitType(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-white outline-none"
+                />
+              </Field>
 
-                <Field label="Visit Type">
-                  <select
-                    value={visitType}
-                    onChange={(e) => setVisitType(e.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-[#123a8a]/35 px-4 py-3 text-white outline-none"
-                  >
-                    <option>Follow-Up</option>
-                    <option>Initial Evaluation</option>
-                    <option>Reassessment</option>
-                  </select>
-                </Field>
-
-                <Field label="Session Label">
-                  <input
-                    value={sessionLabel}
-                    onChange={(e) => setSessionLabel(e.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-[#123a8a]/35 px-4 py-3 text-white outline-none"
-                  />
-                </Field>
-              </div>
-            </div>
-
-            <div className="mt-8">
-              <h2 className="text-2xl font-bold text-white">
-                3. AI Vision Task Configuration
-              </h2>
-
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <Field label="Test Category">
-                  <select
-                    value={testCategory}
-                    onChange={(e) => setTestCategory(e.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-[#123a8a]/35 px-4 py-3 text-white outline-none"
-                  >
-                    <option>Functional Movement</option>
-                    <option>Balance</option>
-                    <option>Posture</option>
-                    <option>Mobility</option>
-                  </select>
-                </Field>
-
-                <Field label="Specific Test">
-                  <select
-                    value={specificTest}
-                    onChange={(e) => setSpecificTest(e.target.value)}
-                    className="w-full rounded-2xl border border-white/10 bg-[#123a8a]/35 px-4 py-3 text-white outline-none"
-                  >
-                    <option>Squat Analysis</option>
-                    <option>Single Leg Balance</option>
-                    <option>Gait Screening</option>
-                    <option>Reach Test</option>
-                  </select>
-                </Field>
-              </div>
-
-              <div className="mt-6 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={handleSaveDraft}
-                  className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 font-semibold text-white transition hover:bg-white/10"
-                >
-                  Save as Draft
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleContinue}
-                  className="rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
-                >
-                  Continue to Results
-                </button>
-              </div>
+              <Field>
+                <label className="mb-2 block text-sm text-white/70">
+                  Session Label
+                </label>
+                <input
+                  value={sessionLabel}
+                  onChange={(e) => setSessionLabel(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-white outline-none"
+                />
+              </Field>
             </div>
           </div>
 
           <aside className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-            <h2 className="text-2xl font-bold text-white">Session Summary</h2>
+            <h2 className="text-2xl font-bold text-white">Assessment Summary</h2>
 
             <div className="mt-5 space-y-4">
-              <InfoCard label="Patient ID" value={patientId || "—"} />
-              <InfoCard label="Assessment ID" value={assessmentId || "—"} />
-              <InfoCard label="Selected Tests" value={`${selectedCount} selected`} />
-              <InfoCard
-                label="Tests Included"
-                value={selectedTests.length ? selectedTests.join(" • ") : "—"}
+              <SummaryCard label="Patient ID" value={patientId || "—"} />
+              <SummaryCard label="Assessment ID" value={assessmentId || "—"} />
+              <SummaryCard
+                label="Selected Tests"
+                value={
+                  selectedTests.length
+                    ? selectedTests
+                        .map((item) => AVAILABLE_TESTS.find((t) => t.key === item)?.label || item)
+                        .join(", ")
+                    : "No tests selected"
+                }
               />
-              <InfoCard label="Body Region" value={bodyRegion} />
-              <InfoCard label="Side" value={side} />
-              <InfoCard label="Visit Type" value={visitType} />
-              <InfoCard label="Test Category" value={testCategory} />
-              <InfoCard label="Specific Test" value={specificTest} />
+              <SummaryCard label="Body Region" value={bodyRegion || "—"} />
+              <SummaryCard label="Side" value={side || "—"} />
+              <SummaryCard label="Visit Type" value={visitType || "—"} />
             </div>
 
             <div className="mt-6 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
               <h3 className="text-base font-semibold text-cyan-300">
-                Metrics Preview
+                Recommended Flow
               </h3>
 
-              <ul className="mt-4 space-y-2 text-sm leading-6 text-white/70">
-                {metricsPreview.map((item) => (
-                  <li key={item}>• {item}</li>
-                ))}
-              </ul>
+              <ol className="mt-4 space-y-2 text-sm text-white/70">
+                <li>1. Confirm patient and session</li>
+                <li>2. Select assessment test</li>
+                <li>3. Continue to active test</li>
+                <li>4. Generate result</li>
+                <li>5. Review results</li>
+              </ol>
+            </div>
+
+            <div className="mt-6 flex flex-col gap-3">
+              <button
+                type="button"
+                onClick={handleContinue}
+                className="rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
+              >
+                Continue to Test
+              </button>
+
+              <Link
+                href={`/results?patientId=${encodeURIComponent(
+                  patientId
+                )}&assessmentId=${encodeURIComponent(assessmentId)}`}
+                className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-center font-semibold text-white transition hover:bg-white/10"
+              >
+                View Current Results
+              </Link>
             </div>
           </aside>
         </section>
@@ -391,42 +288,11 @@ function InClinicAssessmentContent() {
   );
 }
 
-export default function InClinicAssessmentPage() {
-  return (
-    <Suspense
-      fallback={
-        <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
-          <div className="mx-auto max-w-7xl">
-            <div className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6">
-              <h1 className="text-2xl font-bold text-cyan-300">
-                Loading in-clinic assessment...
-              </h1>
-            </div>
-          </div>
-        </main>
-      }
-    >
-      <InClinicAssessmentContent />
-    </Suspense>
-  );
+function Field({ children }: { children: React.ReactNode }) {
+  return <div>{children}</div>;
 }
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="block">
-      <span className="mb-2 block text-sm text-white/75">{label}</span>
-      {children}
-    </label>
-  );
-}
-
-function InfoCard({
+function SummaryCard({
   label,
   value,
 }: {
@@ -438,5 +304,13 @@ function InfoCard({
       <p className="text-sm text-white/60">{label}</p>
       <p className="mt-2 text-base font-semibold text-white">{value}</p>
     </div>
+  );
+}
+
+export default function InClinicAssessmentPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-white">Loading in-clinic assessment...</div>}>
+      <InClinicAssessmentContent />
+    </Suspense>
   );
 }
