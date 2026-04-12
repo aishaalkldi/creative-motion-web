@@ -5,6 +5,23 @@ import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { getAssessmentById } from "../lib/assessments-storage";
 
+function formatTestLabel(testId: string) {
+  switch (testId) {
+    case "posture":
+      return "Postural Assessment";
+    case "gait":
+      return "Gait Assessment";
+    case "balance":
+      return "Balance Assessment";
+    case "squat":
+      return "Squat Assessment";
+    case "rom":
+      return "ROM Assessment";
+    default:
+      return "Assessment";
+  }
+}
+
 function PatientAssessmentContent() {
   const searchParams = useSearchParams();
 
@@ -39,6 +56,13 @@ function PatientAssessmentContent() {
               label="Assessment ID"
               value={assessmentId || "Not provided"}
             />
+          </div>
+
+          <div className="mt-6 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-sm text-white/60">Assigned Assessment</p>
+            <p className="mt-2 text-base font-semibold text-white">
+              {formatTestLabel(firstTest)}
+            </p>
           </div>
 
           <div className="mt-8 rounded-[22px] border border-white/10 bg-white/[0.03] p-5">

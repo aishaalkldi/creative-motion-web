@@ -46,7 +46,6 @@ function BodyAxisAIPageContent() {
         status: "completed",
         selectedTests: updatedTests,
         score: finalScore,
-        
       });
 
       if (isRemote) {
@@ -182,12 +181,6 @@ function formatTestTitle(test: string) {
       return "Postural Assessment";
     case "rom":
       return "ROM Assessment";
-    case "reach":
-      return "Reach Test";
-    case "sit_to_stand":
-      return "Sit-to-Stand Assessment";
-    case "compensation":
-      return "Compensation Analysis";
     default:
       return "Assessment";
   }
@@ -205,12 +198,6 @@ function getInstructionByTest(test: string) {
       return "Ask the patient to stand naturally while posture alignment and body symmetry are assessed.";
     case "rom":
       return "Ask the patient to perform the guided movement while estimated joint range of motion is assessed.";
-    case "reach":
-      return "Ask the patient to perform a reach task while functional control and movement strategy are assessed.";
-    case "sit_to_stand":
-      return "Ask the patient to perform sit-to-stand while transitional movement and lower-limb control are assessed.";
-    case "compensation":
-      return "Ask the patient to perform the instructed task while compensatory movement patterns are assessed.";
     default:
       return "Ask the patient to follow the assessment instructions while the system captures movement performance.";
   }

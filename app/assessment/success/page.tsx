@@ -19,12 +19,12 @@ function SuccessPageContent() {
           </div>
 
           <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
-            Assessment Completed Successfully
+            Thank You
           </h1>
 
           <p className="mt-4 max-w-2xl text-sm leading-7 text-white/75 md:text-base">
-            Thank you. Your assessment has been submitted successfully and is now
-            available for clinician review.
+            Your assessment has been submitted successfully. Your clinician can now
+            review the linked result from your patient profile.
           </p>
 
           <div className="mt-8 grid gap-4 md:grid-cols-2">
@@ -36,12 +36,11 @@ function SuccessPageContent() {
           </div>
 
           <div className="mt-8 rounded-[22px] border border-white/10 bg-white/[0.03] p-5">
-            <h2 className="text-xl font-semibold text-white">What happens next?</h2>
-            <ul className="mt-4 space-y-2 text-sm leading-7 text-white/70">
-              <li>• Your clinician will review the submitted assessment.</li>
-              <li>• The results will be linked to your assessment record.</li>
-              <li>• You may be contacted for the next step of care if needed.</li>
-            </ul>
+            <h2 className="text-xl font-semibold text-white">Next Step</h2>
+            <p className="mt-3 text-sm leading-7 text-white/70">
+              You may now close this page. The submitted assessment is linked to
+              your session record.
+            </p>
           </div>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -49,14 +48,7 @@ function SuccessPageContent() {
               href="/login"
               className="rounded-xl bg-cyan-400 px-5 py-3 text-center font-semibold text-slate-950 transition hover:bg-cyan-300"
             >
-              Back to Login
-            </Link>
-
-            <Link
-              href="/"
-              className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-center font-semibold text-white transition hover:bg-white/10"
-            >
-              Return Home
+              Finish
             </Link>
           </div>
         </div>

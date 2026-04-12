@@ -8,27 +8,42 @@ import {
   saveAssessmentToStorage,
 } from "../../lib/assessments-storage";
 
-type RemoteAssessmentType =
-  | "AI Vision Assessment"
-  | "Balance Test"
-  | "Gait Assessment"
-  | "ROM Assessment"
-  | "Postural Assessment";
+const remoteAssessmentTests = [
+  {
+    id: "posture",
+    title: "Postural Assessment",
+    description:
+      "Assess posture alignment, body symmetry, and static standing position.",
+  },
+  {
+    id: "gait",
+    title: "Gait Assessment",
+    description:
+      "Assess walking pattern, symmetry, and trunk control during gait.",
+  },
+  {
+    id: "balance",
+    title: "Balance Assessment",
+    description:
+      "Assess postural stability, single-leg control, and balance performance.",
+  },
+  {
+    id: "squat",
+    title: "Squat Assessment",
+    description:
+      "Assess lower-limb alignment, control, and movement quality during squat.",
+  },
+  {
+    id: "rom",
+    title: "ROM Assessment",
+    description:
+      "Assess estimated joint range of motion during guided movement tasks.",
+  },
+];
 
-function mapRemoteTypeToTest(type: RemoteAssessmentType): string {
-  switch (type) {
-    case "Balance Test":
-      return "balance";
-    case "Gait Assessment":
-      return "gait";
-    case "ROM Assessment":
-      return "rom";
-    case "Postural Assessment":
-      return "posture";
-    case "AI Vision Assessment":
-    default:
-      return "posture";
-  }
+function formatTestLabel(testId: string) {
+  const item = remoteAssessmentTests.find((test) => test.id === testId);
+  return item?.title || testId;
 }
 
 function RemoteRequestContent() {
@@ -36,16 +51,16 @@ function RemoteRequestContent() {
 
   const patientId = searchParams.get("patientId") || "";
   const assessmentId = searchParams.get("assessmentId") || "";
+  const patientName = searchParams.get("patientName") || "";
 
   const existingAssessment = assessmentId
     ? getAssessmentById(assessmentId)
     : null;
 
-  const [selectedType, setSelectedType] =
-    useState<RemoteAssessmentType>("AI Vision Assessment");
+  const [selectedTest, setSelectedTest] = useState<string>(
+    existingAssessment?.selectedTests?.[0] || "posture"
+  );
   const [generatedLink, setGeneratedLink] = useState("");
-
-  const selectedTest = mapRemoteTypeToTest(selectedType);
 
   const patientAccessLink = useMemo(() => {
     if (!patientId || !assessmentId || typeof window === "undefined") return "";
@@ -84,14 +99,14 @@ function RemoteRequestContent() {
         bodyRegion: baseAssessment.bodyRegion || "Full Body",
         side: baseAssessment.side || "Not Applicable",
         visitType: baseAssessment.visitType || "Follow-Up",
-        sessionLabel: selectedType,
+        sessionLabel: formatTestLabel(selectedTest),
         status: "draft",
       });
 
       setGeneratedLink(patientAccessLink);
     } catch (error) {
       console.error(error);
-      alert("Failed to generate remote assessment link");
+      alert("Failed to generate secure link");
     }
   }
 
@@ -109,7 +124,7 @@ function RemoteRequestContent() {
 
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
-      <div className="mx-auto max-w-6xl">
+      <div className="mx-auto max-w-7xl">
         <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-100">
@@ -117,12 +132,12 @@ function RemoteRequestContent() {
             </div>
 
             <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
-              Create Assessment Request
+              Generate Secure Patient Link
             </h1>
 
             <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70 md:text-base">
-              Configure a remote assessment request and generate a secure link for
-              the patient to complete on phone, tablet, or computer.
+              Select the PT assessment, generate a secure link, and send it to the
+              patient to complete remotely.
             </p>
 
             <p className="mt-3 text-sm text-white/60">
@@ -138,31 +153,56 @@ function RemoteRequestContent() {
           </Link>
         </div>
 
-        <section className="grid gap-6 xl:grid-cols-[1.1fr_0.85fr]">
+        <section className="grid gap-6 xl:grid-cols-[1.2fr_0.85fr]">
           <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-            <h2 className="text-2xl font-bold text-white">Request Configuration</h2>
+            <h2 className="text-2xl font-bold text-white">
+              Select PT Assessment
+            </h2>
 
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <div>
-                <label className="mb-2 block text-sm text-white/70">
-                  Remote Assessment Type
-                </label>
-                <select
-                  value={selectedType}
-                  onChange={(e) =>
-                    setSelectedType(e.target.value as RemoteAssessmentType)
-                  }
-                  className="w-full rounded-xl border border-white/10 bg-[#123a8a]/25 px-4 py-3 text-white outline-none"
-                >
-                  <option value="AI Vision Assessment">AI Vision Assessment</option>
-                  <option value="Postural Assessment">Postural Assessment</option>
-                  <option value="Balance Test">Balance Test</option>
-                  <option value="Gait Assessment">Gait Assessment</option>
-                  <option value="ROM Assessment">ROM Assessment</option>
-                </select>
-              </div>
+            <p className="mt-2 text-sm leading-7 text-white/70">
+              Choose the physical therapy assessment that the patient will complete
+              remotely.
+            </p>
 
-              <InfoCard label="Link Status" value={generatedLink ? "Ready" : "Draft"} />
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              {remoteAssessmentTests.map((test) => {
+                const isSelected = selectedTest === test.id;
+
+                return (
+                  <button
+                    key={test.id}
+                    type="button"
+                    onClick={() => setSelectedTest(test.id)}
+                    className={`rounded-[24px] border p-5 text-left transition ${
+                      isSelected
+                        ? "border-cyan-300 bg-cyan-400/10"
+                        : "border-cyan-300/18 bg-[#123a8a]/25 hover:border-cyan-300/35 hover:bg-[#123a8a]/35"
+                    }`}
+                  >
+                    <div className="mb-3 inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100">
+                      PT Assessment
+                    </div>
+
+                    <h3 className="text-lg font-bold text-white">{test.title}</h3>
+
+                    <p className="mt-3 text-sm leading-7 text-white/70">
+                      {test.description}
+                    </p>
+
+                    <div className="mt-4">
+                      <span
+                        className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
+                          isSelected
+                            ? "bg-cyan-400 text-slate-950"
+                            : "bg-white/10 text-white/70"
+                        }`}
+                      >
+                        {isSelected ? "Selected" : "Tap to select"}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
 
             <div className="mt-6 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
@@ -180,7 +220,7 @@ function RemoteRequestContent() {
                   onClick={handleGenerateLink}
                   className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
                 >
-                  Generate Link
+                  Generate Secure Link
                 </button>
 
                 <button
@@ -200,7 +240,10 @@ function RemoteRequestContent() {
             <div className="mt-5 space-y-4">
               <InfoCard label="Patient ID" value={patientId || "—"} />
               <InfoCard label="Assessment ID" value={assessmentId || "—"} />
-              <InfoCard label="Request Type" value={selectedType} />
+              <InfoCard
+                label="Selected Test"
+                value={formatTestLabel(selectedTest)}
+              />
               <InfoCard label="Status" value={generatedLink ? "Ready" : "Draft"} />
               <InfoCard label="Access" value="Phone / Tablet / Computer" />
             </div>
@@ -211,12 +254,12 @@ function RemoteRequestContent() {
               </h3>
 
               <ol className="mt-4 space-y-2 text-sm text-white/70">
-                <li>1. Configure remote assessment</li>
+                <li>1. Select PT assessment</li>
                 <li>2. Generate secure link</li>
-                <li>3. Send to patient manually</li>
-                <li>4. Patient opens link</li>
-                <li>5. Patient starts assessment</li>
-                <li>6. AI screen opens with linked test</li>
+                <li>3. Send to patient</li>
+                <li>4. Patient opens landing page</li>
+                <li>5. Patient starts session</li>
+                <li>6. Patient submits assessment</li>
               </ol>
             </div>
           </aside>
