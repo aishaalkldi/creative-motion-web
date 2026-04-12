@@ -1,5 +1,5 @@
 export type AssessmentMode = "in_clinic" | "remote";
-export type AssessmentStatus = "draft" | "completed" | "pending_review";
+export type AssessmentStatus = "draft" | "completed";
 
 export type StoredAssessment = {
   id: string;
@@ -13,61 +13,70 @@ export type StoredAssessment = {
   status: AssessmentStatus;
   createdAt: string;
   score?: number;
+  durationSeconds?: number;
+  reportSummary?: string;
+  completedAt?: string;
 };
 
-const STORAGE_KEY = "creative_motion_assessments";
+const STORAGE_KEY = "creative-motion-assessments";
 
-export function createAssessmentId(): string {
-  const random = Math.floor(10000 + Math.random() * 90000);
-  return `AS-${random}`;
-}
-
-export function getStoredAssessments(): StoredAssessment[] {
+function readAssessments(): StoredAssessment[] {
   if (typeof window === "undefined") return [];
 
-  const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
-
   try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return [];
     return JSON.parse(raw) as StoredAssessment[];
-  } catch {
+  } catch (error) {
+    console.error("Failed to read assessments from storage", error);
     return [];
   }
 }
 
-export function saveAssessmentToStorage(
-  assessment: StoredAssessment
-): void {
+function writeAssessments(data: StoredAssessment[]) {
   if (typeof window === "undefined") return;
 
-  const assessments = getStoredAssessments();
-  const existingIndex = assessments.findIndex((a) => a.id === assessment.id);
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (error) {
+    console.error("Failed to write assessments to storage", error);
+  }
+}
 
-  if (existingIndex !== -1) {
-    assessments[existingIndex] = assessment;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(assessments));
-    return;
+export function getAllAssessments(): StoredAssessment[] {
+  return readAssessments();
+}
+
+export function getAssessmentById(id: string): StoredAssessment | null {
+  const items = readAssessments();
+  return items.find((item) => item.id === id) || null;
+}
+
+export function saveAssessmentToStorage(assessment: StoredAssessment) {
+  const items = readAssessments();
+  const existingIndex = items.findIndex((item) => item.id === assessment.id);
+
+  if (existingIndex >= 0) {
+    items[existingIndex] = assessment;
+  } else {
+    items.push(assessment);
   }
 
-  const updated = [assessment, ...assessments];
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  writeAssessments(items);
 }
 
-export function getAssessmentsByPatientId(
+export function getLatestAssessmentForPatient(
   patientId: string
-): StoredAssessment[] {
-  return getStoredAssessments()
-    .filter((a) => a.patientId === patientId)
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
-}
-
-export function getAssessmentById(
-  assessmentId: string
 ): StoredAssessment | null {
-  return (
-    getStoredAssessments().find((a) => a.id === assessmentId) || null
-  );
+  const items = readAssessments().filter((item) => item.patientId === patientId);
+
+  if (items.length === 0) return null;
+
+  return items.sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  )[0];
+}
+export function createAssessmentId() {
+  return `AS-${Math.floor(10000 + Math.random() * 90000)}`;
 }
