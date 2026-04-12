@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
   getAssessmentById,
   saveAssessmentToStorage,
@@ -60,7 +60,6 @@ const assessmentTests = [
 ];
 
 function InClinicAssessmentContent() {
-  const router = useRouter();
   const searchParams = useSearchParams();
 
   const patientId = searchParams.get("patientId") || "";
@@ -75,12 +74,20 @@ function InClinicAssessmentContent() {
   const [selectedTests, setSelectedTests] = useState<string[]>(
     existingAssessment?.selectedTests || []
   );
-  const [saving, setSaving] = useState(false);
+  const [generatedLink, setGeneratedLink] = useState("");
 
   const bodyRegion = existingAssessment?.bodyRegion || "Knee";
   const side = existingAssessment?.side || "Right";
   const visitType = existingAssessment?.visitType || "Follow-Up";
-  const sessionLabel = existingAssessment?.sessionLabel || "In-Clinic Assessment";
+  const sessionLabel =
+    existingAssessment?.sessionLabel || "In-Clinic Patient Session";
+
+  const patientAccessLink = useMemo(() => {
+    if (!patientId || !assessmentId || typeof window === "undefined") return "";
+    return `${window.location.origin}/assessment?patientId=${encodeURIComponent(
+      patientId
+    )}&assessmentId=${encodeURIComponent(assessmentId)}`;
+  }, [patientId, assessmentId]);
 
   function toggleTest(testId: string) {
     setSelectedTests((prev) =>
@@ -90,7 +97,7 @@ function InClinicAssessmentContent() {
     );
   }
 
-  function handleLaunchAssessment() {
+  function handleGeneratePatientLink() {
     if (!patientId || !assessmentId) {
       alert("Missing patient or assessment data");
       return;
@@ -102,11 +109,8 @@ function InClinicAssessmentContent() {
     }
 
     try {
-      setSaving(true);
-
       const assessmentToSave =
-        existingAssessment ||
-        ({
+        existingAssessment || {
           id: assessmentId,
           patientId,
           mode: "in_clinic",
@@ -117,7 +121,7 @@ function InClinicAssessmentContent() {
           sessionLabel,
           status: "draft",
           createdAt: new Date().toISOString(),
-        } as const);
+        };
 
       saveAssessmentToStorage({
         ...assessmentToSave,
@@ -131,20 +135,22 @@ function InClinicAssessmentContent() {
         status: "draft",
       });
 
-      router.push(
-        `/body-axis-ai?patientId=${encodeURIComponent(
-          patientId
-        )}&assessmentId=${encodeURIComponent(
-          assessmentId
-        )}&patientName=${encodeURIComponent(
-          patientName
-        )}&test=${encodeURIComponent(selectedTests[0])}`
-      );
+      setGeneratedLink(patientAccessLink);
     } catch (error) {
       console.error(error);
-      alert("Failed to save in-clinic assessment");
-    } finally {
-      setSaving(false);
+      alert("Failed to generate patient link");
+    }
+  }
+
+  async function handleCopyLink() {
+    if (!generatedLink && !patientAccessLink) return;
+
+    try {
+      await navigator.clipboard.writeText(generatedLink || patientAccessLink);
+      alert("Link copied successfully");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to copy link");
     }
   }
 
@@ -162,13 +168,18 @@ function InClinicAssessmentContent() {
             </h1>
 
             <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70 md:text-base">
-              Select one or more physical therapy assessments for this session,
-              then launch the active AI-assisted test flow.
+              Select one or more physical therapy assessments, generate a secure
+              patient link, and let the patient complete the session from their
+              own device inside the clinic.
             </p>
           </div>
 
           <Link
-            href={patientId ? `/clinician/patients/${patientId}` : "/clinician/patients"}
+            href={
+              patientId
+                ? `/clinician/patients/${patientId}`
+                : "/clinician/patients"
+            }
             className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
           >
             ← Back to Patient Profile
@@ -232,15 +243,35 @@ function InClinicAssessmentContent() {
             </section>
 
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-              <h2 className="text-2xl font-bold text-white">Assessment Scope</h2>
+              <h2 className="text-2xl font-bold text-white">
+                Generated Patient Link
+              </h2>
 
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <InfoCard label="Patient Name" value={patientName || "—"} />
-                <InfoCard label="Patient ID" value={patientId || "—"} />
-                <InfoCard label="Assessment ID" value={assessmentId || "—"} />
-                <InfoCard label="Body Region" value={bodyRegion} />
-                <InfoCard label="Side" value={side} />
-                <InfoCard label="Visit Type" value={visitType} />
+              <p className="mt-2 text-sm leading-7 text-white/70">
+                Generate the session link, then send it to the patient to open on
+                their device inside the clinic.
+              </p>
+
+              <div className="mt-5 rounded-xl border border-white/10 bg-[#123a8a]/25 px-4 py-3 text-sm text-white/80 break-all">
+                {generatedLink || "No link generated yet"}
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={handleGeneratePatientLink}
+                  className="rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
+                >
+                  Generate In-Clinic Patient Link
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 font-semibold text-white transition hover:bg-white/10"
+                >
+                  Copy Link
+                </button>
               </div>
             </section>
           </div>
@@ -253,7 +284,7 @@ function InClinicAssessmentContent() {
 
               <div className="mt-5 space-y-4">
                 <SummaryCard label="Session Label" value={sessionLabel} />
-                <SummaryCard label="Mode" value="In-Clinic Guided Assessment" />
+                <SummaryCard label="Mode" value="In-Clinic Patient Session" />
                 <SummaryCard
                   label="Selected Tests"
                   value={selectedTests.length ? String(selectedTests.length) : "0"}
@@ -269,7 +300,6 @@ function InClinicAssessmentContent() {
                   {selectedTests.length > 0 ? (
                     selectedTests.map((id) => {
                       const test = assessmentTests.find((item) => item.id === id);
-
                       return (
                         <span
                           key={id}
@@ -294,42 +324,18 @@ function InClinicAssessmentContent() {
 
                 <ol className="mt-4 space-y-2 text-sm text-white/70">
                   <li>1. Select PT assessment</li>
-                  <li>2. Confirm assessment details</li>
-                  <li>3. Launch active test screen</li>
-                  <li>4. Capture movement analysis</li>
-                  <li>5. Review result summary</li>
-                  <li>6. Save findings to patient record</li>
+                  <li>2. Generate patient link</li>
+                  <li>3. Send to patient device</li>
+                  <li>4. Patient starts session</li>
+                  <li>5. Patient submits assessment</li>
+                  <li>6. Result returns to patient profile</li>
                 </ol>
               </div>
-
-              <button
-                type="button"
-                onClick={handleLaunchAssessment}
-                disabled={saving}
-                className="mt-6 w-full rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {saving ? "Saving..." : "Launch AI Assessment"}
-              </button>
             </section>
           </aside>
         </section>
       </div>
     </main>
-  );
-}
-
-function InfoCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-      <p className="text-sm text-white/60">{label}</p>
-      <p className="mt-2 text-base font-semibold text-white">{value}</p>
-    </div>
   );
 }
 

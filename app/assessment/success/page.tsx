@@ -45,7 +45,7 @@ function SuccessPageContent() {
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Link
-              href="/login"
+              href={`/clinician/patients/${patientId}`}
               className="rounded-xl bg-cyan-400 px-5 py-3 text-center font-semibold text-slate-950 transition hover:bg-cyan-300"
             >
               Finish
