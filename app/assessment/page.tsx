@@ -3,12 +3,16 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { getAssessmentById } from "../lib/assessments-storage";
 
 function PatientAssessmentContent() {
   const searchParams = useSearchParams();
 
   const patientId = searchParams.get("patientId") || "";
   const assessmentId = searchParams.get("assessmentId") || "";
+
+  const assessment = assessmentId ? getAssessmentById(assessmentId) : null;
+  const firstTest = assessment?.selectedTests?.[0] || "posture";
 
   const canStart = Boolean(patientId && assessmentId);
 
@@ -52,7 +56,9 @@ function PatientAssessmentContent() {
               <Link
                 href={`/body-axis-ai?patientId=${encodeURIComponent(
                   patientId
-                )}&assessmentId=${encodeURIComponent(assessmentId)}`}
+                )}&assessmentId=${encodeURIComponent(
+                  assessmentId
+                )}&test=${encodeURIComponent(firstTest)}`}
                 className="rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 text-center font-semibold text-black transition hover:scale-[1.02]"
               >
                 Start Assessment
