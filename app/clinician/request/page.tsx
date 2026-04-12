@@ -39,12 +39,25 @@ const remoteAssessmentTests = [
     description:
       "Assess estimated joint range of motion during guided movement tasks.",
   },
+  {
+    id: "reach",
+    title: "Reach Test",
+    description:
+      "Assess functional reach, control, and movement strategy.",
+  },
+  {
+    id: "sit_to_stand",
+    title: "Sit-to-Stand Assessment",
+    description:
+      "Assess transitional movement, lower-limb control, and functional strength.",
+  },
+  {
+    id: "compensation",
+    title: "Compensation Analysis",
+    description:
+      "Identify compensatory movement patterns, asymmetry, and movement substitutions.",
+  },
 ];
-
-function formatTestLabel(testId: string) {
-  const item = remoteAssessmentTests.find((test) => test.id === testId);
-  return item?.title || testId;
-}
 
 function RemoteRequestContent() {
   const searchParams = useSearchParams();
@@ -57,22 +70,34 @@ function RemoteRequestContent() {
     ? getAssessmentById(assessmentId)
     : null;
 
-  const [selectedTest, setSelectedTest] = useState<string>(
-    existingAssessment?.selectedTests?.[0] || "posture"
+  const [selectedTests, setSelectedTests] = useState<string[]>(
+    existingAssessment?.selectedTests || []
   );
   const [generatedLink, setGeneratedLink] = useState("");
 
   const patientAccessLink = useMemo(() => {
     if (!patientId || !assessmentId || typeof window === "undefined") return "";
-
     return `${window.location.origin}/assessment?patientId=${encodeURIComponent(
       patientId
     )}&assessmentId=${encodeURIComponent(assessmentId)}`;
   }, [patientId, assessmentId]);
 
+  function toggleTest(testId: string) {
+    setSelectedTests((prev) =>
+      prev.includes(testId)
+        ? prev.filter((id) => id !== testId)
+        : [...prev, testId]
+    );
+  }
+
   function handleGenerateLink() {
     if (!patientId || !assessmentId) {
       alert("Missing patient or assessment data");
+      return;
+    }
+
+    if (selectedTests.length === 0) {
+      alert("Please select at least one PT assessment");
       return;
     }
 
@@ -81,13 +106,13 @@ function RemoteRequestContent() {
         existingAssessment || {
           id: assessmentId,
           patientId,
-          mode: "remote",
+          mode: "remote" as const,
           selectedTests: [],
           bodyRegion: "Full Body",
           side: "Not Applicable",
           visitType: "Follow-Up",
           sessionLabel: "Remote Assessment Request",
-          status: "draft",
+          status: "draft" as const,
           createdAt: new Date().toISOString(),
         };
 
@@ -95,11 +120,11 @@ function RemoteRequestContent() {
         ...baseAssessment,
         patientId,
         mode: "remote",
-        selectedTests: [selectedTest],
+        selectedTests,
         bodyRegion: baseAssessment.bodyRegion || "Full Body",
         side: baseAssessment.side || "Not Applicable",
         visitType: baseAssessment.visitType || "Follow-Up",
-        sessionLabel: formatTestLabel(selectedTest),
+        sessionLabel: "Remote Patient Session",
         status: "draft",
       });
 
@@ -111,10 +136,11 @@ function RemoteRequestContent() {
   }
 
   async function handleCopyLink() {
-    if (!generatedLink && !patientAccessLink) return;
+    const finalLink = generatedLink || patientAccessLink;
+    if (!finalLink) return;
 
     try {
-      await navigator.clipboard.writeText(generatedLink || patientAccessLink);
+      await navigator.clipboard.writeText(finalLink);
       alert("Link copied successfully");
     } catch (error) {
       console.error(error);
@@ -136,12 +162,13 @@ function RemoteRequestContent() {
             </h1>
 
             <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70 md:text-base">
-              Select the PT assessment, generate a secure link, and send it to the
-              patient to complete remotely.
+              Select one or more PT assessments, generate a secure link, and send it
+              to the patient to complete remotely.
             </p>
 
             <p className="mt-3 text-sm text-white/60">
               Patient ID: {patientId || "—"} | Assessment ID: {assessmentId || "—"}
+              {patientName ? ` | Patient: ${patientName}` : ""}
             </p>
           </div>
 
@@ -156,23 +183,22 @@ function RemoteRequestContent() {
         <section className="grid gap-6 xl:grid-cols-[1.2fr_0.85fr]">
           <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
             <h2 className="text-2xl font-bold text-white">
-              Select PT Assessment
+              Select PT Assessments
             </h2>
 
             <p className="mt-2 text-sm leading-7 text-white/70">
-              Choose the physical therapy assessment that the patient will complete
-              remotely.
+              Choose one or more physical therapy assessments for this remote session.
             </p>
 
             <div className="mt-6 grid gap-4 md:grid-cols-2">
               {remoteAssessmentTests.map((test) => {
-                const isSelected = selectedTest === test.id;
+                const isSelected = selectedTests.includes(test.id);
 
                 return (
                   <button
                     key={test.id}
                     type="button"
-                    onClick={() => setSelectedTest(test.id)}
+                    onClick={() => toggleTest(test.id)}
                     className={`rounded-[24px] border p-5 text-left transition ${
                       isSelected
                         ? "border-cyan-300 bg-cyan-400/10"
@@ -241,11 +267,35 @@ function RemoteRequestContent() {
               <InfoCard label="Patient ID" value={patientId || "—"} />
               <InfoCard label="Assessment ID" value={assessmentId || "—"} />
               <InfoCard
-                label="Selected Test"
-                value={formatTestLabel(selectedTest)}
+                label="Selected Tests"
+                value={selectedTests.length ? String(selectedTests.length) : "0"}
               />
               <InfoCard label="Status" value={generatedLink ? "Ready" : "Draft"} />
               <InfoCard label="Access" value="Phone / Tablet / Computer" />
+            </div>
+
+            <div className="mt-6 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+              <h3 className="text-base font-semibold text-cyan-300">
+                Selected PT Assessments
+              </h3>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {selectedTests.length > 0 ? (
+                  selectedTests.map((id) => {
+                    const test = remoteAssessmentTests.find((item) => item.id === id);
+                    return (
+                      <span
+                        key={id}
+                        className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100"
+                      >
+                        {test?.title || id}
+                      </span>
+                    );
+                  })
+                ) : (
+                  <p className="text-sm text-white/60">No assessment selected yet.</p>
+                )}
+              </div>
             </div>
 
             <div className="mt-6 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
@@ -254,7 +304,7 @@ function RemoteRequestContent() {
               </h3>
 
               <ol className="mt-4 space-y-2 text-sm text-white/70">
-                <li>1. Select PT assessment</li>
+                <li>1. Select PT assessments</li>
                 <li>2. Generate secure link</li>
                 <li>3. Send to patient</li>
                 <li>4. Patient opens landing page</li>
