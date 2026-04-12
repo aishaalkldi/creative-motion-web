@@ -14,26 +14,22 @@ function BodyAxisAIPageContent() {
 
   const patientId = searchParams.get("patientId") || "UNKNOWN";
   const patientName = searchParams.get("patientName") || "Unknown Patient";
-  const test = searchParams.get("test") || "squat";
-  const assessmentId = searchParams.get("assessmentId") || "";
+  const test = searchParams.get("test") || "posture";
+  const assessmentId = searchParams.get("assessmentId") || "AX-1001";
+
+  const existingAssessment = getAssessmentById(assessmentId);
+  const isRemote = existingAssessment?.mode === "remote";
 
   const [loading, setLoading] = useState(false);
-  const [saved, setSaved] = useState(false);
 
   const finalScore = 85;
 
-  const handleGenerateMockResult = async () => {
+  async function handleSaveResult() {
     try {
       setLoading(true);
 
-      if (!assessmentId) {
-        throw new Error("Missing assessmentId");
-      }
-
-      const existingAssessment = getAssessmentById(assessmentId);
-
       if (!existingAssessment) {
-        throw new Error(`Assessment not found: ${assessmentId}`);
+        throw new Error(`Assessment ${assessmentId} not found`);
       }
 
       const existingTests = Array.isArray(existingAssessment.selectedTests)
@@ -50,22 +46,29 @@ function BodyAxisAIPageContent() {
         status: "completed",
         selectedTests: updatedTests,
         score: finalScore,
+        
       });
 
-      setSaved(true);
-
-      router.push(
-        `/results?patientId=${encodeURIComponent(
-          patientId
-        )}&assessmentId=${encodeURIComponent(assessmentId)}`
-      );
+      if (isRemote) {
+        router.push(
+          `/assessment/success?patientId=${encodeURIComponent(
+            patientId
+          )}&assessmentId=${encodeURIComponent(assessmentId)}`
+        );
+      } else {
+        router.push(
+          `/results?patientId=${encodeURIComponent(
+            patientId
+          )}&assessmentId=${encodeURIComponent(assessmentId)}`
+        );
+      }
     } catch (error) {
       console.error(error);
       alert("Failed to save result ❌");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
     <main className="min-h-screen bg-[#0B1220] px-6 py-20 text-white">
@@ -98,8 +101,8 @@ function BodyAxisAIPageContent() {
                 Camera / Video Input Placeholder
               </p>
               <p className="mt-2 text-sm text-slate-400">
-                In the next stage, this section can connect to live camera,
-                uploaded video, or AI motion analysis output.
+                In the next stage, this section can connect to live camera, uploaded
+                video, or AI motion analysis output.
               </p>
             </div>
           </section>
@@ -112,34 +115,38 @@ function BodyAxisAIPageContent() {
             <div className="space-y-4">
               <InfoBox label="Patient Name" value={patientName} />
               <InfoBox label="File Number" value={patientId} />
-              <InfoBox label="Assessment ID" value={assessmentId || "Not provided"} />
+              <InfoBox label="Assessment ID" value={assessmentId} />
               <InfoBox label="Test Type" value={formatTestTitle(test)} />
             </div>
 
             <button
-              onClick={handleGenerateMockResult}
+              onClick={handleSaveResult}
               disabled={loading}
               className="mt-6 w-full rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 font-semibold text-black transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {loading ? "Saving Result..." : "Generate Mock Result"}
+              {loading
+                ? "Saving..."
+                : isRemote
+                ? "Submit Assessment"
+                : "Save Result"}
             </button>
 
-            <Link
-              href={`/clinician/patients/${encodeURIComponent(patientId)}`}
-              className="mt-3 block w-full rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-center font-semibold text-white transition hover:bg-white/10"
-            >
-              Back to Patient Profile
-            </Link>
-
-            {saved && (
-              <div className="mt-4 rounded-2xl border border-green-400/20 bg-green-400/10 p-4">
-                <p className="text-sm text-green-300">
-                  Result saved successfully to file number {patientId}.
-                </p>
-                <p className="mt-2 text-sm text-slate-300">
-                  Score: <span className="font-semibold text-white">{finalScore}%</span>
-                </p>
-              </div>
+            {isRemote ? (
+              <Link
+                href={`/assessment?patientId=${encodeURIComponent(
+                  patientId
+                )}&assessmentId=${encodeURIComponent(assessmentId)}`}
+                className="mt-3 block w-full rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-center font-semibold text-white transition hover:bg-white/10"
+              >
+                Back
+              </Link>
+            ) : (
+              <Link
+                href={`/clinician/patients/${encodeURIComponent(patientId)}`}
+                className="mt-3 block w-full rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-center font-semibold text-white transition hover:bg-white/10"
+              >
+                Back to Patient Profile
+              </Link>
             )}
           </aside>
         </div>
@@ -166,13 +173,21 @@ function InfoBox({
 function formatTestTitle(test: string) {
   switch (test) {
     case "gait":
-      return "Gait Screening";
+      return "Gait Assessment";
     case "balance":
-      return "Balance Test";
+      return "Balance Assessment";
     case "squat":
-      return "Squat Analysis";
+      return "Squat Assessment";
     case "posture":
-      return "Posture Analysis";
+      return "Postural Assessment";
+    case "rom":
+      return "ROM Assessment";
+    case "reach":
+      return "Reach Test";
+    case "sit_to_stand":
+      return "Sit-to-Stand Assessment";
+    case "compensation":
+      return "Compensation Analysis";
     default:
       return "Assessment";
   }
@@ -181,13 +196,21 @@ function formatTestTitle(test: string) {
 function getInstructionByTest(test: string) {
   switch (test) {
     case "gait":
-      return "Ask the patient to walk naturally while the system evaluates gait pattern and lower-limb control.";
+      return "Ask the patient to walk naturally while walking pattern, symmetry, and trunk control are assessed.";
     case "balance":
-      return "Ask the patient to maintain balance in the required position while stability and postural control are reviewed.";
+      return "Ask the patient to maintain balance in the required position while postural stability and control are reviewed.";
     case "squat":
       return "Ask the patient to perform a controlled squat while alignment, compensation, and movement quality are reviewed.";
     case "posture":
       return "Ask the patient to stand naturally while posture alignment and body symmetry are assessed.";
+    case "rom":
+      return "Ask the patient to perform the guided movement while estimated joint range of motion is assessed.";
+    case "reach":
+      return "Ask the patient to perform a reach task while functional control and movement strategy are assessed.";
+    case "sit_to_stand":
+      return "Ask the patient to perform sit-to-stand while transitional movement and lower-limb control are assessed.";
+    case "compensation":
+      return "Ask the patient to perform the instructed task while compensatory movement patterns are assessed.";
     default:
       return "Ask the patient to follow the assessment instructions while the system captures movement performance.";
   }
