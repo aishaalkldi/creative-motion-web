@@ -29,6 +29,11 @@ function ResultsPageContent() {
     ? new Date(assessment.createdAt).toLocaleDateString()
     : "—";
 
+  const score =
+    typeof assessment?.score === "number"
+      ? `${assessment.score}%`
+      : assessment?.score || "—";
+
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
       <div className="mx-auto max-w-7xl">
@@ -77,6 +82,7 @@ function ResultsPageContent() {
                 <InfoCard label="Assessment ID" value={assessmentId} />
                 <InfoCard label="Mode" value={mode} />
                 <InfoCard label="Status" value={status} />
+                <InfoCard label="Score" value={String(score)} />
                 <InfoCard label="Body Region" value={bodyRegion} />
                 <InfoCard label="Side" value={side} />
                 <InfoCard label="Visit Type" value={visitType} />
@@ -99,9 +105,7 @@ function ResultsPageContent() {
                     </span>
                   ))
                 ) : (
-                  <p className="text-sm text-white/60">
-                    No tests were selected.
-                  </p>
+                  <p className="text-sm text-white/60">No tests were selected.</p>
                 )}
               </div>
             </section>
@@ -113,11 +117,9 @@ function ResultsPageContent() {
 
               <div className="mt-5 rounded-[20px] border border-white/10 bg-white/[0.03] p-5">
                 <p className="text-sm leading-8 text-white/75">
-                  This page is now linked to the actual assessment session created
-                  for the selected patient. The saved setup confirms the selected
-                  tests, the visit context, and the clinical mode used for this
-                  evaluation. The next step is to review findings, assign the
-                  appropriate program, and track progress across future sessions.
+                  This page is linked to the saved assessment session. The selected
+                  tests, session mode, and recorded score are now available for
+                  clinical review and follow-up planning.
                 </p>
               </div>
             </section>
@@ -129,9 +131,7 @@ function ResultsPageContent() {
                 <p className="text-sm leading-8 text-white/70">
                   Session type: {mode}. Body region: {bodyRegion}. Side: {side}.
                   Visit type: {visitType}. This result record is tied to assessment{" "}
-                  <span className="font-semibold text-white">
-                    {assessmentId}
-                  </span>{" "}
+                  <span className="font-semibold text-white">{assessmentId}</span>{" "}
                   for patient{" "}
                   <span className="font-semibold text-white">{patientId}</span>.
                 </p>
@@ -150,6 +150,7 @@ function ResultsPageContent() {
                   label="Recorded Tests"
                   value={String(selectedTests.length)}
                 />
+                <InfoCard label="Score" value={String(score)} />
               </div>
             </section>
 
@@ -188,6 +189,31 @@ function ResultsPageContent() {
   );
 }
 
+function formatTestLabel(test: string) {
+  switch (test) {
+    case "posture":
+      return "Postural Assessment";
+    case "gait":
+      return "Gait Assessment";
+    case "balance":
+      return "Balance Assessment";
+    case "squat":
+      return "Squat Assessment";
+    case "rom":
+      return "ROM Assessment";
+    case "reach":
+      return "Reach Test";
+    case "sit_to_stand":
+      return "Sit-to-Stand Assessment";
+    case "compensation":
+      return "Compensation Analysis";
+    case "ai-vision":
+      return "AI Vision Assessment";
+    default:
+      return test;
+  }
+}
+
 function InfoCard({
   label,
   value,
@@ -205,29 +231,10 @@ function InfoCard({
 
 function ActionBox({ text }: { text: string }) {
   return (
-    <div className="rounded-[18px] border border-white/10 bg-white/[0.03] p-4">
-      <p className="text-sm leading-7 text-white/75">{text}</p>
+    <div className="rounded-[18px] border border-white/10 bg-white/[0.03] px-4 py-4 text-sm leading-6 text-white/75">
+      {text}
     </div>
   );
-}
-
-function formatTestLabel(test: string) {
-  switch (test) {
-    case "squat":
-      return "Squat Analysis";
-    case "balance":
-      return "Balance Test";
-    case "gait":
-      return "Gait Screening";
-    case "posture":
-      return "Posture Analysis";
-    case "rom":
-      return "Range of Motion";
-    case "voice":
-      return "Voice Intake";
-    default:
-      return test;
-  }
 }
 
 export default function ResultsPage() {
