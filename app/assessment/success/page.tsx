@@ -11,7 +11,7 @@ function SuccessPageContent() {
   const assessmentId = searchParams.get("assessmentId") || "";
 
   function handleFinish() {
-    router.replace("/clinician");
+    router.replace("/");
   }
 
   return (
