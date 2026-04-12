@@ -1,14 +1,18 @@
 "use client";
 
-import Link from "next/link";
 import { Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 function SuccessPageContent() {
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   const patientId = searchParams.get("patientId") || "";
   const assessmentId = searchParams.get("assessmentId") || "";
+
+  function handleFinish() {
+    router.replace("/login");
+  }
 
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
@@ -39,17 +43,18 @@ function SuccessPageContent() {
             <h2 className="text-xl font-semibold text-white">Next Step</h2>
             <p className="mt-3 text-sm leading-7 text-white/70">
               You may now close this page. The submitted assessment is linked to
-              your session record.
+              your session record automatically.
             </p>
           </div>
 
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <Link
-              href={`/clinician/patients/${patientId}`}
-              className="rounded-xl bg-cyan-400 px-5 py-3 text-center font-semibold text-slate-950 transition hover:bg-cyan-300"
+          <div className="mt-8">
+            <button
+              type="button"
+              onClick={handleFinish}
+              className="rounded-xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
             >
               Finish
-            </Link>
+            </button>
           </div>
         </div>
       </div>
