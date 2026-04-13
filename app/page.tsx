@@ -54,10 +54,17 @@ const trustSignals = [
 
 export default function HomePage() {
   return (
-    <main className={`${bodyFont.className} min-h-screen bg-[#071a2f] text-white`}>
-      <section className="relative overflow-hidden border-b border-white/10 bg-[linear-gradient(180deg,#08172d_0%,#0b1f3f_42%,#0a203e_100%)]">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:38px_38px] opacity-15" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.18),transparent_34%)]" />
+    <main
+      className={`${bodyFont.className} relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,#071a2f_0%,#0a1f3d_45%,#0a2447_72%,#081a34_100%)] text-white`}
+    >
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_8%,rgba(34,211,238,0.14),transparent_34%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_82%_22%,rgba(56,189,248,0.1),transparent_36%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_92%,rgba(34,211,238,0.08),transparent_28%)]" />
+
+      <section className="relative overflow-hidden bg-[linear-gradient(180deg,rgba(8,23,45,0.9)_0%,rgba(11,31,63,0.68)_54%,rgba(10,32,62,0.35)_100%)]">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.018)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.018)_1px,transparent_1px)] bg-[size:38px_38px] opacity-15" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(56,189,248,0.2),transparent_36%)]" />
+        <div className="pointer-events-none absolute inset-x-0 -bottom-16 h-44 bg-[radial-gradient(ellipse_at_center,rgba(34,211,238,0.09),transparent_68%)]" />
 
         <div className="relative mx-auto max-w-7xl px-6 py-6 md:py-8">
           <header className="flex items-center justify-between">
@@ -141,7 +148,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="platform-overview" className="mx-auto max-w-7xl px-6 pb-8 pt-14">
+      <section id="platform-overview" className="relative mx-auto max-w-7xl px-6 pb-8 pt-14">
         <SectionHeader
           eyebrow="What the Platform Does"
           title="One workflow connecting clinicians, patients, and assessment sessions."
@@ -170,7 +177,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="modules" className="mx-auto max-w-7xl px-6 pb-8 pt-10">
+      <section id="modules" className="relative mx-auto max-w-7xl px-6 pb-8 pt-10">
         <SectionHeader
           eyebrow="Core Modules"
           title="Product sections supporting the rehabilitation lifecycle."
@@ -203,7 +210,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="how-it-works" className="mx-auto max-w-7xl px-6 pb-8 pt-10">
+      <section id="how-it-works" className="relative mx-auto max-w-7xl px-6 pb-8 pt-10">
         <SectionHeader
           eyebrow="Why It Is Different"
           title="Designed around clinical structure, not generic wellness flows."
@@ -229,7 +236,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="direction" className="mx-auto max-w-7xl px-6 pb-14 pt-10">
+      <section id="direction" className="relative mx-auto max-w-7xl px-6 pb-14 pt-10">
         <div className="grid gap-5 md:grid-cols-2">
           <div className="rounded-[24px] border border-cyan-300/18 bg-white/[0.035] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)]">
             <p className="text-sm font-semibold text-cyan-200">Current Focus</p>
@@ -257,7 +264,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section id="cta" className="mx-auto max-w-7xl px-6 pb-20">
+      <section id="cta" className="relative mx-auto max-w-7xl px-6 pb-20">
         <div className="rounded-[28px] border border-white/10 bg-white/[0.04] p-8 text-center shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
           <h2 className="text-3xl font-semibold text-cyan-200 md:text-4xl">
             Built for clinics now. Ready for scale next.
