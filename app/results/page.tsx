@@ -15,10 +15,11 @@ function ResultsPageContent() {
   const assessment =
     assessmentId !== "—" ? getAssessmentById(assessmentId) : null;
 
-  const mode =
-    assessment?.mode === "remote"
+  const mode = assessment
+    ? assessment.mode === "remote"
       ? "Remote Online Assessment"
-      : "In-Clinic Guided Assessment";
+      : "In-Clinic Guided Assessment"
+    : "Not available";
 
   const selectedTests = assessment?.selectedTests || [];
   const bodyRegion = assessment?.bodyRegion || "—";
@@ -43,6 +44,11 @@ function ResultsPageContent() {
         : scoreValue >= 60
           ? "moderate"
           : "attention";
+  const reportSummary = assessment?.reportSummary?.trim()
+    ? assessment.reportSummary
+    : assessment
+      ? `${mode} recorded for ${bodyRegion.toLowerCase()} (${side.toLowerCase()}) during a ${visitType.toLowerCase()} visit. Use the selected tests and score to confirm progression and next care step.`
+      : "Report summary will appear after a valid assessment record is loaded.";
 
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
@@ -165,14 +171,12 @@ function ResultsPageContent() {
 
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
               <h2 className="text-2xl font-bold text-white">
-                Clinical Interpretation
+                Report Summary
               </h2>
 
               <div className="mt-5 rounded-[20px] border border-white/10 bg-white/[0.03] p-5">
                 <p className="text-sm leading-8 text-white/75">
-                  {assessment
-                    ? "This result is linked to a saved assessment session. Use the score, selected tests, and session context to confirm interpretation and define the next care step."
-                    : "No saved assessment details are available yet. Once a session is completed and stored, this section will summarize the clinical interpretation context."}
+                  {reportSummary}
                 </p>
               </div>
             </section>
@@ -234,10 +238,21 @@ function ResultsPageContent() {
                 </Link>
 
                 <Link
-                  href={`/clinician/patients/${patientId}`}
+                  href={patientId !== "—" ? `/clinician/patients/${patientId}` : "/clinician/patients"}
                   className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-center font-semibold text-white transition hover:bg-white/10"
                 >
                   Track Progress
+                </Link>
+
+                <Link
+                  href={
+                    patientId !== "—"
+                      ? `/clinician/assessment/start?patientId=${patientId}`
+                      : "/clinician/assessment/start"
+                  }
+                  className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-5 py-3 text-center font-semibold text-cyan-100 transition hover:bg-cyan-400/15"
+                >
+                  Start New Assessment
                 </Link>
               </div>
             </section>
