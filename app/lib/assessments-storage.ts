@@ -1,50 +1,39 @@
-export type AssessmentMode = "in_clinic" | "remote";
-export type AssessmentStatus = "draft" | "completed";
+import type {
+  AssessmentRecord,
+  CreateAssessmentInput,
+  MotionMetrics,
+} from "./domain-types";
 
-export type StoredAssessment = {
-  id: string;
-  patientId: string;
-  mode: AssessmentMode;
-  selectedTests: string[];
-  bodyRegion: string;
-  side: string;
-  visitType: string;
-  sessionLabel: string;
-  status: AssessmentStatus;
-  createdAt: string;
-  score?: number;
-  durationSeconds?: number;
-  reportSummary?: string;
-  completedAt?: string;
-};
+export type {
+  AssessmentMode,
+  AssessmentRecord,
+  AssessmentResult,
+  AssessmentStatus,
+  CreateAssessmentInput,
+  MotionMetrics,
+} from "./domain-types";
+
+/** Alias kept for existing imports — identical to `AssessmentRecord`. */
+export type StoredAssessment = AssessmentRecord;
 
 const STORAGE_KEY = "creative-motion-assessments";
 
-type DraftAssessmentInput = {
-  id: string;
-  patientId: string;
-  mode: AssessmentMode;
-  selectedTests?: string[];
-  bodyRegion?: string;
-  side?: string;
-  visitType?: string;
-  sessionLabel?: string;
-  createdAt?: string;
-};
-
 type AssessmentStore = {
-  getAll(): StoredAssessment[];
-  getById(id: string): StoredAssessment | null;
-  getByPatientId(patientId: string): StoredAssessment[];
-  getRecentByPatientId(patientId: string, limit: number): StoredAssessment[];
-  getLatestByPatientId(patientId: string): StoredAssessment | null;
-  save(assessment: StoredAssessment): void;
-  createDraft(input: DraftAssessmentInput): StoredAssessment;
+  getAll(): AssessmentRecord[];
+  getById(id: string): AssessmentRecord | null;
+  getByPatientId(patientId: string): AssessmentRecord[];
+  getRecentByPatientId(patientId: string, limit: number): AssessmentRecord[];
+  getLatestByPatientId(patientId: string): AssessmentRecord | null;
+  save(assessment: AssessmentRecord): void;
+  createDraft(input: CreateAssessmentInput): AssessmentRecord;
 };
 
-function normalizeAssessment(
-  input: Partial<StoredAssessment>
-): StoredAssessment | null {
+function normalizeMotionMetrics(input: unknown): MotionMetrics | undefined {
+  if (!input || typeof input !== "object") return undefined;
+  return input as MotionMetrics;
+}
+
+function normalizeAssessment(input: Partial<AssessmentRecord>): AssessmentRecord | null {
   if (!input.id || !input.patientId) return null;
 
   return {
@@ -66,10 +55,11 @@ function normalizeAssessment(
     reportSummary:
       typeof input.reportSummary === "string" ? input.reportSummary : undefined,
     completedAt: typeof input.completedAt === "string" ? input.completedAt : undefined,
+    motionMetrics: normalizeMotionMetrics(input.motionMetrics),
   };
 }
 
-function readAssessments(): StoredAssessment[] {
+function readAssessments(): AssessmentRecord[] {
   if (typeof window === "undefined") return [];
 
   try {
@@ -81,14 +71,14 @@ function readAssessments(): StoredAssessment[] {
 
     return parsed
       .map((item) => normalizeAssessment(item))
-      .filter((item): item is StoredAssessment => item !== null);
+      .filter((item): item is AssessmentRecord => item !== null);
   } catch (error) {
     console.error("Failed to read assessments from storage", error);
     return [];
   }
 }
 
-function writeAssessments(data: StoredAssessment[]) {
+function writeAssessments(data: AssessmentRecord[]) {
   if (typeof window === "undefined") return;
 
   try {
@@ -124,7 +114,7 @@ const localAssessmentStore: AssessmentStore = {
     const recent = localAssessmentStore.getRecentByPatientId(patientId, 1);
     return recent.length > 0 ? recent[0] : null;
   },
-  save(assessment: StoredAssessment) {
+  save(assessment: AssessmentRecord) {
     const normalized = normalizeAssessment(assessment);
     if (!normalized) {
       console.error("Failed to save assessment: invalid payload");
@@ -158,7 +148,7 @@ const localAssessmentStore: AssessmentStore = {
 
     writeAssessments(items);
   },
-  createDraft(input: DraftAssessmentInput) {
+  createDraft(input: CreateAssessmentInput) {
     const draft = normalizeAssessment({
       ...input,
       selectedTests: input.selectedTests || [],
@@ -179,38 +169,36 @@ const localAssessmentStore: AssessmentStore = {
   },
 };
 
-export function getAllAssessments(): StoredAssessment[] {
+export function getAllAssessments(): AssessmentRecord[] {
   return localAssessmentStore.getAll();
 }
 
-export function getAssessmentById(id: string): StoredAssessment | null {
+export function getAssessmentById(id: string): AssessmentRecord | null {
   return localAssessmentStore.getById(id);
 }
 
-export function getAssessmentsByPatientId(
-  patientId: string
-): StoredAssessment[] {
+export function getAssessmentsByPatientId(patientId: string): AssessmentRecord[] {
   return localAssessmentStore.getByPatientId(patientId);
 }
 
 export function getRecentAssessmentsForPatient(
   patientId: string,
   limit = 3
-): StoredAssessment[] {
+): AssessmentRecord[] {
   return localAssessmentStore.getRecentByPatientId(patientId, limit);
 }
 
-export function saveAssessmentToStorage(assessment: StoredAssessment) {
+export function saveAssessmentToStorage(assessment: AssessmentRecord) {
   localAssessmentStore.save(assessment);
 }
 
-export function createDraftAssessment(input: DraftAssessmentInput) {
+export function createDraftAssessment(input: CreateAssessmentInput) {
   return localAssessmentStore.createDraft(input);
 }
 
 export function getLatestAssessmentForPatient(
   patientId: string
-): StoredAssessment | null {
+): AssessmentRecord | null {
   return localAssessmentStore.getLatestByPatientId(patientId);
 }
 
