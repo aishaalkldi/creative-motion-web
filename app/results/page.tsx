@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { getAssessmentById } from "../lib/assessments-storage";
+import { getStoredPatients } from "../lib/patients-storage";
 
 function ResultsPageContent() {
   const searchParams = useSearchParams();
@@ -15,6 +16,10 @@ function ResultsPageContent() {
   const assessment =
     assessmentId !== "—" ? getAssessmentById(assessmentId) : null;
   const hasLinkedResult = hasValidContext && Boolean(assessment);
+  const patientName =
+    patientId !== "—"
+      ? getStoredPatients().find((item) => item.id === patientId)?.fullName || "Not available"
+      : "Not available";
 
   const mode = assessment
     ? assessment.mode === "remote"
@@ -30,6 +35,9 @@ function ResultsPageContent() {
   const status = assessment?.status || "—";
   const createdAt = assessment?.createdAt
     ? new Date(assessment.createdAt).toLocaleDateString()
+    : "—";
+  const completedAt = assessment?.completedAt
+    ? new Date(assessment.completedAt).toLocaleDateString()
     : "—";
 
   const score =
@@ -50,6 +58,26 @@ function ResultsPageContent() {
     : assessment
       ? `${mode} recorded for ${bodyRegion.toLowerCase()} (${side.toLowerCase()}) during a ${visitType.toLowerCase()} visit. Use the selected tests and score to confirm progression and next care step.`
       : "No linked result available yet.";
+  const assessmentContext =
+    assessment && hasLinkedResult
+      ? `${mode} session focused on ${bodyRegion} (${side}) for ${visitType}.`
+      : "No linked assessment context available.";
+  const movementQuality =
+    scoreValue === null
+      ? "Movement quality is pending until a scored result is available."
+      : scoreValue >= 80
+        ? "Movement quality appears stable with good control across the selected tasks."
+        : scoreValue >= 60
+          ? "Movement quality is functional with moderate control variability."
+          : "Movement quality indicates reduced control and requires close follow-up.";
+  const compensationPatterns =
+    selectedTests.includes("compensation")
+      ? "Compensation-focused capture was included. Review asymmetry and substitution patterns."
+      : "No dedicated compensation capture was selected in this session.";
+  const functionalPerformance =
+    selectedTests.length > 0
+      ? `Functional performance was evaluated across ${selectedTests.length} selected test${selectedTests.length > 1 ? "s" : ""}.`
+      : "Functional performance tests are not linked to this result yet.";
 
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
@@ -91,68 +119,56 @@ function ResultsPageContent() {
 
         <section className="grid gap-6 xl:grid-cols-[1.2fr_0.85fr]">
           <div className="space-y-6">
-            <section className="rounded-[28px] border border-cyan-300/18 bg-gradient-to-br from-cyan-500/8 via-white/[0.04] to-white/[0.02] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-2xl font-bold text-white">Clinical Result Overview</h2>
+                  <h2 className="text-2xl font-bold text-white">Patient & Session Details</h2>
                   <p className="mt-2 text-sm leading-7 text-white/70">
-                    Linked assessment context, score signal, and session readiness for follow-up decisions.
+                    Core clinical identity and session metadata for this physiotherapy motion report.
                   </p>
                 </div>
                 <StatusPill status={status} />
               </div>
-
               <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <MetricCard label="Score" value={String(score)} tone={scoreTone} />
-                <MetricCard label="Mode" value={mode} />
-                <MetricCard label="Selected Tests" value={String(selectedTests.length)} />
-                <MetricCard label="Patient ID" value={patientId} />
-                <MetricCard label="Assessment ID" value={assessmentId} />
-                <MetricCard label="Created At" value={createdAt} />
+                <InfoCard label="Patient ID" value={patientId} />
+                <InfoCard label="Patient Name" value={patientName} />
+                <InfoCard label="Assessment ID" value={assessmentId} />
+                <InfoCard label="Assessment Date" value={createdAt} />
+                <InfoCard label="Assessment Mode" value={mode} />
+                <InfoCard label="Visit Type" value={visitType} />
+                <InfoCard label="Session Label" value={sessionLabel} />
+                <InfoCard label="Body Region" value={bodyRegion} />
+                <InfoCard label="Side" value={side} />
+                <InfoCard label="Status" value={status} />
               </div>
+            </section>
 
+            <section className="rounded-[28px] border border-cyan-300/18 bg-gradient-to-br from-cyan-500/8 via-white/[0.04] to-white/[0.02] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+              <h2 className="text-2xl font-bold text-white">Assessment Overview</h2>
+              <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <MetricCard label="Overall Score" value={String(score)} tone={scoreTone} />
+                <MetricCard
+                  label="Tests Included"
+                  value={String(selectedTests.length)}
+                  tone="moderate"
+                />
+                <MetricCard label="Session Status" value={status} tone="default" />
+                <MetricCard label="Created At" value={createdAt} tone="default" />
+                <MetricCard label="Completed At" value={completedAt} tone="pending" />
+                <MetricCard label="Assessment Context" value={assessmentContext} tone="default" />
+              </div>
               {!hasLinkedResult && (
                 <div className="mt-5 rounded-[20px] border border-cyan-300/20 bg-cyan-400/8 p-4">
-                  <p className="text-sm font-semibold text-cyan-100">
-                    No linked result found
-                  </p>
+                  <p className="text-sm font-semibold text-cyan-100">No linked result found</p>
                   <p className="mt-2 text-sm leading-6 text-white/70">
-                    This screen is ready, but no valid assessment result is currently attached to this URL.
+                    This report layout is ready, but no valid assessment result is currently attached to this URL.
                   </p>
                 </div>
               )}
             </section>
 
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-              <h2 className="text-2xl font-bold text-white">
-                Assessment Summary
-              </h2>
-
-              <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <InfoCard label="Patient ID" value={patientId} />
-                <InfoCard label="Assessment ID" value={assessmentId} />
-                <InfoCard label="Mode" value={mode} />
-                <InfoCard label="Status" value={status} />
-                <InfoCard label="Score" value={String(score)} />
-                <InfoCard label="Body Region" value={bodyRegion} />
-                <InfoCard label="Side" value={side} />
-                <InfoCard label="Visit Type" value={visitType} />
-                <InfoCard label="Session Label" value={sessionLabel} />
-                <InfoCard label="Created At" value={createdAt} />
-              </div>
-            </section>
-
-            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
               <h2 className="text-2xl font-bold text-white">Tests Included</h2>
-
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <p className="text-sm text-white/65">
-                  {selectedTests.length > 0
-                    ? `${selectedTests.length} tests selected for this session`
-                    : "No tests linked"}
-                </p>
-              </div>
-
               <div className="mt-4 flex flex-wrap gap-3">
                 {selectedTests.length > 0 ? (
                   selectedTests.map((test) => (
@@ -165,34 +181,38 @@ function ResultsPageContent() {
                   ))
                 ) : (
                   <div className="w-full rounded-[18px] border border-white/10 bg-white/[0.03] px-4 py-4 text-sm text-white/60">
-                    No test data available for this result.
+                    No tests are linked to this report yet.
                   </div>
                 )}
               </div>
             </section>
 
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-              <h2 className="text-2xl font-bold text-white">
-                Report Summary
-              </h2>
+              <h2 className="text-2xl font-bold text-white">Motion Analysis Findings</h2>
+              <div className="mt-5 space-y-3">
+                <ActionBox text={`Movement quality: ${movementQuality}`} />
+                <ActionBox text={`Compensation patterns: ${compensationPatterns}`} />
+                <ActionBox text={`Functional performance: ${functionalPerformance}`} />
+                <ActionBox text={`Structured findings summary: ${reportSummary}`} />
+              </div>
+            </section>
 
+            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+              <h2 className="text-2xl font-bold text-white">Clinical Summary</h2>
               <div className="mt-5 rounded-[20px] border border-white/10 bg-white/[0.03] p-5">
-                <p className="text-sm leading-8 text-white/75">
-                  {reportSummary}
-                </p>
+                <p className="text-sm leading-8 text-white/75">{reportSummary}</p>
               </div>
             </section>
 
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
               <h2 className="text-2xl font-bold text-white">Session Notes</h2>
-
               <div className="mt-5 rounded-[20px] border border-white/10 bg-white/[0.03] p-5">
                 <p className="text-sm leading-8 text-white/70">
                   Session type: <span className="font-semibold text-white">{mode}</span>. Body region:{" "}
                   <span className="font-semibold text-white">{bodyRegion}</span>. Side:{" "}
                   <span className="font-semibold text-white">{side}</span>. Visit type:{" "}
                   <span className="font-semibold text-white">{visitType}</span>. Session label:{" "}
-                  <span className="font-semibold text-white">{sessionLabel}</span>. This result is tied to assessment{" "}
+                  <span className="font-semibold text-white">{sessionLabel}</span>. Report linked to assessment{" "}
                   <span className="font-semibold text-white">{assessmentId}</span> for patient{" "}
                   <span className="font-semibold text-white">{patientId}</span>.
                 </p>
@@ -202,35 +222,16 @@ function ResultsPageContent() {
 
           <aside className="space-y-6">
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-              <h2 className="text-2xl font-bold text-white">Result Snapshot</h2>
-
-              <div className="mt-5 space-y-4">
-                <InfoCard label="Patient ID" value={patientId} />
-                <InfoCard label="Assessment ID" value={assessmentId} />
-                <InfoCard
-                  label="Recorded Tests"
-                  value={String(selectedTests.length)}
-                />
-                <InfoCard label="Score" value={String(score)} />
-                <InfoCard label="Status" value={status} />
-              </div>
-            </section>
-
-            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-              <h2 className="text-2xl font-bold text-white">
-                Clinician Actions
-              </h2>
+              <h2 className="text-2xl font-bold text-white">Recommendations / Next Step</h2>
               <p className="mt-2 text-sm text-white/70">
-                Continue this case from interpretation to care planning and follow-up.
+                Continue this case from motion interpretation to treatment planning.
               </p>
-
               <div className="mt-5 space-y-3">
-                <ActionBox text="Review assessment findings and confirm clinical interpretation" />
-                <ActionBox text="Assign or update rehabilitation program" />
-                <ActionBox text="Track progress on follow-up sessions" />
-                <ActionBox text="Repeat assessment when clinically needed" />
+                <ActionBox text="Assign a tailored rehabilitation program." />
+                <ActionBox text="Repeat assessment to monitor progression." />
+                <ActionBox text="Compare this report with previous sessions." />
+                <ActionBox text="Continue clinician follow-up and tracking." />
               </div>
-
               <div className="mt-6 flex flex-col gap-3">
                 <Link
                   href="/library"
@@ -238,24 +239,19 @@ function ResultsPageContent() {
                 >
                   Assign Program
                 </Link>
-
                 <Link
                   href={patientId !== "—" ? `/clinician/patients/${patientId}` : "/clinician/patients"}
                   className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-center font-semibold text-white transition hover:bg-white/10"
                 >
-                  Track Progress
+                  Open Patient Profile
                 </Link>
-
-                <Link
-                  href={
-                    patientId !== "—"
-                      ? `/clinician/assessment/start?patientId=${patientId}`
-                      : "/clinician/assessment/start"
-                  }
-                  className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-5 py-3 text-center font-semibold text-cyan-100 transition hover:bg-cyan-400/15"
+                <button
+                  type="button"
+                  disabled
+                  className="cursor-not-allowed rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-center text-sm font-semibold text-white/55"
                 >
-                  Start New Assessment
-                </Link>
+                  Download PDF (Coming Soon)
+                </button>
               </div>
             </section>
           </aside>

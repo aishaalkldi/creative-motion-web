@@ -433,7 +433,7 @@ export default function PatientProfilePage() {
                           href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
                           className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10"
                         >
-                          View Result →
+                          View Motion Report →
                         </Link>
                       </div>
                     </div>
@@ -493,7 +493,7 @@ export default function PatientProfilePage() {
                           href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
                           className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10"
                         >
-                          Open Result →
+                          Open Report →
                         </Link>
                       </div>
                     </div>
