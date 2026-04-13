@@ -75,6 +75,10 @@ function InClinicAssessmentContent() {
     existingAssessment?.selectedTests || []
   );
   const [generatedLink, setGeneratedLink] = useState("");
+  const [feedback, setFeedback] = useState<{
+    type: "idle" | "success" | "error";
+    message: string;
+  }>({ type: "idle", message: "" });
 
   const bodyRegion = existingAssessment?.bodyRegion || "Knee";
   const side = existingAssessment?.side || "Right";
@@ -99,12 +103,18 @@ function InClinicAssessmentContent() {
 
   function handleGeneratePatientLink() {
     if (!patientId || !assessmentId) {
-      alert("Missing patient or assessment data");
+      setFeedback({
+        type: "error",
+        message: "Missing patient or assessment context.",
+      });
       return;
     }
 
     if (selectedTests.length === 0) {
-      alert("Please select at least one PT assessment");
+      setFeedback({
+        type: "error",
+        message: "Select at least one PT assessment before generating a link.",
+      });
       return;
     }
 
@@ -136,54 +146,80 @@ function InClinicAssessmentContent() {
       });
 
       setGeneratedLink(patientAccessLink);
+      setFeedback({
+        type: "success",
+        message: "In-clinic patient link generated and saved to draft session.",
+      });
     } catch (error) {
       console.error(error);
-      alert("Failed to generate patient link");
+      setFeedback({
+        type: "error",
+        message: "Failed to generate patient link. Please try again.",
+      });
     }
   }
 
   async function handleCopyLink() {
-    if (!generatedLink && !patientAccessLink) return;
+    if (!generatedLink && !patientAccessLink) {
+      setFeedback({
+        type: "error",
+        message: "Generate a patient link before copying.",
+      });
+      return;
+    }
 
     try {
       await navigator.clipboard.writeText(generatedLink || patientAccessLink);
-      alert("Link copied successfully");
+      setFeedback({
+        type: "success",
+        message: "Patient link copied to clipboard.",
+      });
     } catch (error) {
       console.error(error);
-      alert("Failed to copy link");
+      setFeedback({
+        type: "error",
+        message: "Failed to copy link. Please copy manually.",
+      });
     }
   }
 
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-100">
-              Clinician Portal
+        <div className="mb-8 rounded-[28px] border border-cyan-300/18 bg-gradient-to-br from-cyan-500/8 via-white/[0.04] to-white/[0.02] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-100">
+                In-Clinic Session Setup
+              </div>
+
+              <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
+                In-Clinic Assessment
+              </h1>
+
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70 md:text-base">
+                Select PT assessments, generate secure access, and prepare an
+                in-clinic patient session in a structured clinician workflow.
+              </p>
+
+              <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                <MetaBadge label={`Patient ID: ${patientId || "—"}`} />
+                <MetaBadge label={`Assessment ID: ${assessmentId || "—"}`} />
+                <MetaBadge label={`Patient: ${patientName || "Unknown Patient"}`} />
+              </div>
             </div>
 
-            <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
-              In-Clinic Assessment
-            </h1>
-
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70 md:text-base">
-              Select one or more physical therapy assessments, generate a secure
-              patient link, and let the patient complete the session from their
-              own device inside the clinic.
-            </p>
+            <Link
+              href={
+                patientId
+                  ? `/clinician/patients/${patientId}`
+                  : "/clinician/patients"
+              }
+              className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+            >
+              ← Back to Patient Profile
+            </Link>
           </div>
-
-          <Link
-            href={
-              patientId
-                ? `/clinician/patients/${patientId}`
-                : "/clinician/patients"
-            }
-            className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-          >
-            ← Back to Patient Profile
-          </Link>
         </div>
 
         <section className="grid gap-6 xl:grid-cols-[1.2fr_0.85fr]">
@@ -243,35 +279,34 @@ function InClinicAssessmentContent() {
             </section>
 
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-              <h2 className="text-2xl font-bold text-white">
-                Generated Patient Link
-              </h2>
-
+              <h2 className="text-2xl font-bold text-white">Selected Tests Summary</h2>
               <p className="mt-2 text-sm leading-7 text-white/70">
-                Generate the session link, then send it to the patient to open on
-                their device inside the clinic.
+                Confirm the selected PT assessments before generating secure in-clinic access.
               </p>
 
-              <div className="mt-5 rounded-xl border border-white/10 bg-[#123a8a]/25 px-4 py-3 text-sm text-white/80 break-all">
-                {generatedLink || "No link generated yet"}
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={handleGeneratePatientLink}
-                  className="rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
-                >
-                  Generate In-Clinic Patient Link
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 font-semibold text-white transition hover:bg-white/10"
-                >
-                  Copy Link
-                </button>
+              <div className="mt-4 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-sm text-white/65">
+                  {selectedTests.length > 0
+                    ? `${selectedTests.length} assessment(s) selected`
+                    : "No PT assessments selected yet."}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {selectedTests.length > 0 ? (
+                    selectedTests.map((id) => {
+                      const test = assessmentTests.find((item) => item.id === id);
+                      return (
+                        <span
+                          key={id}
+                          className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100"
+                        >
+                          {test?.title || id}
+                        </span>
+                      );
+                    })
+                  ) : (
+                    <p className="text-sm text-white/55">Select tests above to continue.</p>
+                  )}
+                </div>
               </div>
             </section>
           </div>
@@ -292,29 +327,41 @@ function InClinicAssessmentContent() {
               </div>
 
               <div className="mt-6 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-                <h3 className="text-base font-semibold text-cyan-300">
-                  Selected PT Assessments
-                </h3>
-
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {selectedTests.length > 0 ? (
-                    selectedTests.map((id) => {
-                      const test = assessmentTests.find((item) => item.id === id);
-                      return (
-                        <span
-                          key={id}
-                          className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100"
-                        >
-                          {test?.title || id}
-                        </span>
-                      );
-                    })
-                  ) : (
-                    <p className="text-sm text-white/60">
-                      No assessment selected yet.
-                    </p>
-                  )}
+                <h3 className="text-base font-semibold text-cyan-300">Patient Link</h3>
+                <p className="mt-2 text-sm text-white/65">
+                  Generate and share the in-clinic session link with the patient device.
+                </p>
+                <div className="mt-4 rounded-xl border border-white/10 bg-[#123a8a]/25 px-4 py-3 text-sm text-white/80 break-all">
+                  {generatedLink || "No link generated yet."}
                 </div>
+
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={handleGeneratePatientLink}
+                    className="rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
+                  >
+                    Generate In-Clinic Link
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 font-semibold text-white transition hover:bg-white/10"
+                  >
+                    Copy Link
+                  </button>
+                </div>
+
+                {feedback.type !== "idle" && (
+                  <p
+                    className={`mt-3 text-sm ${
+                      feedback.type === "success" ? "text-cyan-200" : "text-rose-200"
+                    }`}
+                  >
+                    {feedback.message}
+                  </p>
+                )}
               </div>
 
               <div className="mt-6 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
@@ -351,6 +398,14 @@ function SummaryCard({
       <p className="text-sm text-white/60">{label}</p>
       <p className="mt-2 text-base font-semibold text-white">{value}</p>
     </div>
+  );
+}
+
+function MetaBadge({ label }: { label: string }) {
+  return (
+    <span className="rounded-full border border-cyan-300/15 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100">
+      {label}
+    </span>
   );
 }
 
