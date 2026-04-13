@@ -8,9 +8,9 @@ import {
   type StoredPatient,
 } from "../../../lib/patients-storage";
 import {
+  createDraftAssessment,
   createAssessmentId,
   getAssessmentsByPatientId,
-  saveAssessmentToStorage,
   type StoredAssessment,
 } from "../../../lib/assessments-storage";
 
@@ -54,7 +54,7 @@ export default function PatientProfilePage() {
 
     const assessmentId = createAssessmentId();
 
-    saveAssessmentToStorage({
+    createDraftAssessment({
       id: assessmentId,
       patientId: patient.id,
       mode: "remote",
@@ -63,7 +63,6 @@ export default function PatientProfilePage() {
       side: "Not Applicable",
       visitType: "Follow-Up",
       sessionLabel: "Remote Assessment Request",
-      status: "draft",
       createdAt: new Date().toISOString(),
     });
 

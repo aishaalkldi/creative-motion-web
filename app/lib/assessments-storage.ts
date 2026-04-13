@@ -20,7 +20,31 @@ export type StoredAssessment = {
 
 const STORAGE_KEY = "creative-motion-assessments";
 
-function normalizeAssessment(input: Partial<StoredAssessment>): StoredAssessment | null {
+type DraftAssessmentInput = {
+  id: string;
+  patientId: string;
+  mode: AssessmentMode;
+  selectedTests?: string[];
+  bodyRegion?: string;
+  side?: string;
+  visitType?: string;
+  sessionLabel?: string;
+  createdAt?: string;
+};
+
+type AssessmentStore = {
+  getAll(): StoredAssessment[];
+  getById(id: string): StoredAssessment | null;
+  getByPatientId(patientId: string): StoredAssessment[];
+  getRecentByPatientId(patientId: string, limit: number): StoredAssessment[];
+  getLatestByPatientId(patientId: string): StoredAssessment | null;
+  save(assessment: StoredAssessment): void;
+  createDraft(input: DraftAssessmentInput): StoredAssessment;
+};
+
+function normalizeAssessment(
+  input: Partial<StoredAssessment>
+): StoredAssessment | null {
   if (!input.id || !input.patientId) return null;
 
   return {
@@ -74,76 +98,120 @@ function writeAssessments(data: StoredAssessment[]) {
   }
 }
 
+const localAssessmentStore: AssessmentStore = {
+  getAll() {
+    return readAssessments();
+  },
+  getById(id: string) {
+    return readAssessments().find((item) => item.id === id) || null;
+  },
+  getByPatientId(patientId: string) {
+    return readAssessments()
+      .filter((item) => item.patientId === patientId)
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+  },
+  getRecentByPatientId(patientId: string, limit: number) {
+    const safeLimit = Number.isFinite(limit)
+      ? Math.max(0, Math.floor(limit))
+      : 3;
+    if (safeLimit === 0) return [];
+    return localAssessmentStore.getByPatientId(patientId).slice(0, safeLimit);
+  },
+  getLatestByPatientId(patientId: string) {
+    const recent = localAssessmentStore.getRecentByPatientId(patientId, 1);
+    return recent.length > 0 ? recent[0] : null;
+  },
+  save(assessment: StoredAssessment) {
+    const normalized = normalizeAssessment(assessment);
+    if (!normalized) {
+      console.error("Failed to save assessment: invalid payload");
+      return;
+    }
+
+    const items = readAssessments();
+    const existingIndex = items.findIndex((item) => item.id === normalized.id);
+
+    if (existingIndex >= 0) {
+      const existing = items[existingIndex];
+
+      // Keep assessment session identity immutable once created.
+      if (existing.patientId !== normalized.patientId) {
+        console.error(
+          `Failed to save assessment ${normalized.id}: patientId mismatch`
+        );
+        return;
+      }
+
+      items[existingIndex] = {
+        ...existing,
+        ...normalized,
+        id: existing.id,
+        patientId: existing.patientId,
+        createdAt: existing.createdAt || normalized.createdAt,
+      };
+    } else {
+      items.push(normalized);
+    }
+
+    writeAssessments(items);
+  },
+  createDraft(input: DraftAssessmentInput) {
+    const draft = normalizeAssessment({
+      ...input,
+      selectedTests: input.selectedTests || [],
+      bodyRegion: input.bodyRegion || "Full Body",
+      side: input.side || "Not Applicable",
+      visitType: input.visitType || "Follow-Up",
+      sessionLabel: input.sessionLabel || "Assessment Session",
+      status: "draft",
+      createdAt: input.createdAt || new Date().toISOString(),
+    });
+
+    if (!draft) {
+      throw new Error("Invalid draft assessment payload");
+    }
+
+    localAssessmentStore.save(draft);
+    return draft;
+  },
+};
+
 export function getAllAssessments(): StoredAssessment[] {
-  return readAssessments();
+  return localAssessmentStore.getAll();
 }
 
 export function getAssessmentById(id: string): StoredAssessment | null {
-  const items = readAssessments();
-  return items.find((item) => item.id === id) || null;
+  return localAssessmentStore.getById(id);
 }
 
 export function getAssessmentsByPatientId(
   patientId: string
 ): StoredAssessment[] {
-  return readAssessments()
-    .filter((item) => item.patientId === patientId)
-    .sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+  return localAssessmentStore.getByPatientId(patientId);
 }
 
 export function getRecentAssessmentsForPatient(
   patientId: string,
   limit = 3
 ): StoredAssessment[] {
-  const safeLimit = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : 3;
-  if (safeLimit === 0) return [];
-  return getAssessmentsByPatientId(patientId).slice(0, safeLimit);
+  return localAssessmentStore.getRecentByPatientId(patientId, limit);
 }
 
 export function saveAssessmentToStorage(assessment: StoredAssessment) {
-  const normalized = normalizeAssessment(assessment);
-  if (!normalized) {
-    console.error("Failed to save assessment: invalid payload");
-    return;
-  }
+  localAssessmentStore.save(assessment);
+}
 
-  const items = readAssessments();
-  const existingIndex = items.findIndex((item) => item.id === normalized.id);
-
-  if (existingIndex >= 0) {
-    const existing = items[existingIndex];
-
-    // Protect session history integrity: the same assessment ID must remain tied
-    // to the original patient record once created.
-    if (existing.patientId !== normalized.patientId) {
-      console.error(
-        `Failed to save assessment ${normalized.id}: patientId mismatch`
-      );
-      return;
-    }
-
-    items[existingIndex] = {
-      ...existing,
-      ...normalized,
-      id: existing.id,
-      patientId: existing.patientId,
-      createdAt: existing.createdAt || normalized.createdAt,
-    };
-  } else {
-    items.push(normalized);
-  }
-
-  writeAssessments(items);
+export function createDraftAssessment(input: DraftAssessmentInput) {
+  return localAssessmentStore.createDraft(input);
 }
 
 export function getLatestAssessmentForPatient(
   patientId: string
 ): StoredAssessment | null {
-  const items = getRecentAssessmentsForPatient(patientId, 1);
-  return items.length > 0 ? items[0] : null;
+  return localAssessmentStore.getLatestByPatientId(patientId);
 }
 
 export function createAssessmentId() {

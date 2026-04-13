@@ -4,8 +4,8 @@ import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  createDraftAssessment,
   createAssessmentId,
-  saveAssessmentToStorage,
 } from "../../../lib/assessments-storage";
 
 function StartAssessmentPageContent() {
@@ -29,7 +29,7 @@ function StartAssessmentPageContent() {
 
     const assessmentId = createAssessmentId();
 
-    saveAssessmentToStorage({
+    createDraftAssessment({
       id: assessmentId,
       patientId,
       mode: "in_clinic",
@@ -38,7 +38,6 @@ function StartAssessmentPageContent() {
       side: "Right",
       visitType: "Follow-Up",
       sessionLabel: "New Assessment",
-      status: "draft",
       createdAt: new Date().toISOString(),
     });
 
@@ -58,7 +57,7 @@ function StartAssessmentPageContent() {
 
     const assessmentId = createAssessmentId();
 
-    saveAssessmentToStorage({
+    createDraftAssessment({
       id: assessmentId,
       patientId,
       mode: "remote",
@@ -67,7 +66,6 @@ function StartAssessmentPageContent() {
       side: "Not Applicable",
       visitType: "Follow-Up",
       sessionLabel: "Remote Assessment Request",
-      status: "draft",
       createdAt: new Date().toISOString(),
     });
 
