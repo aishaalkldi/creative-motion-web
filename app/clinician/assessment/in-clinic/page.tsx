@@ -3,10 +3,7 @@
 import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  getAssessmentById,
-  saveAssessmentToStorage,
-} from "../../../lib/assessments-storage";
+import { assessmentsRepository } from "../../../lib/repositories";
 
 const assessmentTests = [
   {
@@ -68,7 +65,7 @@ function InClinicAssessmentContent() {
 
   const existingAssessment = useMemo(() => {
     if (!assessmentId) return null;
-    return getAssessmentById(assessmentId);
+    return assessmentsRepository.getById(assessmentId);
   }, [assessmentId]);
 
   const [selectedTests, setSelectedTests] = useState<string[]>(
@@ -133,7 +130,7 @@ function InClinicAssessmentContent() {
           createdAt: new Date().toISOString(),
         };
 
-      saveAssessmentToStorage({
+      assessmentsRepository.update({
         ...assessmentToSave,
         patientId,
         mode: "in_clinic",

@@ -2,10 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  getAssessmentById,
-  saveAssessmentToStorage,
-} from "../lib/assessments-storage";
+import { assessmentsRepository } from "../lib/repositories";
 
 type SessionState = "idle" | "ready" | "running" | "stopped";
 
@@ -19,7 +16,7 @@ function BodyAxisAIPageContent() {
   const assessmentId = searchParams.get("assessmentId") || "AX-1001";
 
   const assessment = useMemo(
-    () => getAssessmentById(assessmentId),
+    () => assessmentsRepository.getById(assessmentId),
     [assessmentId]
   );
   const hasLinkedAssessment = Boolean(assessment);
@@ -179,7 +176,7 @@ function BodyAxisAIPageContent() {
         reportSummary ||
         generateReportSummary(test, finalScore, seconds || 10);
 
-      saveAssessmentToStorage({
+      assessmentsRepository.update({
         ...assessment,
         patientId,
         status: "completed",

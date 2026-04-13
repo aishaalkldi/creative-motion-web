@@ -3,10 +3,7 @@
 import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  createDraftAssessment,
-  createAssessmentId,
-} from "../../../lib/assessments-storage";
+import { assessmentsRepository } from "../../../lib/repositories";
 
 function StartAssessmentPageContent() {
   const router = useRouter();
@@ -27,9 +24,9 @@ function StartAssessmentPageContent() {
       return;
     }
 
-    const assessmentId = createAssessmentId();
+    const assessmentId = assessmentsRepository.newAssessmentId();
 
-    createDraftAssessment({
+    assessmentsRepository.create({
       id: assessmentId,
       patientId,
       mode: "in_clinic",
@@ -55,9 +52,9 @@ function StartAssessmentPageContent() {
       return;
     }
 
-    const assessmentId = createAssessmentId();
+    const assessmentId = assessmentsRepository.newAssessmentId();
 
-    createDraftAssessment({
+    assessmentsRepository.create({
       id: assessmentId,
       patientId,
       mode: "remote",

@@ -4,10 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { createPatientId } from "../../../lib/ids";
-import {
-  savePatientToStorage,
-  type StoredPatient,
-} from "../../../lib/patients-storage";
+import type { PatientRecord } from "../../../lib/domain-types";
+import { patientsRepository } from "../../../lib/repositories";
 
 export default function AddPatientPage() {
   const router = useRouter();
@@ -23,7 +21,7 @@ export default function AddPatientPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
 
-  function buildPatient(): StoredPatient {
+  function buildPatient(): PatientRecord {
     return {
       id: patientId,
       fullName: fullName.trim(),
@@ -55,7 +53,7 @@ export default function AddPatientPage() {
     }
 
     const patient = buildPatient();
-    savePatientToStorage(patient);
+    patientsRepository.create(patient);
     setSaved(true);
     setError("");
     alert("Patient saved successfully");
@@ -71,7 +69,7 @@ export default function AddPatientPage() {
     }
 
     const patient = buildPatient();
-    savePatientToStorage(patient);
+    patientsRepository.create(patient);
     setSaved(true);
     setError("");
     router.push(`/clinician/patients/${patient.id}`);
@@ -87,7 +85,7 @@ export default function AddPatientPage() {
     }
 
     const patient = buildPatient();
-    savePatientToStorage(patient);
+    patientsRepository.create(patient);
     setSaved(true);
     setError("");
     router.push(`/clinician/assessment/start?patientId=${patient.id}`);
@@ -103,7 +101,7 @@ export default function AddPatientPage() {
     }
 
     const patient = buildPatient();
-    savePatientToStorage(patient);
+    patientsRepository.create(patient);
     setSaved(true);
     setError("");
     router.push("/clinician/patients");

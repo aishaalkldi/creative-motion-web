@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { getAssessmentById } from "../lib/assessments-storage";
-import { getPatientById } from "../lib/patients-storage";
+import { assessmentsRepository, patientsRepository } from "../lib/repositories";
 
 function ResultsPageContent() {
   const searchParams = useSearchParams();
@@ -14,11 +13,11 @@ function ResultsPageContent() {
   const hasValidContext = patientId !== "—" && assessmentId !== "—";
 
   const assessment =
-    assessmentId !== "—" ? getAssessmentById(assessmentId) : null;
+    assessmentId !== "—" ? assessmentsRepository.getById(assessmentId) : null;
   const hasLinkedResult = hasValidContext && Boolean(assessment);
   const patientName =
     patientId !== "—"
-      ? getPatientById(patientId)?.fullName || "Not available"
+      ? patientsRepository.getById(patientId)?.fullName || "Not available"
       : "Not available";
 
   const mode = assessment

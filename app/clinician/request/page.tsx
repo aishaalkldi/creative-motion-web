@@ -3,10 +3,7 @@
 import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  getAssessmentById,
-  saveAssessmentToStorage,
-} from "../../lib/assessments-storage";
+import { assessmentsRepository } from "../../lib/repositories";
 
 const remoteAssessmentTests = [
   {
@@ -67,7 +64,7 @@ function RemoteRequestContent() {
   const patientName = searchParams.get("patientName") || "";
 
   const existingAssessment = assessmentId
-    ? getAssessmentById(assessmentId)
+    ? assessmentsRepository.getById(assessmentId)
     : null;
 
   const [selectedTests, setSelectedTests] = useState<string[]>(
@@ -126,7 +123,7 @@ function RemoteRequestContent() {
           createdAt: new Date().toISOString(),
         };
 
-      saveAssessmentToStorage({
+      assessmentsRepository.update({
         ...baseAssessment,
         patientId,
         mode: "remote",

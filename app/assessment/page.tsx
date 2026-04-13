@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
-import { getAssessmentById } from "../lib/assessments-storage";
+import { assessmentsRepository } from "../lib/repositories";
 
 function formatTestLabel(testId: string) {
   switch (testId) {
@@ -28,7 +28,7 @@ function PatientAssessmentContent() {
   const patientId = searchParams.get("patientId") || "";
   const assessmentId = searchParams.get("assessmentId") || "";
 
-  const assessment = assessmentId ? getAssessmentById(assessmentId) : null;
+  const assessment = assessmentId ? assessmentsRepository.getById(assessmentId) : null;
   const firstTest = assessment?.selectedTests?.[0] || "posture";
 
   const canStart = Boolean(patientId && assessmentId);

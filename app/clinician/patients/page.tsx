@@ -2,17 +2,15 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import {
-  getStoredPatients,
-  type StoredPatient,
-} from "../../lib/patients-storage";
+import type { PatientRecord } from "../../lib/domain-types";
+import { patientsRepository } from "../../lib/repositories";
 
 export default function PatientsPage() {
-  const [patients, setPatients] = useState<StoredPatient[]>([]);
+  const [patients, setPatients] = useState<PatientRecord[]>([]);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    const data = getStoredPatients();
+    const data = patientsRepository.getAll();
     setPatients(data);
   }, []);
 

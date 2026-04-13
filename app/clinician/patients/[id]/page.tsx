@@ -3,35 +3,26 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  getPatientById,
-  getStoredPatients,
-  type StoredPatient,
-} from "../../../lib/patients-storage";
-import {
-  createDraftAssessment,
-  createAssessmentId,
-  getAssessmentsByPatientId,
-  type StoredAssessment,
-} from "../../../lib/assessments-storage";
+import type { AssessmentRecord, PatientRecord } from "../../../lib/domain-types";
+import { assessmentsRepository, patientsRepository } from "../../../lib/repositories";
 
 export default function PatientProfilePage() {
   const params = useParams();
   const router = useRouter();
   const id = String(params.id || "");
 
-  const [patient, setPatient] = useState<StoredPatient | null>(null);
-  const [assessments, setAssessments] = useState<StoredAssessment[]>([]);
+  const [patient, setPatient] = useState<PatientRecord | null>(null);
+  const [assessments, setAssessments] = useState<AssessmentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [copyFeedback, setCopyFeedback] = useState<"idle" | "success" | "error">(
     "idle"
   );
 
   useEffect(() => {
-    const foundPatient = getPatientById(id);
+    const foundPatient = patientsRepository.getById(id);
     setPatient(foundPatient);
 
-    const patientAssessments = getAssessmentsByPatientId(id);
+    const patientAssessments = assessmentsRepository.listByPatientId(id);
     setAssessments(patientAssessments);
     setIsLoading(false);
   }, [id]);
@@ -52,9 +43,9 @@ export default function PatientProfilePage() {
       return;
     }
 
-    const assessmentId = createAssessmentId();
+    const assessmentId = assessmentsRepository.newAssessmentId();
 
-    createDraftAssessment({
+    assessmentsRepository.create({
       id: assessmentId,
       patientId: patient.id,
       mode: "remote",
