@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   createAssessmentId,
@@ -13,10 +13,17 @@ function StartAssessmentPageContent() {
   const searchParams = useSearchParams();
 
   const patientId = searchParams.get("patientId") || "";
+  const [feedback, setFeedback] = useState<{
+    type: "idle" | "error";
+    message: string;
+  }>({ type: "idle", message: "" });
 
   function handleStartInClinic() {
     if (!patientId) {
-      alert("No patient selected");
+      setFeedback({
+        type: "error",
+        message: "No patient context found. Open this flow from a patient profile.",
+      });
       return;
     }
 
@@ -42,7 +49,10 @@ function StartAssessmentPageContent() {
 
   function handleStartRemote() {
     if (!patientId) {
-      alert("No patient selected");
+      setFeedback({
+        type: "error",
+        message: "No patient context found. Open this flow from a patient profile.",
+      });
       return;
     }
 
@@ -69,32 +79,33 @@ function StartAssessmentPageContent() {
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-100">
-              Clinician Portal
+        <div className="mb-8 rounded-[28px] border border-cyan-300/18 bg-gradient-to-br from-cyan-500/8 via-white/[0.04] to-white/[0.02] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-100">
+                Assessment Mode Setup
+              </div>
+
+              <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
+                Start Assessment
+              </h1>
+
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70 md:text-base">
+                Choose the appropriate mode to continue the clinician workflow for this patient.
+              </p>
+
+              <div className="mt-4">
+                <MetaBadge label={`Patient ID: ${patientId || "—"}`} />
+              </div>
             </div>
 
-            <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
-              Start Assessment
-            </h1>
-
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70 md:text-base">
-              Choose the assessment mode to continue the clinical workflow for
-              this patient.
-            </p>
-
-            <p className="mt-3 text-sm text-white/60">
-              Patient ID: {patientId || "—"}
-            </p>
+            <Link
+              href={patientId ? `/clinician/patients/${patientId}` : "/clinician/patients"}
+              className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+            >
+              ← Back to Patient Profile
+            </Link>
           </div>
-
-          <Link
-            href={patientId ? `/clinician/patients/${patientId}` : "/clinician/patients"}
-            className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-          >
-            ← Back to Patient Profile
-          </Link>
         </div>
 
         <section className="grid gap-6 xl:grid-cols-[1.2fr_0.85fr]">
@@ -133,7 +144,7 @@ function StartAssessmentPageContent() {
                 <button
                   type="button"
                   onClick={handleStartInClinic}
-                  className="mt-6 rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
+                  className="mt-6 rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
                 >
                   Start In-Clinic Assessment
                 </button>
@@ -162,12 +173,18 @@ function StartAssessmentPageContent() {
                 <button
                   type="button"
                   onClick={handleStartRemote}
-                  className="mt-6 rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
+                  className="mt-6 rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
                 >
                   Create Remote Assessment
                 </button>
               </div>
             </div>
+
+            {feedback.type === "error" && (
+              <div className="mt-5 rounded-[20px] border border-amber-300/25 bg-amber-400/10 p-4 text-sm text-amber-100">
+                {feedback.message}
+              </div>
+            )}
           </div>
 
           <aside className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
@@ -225,9 +242,17 @@ function SummaryCard({
   );
 }
 
+function MetaBadge({ label }: { label: string }) {
+  return (
+    <span className="rounded-full border border-cyan-300/15 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100">
+      {label}
+    </span>
+  );
+}
+
 export default function StartAssessmentPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-white">Loading...</div>}>
+    <Suspense fallback={<div className="p-6 text-white">Loading assessment setup...</div>}>
       <StartAssessmentPageContent />
     </Suspense>
   );

@@ -339,7 +339,7 @@ function InClinicAssessmentContent() {
                   <button
                     type="button"
                     onClick={handleGeneratePatientLink}
-                    className="rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
+                    className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
                   >
                     Generate In-Clinic Link
                   </button>
@@ -347,7 +347,8 @@ function InClinicAssessmentContent() {
                   <button
                     type="button"
                     onClick={handleCopyLink}
-                    className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 font-semibold text-white transition hover:bg-white/10"
+                    disabled={!generatedLink && !patientAccessLink}
+                    className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/5"
                   >
                     Copy Link
                   </button>
@@ -355,8 +356,12 @@ function InClinicAssessmentContent() {
 
                 {feedback.type !== "idle" && (
                   <p
-                    className={`mt-3 text-sm ${
+                    className={`mt-3 rounded-xl border px-3 py-2 text-sm ${
                       feedback.type === "success" ? "text-cyan-200" : "text-rose-200"
+                    } ${
+                      feedback.type === "success"
+                        ? "border-cyan-300/20 bg-cyan-400/10"
+                        : "border-rose-300/20 bg-rose-400/10"
                     }`}
                   >
                     {feedback.message}
@@ -411,7 +416,7 @@ function MetaBadge({ label }: { label: string }) {
 
 export default function InClinicAssessmentPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-white">Loading...</div>}>
+    <Suspense fallback={<div className="p-6 text-white">Loading session setup...</div>}>
       <InClinicAssessmentContent />
     </Suspense>
   );

@@ -322,7 +322,8 @@ function RemoteRequestContent() {
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                  disabled={!generatedLink && !patientAccessLink}
+                  className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/5"
                 >
                   Copy Link
                 </button>
@@ -330,8 +331,12 @@ function RemoteRequestContent() {
 
               {feedback.type !== "idle" && (
                 <p
-                  className={`mt-3 text-sm ${
+                  className={`mt-3 rounded-xl border px-3 py-2 text-sm ${
                     feedback.type === "success" ? "text-cyan-200" : "text-rose-200"
+                  } ${
+                    feedback.type === "success"
+                      ? "border-cyan-300/20 bg-cyan-400/10"
+                      : "border-rose-300/20 bg-rose-400/10"
                   }`}
                 >
                   {feedback.message}
