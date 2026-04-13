@@ -64,20 +64,42 @@ export default function PatientsPage() {
 
         <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
           <div className="mb-6 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-            <label className="block">
-              <span className="mb-2 block text-sm text-white/70">
-                Search Patients
-              </span>
-              <input
-                placeholder="Search by Patient ID, Name, Phone, or Diagnosis"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-2xl border border-white/10 bg-[#123a8a]/30 px-4 py-3 text-white outline-none placeholder:text-white/40"
-              />
-            </label>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <label className="block flex-1 min-w-[260px]">
+                <span className="mb-2 block text-sm text-white/70">
+                  Search Patients
+                </span>
+                <input
+                  placeholder="Search by Patient ID, Name, Phone, or Diagnosis"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full rounded-2xl border border-white/10 bg-[#123a8a]/30 px-4 py-3 text-white outline-none placeholder:text-white/40"
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                disabled={!hasSearch}
+                className="rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/5"
+              >
+                Clear Filter
+              </button>
+            </div>
             <div className="mt-3 text-xs text-white/55">
               Use search to filter by patient identity or clinical context.
             </div>
+          </div>
+
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-white/65">
+              {filtered.length} {filtered.length === 1 ? "patient" : "patients"} displayed
+            </p>
+            {hasSearch && (
+              <p className="text-xs text-cyan-100">
+                Filter active: <span className="font-semibold text-white">{search}</span>
+              </p>
+            )}
           </div>
 
           <div className="overflow-x-auto rounded-[24px] border border-white/10">
@@ -109,21 +131,25 @@ export default function PatientsPage() {
                   filtered.map((patient) => (
                     <tr
                       key={patient.id}
-                      className="border-t border-white/10 text-sm text-white/80"
+                      className="border-t border-white/10 text-sm text-white/80 transition hover:bg-white/[0.02]"
                     >
-                      <td className="px-5 py-4">{patient.id}</td>
-                      <td className="px-5 py-4">{patient.fullName}</td>
+                      <td className="px-5 py-4 font-medium text-cyan-100">{patient.id}</td>
+                      <td className="px-5 py-4 font-medium text-white">{patient.fullName}</td>
                       <td className="px-5 py-4">{patient.phone}</td>
-                      <td className="px-5 py-4">{patient.diagnosis || "—"}</td>
+                      <td className="px-5 py-4">
+                        <span className="rounded-full border border-white/12 bg-white/[0.03] px-3 py-1 text-xs text-white/75">
+                          {patient.diagnosis || "Not specified"}
+                        </span>
+                      </td>
                       <td className="px-5 py-4">
                         <StatusBadge status={patient.status} />
                       </td>
                       <td className="px-5 py-4">
                         <Link
                           href={`/clinician/patients/${patient.id}`}
-                          className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10"
+                          className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10"
                         >
-                          Open Profile
+                          Open Profile →
                         </Link>
                       </td>
                     </tr>
