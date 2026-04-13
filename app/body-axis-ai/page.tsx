@@ -22,6 +22,10 @@ function BodyAxisAIPageContent() {
     () => getAssessmentById(assessmentId),
     [assessmentId]
   );
+  const hasLinkedAssessment = Boolean(assessment);
+  const displayPatientId = patientId === "UNKNOWN" ? "Not provided" : patientId;
+  const displayPatientName =
+    patientName === "Unknown Patient" ? "Not provided" : patientName;
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -38,6 +42,7 @@ function BodyAxisAIPageContent() {
   const [distanceStatus, setDistanceStatus] = useState("Stand 1.5 to 2 meters away");
   const [movementScore, setMovementScore] = useState<number | null>(null);
   const [reportSummary, setReportSummary] = useState("");
+  const [sessionMessage, setSessionMessage] = useState("");
 
   useEffect(() => {
     return () => {
@@ -102,10 +107,11 @@ function BodyAxisAIPageContent() {
 
   function handleStartSession() {
     if (!cameraReady) {
-      alert("Please enable the camera first.");
+      setSessionMessage("Enable camera or upload video before starting the session.");
       return;
     }
 
+    setSessionMessage("");
     setMovementScore(null);
     setReportSummary("");
     setSeconds(0);
@@ -194,61 +200,68 @@ function BodyAxisAIPageContent() {
       );
     } catch (error) {
       console.error(error);
-      alert("Failed to submit assessment");
+      setSessionMessage("Failed to submit assessment. Please verify linked assessment context and try again.");
     } finally {
       setLoading(false);
     }
   }
 
-  const canSubmit = sessionState === "stopped";
+  const canSubmit = sessionState === "stopped" && hasLinkedAssessment;
 
   return (
-    <main className="min-h-screen bg-[#0B1220] px-6 py-10 text-white">
+    <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8">
-          <p className="mb-3 inline-block rounded-full bg-cyan-400/10 px-4 py-1 text-sm text-cyan-300">
-            Body Axis AI
+        <div className="mb-8 rounded-[28px] border border-cyan-300/18 bg-gradient-to-br from-cyan-500/8 via-white/[0.04] to-white/[0.02] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+          <p className="mb-3 inline-block rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-200">
+            Body Axis AI Session
           </p>
 
-          <h1 className="text-4xl font-bold text-cyan-300">
+          <h1 className="text-3xl font-bold text-cyan-300 md:text-4xl">
             {formatTestTitle(test)}
           </h1>
 
-          <p className="mt-2 max-w-3xl leading-7 text-slate-300">
-            Live camera assessment session with timing, instructions, and linked
-            submission to the patient record.
+          <p className="mt-3 max-w-3xl text-sm leading-7 text-white/75 md:text-base">
+            Guided movement capture session with structured timing, standardized instructions,
+            and linked submission to the clinician workflow.
           </p>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <MetaBadge label={`Patient: ${displayPatientName}`} />
+            <MetaBadge label={`ID: ${displayPatientId}`} />
+            <MetaBadge label={`Assessment: ${assessmentId}`} />
+          </div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
-          <section className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md">
-            <h2 className="mb-5 text-2xl font-semibold text-white">
-              Assessment Session
-            </h2>
+          <section className="rounded-3xl border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-2xl font-semibold text-white">Assessment Session</h2>
+              <SessionStateBadge state={sessionState} />
+            </div>
 
-            <div className="rounded-2xl border border-white/10 bg-[#0F172A] p-5">
-              <h3 className="text-lg font-semibold text-cyan-300">
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+              <h3 className="text-lg font-semibold text-cyan-200">
                 Instructions
               </h3>
 
               <ul className="mt-4 space-y-2 text-sm leading-7 text-slate-300">
-                <li>• {getInstructionByTest(test)}</li>
-                <li>• Keep your whole body visible in the frame.</li>
-                <li>• Stand about 1.5 to 2 meters away from the device.</li>
-                <li>• Use Start Session to begin timing, then Stop Session when done.</li>
+                <li>1. {getInstructionByTest(test)}</li>
+                <li>2. Keep your full body visible in the camera frame.</li>
+                <li>3. Maintain approximately 1.5 to 2 meters distance.</li>
+                <li>4. Start session, perform movement, then stop and submit.</li>
               </ul>
             </div>
 
             <div className="mt-5 grid gap-4 md:grid-cols-3">
               <StatusCard label="Visibility" value={visibilityStatus} />
               <StatusCard label="Distance" value={distanceStatus} />
-              <StatusCard label="Timer" value={`${seconds}s`} />
+              <StatusCard label="Elapsed Time" value={`${seconds}s`} />
             </div>
 
             <div className="mt-6 overflow-hidden rounded-3xl border border-dashed border-cyan-400/30 bg-cyan-400/5">
               <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
                 <p className="text-sm font-medium text-cyan-300">
-                  Live Camera / Uploaded Video
+                  Session Capture
                 </p>
 
                 <button
@@ -272,7 +285,7 @@ function BodyAxisAIPageContent() {
 
                 {!cameraReady && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/70 px-6 text-center text-sm text-slate-300">
-                    {cameraError || "Enable camera or upload a video to begin."}
+                    {cameraError || "Enable camera or upload a video to begin capture."}
                   </div>
                 )}
 
@@ -283,7 +296,7 @@ function BodyAxisAIPageContent() {
                 )}
 
                 <div className="absolute bottom-4 left-4 rounded-xl bg-black/60 px-4 py-2 text-sm text-white">
-                  Timer: {seconds}s
+                  Elapsed: {seconds}s
                 </div>
               </div>
             </div>
@@ -296,7 +309,7 @@ function BodyAxisAIPageContent() {
               className="hidden"
             />
 
-            <div className="mt-6 flex flex-wrap gap-3">
+            <div className="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <button
                 type="button"
                 onClick={enableCamera}
@@ -332,14 +345,20 @@ function BodyAxisAIPageContent() {
               </button>
             </div>
 
+            {sessionMessage && (
+              <div className="mt-4 rounded-2xl border border-amber-300/25 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+                {sessionMessage}
+              </div>
+            )}
+
             {sessionState === "stopped" && (
-              <div className="mt-6 rounded-2xl border border-green-400/20 bg-green-400/10 p-5">
-                <h3 className="text-lg font-semibold text-green-300">
+              <div className="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-5">
+                <h3 className="text-lg font-semibold text-emerald-200">
                   Session Report
                 </h3>
 
                 <p className="mt-3 text-sm leading-7 text-white/80">
-                  {reportSummary}
+                  {reportSummary || "Session completed. Review summary metrics and submit assessment."}
                 </p>
 
                 <div className="mt-4 grid gap-4 md:grid-cols-2">
@@ -355,23 +374,33 @@ function BodyAxisAIPageContent() {
             )}
           </section>
 
-          <aside className="rounded-3xl border border-white/10 bg-white/5 p-6 backdrop-blur-md">
+          <aside className="rounded-3xl border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
             <h2 className="mb-5 text-2xl font-semibold text-white">
               Assessment Info
             </h2>
 
             <div className="space-y-4">
-              <InfoBox label="Patient Name" value={patientName} />
-              <InfoBox label="File Number" value={patientId} />
+              <InfoBox label="Patient Name" value={displayPatientName} />
+              <InfoBox label="File Number" value={displayPatientId} />
               <InfoBox label="Assessment ID" value={assessmentId} />
               <InfoBox label="Test Type" value={formatTestTitle(test)} />
+              <InfoBox
+                label="Linked Assessment"
+                value={hasLinkedAssessment ? "Connected" : "Not linked"}
+              />
             </div>
+
+            {!hasLinkedAssessment && (
+              <div className="mt-5 rounded-2xl border border-amber-300/25 bg-amber-400/10 p-4 text-sm leading-6 text-amber-100">
+                No linked assessment record found. You can run the session, but submission requires a valid assessment context.
+              </div>
+            )}
 
             <button
               type="button"
               onClick={handleSubmitAssessment}
               disabled={!canSubmit || loading}
-              className="mt-6 w-full rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 font-semibold text-black transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-50"
+              className="mt-6 w-full rounded-xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading ? "Submitting..." : "Submit Assessment"}
             </button>
@@ -384,7 +413,7 @@ function BodyAxisAIPageContent() {
               Back
             </button>
 
-            <div className="mt-6 rounded-2xl border border-white/10 bg-[#0F172A] p-4">
+            <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
               <p className="text-sm text-slate-400">Session State</p>
               <p className="mt-2 font-medium text-white capitalize">
                 {sessionState}
@@ -405,7 +434,7 @@ function InfoBox({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#0F172A] p-4">
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
       <p className="text-sm text-slate-400">{label}</p>
       <p className="mt-2 font-medium text-white">{value}</p>
     </div>
@@ -420,10 +449,35 @@ function StatusCard({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#0F172A] p-4">
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
       <p className="text-sm text-slate-400">{label}</p>
       <p className="mt-2 font-medium text-white">{value}</p>
     </div>
+  );
+}
+
+function MetaBadge({ label }: { label: string }) {
+  return (
+    <span className="rounded-full border border-cyan-300/15 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100">
+      {label}
+    </span>
+  );
+}
+
+function SessionStateBadge({ state }: { state: SessionState }) {
+  const stateClass =
+    state === "running"
+      ? "border-rose-300/25 bg-rose-400/10 text-rose-100"
+      : state === "stopped"
+        ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-100"
+        : state === "ready"
+          ? "border-cyan-300/25 bg-cyan-400/10 text-cyan-100"
+          : "border-white/15 bg-white/[0.04] text-white/80";
+
+  return (
+    <span className={`rounded-full border px-4 py-2 text-xs font-semibold uppercase tracking-[0.08em] ${stateClass}`}>
+      {state}
+    </span>
   );
 }
 
