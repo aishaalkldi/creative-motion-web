@@ -40,6 +40,7 @@ export default function PatientProfilePage() {
     if (assessments.length === 0) return null;
     return assessments[0];
   }, [assessments]);
+  const recentAssessments = useMemo(() => assessments.slice(0, 3), [assessments]);
 
   const latestRemoteAssessment = useMemo(() => {
     return assessments.find((item) => item.mode === "remote") || null;
@@ -290,12 +291,30 @@ export default function PatientProfilePage() {
               id="assessment-timeline"
               className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md"
             >
-              <h2 className="text-2xl font-bold text-white">Latest Assessment Result</h2>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Latest Result</h2>
+                  <p className="mt-2 text-sm text-white/70">
+                    Most recent assessment snapshot for immediate clinical decision-making.
+                  </p>
+                </div>
+                {latestAssessment && (
+                  <Link
+                    href={`/results?patientId=${patient.id}&assessmentId=${latestAssessment.id}`}
+                    className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                  >
+                    View Full Result
+                  </Link>
+                )}
+              </div>
 
               {latestAssessment ? (
                 <div className="mt-5 space-y-5">
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                    <InfoCard label="Assessment ID" value={latestAssessment.id} />
+                    <InfoCard
+                      label="Assessment Date"
+                      value={new Date(latestAssessment.createdAt).toLocaleDateString()}
+                    />
                     <InfoCard
                       label="Mode"
                       value={
@@ -304,7 +323,10 @@ export default function PatientProfilePage() {
                           : "In-clinic"
                       }
                     />
-                    <InfoCard label="Status" value={latestAssessment.status} />
+                    <InfoCard
+                      label="Status"
+                      value={formatStatusLabel(latestAssessment.status)}
+                    />
                     <InfoCard
                       label="Score"
                       value={
@@ -356,13 +378,79 @@ export default function PatientProfilePage() {
                 </div>
               ) : (
                 <div className="mt-5 rounded-[20px] border border-white/10 bg-white/[0.03] p-5 text-sm text-white/65">
-                  No saved assessment yet for this patient.
+                  No result recorded yet. Start an assessment to create the first linked result.
                 </div>
               )}
             </section>
 
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-              <h2 className="text-2xl font-bold text-white">Assessment Timeline</h2>
+              <h2 className="text-2xl font-bold text-white">Recent Results</h2>
+              <p className="mt-2 text-sm text-white/70">
+                Last 3 assessments for quick clinician comparison.
+              </p>
+
+              <div className="mt-5 space-y-3">
+                {recentAssessments.length > 0 ? (
+                  recentAssessments.map((item) => (
+                    <div
+                      key={`${item.id}-recent`}
+                      className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm text-white/60">
+                            {new Date(item.createdAt).toLocaleDateString()}
+                          </p>
+                          <h3 className="mt-1 text-base font-semibold text-white">
+                            {item.mode === "remote" ? "Remote" : "In-clinic"} Session
+                          </h3>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2">
+                          <ResultPill
+                            label={
+                              typeof item.score === "number"
+                                ? `Score ${item.score}%`
+                                : "Score pending"
+                            }
+                            tone={typeof item.score === "number" ? "score" : "neutral"}
+                          />
+                          <ResultPill
+                            label={formatStatusLabel(item.status)}
+                            tone={item.status === "completed" ? "good" : "neutral"}
+                          />
+                        </div>
+                      </div>
+
+                      <p className="mt-3 text-sm leading-6 text-white/70">
+                        {item.selectedTests.length > 0
+                          ? `Tests: ${item.selectedTests.map(formatTestLabel).join(", ")}`
+                          : "No tests selected"}
+                      </p>
+
+                      <div className="mt-3">
+                        <Link
+                          href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
+                          className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10"
+                        >
+                          View Result →
+                        </Link>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-5 text-sm text-white/65">
+                    No recent results available.
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+              <h2 className="text-2xl font-bold text-white">Full Assessment History</h2>
+              <p className="mt-2 text-sm text-white/70">
+                Complete session archive preserved for longitudinal tracking and future trends.
+              </p>
 
               <div className="mt-5 space-y-4">
                 {assessments.length > 0 ? (
@@ -385,21 +473,29 @@ export default function PatientProfilePage() {
 
                         <div className="flex flex-wrap items-center gap-2">
                           {typeof item.score === "number" && (
-                            <span className="rounded-full border border-cyan-300/15 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100">
-                              Score: {item.score}%
-                            </span>
+                            <ResultPill label={`Score ${item.score}%`} tone="score" />
                           )}
-                          <span className="rounded-full border border-cyan-300/15 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100">
-                            {item.status}
-                          </span>
+                          <ResultPill
+                            label={formatStatusLabel(item.status)}
+                            tone={item.status === "completed" ? "good" : "neutral"}
+                          />
                         </div>
                       </div>
 
                       <p className="mt-3 text-sm leading-6 text-white/70">
                         {item.selectedTests.length > 0
-                          ? `Tests: ${item.selectedTests.join(", ")}`
+                          ? `Tests: ${item.selectedTests.map(formatTestLabel).join(", ")}`
                           : "No tests selected"}
                       </p>
+
+                      <div className="mt-3">
+                        <Link
+                          href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
+                          className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10"
+                        >
+                          Open Result →
+                        </Link>
+                      </div>
                     </div>
                   ))
                 ) : (
@@ -494,6 +590,33 @@ function formatTestLabel(test: string) {
     default:
       return test;
   }
+}
+
+function formatStatusLabel(status: string) {
+  if (status === "completed") return "Completed";
+  if (status === "draft") return "Draft";
+  return status;
+}
+
+function ResultPill({
+  label,
+  tone,
+}: {
+  label: string;
+  tone: "score" | "good" | "neutral";
+}) {
+  const className =
+    tone === "good"
+      ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-100"
+      : tone === "score"
+        ? "border-cyan-300/20 bg-cyan-400/10 text-cyan-100"
+        : "border-white/15 bg-white/[0.04] text-white/80";
+
+  return (
+    <span className={`rounded-full border px-3 py-1 text-xs font-medium ${className}`}>
+      {label}
+    </span>
+  );
 }
 
 function Badge({ text }: { text: string }) {
