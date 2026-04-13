@@ -14,6 +14,7 @@ function ResultsPageContent() {
 
   const assessment =
     assessmentId !== "—" ? getAssessmentById(assessmentId) : null;
+  const hasLinkedResult = hasValidContext && Boolean(assessment);
 
   const mode = assessment
     ? assessment.mode === "remote"
@@ -48,7 +49,7 @@ function ResultsPageContent() {
     ? assessment.reportSummary
     : assessment
       ? `${mode} recorded for ${bodyRegion.toLowerCase()} (${side.toLowerCase()}) during a ${visitType.toLowerCase()} visit. Use the selected tests and score to confirm progression and next care step.`
-      : "Report summary will appear after a valid assessment record is loaded.";
+      : "No linked result available yet.";
 
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
@@ -108,15 +109,14 @@ function ResultsPageContent() {
                 <MetricCard label="Created At" value={createdAt} />
               </div>
 
-              {!hasValidContext && (
-                <div className="mt-5 rounded-[18px] border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
-                  Missing patient or assessment query parameters. Open this page from a patient workflow for full context.
-                </div>
-              )}
-
-              {hasValidContext && !assessment && (
-                <div className="mt-5 rounded-[18px] border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
-                  Assessment record was not found in saved data. Confirm the assessment was completed and stored.
+              {!hasLinkedResult && (
+                <div className="mt-5 rounded-[20px] border border-cyan-300/20 bg-cyan-400/8 p-4">
+                  <p className="text-sm font-semibold text-cyan-100">
+                    No linked result found
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-white/70">
+                    This screen is ready, but no valid assessment result is currently attached to this URL.
+                  </p>
                 </div>
               )}
             </section>
@@ -147,7 +147,7 @@ function ResultsPageContent() {
                 <p className="text-sm text-white/65">
                   {selectedTests.length > 0
                     ? `${selectedTests.length} tests selected for this session`
-                    : "No tests selected for this session"}
+                    : "No tests linked"}
                 </p>
               </div>
 
@@ -163,7 +163,7 @@ function ResultsPageContent() {
                   ))
                 ) : (
                   <div className="w-full rounded-[18px] border border-white/10 bg-white/[0.03] px-4 py-4 text-sm text-white/60">
-                    Tests will appear here once the assessment is configured and completed.
+                    No test data available for this result.
                   </div>
                 )}
               </div>
@@ -357,7 +357,7 @@ function ActionBox({ text }: { text: string }) {
 
 export default function ResultsPage() {
   return (
-    <Suspense fallback={<div className="p-6 text-white">Loading results...</div>}>
+    <Suspense fallback={<div className="p-6 text-white">Loading result...</div>}>
       <ResultsPageContent />
     </Suspense>
   );
