@@ -74,6 +74,10 @@ function RemoteRequestContent() {
     existingAssessment?.selectedTests || []
   );
   const [generatedLink, setGeneratedLink] = useState("");
+  const [feedback, setFeedback] = useState<{
+    type: "idle" | "success" | "error";
+    message: string;
+  }>({ type: "idle", message: "" });
 
   const patientAccessLink = useMemo(() => {
     if (!patientId || !assessmentId || typeof window === "undefined") return "";
@@ -92,12 +96,18 @@ function RemoteRequestContent() {
 
   function handleGenerateLink() {
     if (!patientId || !assessmentId) {
-      alert("Missing patient or assessment data");
+      setFeedback({
+        type: "error",
+        message: "Missing patient or assessment context.",
+      });
       return;
     }
 
     if (selectedTests.length === 0) {
-      alert("Please select at least one PT assessment");
+      setFeedback({
+        type: "error",
+        message: "Select at least one PT assessment before generating a link.",
+      });
       return;
     }
 
@@ -129,55 +139,77 @@ function RemoteRequestContent() {
       });
 
       setGeneratedLink(patientAccessLink);
+      setFeedback({
+        type: "success",
+        message: "Secure link generated and saved to assessment draft.",
+      });
     } catch (error) {
       console.error(error);
-      alert("Failed to generate secure link");
+      setFeedback({
+        type: "error",
+        message: "Failed to generate secure link. Please try again.",
+      });
     }
   }
 
   async function handleCopyLink() {
     const finalLink = generatedLink || patientAccessLink;
-    if (!finalLink) return;
+    if (!finalLink) {
+      setFeedback({
+        type: "error",
+        message: "Generate a secure link before copying.",
+      });
+      return;
+    }
 
     try {
       await navigator.clipboard.writeText(finalLink);
-      alert("Link copied successfully");
+      setFeedback({
+        type: "success",
+        message: "Secure link copied to clipboard.",
+      });
     } catch (error) {
       console.error(error);
-      alert("Failed to copy link");
+      setFeedback({
+        type: "error",
+        message: "Failed to copy link. Please copy manually.",
+      });
     }
   }
 
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-100">
-              Remote Assessment
+        <div className="mb-8 rounded-[28px] border border-cyan-300/18 bg-gradient-to-br from-cyan-500/8 via-white/[0.04] to-white/[0.02] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-100">
+                Remote Assessment Setup
+              </div>
+
+              <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
+                Generate Secure Patient Link
+              </h1>
+
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70 md:text-base">
+                Select PT assessments, generate secure access, and prepare the patient’s
+                remote session in a structured clinician workflow.
+              </p>
+
+              <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                <MetaBadge label={`Patient ID: ${patientId || "—"}`} />
+                <MetaBadge label={`Assessment ID: ${assessmentId || "—"}`} />
+                {patientName ? <MetaBadge label={`Patient: ${patientName}`} /> : null}
+              </div>
             </div>
 
-            <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
-              Generate Secure Patient Link
-            </h1>
-
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70 md:text-base">
-              Select one or more PT assessments, generate a secure link, and send it
-              to the patient to complete remotely.
-            </p>
-
-            <p className="mt-3 text-sm text-white/60">
-              Patient ID: {patientId || "—"} | Assessment ID: {assessmentId || "—"}
-              {patientName ? ` | Patient: ${patientName}` : ""}
-            </p>
+            <Link
+              href={patientId ? `/clinician/patients/${patientId}` : "/clinician/patients"}
+              className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+            >
+              ← Back to Patient Profile
+            </Link>
           </div>
-
-          <Link
-            href={patientId ? `/clinician/patients/${patientId}` : "/clinician/patients"}
-            className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-          >
-            ← Back to Patient Profile
-          </Link>
         </div>
 
         <section className="grid gap-6 xl:grid-cols-[1.2fr_0.85fr]">
@@ -232,30 +264,28 @@ function RemoteRequestContent() {
             </div>
 
             <div className="mt-6 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-              <h3 className="text-base font-semibold text-cyan-300">
-                Generated Link
-              </h3>
-
-              <div className="mt-4 rounded-xl border border-white/10 bg-[#123a8a]/25 px-4 py-3 text-sm text-white/80 break-all">
-                {generatedLink || "No link generated yet"}
-              </div>
-
-              <div className="mt-4 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={handleGenerateLink}
-                  className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-                >
-                  Generate Secure Link
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleCopyLink}
-                  className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-                >
-                  Copy Link
-                </button>
+              <h3 className="text-base font-semibold text-cyan-300">Selected Tests Summary</h3>
+              <p className="mt-2 text-sm text-white/65">
+                {selectedTests.length > 0
+                  ? `${selectedTests.length} assessment(s) selected`
+                  : "No PT assessments selected yet."}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {selectedTests.length > 0 ? (
+                  selectedTests.map((id) => {
+                    const test = remoteAssessmentTests.find((item) => item.id === id);
+                    return (
+                      <span
+                        key={id}
+                        className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100"
+                      >
+                        {test?.title || id}
+                      </span>
+                    );
+                  })
+                ) : (
+                  <p className="text-sm text-white/55">Select tests above to continue.</p>
+                )}
               </div>
             </div>
           </section>
@@ -275,27 +305,38 @@ function RemoteRequestContent() {
             </div>
 
             <div className="mt-6 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-              <h3 className="text-base font-semibold text-cyan-300">
-                Selected PT Assessments
-              </h3>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                {selectedTests.length > 0 ? (
-                  selectedTests.map((id) => {
-                    const test = remoteAssessmentTests.find((item) => item.id === id);
-                    return (
-                      <span
-                        key={id}
-                        className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100"
-                      >
-                        {test?.title || id}
-                      </span>
-                    );
-                  })
-                ) : (
-                  <p className="text-sm text-white/60">No assessment selected yet.</p>
-                )}
+              <h3 className="text-base font-semibold text-cyan-300">Secure Link</h3>
+              <div className="mt-4 rounded-xl border border-white/10 bg-[#123a8a]/25 px-4 py-3 text-sm text-white/80 break-all">
+                {generatedLink || "No link generated yet."}
               </div>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={handleGenerateLink}
+                  className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+                >
+                  Generate Secure Link
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleCopyLink}
+                  className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                >
+                  Copy Link
+                </button>
+              </div>
+
+              {feedback.type !== "idle" && (
+                <p
+                  className={`mt-3 text-sm ${
+                    feedback.type === "success" ? "text-cyan-200" : "text-rose-200"
+                  }`}
+                >
+                  {feedback.message}
+                </p>
+              )}
             </div>
 
             <div className="mt-6 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
@@ -331,6 +372,14 @@ function InfoCard({
       <p className="text-sm text-white/60">{label}</p>
       <p className="mt-2 text-base font-semibold text-white">{value}</p>
     </div>
+  );
+}
+
+function MetaBadge({ label }: { label: string }) {
+  return (
+    <span className="rounded-full border border-cyan-300/15 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100">
+      {label}
+    </span>
   );
 }
 
