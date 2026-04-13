@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
+  getPatientById,
   getStoredPatients,
   type StoredPatient,
 } from "../../../lib/patients-storage";
@@ -27,8 +28,7 @@ export default function PatientProfilePage() {
   );
 
   useEffect(() => {
-    const patients = getStoredPatients();
-    const foundPatient = patients.find((p) => p.id === id) || null;
+    const foundPatient = getPatientById(id);
     setPatient(foundPatient);
 
     const patientAssessments = getAssessmentsByPatientId(id);

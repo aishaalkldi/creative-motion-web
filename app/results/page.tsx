@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { getAssessmentById } from "../lib/assessments-storage";
-import { getStoredPatients } from "../lib/patients-storage";
+import { getPatientById } from "../lib/patients-storage";
 
 function ResultsPageContent() {
   const searchParams = useSearchParams();
@@ -18,7 +18,7 @@ function ResultsPageContent() {
   const hasLinkedResult = hasValidContext && Boolean(assessment);
   const patientName =
     patientId !== "—"
-      ? getStoredPatients().find((item) => item.id === patientId)?.fullName || "Not available"
+      ? getPatientById(patientId)?.fullName || "Not available"
       : "Not available";
 
   const mode = assessment
