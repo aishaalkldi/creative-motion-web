@@ -10,6 +10,7 @@ function ResultsPageContent() {
 
   const patientId = searchParams.get("patientId") || "—";
   const assessmentId = searchParams.get("assessmentId") || "—";
+  const hasValidContext = patientId !== "—" && assessmentId !== "—";
 
   const assessment =
     assessmentId !== "—" ? getAssessmentById(assessmentId) : null;
@@ -33,6 +34,15 @@ function ResultsPageContent() {
     typeof assessment?.score === "number"
       ? `${assessment.score}%`
       : assessment?.score || "—";
+  const scoreValue = typeof assessment?.score === "number" ? assessment.score : null;
+  const scoreTone =
+    scoreValue === null
+      ? "pending"
+      : scoreValue >= 80
+        ? "good"
+        : scoreValue >= 60
+          ? "moderate"
+          : "attention";
 
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
@@ -55,7 +65,7 @@ function ResultsPageContent() {
 
           <div className="flex flex-wrap gap-3">
             <Link
-              href={`/clinician/patients/${patientId}`}
+              href={patientId !== "—" ? `/clinician/patients/${patientId}` : "/clinician/patients"}
               className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
             >
               ← Back to Patient Profile
@@ -72,6 +82,39 @@ function ResultsPageContent() {
 
         <section className="grid gap-6 xl:grid-cols-[1.2fr_0.85fr]">
           <div className="space-y-6">
+            <section className="rounded-[28px] border border-cyan-300/18 bg-gradient-to-br from-cyan-500/8 via-white/[0.04] to-white/[0.02] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-white">Clinical Result Overview</h2>
+                  <p className="mt-2 text-sm leading-7 text-white/70">
+                    Linked assessment context, score signal, and session readiness for follow-up decisions.
+                  </p>
+                </div>
+                <StatusPill status={status} />
+              </div>
+
+              <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <MetricCard label="Score" value={String(score)} tone={scoreTone} />
+                <MetricCard label="Mode" value={mode} />
+                <MetricCard label="Selected Tests" value={String(selectedTests.length)} />
+                <MetricCard label="Patient ID" value={patientId} />
+                <MetricCard label="Assessment ID" value={assessmentId} />
+                <MetricCard label="Created At" value={createdAt} />
+              </div>
+
+              {!hasValidContext && (
+                <div className="mt-5 rounded-[18px] border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+                  Missing patient or assessment query parameters. Open this page from a patient workflow for full context.
+                </div>
+              )}
+
+              {hasValidContext && !assessment && (
+                <div className="mt-5 rounded-[18px] border border-amber-300/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+                  Assessment record was not found in saved data. Confirm the assessment was completed and stored.
+                </div>
+              )}
+            </section>
+
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
               <h2 className="text-2xl font-bold text-white">
                 Assessment Summary
@@ -94,18 +137,28 @@ function ResultsPageContent() {
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
               <h2 className="text-2xl font-bold text-white">Tests Included</h2>
 
-              <div className="mt-5 flex flex-wrap gap-3">
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <p className="text-sm text-white/65">
+                  {selectedTests.length > 0
+                    ? `${selectedTests.length} tests selected for this session`
+                    : "No tests selected for this session"}
+                </p>
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-3">
                 {selectedTests.length > 0 ? (
                   selectedTests.map((test) => (
                     <span
                       key={test}
-                      className="rounded-full border border-cyan-300/15 bg-cyan-400/10 px-4 py-2 text-sm text-cyan-100"
+                      className="rounded-full border border-cyan-300/25 bg-cyan-400/12 px-4 py-2 text-sm font-medium text-cyan-100"
                     >
                       {formatTestLabel(test)}
                     </span>
                   ))
                 ) : (
-                  <p className="text-sm text-white/60">No tests were selected.</p>
+                  <div className="w-full rounded-[18px] border border-white/10 bg-white/[0.03] px-4 py-4 text-sm text-white/60">
+                    Tests will appear here once the assessment is configured and completed.
+                  </div>
                 )}
               </div>
             </section>
@@ -117,9 +170,9 @@ function ResultsPageContent() {
 
               <div className="mt-5 rounded-[20px] border border-white/10 bg-white/[0.03] p-5">
                 <p className="text-sm leading-8 text-white/75">
-                  This page is linked to the saved assessment session. The selected
-                  tests, session mode, and recorded score are now available for
-                  clinical review and follow-up planning.
+                  {assessment
+                    ? "This result is linked to a saved assessment session. Use the score, selected tests, and session context to confirm interpretation and define the next care step."
+                    : "No saved assessment details are available yet. Once a session is completed and stored, this section will summarize the clinical interpretation context."}
                 </p>
               </div>
             </section>
@@ -129,10 +182,12 @@ function ResultsPageContent() {
 
               <div className="mt-5 rounded-[20px] border border-white/10 bg-white/[0.03] p-5">
                 <p className="text-sm leading-8 text-white/70">
-                  Session type: {mode}. Body region: {bodyRegion}. Side: {side}.
-                  Visit type: {visitType}. This result record is tied to assessment{" "}
-                  <span className="font-semibold text-white">{assessmentId}</span>{" "}
-                  for patient{" "}
+                  Session type: <span className="font-semibold text-white">{mode}</span>. Body region:{" "}
+                  <span className="font-semibold text-white">{bodyRegion}</span>. Side:{" "}
+                  <span className="font-semibold text-white">{side}</span>. Visit type:{" "}
+                  <span className="font-semibold text-white">{visitType}</span>. Session label:{" "}
+                  <span className="font-semibold text-white">{sessionLabel}</span>. This result is tied to assessment{" "}
+                  <span className="font-semibold text-white">{assessmentId}</span> for patient{" "}
                   <span className="font-semibold text-white">{patientId}</span>.
                 </p>
               </div>
@@ -151,13 +206,17 @@ function ResultsPageContent() {
                   value={String(selectedTests.length)}
                 />
                 <InfoCard label="Score" value={String(score)} />
+                <InfoCard label="Status" value={status} />
               </div>
             </section>
 
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
               <h2 className="text-2xl font-bold text-white">
-                Recommended Next Actions
+                Clinician Actions
               </h2>
+              <p className="mt-2 text-sm text-white/70">
+                Continue this case from interpretation to care planning and follow-up.
+              </p>
 
               <div className="mt-5 space-y-3">
                 <ActionBox text="Review assessment findings and confirm clinical interpretation" />
@@ -226,6 +285,50 @@ function InfoCard({
       <p className="text-sm text-white/60">{label}</p>
       <p className="mt-2 text-base font-semibold text-white">{value}</p>
     </div>
+  );
+}
+
+function MetricCard({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  tone?: "default" | "good" | "moderate" | "attention" | "pending";
+}) {
+  const toneClass =
+    tone === "good"
+      ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-100"
+      : tone === "moderate"
+        ? "border-cyan-300/25 bg-cyan-400/10 text-cyan-100"
+        : tone === "attention"
+          ? "border-amber-300/25 bg-amber-400/10 text-amber-100"
+          : tone === "pending"
+            ? "border-white/15 bg-white/[0.04] text-white/90"
+            : "border-cyan-300/15 bg-cyan-400/10 text-cyan-100";
+
+  return (
+    <div className={`rounded-[20px] border p-4 ${toneClass}`}>
+      <p className="text-sm text-white/70">{label}</p>
+      <p className="mt-2 text-lg font-semibold">{value}</p>
+    </div>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  const normalized = status.toLowerCase();
+  const statusClass =
+    normalized === "completed"
+      ? "border-emerald-300/25 bg-emerald-400/10 text-emerald-100"
+      : normalized === "draft"
+        ? "border-amber-300/25 bg-amber-400/10 text-amber-100"
+        : "border-cyan-300/18 bg-cyan-400/10 text-cyan-100";
+
+  return (
+    <span className={`rounded-full border px-4 py-2 text-sm font-semibold ${statusClass}`}>
+      {status}
+    </span>
   );
 }
 
