@@ -17,7 +17,7 @@ function SuccessPageContent() {
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
       <div className="mx-auto max-w-3xl">
-        <div className="rounded-[28px] border border-white/10 bg-white/[0.03] p-6 shadow-2xl backdrop-blur md:p-8">
+        <div className="rounded-[28px] border border-cyan-300/18 bg-gradient-to-br from-cyan-500/8 via-white/[0.04] to-white/[0.02] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md md:p-8">
           <div className="inline-flex rounded-full border border-green-400/20 bg-green-400/10 px-4 py-1 text-sm font-medium text-green-300">
             Assessment Submitted
           </div>
@@ -51,7 +51,7 @@ function SuccessPageContent() {
             <button
               type="button"
               onClick={handleFinish}
-              className="rounded-xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
+              className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
             >
               Finish
             </button>
@@ -70,8 +70,8 @@ function InfoCard({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-[#0F172A] p-4">
-      <p className="text-sm text-slate-400">{label}</p>
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      <p className="text-sm text-white/60">{label}</p>
       <p className="mt-2 font-medium text-white">{value}</p>
     </div>
   );

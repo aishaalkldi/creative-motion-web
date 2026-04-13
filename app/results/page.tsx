@@ -54,36 +54,38 @@ function ResultsPageContent() {
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-100">
-              Assessment Results
+        <div className="mb-8 rounded-[28px] border border-cyan-300/18 bg-gradient-to-br from-cyan-500/8 via-white/[0.04] to-white/[0.02] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-100">
+                Assessment Results
+              </div>
+
+              <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
+                Results Review
+              </h1>
+
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70 md:text-base">
+                Review findings, confirm the linked assessment session, and continue
+                to the next clinical decision.
+              </p>
             </div>
 
-            <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
-              Results Review
-            </h1>
+            <div className="flex flex-wrap gap-3">
+              <Link
+                href={patientId !== "—" ? `/clinician/patients/${patientId}` : "/clinician/patients"}
+                className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+              >
+                ← Back to Patient Profile
+              </Link>
 
-            <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70 md:text-base">
-              Review findings, confirm the linked assessment session, and continue
-              to the next clinical decision.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <Link
-              href={patientId !== "—" ? `/clinician/patients/${patientId}` : "/clinician/patients"}
-              className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-            >
-              ← Back to Patient Profile
-            </Link>
-
-            <Link
-              href="/library"
-              className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-            >
-              Assign Program
-            </Link>
+              <Link
+                href="/library"
+                className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+              >
+                Assign Program
+              </Link>
+            </div>
           </div>
         </div>
 
