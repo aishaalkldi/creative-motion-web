@@ -31,6 +31,12 @@ const assessmentTests = [
       "Assess lower-limb alignment, control, and movement quality during squat.",
   },
   {
+    id: "single_leg_squat",
+    title: "Single-Leg Squat (ACL)",
+    description:
+      "Assess single-leg control, knee alignment, pelvic stability, and trunk compensation.",
+  },
+  {
     id: "rom",
     title: "ROM Assessment",
     description:
