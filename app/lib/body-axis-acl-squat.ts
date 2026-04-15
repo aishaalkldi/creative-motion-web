@@ -24,18 +24,22 @@ export const L = {
  * Rep hysteresis (stance knee interior angle, hip–knee–ankle).
  * Between HYST_DOWN_DEG and HYST_UP_DEG the phase does not flip — reduces webcam jitter.
  */
-/** Enter “down” only after this many consecutive frames with kneeAngle < HYST_DOWN_DEG. */
-const DOWN_STREAK_ENTER = 6;
-/** Count rep++ only after this many consecutive frames with kneeAngle > HYST_UP_DEG while down. */
+/** Enter “down” only after this many consecutive frames with smoothed knee < HYST_DOWN_DEG. */
+const DOWN_STREAK_ENTER = 5;
+/** Count rep++ only after this many consecutive frames with smoothed knee > HYST_UP_DEG while down. */
 const UP_STREAK_COMPLETE = 5;
 /** Loosened further for repeated reps on webcam (interior angle at stance knee). */
-const HYST_DOWN_DEG = 135;
-const HYST_UP_DEG = 157;
+const HYST_DOWN_DEG = 132;
+const HYST_UP_DEG = 156;
 /** After a rep, require this many frames of “tall” standing before the next descent can arm. */
-const NEUTRAL_TOP_DEG = 168;
+const NEUTRAL_TOP_DEG = 166;
 const NEUTRAL_STREAK = 4;
 /** Frames after rep++ where entering “down” is blocked (bounce / settle). */
-const REP_COOLDOWN_FRAMES = 5;
+const REP_COOLDOWN_FRAMES = 8;
+/** EMA weight on raw knee angle each frame (higher = less smoothing, faster response). */
+const KNEE_ANGLE_EMA_ALPHA = 0.45;
+/** Minimum wall time after a completed rep before a new descent can start (anti double-count). */
+const MIN_MS_BETWEEN_REPS = 520;
 /** Any stance point below this (when defined) triggers on-screen guidance. */
 const STANCE_GUIDANCE_VIS = 0.28;
 /** Knee + ankle must both be under this (when both defined) to stress the rep FSM. */
@@ -121,6 +125,11 @@ export class AclSingleLegSquatTracker {
   /** Frames spent with rep FSM paused on visibility — long loss triggers recovery. */
   private prolongedFsmPauseFrames = 0;
 
+  /** Low-pass knee angle (hip–knee–ankle) for FSM only; reduces webcam jitter undercounting. */
+  private kneeAngleEma: number | null = null;
+  /** Wall-clock time of last rep completion; used with MIN_MS_BETWEEN_REPS. */
+  private lastRepCompleteMs = 0;
+
   private dbgFrame = 0;
 
   reset() {
@@ -140,10 +149,12 @@ export class AclSingleLegSquatTracker {
     this.framesSinceRepComplete = -1;
     this.visStressStreak = 0;
     this.prolongedFsmPauseFrames = 0;
+    this.kneeAngleEma = null;
+    this.lastRepCompleteMs = 0;
     this.dbgFrame = 0;
   }
 
-  process(landmarks: NormLandmark[], _nowMs: number): AclProcessResult {
+  process(landmarks: NormLandmark[], nowMs: number): AclProcessResult {
     const rh = landmarks[L.R_HIP];
     const rk = landmarks[L.R_KNEE];
     const ra = landmarks[L.R_ANKLE];
@@ -207,7 +218,15 @@ export class AclSingleLegSquatTracker {
 
     const fsmPaused = this.visStressStreak >= VIS_PAUSE_NEED_FRAMES;
 
-    const kneeAngle = angleAtB(rh, rk, ra);
+    const kneeAngleRaw = angleAtB(rh, rk, ra);
+    if (this.kneeAngleEma === null) {
+      this.kneeAngleEma = kneeAngleRaw;
+    } else {
+      this.kneeAngleEma =
+        KNEE_ANGLE_EMA_ALPHA * kneeAngleRaw +
+        (1 - KNEE_ANGLE_EMA_ALPHA) * this.kneeAngleEma;
+    }
+    const kneeAngle = this.kneeAngleEma;
 
     if (this.framesSinceRepComplete >= 0) {
       this.framesSinceRepComplete += 1;
@@ -277,7 +296,9 @@ export class AclSingleLegSquatTracker {
     }
 
     const inCooldown = this.cooldownRemaining > 0;
-    const canSeekDown = this.repArmed && !inCooldown && !fsmPaused;
+    const repSpacingOk =
+      this.repCount === 0 || nowMs - this.lastRepCompleteMs >= MIN_MS_BETWEEN_REPS;
+    const canSeekDown = this.repArmed && !inCooldown && !fsmPaused && repSpacingOk;
 
     /** Descent / bottom band for valgus etc. — overlaps partial squat ROM, widened slightly for noise. */
     const inSquatRange = kneeAngle < 165 && kneeAngle > 68;
@@ -332,6 +353,7 @@ export class AclSingleLegSquatTracker {
       if (this.upStreak >= UP_STREAK_COMPLETE) {
         const prevReps = this.repCount;
         this.repCount += 1;
+        this.lastRepCompleteMs = nowMs;
         this.repArmed = false;
         this.neutralStreak = 0;
         this.cooldownRemaining = REP_COOLDOWN_FRAMES;
