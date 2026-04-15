@@ -2,9 +2,123 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { saveAssessmentRecord, saveMotionResultRecord } from "../lib/api";
+import {
+  AclSingleLegSquatTracker,
+  isAclSingleLegSquatTest,
+  type NormLandmark,
+} from "../lib/body-axis-acl-squat";
 import { assessmentsRepository } from "../lib/repositories";
 
 type SessionState = "idle" | "ready" | "running" | "stopped";
+
+const MEDIAPIPE_CDN =
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/+esm";
+const MEDIAPIPE_WASM =
+  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm";
+const POSE_MODEL =
+  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
+const POSE_LOAD_TIMEOUT_MS = 45_000;
+const ACL_MIN_POSE_FRAMES = 8;
+
+/** BlazePose 33-landmark topology for overlay lines (MediaPipe-compatible indices). */
+const POSE_EDGES: [number, number][] = [
+  [0, 1],
+  [1, 2],
+  [2, 3],
+  [3, 7],
+  [0, 4],
+  [4, 5],
+  [5, 6],
+  [6, 8],
+  [9, 10],
+  [11, 12],
+  [11, 13],
+  [13, 15],
+  [15, 17],
+  [15, 19],
+  [15, 21],
+  [17, 19],
+  [12, 14],
+  [14, 16],
+  [16, 18],
+  [16, 20],
+  [16, 22],
+  [18, 20],
+  [11, 23],
+  [12, 24],
+  [23, 24],
+  [23, 25],
+  [25, 27],
+  [27, 29],
+  [27, 31],
+  [24, 26],
+  [26, 28],
+  [28, 30],
+  [28, 32],
+];
+
+/** Rotating tips when stance-leg visibility is weak (synced with ACL tracker output). */
+const ACL_GUIDANCE_TIPS = [
+  "Keep full right leg visible",
+  "Move slightly back",
+  "Improve lighting",
+] as const;
+
+/**
+ * Map normalized landmarks to the displayed `<video>` rect (same transform as CSS `object-cover`).
+ */
+function drawPoseLandmarksOnCanvas(
+  ctx: CanvasRenderingContext2D,
+  landmarks: NormLandmark[],
+  video: HTMLVideoElement
+) {
+  const cw = Math.max(1, Math.floor(video.clientWidth));
+  const ch = Math.max(1, Math.floor(video.clientHeight));
+  const canvas = ctx.canvas;
+  if (canvas.width !== cw || canvas.height !== ch) {
+    canvas.width = cw;
+    canvas.height = ch;
+  }
+
+  const vw = Math.max(1, video.videoWidth || cw);
+  const vh = Math.max(1, video.videoHeight || ch);
+  const scale = Math.max(cw / vw, ch / vh);
+  const dw = vw * scale;
+  const dh = vh * scale;
+  const ox = (cw - dw) * 0.5;
+  const oy = (ch - dh) * 0.5;
+
+  const map = (lm: NormLandmark) => ({
+    x: ox + lm.x * dw,
+    y: oy + lm.y * dh,
+  });
+
+  ctx.clearRect(0, 0, cw, ch);
+  ctx.strokeStyle = "rgba(34, 211, 238, 0.9)";
+  ctx.lineWidth = 2;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  for (const [a, b] of POSE_EDGES) {
+    const pa = landmarks[a];
+    const pb = landmarks[b];
+    if (!pa || !pb) continue;
+    const A = map(pa);
+    const B = map(pb);
+    ctx.beginPath();
+    ctx.moveTo(A.x, A.y);
+    ctx.lineTo(B.x, B.y);
+    ctx.stroke();
+  }
+  ctx.fillStyle = "rgba(34, 211, 238, 0.6)";
+  for (const lm of landmarks) {
+    if (!lm) continue;
+    const p = map(lm);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 3.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
 
 function BodyAxisAIPageContent() {
   const router = useRouter();
@@ -24,10 +138,26 @@ function BodyAxisAIPageContent() {
   const displayPatientName =
     patientName === "Unknown Patient" ? "Not provided" : patientName;
 
+  const aclMode = isAclSingleLegSquatTest(test);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const poseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const timerRef = useRef<number | null>(null);
+  const sessionStateRef = useRef<SessionState>("idle");
+  const aclTrackerRef = useRef(new AclSingleLegSquatTracker());
+  const poseLandmarkerRef = useRef<{
+    detectForVideo: (v: HTMLVideoElement, t: number) => { landmarks?: NormLandmark[][] };
+    close: () => void;
+  } | null>(null);
+  const poseRafRef = useRef<number | null>(null);
+  const aclPoseFramesThisRunRef = useRef(0);
+  /** Last `detectForVideo` timestamp (MediaPipe VIDEO mode must increase monotonically). */
+  const aclMpVideoTimestampRef = useRef(0);
+  /** Wall-clock session bounds for duration (strict end − start). */
+  const sessionWallStartMsRef = useRef<number | null>(null);
+  const lastSessionDurationSecondsRef = useRef(0);
+  const [poseReloadNonce, setPoseReloadNonce] = useState(0);
 
   const [sessionState, setSessionState] = useState<SessionState>("idle");
   const [cameraReady, setCameraReady] = useState(false);
@@ -41,10 +171,229 @@ function BodyAxisAIPageContent() {
   const [reportSummary, setReportSummary] = useState("");
   const [sessionMessage, setSessionMessage] = useState("");
 
+  const [aclPoseStatus, setAclPoseStatus] = useState<
+    "idle" | "loading" | "ready" | "error"
+  >("idle");
+  const [aclPoseError, setAclPoseError] = useState("");
+  const [aclLiveOk, setAclLiveOk] = useState(true);
+  const [aclRepDisplay, setAclRepDisplay] = useState(0);
+  const [aclErrorsDisplay, setAclErrorsDisplay] = useState({
+    v: 0,
+    h: 0,
+    t: 0,
+  });
+  const [aclStanceLegVisPoor, setAclStanceLegVisPoor] = useState(false);
+  const [aclGuidanceIdx, setAclGuidanceIdx] = useState(0);
+
+  useEffect(() => {
+    sessionStateRef.current = sessionState;
+  }, [sessionState]);
+
+  useEffect(() => {
+    if (!aclMode || !aclStanceLegVisPoor || sessionState !== "running") return;
+    const id = window.setInterval(() => {
+      setAclGuidanceIdx((i) => (i + 1) % ACL_GUIDANCE_TIPS.length);
+    }, 4200);
+    return () => window.clearInterval(id);
+  }, [aclMode, aclStanceLegVisPoor, sessionState]);
+
+  useEffect(() => {
+    if (!aclMode) {
+      setAclPoseStatus("idle");
+      return;
+    }
+
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    setAclPoseStatus("loading");
+    setAclPoseError("");
+
+    (async () => {
+      try {
+        // True runtime import so Turbopack/webpack do not rewrite or stall the CDN URL.
+        const importModule = new Function("u", "return import(u)") as (
+          u: string
+        ) => Promise<unknown>;
+
+        const loadModule = importModule(MEDIAPIPE_CDN);
+        const timeout = new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  "Pose model load timed out (CDN). Check network, firewall, or try Retry."
+                )
+              ),
+            POSE_LOAD_TIMEOUT_MS
+          );
+        });
+
+        const mod = (await Promise.race([loadModule, timeout])) as {
+          FilesetResolver: { forVisionTasks: (base: string) => Promise<unknown> };
+          RunningMode?: { VIDEO: string };
+          PoseLandmarker: {
+            createFromOptions: (
+              fileset: unknown,
+              options: {
+                baseOptions: { modelAssetPath: string; delegate: string };
+                runningMode: string;
+                numPoses: number;
+              }
+            ) => Promise<{
+              detectForVideo: (v: HTMLVideoElement, t: number) => {
+                landmarks?: NormLandmark[][];
+              };
+              close: () => void;
+            }>;
+          };
+        };
+
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        if (cancelled) return;
+
+        const { FilesetResolver, PoseLandmarker, RunningMode } = mod;
+        const videoRunningMode = RunningMode?.VIDEO ?? "VIDEO";
+
+        const fileset = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM);
+        const landmarker = await PoseLandmarker.createFromOptions(fileset, {
+          baseOptions: {
+            modelAssetPath: POSE_MODEL,
+            delegate: "CPU",
+          },
+          runningMode: videoRunningMode,
+          numPoses: 1,
+        });
+
+        if (cancelled) {
+          landmarker.close();
+          return;
+        }
+
+        poseLandmarkerRef.current = landmarker;
+        setAclPoseStatus("ready");
+      } catch (e) {
+        if (timeoutId !== null) {
+          clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+        if (!cancelled) {
+          setAclPoseStatus("error");
+          setAclPoseError(
+            e instanceof Error ? e.message : "Could not load pose model from CDN."
+          );
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId !== null) clearTimeout(timeoutId);
+      poseLandmarkerRef.current?.close();
+      poseLandmarkerRef.current = null;
+    };
+  }, [aclMode, poseReloadNonce]);
+
+  useEffect(() => {
+    if (!aclMode || !cameraReady || aclPoseStatus !== "ready") {
+      if (poseRafRef.current !== null) {
+        cancelAnimationFrame(poseRafRef.current);
+        poseRafRef.current = null;
+      }
+      return;
+    }
+
+    const video = videoRef.current;
+    const lm = poseLandmarkerRef.current;
+    if (!video || !lm) return;
+
+    /** Live getUserMedia streams often keep `video.currentTime` at 0; MediaPipe samples gate on time advancing, which would skip every frame after the first. */
+    const isLiveCameraStream = Boolean(streamRef.current);
+
+    let lastVideoTime = -1;
+    let poseLogBudget = 5;
+
+    const tick = () => {
+      if (video.readyState >= 2) {
+        const t = video.currentTime;
+        const newDecodedFrame = t !== lastVideoTime;
+        if (!isLiveCameraStream && !newDecodedFrame) {
+          poseRafRef.current = requestAnimationFrame(tick);
+          return;
+        }
+        if (newDecodedFrame) lastVideoTime = t;
+
+        try {
+          let detectTimestampMs = aclMpVideoTimestampRef.current;
+          const now = performance.now();
+          if (now <= detectTimestampMs) detectTimestampMs += 0.001;
+          else detectTimestampMs = now;
+          const res = lm.detectForVideo(video, detectTimestampMs);
+          aclMpVideoTimestampRef.current = detectTimestampMs;
+          const frame = res.landmarks?.[0];
+          const canvas = poseCanvasRef.current;
+          const ctx = canvas?.getContext("2d");
+          if (canvas && ctx && video.clientWidth > 0 && video.clientHeight > 0) {
+            if (frame?.length) {
+              drawPoseLandmarksOnCanvas(ctx, frame, video);
+            } else {
+              const cw = Math.max(1, Math.floor(video.clientWidth));
+              const ch = Math.max(1, Math.floor(video.clientHeight));
+              if (canvas.width !== cw || canvas.height !== ch) {
+                canvas.width = cw;
+                canvas.height = ch;
+              }
+              ctx.clearRect(0, 0, cw, ch);
+            }
+          }
+          if (frame?.length) {
+            if (poseLogBudget > 0) {
+              poseLogBudget -= 1;
+              console.log(
+                "[BodyAxisAI] Pose detected:",
+                frame.length,
+                "landmarks (single_leg_squat)"
+              );
+            }
+            if (sessionStateRef.current === "running") {
+              aclPoseFramesThisRunRef.current += 1;
+              const out = aclTrackerRef.current.process(frame, performance.now());
+              setAclLiveOk(out.liveOk);
+              setAclStanceLegVisPoor(
+                Boolean(out.landmarksValidThisFrame && out.stanceLegVisPoor)
+              );
+              syncAclDisplayFromTracker();
+            }
+          }
+        } catch (err) {
+          console.error("[BodyAxisAI] detectForVideo failed:", err);
+        }
+      }
+
+      poseRafRef.current = requestAnimationFrame(tick);
+    };
+
+    poseRafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (poseRafRef.current !== null) {
+        cancelAnimationFrame(poseRafRef.current);
+        poseRafRef.current = null;
+      }
+    };
+  }, [aclMode, cameraReady, aclPoseStatus]);
+
   useEffect(() => {
     return () => {
       stopTimer();
       stopCamera();
+      if (poseRafRef.current !== null) {
+        cancelAnimationFrame(poseRafRef.current);
+        poseRafRef.current = null;
+      }
+      poseLandmarkerRef.current?.close();
+      poseLandmarkerRef.current = null;
     };
   }, []);
 
@@ -91,7 +440,9 @@ function BodyAxisAIPageContent() {
     stopTimer();
 
     timerRef.current = window.setInterval(() => {
-      setSeconds((prev) => prev + 1);
+      const startMs = sessionWallStartMsRef.current;
+      if (startMs === null) return;
+      setSeconds(Math.max(0, Math.floor((Date.now() - startMs) / 1000)));
     }, 1000);
   }
 
@@ -102,9 +453,53 @@ function BodyAxisAIPageContent() {
     }
   }
 
+  function syncAclDisplayFromTracker() {
+    setAclRepDisplay(aclTrackerRef.current.repCount);
+    setAclErrorsDisplay({
+      v: aclTrackerRef.current.valgusCount,
+      h: aclTrackerRef.current.hipDropCount,
+      t: aclTrackerRef.current.trunkLeanCount,
+    });
+  }
+
+  /**
+   * Final detect+process burst using the same monotonic VIDEO timestamps as the RAF loop.
+   * A single `performance.now()` flush can reuse/stale-gate MediaPipe and miss the latest pose.
+   */
+  function flushAclPoseToTrackerFinal(iterations = 8) {
+    const video = videoRef.current;
+    const lm = poseLandmarkerRef.current;
+    if (!video || !lm || video.readyState < 2) return;
+    try {
+      for (let i = 0; i < iterations; i++) {
+        let ts = aclMpVideoTimestampRef.current;
+        const now = performance.now();
+        if (now <= ts) ts += 0.001;
+        else ts = now;
+        const res = lm.detectForVideo(video, ts);
+        aclMpVideoTimestampRef.current = ts;
+        const frame = res.landmarks?.[0];
+        if (frame?.length) {
+          aclTrackerRef.current.process(frame, performance.now());
+        }
+      }
+    } catch (e) {
+      console.error("[BodyAxisAI] flushAclPoseToTrackerFinal:", e);
+    }
+  }
+
   function handleStartSession() {
     if (!cameraReady) {
       setSessionMessage("Enable camera or upload video before starting the session.");
+      return;
+    }
+
+    if (aclMode && aclPoseStatus !== "ready") {
+      setSessionMessage(
+        aclPoseStatus === "loading"
+          ? "Pose engine is still loading. Wait until ready before starting."
+          : "Pose engine is not ready. Check network (CDN) and refresh, then try again."
+      );
       return;
     }
 
@@ -112,19 +507,120 @@ function BodyAxisAIPageContent() {
     setMovementScore(null);
     setReportSummary("");
     setSeconds(0);
+    sessionWallStartMsRef.current = Date.now();
+    lastSessionDurationSecondsRef.current = 0;
+    if (aclMode) {
+      aclTrackerRef.current.reset();
+      aclPoseFramesThisRunRef.current = 0;
+      setAclRepDisplay(0);
+      setAclErrorsDisplay({ v: 0, h: 0, t: 0 });
+      setAclLiveOk(true);
+      setAclStanceLegVisPoor(false);
+      setAclGuidanceIdx(0);
+    }
     setSessionState("running");
     startTimer();
   }
 
   function handleStopSession() {
+    sessionStateRef.current = "stopped";
     stopTimer();
     setSessionState("stopped");
 
-    const score = generateMockScore(test, seconds || 12);
-    const summary = generateReportSummary(test, score, seconds || 12);
+    const sessionEndMs = Date.now();
+    const sessionStartMs = sessionWallStartMsRef.current ?? sessionEndMs;
+    const durationSec = Math.max(0, Math.floor((sessionEndMs - sessionStartMs) / 1000));
+    lastSessionDurationSecondsRef.current = durationSec;
+    setSeconds(durationSec);
 
-    setMovementScore(score);
-    setReportSummary(summary);
+    if (aclMode && aclPoseStatus === "ready") {
+      flushAclPoseToTrackerFinal();
+    }
+
+    setAclStanceLegVisPoor(false);
+    setAclGuidanceIdx(0);
+
+    if (aclMode) {
+      if (aclPoseStatus !== "ready") {
+        setMovementScore(null);
+        setReportSummary(
+          "Pose tracking was not ready for this session. Wait until the pose model shows Ready, then start again."
+        );
+        console.log("[BodyAxisAI] FINAL TRACKER SNAPSHOT (pose not ready — skipped flush path)");
+        console.log("[BodyAxisAI] FINAL REPORT VALUES", { score: null, summary: "not ready" });
+        console.log("[BodyAxisAI] SESSION START TIME", sessionStartMs);
+        console.log("[BodyAxisAI] SESSION END TIME", sessionEndMs);
+        console.log("[BodyAxisAI] FINAL DURATION SECONDS", durationSec);
+        return;
+      }
+
+      const frames = aclPoseFramesThisRunRef.current;
+      if (frames < ACL_MIN_POSE_FRAMES) {
+        setMovementScore(null);
+        setReportSummary(
+          `Not enough pose frames captured (${frames}/${ACL_MIN_POSE_FRAMES} minimum). Stay in frame with good lighting, run the session for a few seconds, then stop.`
+        );
+        const tr = aclTrackerRef.current;
+        setAclRepDisplay(tr.repCount);
+        setAclErrorsDisplay({
+          v: tr.valgusCount,
+          h: tr.hipDropCount,
+          t: tr.trunkLeanCount,
+        });
+        console.log("[BodyAxisAI] FINAL TRACKER SNAPSHOT", {
+          repCount: tr.repCount,
+          valgusCount: tr.valgusCount,
+          hipDropCount: tr.hipDropCount,
+          trunkLeanCount: tr.trunkLeanCount,
+        });
+        console.log("[BodyAxisAI] FINAL REPORT VALUES", { score: null, summary: "insufficient frames" });
+        console.log("[BodyAxisAI] SESSION START TIME", sessionStartMs);
+        console.log("[BodyAxisAI] SESSION END TIME", sessionEndMs);
+        console.log("[BodyAxisAI] FINAL DURATION SECONDS", durationSec);
+        return;
+      }
+
+      const tr = aclTrackerRef.current;
+      const snapshot = {
+        repCount: tr.repCount,
+        valgusCount: tr.valgusCount,
+        hipDropCount: tr.hipDropCount,
+        trunkLeanCount: tr.trunkLeanCount,
+      };
+      setAclRepDisplay(snapshot.repCount);
+      setAclErrorsDisplay({
+        v: snapshot.valgusCount,
+        h: snapshot.hipDropCount,
+        t: snapshot.trunkLeanCount,
+      });
+
+      const score = tr.finalScore();
+      let summary: string;
+      if (score === null) {
+        setMovementScore(0);
+        summary = tr.summaryLineNoReps();
+      } else {
+        setMovementScore(score);
+        summary = tr.summaryLine(score);
+      }
+      setReportSummary(summary);
+
+      console.log("[BodyAxisAI] FINAL TRACKER SNAPSHOT", snapshot);
+      console.log("[BodyAxisAI] FINAL REPORT VALUES", { score, summary });
+      console.log("[BodyAxisAI] SESSION START TIME", sessionStartMs);
+      console.log("[BodyAxisAI] SESSION END TIME", sessionEndMs);
+      console.log("[BodyAxisAI] FINAL DURATION SECONDS", durationSec);
+    } else {
+      const score = generateMockScore(test, durationSec);
+      const summary = generateReportSummary(test, score, durationSec);
+      setMovementScore(score);
+      setReportSummary(summary);
+      console.log("[BodyAxisAI] FINAL TRACKER SNAPSHOT", null);
+      console.log("[BodyAxisAI] FINAL REPORT VALUES", { score, summary });
+      console.log("[BodyAxisAI] SESSION START TIME", sessionStartMs);
+      console.log("[BodyAxisAI] SESSION END TIME", sessionEndMs);
+      console.log("[BodyAxisAI] FINAL DURATION SECONDS", durationSec);
+    }
   }
 
   function handleUploadVideoClick() {
@@ -171,10 +667,20 @@ function BodyAxisAIPageContent() {
         ? existingTests
         : [...existingTests, test];
 
-      const finalScore = movementScore ?? generateMockScore(test, seconds || 10);
-      const finalSummary =
-        reportSummary ||
-        generateReportSummary(test, finalScore, seconds || 10);
+      const sessionDurationSec = lastSessionDurationSecondsRef.current;
+
+      const finalScore = aclMode
+        ? movementScore
+        : (movementScore ?? generateMockScore(test, sessionDurationSec));
+
+      if (typeof finalScore !== "number" || !Number.isFinite(finalScore)) {
+        throw new Error("No valid score to submit for this session.");
+      }
+
+      const finalSummary = aclMode
+        ? reportSummary.trim()
+        : reportSummary.trim() ||
+          generateReportSummary(test, finalScore, sessionDurationSec);
 
       assessmentsRepository.update({
         ...assessment,
@@ -182,10 +688,34 @@ function BodyAxisAIPageContent() {
         status: "completed",
         selectedTests: updatedTests,
         score: finalScore,
-        durationSeconds: seconds,
+        durationSeconds: sessionDurationSec,
         reportSummary: finalSummary,
         completedAt: new Date().toISOString(),
       });
+
+      if (patientId && patientId !== "UNKNOWN") {
+        try {
+          await saveAssessmentRecord({
+            patient_code: patientId,
+            assessment_id: assessmentId,
+            test_type: test,
+            score: finalScore,
+            summary: finalSummary,
+          });
+          await saveMotionResultRecord({
+            patient_id: patientId,
+            test: test,
+            score: finalScore,
+          });
+        } catch (err) {
+          setSessionMessage(
+            err instanceof Error
+              ? err.message
+              : "Could not save assessment to the server. Please try again."
+          );
+          return;
+        }
+      }
 
       stopTimer();
       stopCamera();
@@ -203,7 +733,10 @@ function BodyAxisAIPageContent() {
     }
   }
 
-  const canSubmit = sessionState === "stopped" && hasLinkedAssessment;
+  const canSubmit =
+    sessionState === "stopped" &&
+    hasLinkedAssessment &&
+    (!aclMode || movementScore !== null);
 
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
@@ -270,7 +803,15 @@ function BodyAxisAIPageContent() {
                 </button>
               </div>
 
-              <div className="relative aspect-video bg-black">
+              <div
+                className={`relative aspect-video bg-black ${
+                  aclMode && sessionState === "running" && aclPoseStatus === "ready"
+                    ? aclLiveOk
+                      ? "ring-4 ring-emerald-500/55"
+                      : "ring-4 ring-rose-500/60"
+                    : ""
+                }`}
+              >
                 <video
                   ref={videoRef}
                   autoPlay
@@ -292,11 +833,78 @@ function BodyAxisAIPageContent() {
                   </div>
                 )}
 
+                <canvas
+                  ref={poseCanvasRef}
+                  className="pointer-events-none absolute inset-0 z-[15] h-full w-full"
+                  aria-hidden
+                />
+
+                {aclStanceLegVisPoor && sessionState === "running" && (
+                  <div className="pointer-events-none absolute bottom-12 left-1/2 z-20 max-w-[90%] -translate-x-1/2 rounded-lg bg-black/65 px-3 py-1.5 text-center text-[11px] font-medium text-amber-100">
+                    {ACL_GUIDANCE_TIPS[aclGuidanceIdx % ACL_GUIDANCE_TIPS.length]}
+                  </div>
+                )}
+
                 <div className="absolute bottom-4 left-4 rounded-xl bg-black/60 px-4 py-2 text-sm text-white">
                   Elapsed: {seconds}s
                 </div>
               </div>
             </div>
+
+            {aclMode && aclPoseStatus === "error" && (
+              <div className="mt-4 rounded-2xl border border-rose-300/35 bg-rose-500/10 p-4 text-sm text-rose-100">
+                <p className="font-semibold text-rose-200">Pose model failed to load</p>
+                <p className="mt-2 text-white/85">{aclPoseError}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSessionMessage("");
+                    setPoseReloadNonce((n) => n + 1);
+                  }}
+                  className="mt-3 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/15"
+                >
+                  Retry pose load
+                </button>
+              </div>
+            )}
+
+            {aclMode && (
+              <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/85">
+                <p className="font-semibold text-cyan-200">Single-Leg Squat (live)</p>
+                <p className="mt-2 text-xs text-white/60">
+                  Pose:{" "}
+                  {aclPoseStatus === "loading"
+                    ? "Loading MediaPipe (CDN)…"
+                    : aclPoseStatus === "ready"
+                      ? "Tracking (stance: right leg)"
+                      : aclPoseStatus === "error"
+                        ? `Error — use Retry above or check network.`
+                        : "Idle"}
+                </p>
+                {aclStanceLegVisPoor && sessionState === "running" && (
+                  <p className="mt-2 text-xs leading-relaxed text-amber-200/95">
+                    {ACL_GUIDANCE_TIPS[aclGuidanceIdx % ACL_GUIDANCE_TIPS.length]}
+                  </p>
+                )}
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 md:grid-cols-4">
+                  <StatusCard label="Reps" value={String(aclRepDisplay)} />
+                  <StatusCard label="Valgus (reps)" value={String(aclErrorsDisplay.v)} />
+                  <StatusCard label="Hip drop (reps)" value={String(aclErrorsDisplay.h)} />
+                  <StatusCard label="Trunk lean (reps)" value={String(aclErrorsDisplay.t)} />
+                </div>
+                {sessionState === "running" && aclPoseStatus === "ready" && (
+                  <p
+                    className={`mt-3 text-xs font-medium ${
+                      aclLiveOk ? "text-emerald-200" : "text-rose-200"
+                    }`}
+                  >
+                    {aclLiveOk
+                      ? "Movement acceptable (no error flags this frame)."
+                      : "Error pattern detected — adjust alignment and control."}
+                  </p>
+                )}
+              </div>
+            )}
 
             <input
               ref={fileInputRef}
@@ -326,7 +934,11 @@ function BodyAxisAIPageContent() {
               <button
                 type="button"
                 onClick={handleStartSession}
-                disabled={!cameraReady || sessionState === "running"}
+                disabled={
+                  !cameraReady ||
+                  sessionState === "running" ||
+                  (aclMode && aclPoseStatus !== "ready")
+                }
                 className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Start Session
@@ -358,7 +970,9 @@ function BodyAxisAIPageContent() {
                   {reportSummary || "Session completed. Review summary metrics and submit assessment."}
                 </p>
 
-                <div className="mt-4 grid gap-4 md:grid-cols-2">
+                <div
+                  className={`mt-4 grid gap-4 ${aclMode ? "md:grid-cols-3" : "md:grid-cols-2"}`}
+                >
                   <StatusCard
                     label="Score"
                     value={
@@ -366,6 +980,9 @@ function BodyAxisAIPageContent() {
                     }
                   />
                   <StatusCard label="Duration" value={`${seconds}s`} />
+                  {aclMode && (
+                    <StatusCard label="Reps" value={String(aclRepDisplay)} />
+                  )}
                 </div>
               </div>
             )}
@@ -480,6 +1097,8 @@ function SessionStateBadge({ state }: { state: SessionState }) {
 
 function formatTestTitle(test: string) {
   switch (test) {
+    case "single_leg_squat":
+      return "Single-Leg Squat (ACL)";
     case "gait":
       return "Gait Assessment";
     case "balance":
@@ -503,6 +1122,8 @@ function formatTestTitle(test: string) {
 
 function getInstructionByTest(test: string) {
   switch (test) {
+    case "single_leg_squat":
+      return "Stand on your RIGHT leg only. Perform controlled single-leg squats: stand tall, lower until the stance knee bends, then return to standing. Keep the full body in frame (frontal view works best).";
     case "gait":
       return "Walk naturally for a few seconds while gait symmetry and trunk control are reviewed.";
     case "balance":
