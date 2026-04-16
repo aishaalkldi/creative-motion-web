@@ -1,16 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 import psycopg2
-import os
 
-load_dotenv()
-
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL is missing in .env file")
+from config import check_db_connection, get_connection, settings
 
 app = FastAPI()
 
@@ -22,56 +15,85 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def get_connection():
-    return psycopg2.connect(DATABASE_URL)
-
 def init_db():
-    conn = get_connection()
-    cursor = conn.cursor()
+    try:
+        conn = get_connection()
+    except ConnectionError as e:
+        raise RuntimeError(
+            "Database schema initialization could not open a connection. " + str(e)
+        ) from e
 
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS patients (
-        id SERIAL PRIMARY KEY,
-        patient_code TEXT NOT NULL,
-        name TEXT NOT NULL,
-        phone TEXT NOT NULL,
-        age TEXT,
-        gender TEXT,
-        diagnosis TEXT NOT NULL,
-        condition TEXT,
-        status TEXT NOT NULL
-    );
-    """)
+    try:
+        cursor = conn.cursor()
 
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS results (
-        id SERIAL PRIMARY KEY,
-        patient_id TEXT NOT NULL,
-        test TEXT NOT NULL,
-        score REAL NOT NULL
-    );
-    """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS patients (
+            id SERIAL PRIMARY KEY,
+            patient_code TEXT NOT NULL,
+            name TEXT NOT NULL,
+            phone TEXT NOT NULL,
+            age TEXT,
+            gender TEXT,
+            diagnosis TEXT NOT NULL,
+            condition TEXT,
+            status TEXT NOT NULL
+        );
+        """)
 
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS assessments (
-        id SERIAL PRIMARY KEY,
-        patient_code TEXT NOT NULL,
-        assessment_id TEXT NOT NULL,
-        test_type TEXT NOT NULL,
-        score REAL NOT NULL,
-        summary TEXT,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-    """)
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS results (
+            id SERIAL PRIMARY KEY,
+            patient_id TEXT NOT NULL,
+            test TEXT NOT NULL,
+            score REAL NOT NULL
+        );
+        """)
 
-    cursor.execute(
-        "CREATE INDEX IF NOT EXISTS idx_assessments_patient_code ON assessments (patient_code);"
-    )
+        cursor.execute("""
+        CREATE TABLE IF NOT EXISTS assessments (
+            id SERIAL PRIMARY KEY,
+            patient_code TEXT NOT NULL,
+            assessment_id TEXT NOT NULL,
+            test_type TEXT NOT NULL,
+            score REAL NOT NULL,
+            summary TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+        """)
 
-    conn.commit()
-    conn.close()
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_assessments_patient_code ON assessments (patient_code);"
+        )
+
+        conn.commit()
+    except psycopg2.Error as e:
+        conn.rollback()
+        raise RuntimeError(
+            "Database schema initialization failed while applying DDL. "
+            "Review the SQL migration statements and database permissions. "
+            f"Details: {e}"
+        ) from e
+    finally:
+        conn.close()
+
 
 init_db()
+
+
+@app.get("/health")
+def health():
+    """Liveness and database readiness-style signal for operators and probes."""
+    ok, err = check_db_connection(settings.database_url)
+    body = {
+        "status": "ok" if ok else "degraded",
+        "app": "creative-motion-backend",
+        "database_url_configured": True,
+        "database_connected": ok,
+    }
+    if err:
+        body["database_error"] = err
+    return body
+
 
 @app.get("/")
 def root():
