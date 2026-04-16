@@ -119,9 +119,22 @@ def check_db_connection(database_url: str, *, connect_timeout: int = 5) -> tuple
             conn.close()
 
 
-settings = load_settings()
+settings: Settings | None
+settings_load_error: str | None
+
+try:
+    settings = load_settings()
+    settings_load_error = None
+except ValueError as e:
+    settings = None
+    settings_load_error = str(e)
 
 
 def get_connection():
     """Return a new PostgreSQL connection using the validated DATABASE_URL."""
+    if settings is None:
+        raise ConnectionError(
+            settings_load_error
+            or "DATABASE_URL is not configured. Set DATABASE_URL in the environment or backend/.env."
+        )
     return connect_postgres(settings.database_url)

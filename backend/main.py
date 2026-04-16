@@ -1,9 +1,13 @@
+import logging
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import psycopg2
 
-from config import check_db_connection, get_connection, settings
+from config import check_db_connection, get_connection, settings, settings_load_error
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI()
 
@@ -77,21 +81,49 @@ def init_db():
         conn.close()
 
 
-init_db()
+db_init_ok = False
+db_init_error: str | None = None
+
+if settings is not None:
+    try:
+        init_db()
+        db_init_ok = True
+    except (RuntimeError, ConnectionError) as e:
+        db_init_error = str(e)
+        logger.error("Database schema initialization failed.", exc_info=True)
+    except Exception as e:
+        db_init_error = str(e)
+        logger.error("Database schema initialization failed with an unexpected error.", exc_info=True)
+else:
+    logger.warning(
+        "Database schema initialization was skipped: %s",
+        settings_load_error or "DATABASE_URL is not configured.",
+    )
 
 
 @app.get("/health")
 def health():
     """Liveness and database readiness-style signal for operators and probes."""
-    ok, err = check_db_connection(settings.database_url)
-    body = {
-        "status": "ok" if ok else "degraded",
+    configured = settings is not None
+    connected = False
+    connect_err: str | None = None
+    if configured:
+        connected, connect_err = check_db_connection(settings.database_url)
+
+    all_ok = configured and connected and db_init_ok
+    body: dict = {
+        "status": "ok" if all_ok else "degraded",
         "app": "creative-motion-backend",
-        "database_url_configured": True,
-        "database_connected": ok,
+        "database_url_configured": configured,
+        "database_connected": connected if configured else False,
+        "database_initialized": db_init_ok,
     }
-    if err:
-        body["database_error"] = err
+    if settings_load_error and not configured:
+        body["configuration_error"] = settings_load_error
+    if connect_err:
+        body["database_error"] = connect_err
+    if db_init_error:
+        body["database_init_error"] = db_init_error
     return body
 
 
