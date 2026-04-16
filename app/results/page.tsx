@@ -1,49 +1,84 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { assessmentsRepository, patientsRepository } from "../lib/repositories";
+import { getResults, type BackendResult } from "../lib/api";
+import { patientsRepository } from "../lib/repositories";
 
 function ResultsPageContent() {
   const searchParams = useSearchParams();
 
   const patientId = searchParams.get("patientId") || "—";
   const assessmentId = searchParams.get("assessmentId") || "—";
-  const hasValidContext = patientId !== "—" && assessmentId !== "—";
+  const hasValidContext = patientId !== "—";
 
-  const assessment =
-    assessmentId !== "—" ? assessmentsRepository.getById(assessmentId) : null;
-  const hasLinkedResult = hasValidContext && Boolean(assessment);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [results, setResults] = useState<BackendResult[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function load() {
+      try {
+        setIsLoading(true);
+        setError("");
+        const data = await getResults();
+        if (isMounted) setResults(data);
+      } catch (err) {
+        if (!isMounted) return;
+        setResults([]);
+        setError(
+          err instanceof Error ? err.message : "Failed to load results. Please try again."
+        );
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const result = useMemo(() => {
+    if (!hasValidContext) return null;
+
+    const matches = results.filter(
+      (item) => String(item.patient_id) === String(patientId)
+    );
+    if (matches.length === 0) return null;
+
+    // "Latest" = last item in backend response order for that patient.
+    return matches[matches.length - 1] || null;
+  }, [hasValidContext, patientId, results]);
+
+  const hasLinkedResult = hasValidContext && Boolean(result);
   const patientName =
     patientId !== "—"
       ? patientsRepository.getById(patientId)?.fullName || "Not available"
       : "Not available";
 
-  const mode = assessment
-    ? assessment.mode === "remote"
-      ? "Remote Online Assessment"
-      : "In-Clinic Guided Assessment"
-    : "Not available";
+  const mode = hasLinkedResult ? "Motion Result (Backend)" : "Not available";
 
-  const selectedTests = assessment?.selectedTests || [];
-  const bodyRegion = assessment?.bodyRegion || "—";
-  const side = assessment?.side || "—";
-  const visitType = assessment?.visitType || "—";
-  const sessionLabel = assessment?.sessionLabel || "—";
-  const status = assessment?.status || "—";
-  const createdAt = assessment?.createdAt
-    ? new Date(assessment.createdAt).toLocaleDateString()
-    : "—";
-  const completedAt = assessment?.completedAt
-    ? new Date(assessment.completedAt).toLocaleDateString()
-    : "—";
+  const selectedTests = result?.test ? [result.test] : [];
+  const bodyRegion = "—";
+  const side = "—";
+  const visitType = "—";
+  const sessionLabel = "—";
+  const status = hasLinkedResult ? "completed" : "—";
+  const createdAt = "—";
+  const completedAt = "—";
 
   const score =
-    typeof assessment?.score === "number"
-      ? `${assessment.score}%`
-      : assessment?.score || "—";
-  const scoreValue = typeof assessment?.score === "number" ? assessment.score : null;
+    typeof result?.score === "number"
+      ? `${result.score}%`
+      : typeof result?.score === "string" && result.score.trim()
+        ? result.score
+        : "—";
+  const scoreValue = typeof result?.score === "number" ? result.score : null;
   const scoreTone =
     scoreValue === null
       ? "pending"
@@ -52,14 +87,12 @@ function ResultsPageContent() {
         : scoreValue >= 60
           ? "moderate"
           : "attention";
-  const reportSummary = assessment?.reportSummary?.trim()
-    ? assessment.reportSummary
-    : assessment
-      ? `${mode} recorded for ${bodyRegion.toLowerCase()} (${side.toLowerCase()}) during a ${visitType.toLowerCase()} visit. Use the selected tests and score to confirm progression and next care step.`
-      : "No linked result available yet.";
+  const reportSummary = hasLinkedResult
+    ? `Result received from backend for test “${selectedTests[0] || "unknown"}”. Use score and session context to confirm progression and next care step.`
+    : "No linked result available yet.";
   const assessmentContext =
-    assessment && hasLinkedResult
-      ? `${mode} session focused on ${bodyRegion} (${side}) for ${visitType}.`
+    hasLinkedResult
+      ? `${mode} linked to patient ${patientId}.`
       : "No linked assessment context available.";
   const movementQuality =
     scoreValue === null
@@ -77,6 +110,88 @@ function ResultsPageContent() {
     selectedTests.length > 0
       ? `Functional performance was evaluated across ${selectedTests.length} selected test${selectedTests.length > 1 ? "s" : ""}.`
       : "Functional performance tests are not linked to this result yet.";
+
+  const analysisScore = useMemo(() => {
+    if (!result) return null;
+    const raw = result.score;
+    if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+    if (typeof raw === "string") {
+      const n = Number.parseFloat(raw.replace(/%/g, "").trim());
+      return Number.isFinite(n) ? n : null;
+    }
+    return null;
+  }, [result]);
+
+  const clinicalAnalysis = useMemo(() => {
+    if (!hasLinkedResult || !result || analysisScore === null) return null;
+
+    const testKey = String(result.test ?? "").toLowerCase().trim();
+
+    let severity: string;
+    if (analysisScore >= 85) severity = "Mild";
+    else if (analysisScore >= 70) severity = "Moderate";
+    else severity = "Needs Attention";
+
+    if (testKey === "squat") {
+      if (analysisScore >= 85) {
+        return {
+          severity,
+          interpretation:
+            "Good squat performance with mild residual limitation. Functional movement appears acceptable.",
+          nextStep:
+            "Continue strengthening, balance training, and follow-up reassessment.",
+        };
+      }
+      if (analysisScore >= 70) {
+        return {
+          severity,
+          interpretation:
+            "Moderate squat performance limitation detected. Ongoing rehabilitation is recommended.",
+          nextStep:
+            "Progress strengthening and movement control exercises, then reassess.",
+        };
+      }
+      return {
+        severity,
+        interpretation:
+          "Notable squat performance deficit detected. Closer monitoring and targeted rehabilitation are needed.",
+        nextStep: "Start a focused corrective program and repeat assessment soon.",
+      };
+    }
+
+    const testLabel = formatTestLabel(testKey);
+    if (severity === "Mild") {
+      return {
+        severity,
+        interpretation: `${testLabel}: performance appears broadly acceptable with only mild limitation to monitor.`,
+        nextStep:
+          "Continue the current rehabilitation emphasis and schedule a routine follow-up reassessment.",
+      };
+    }
+    if (severity === "Moderate") {
+      return {
+        severity,
+        interpretation: `${testLabel}: moderate limitation is present. Functional capacity may be reduced under demand.`,
+        nextStep:
+          "Progress targeted strengthening and motor control work, then reassess objective markers.",
+      };
+    }
+    return {
+      severity,
+      interpretation: `${testLabel}: notable limitation is present. Movement quality may require closer clinical oversight.`,
+      nextStep:
+        "Initiate a focused corrective plan with nearer-term reassessment and safety monitoring.",
+    };
+  }, [analysisScore, hasLinkedResult, result]);
+
+  const severityTone =
+    clinicalAnalysis?.severity === "Mild"
+      ? "good"
+      : clinicalAnalysis?.severity === "Moderate"
+        ? "moderate"
+        : clinicalAnalysis?.severity === "Needs Attention"
+          ? "attention"
+          : "default";
 
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
@@ -116,6 +231,17 @@ function ResultsPageContent() {
           </div>
         </div>
 
+        {isLoading && (
+          <div className="mb-6 rounded-[20px] border border-white/10 bg-white/[0.03] p-4 text-sm text-white/65">
+            Loading results from backend...
+          </div>
+        )}
+        {!isLoading && error && (
+          <div className="mb-6 rounded-[20px] border border-rose-300/20 bg-rose-500/10 p-4 text-sm text-rose-100">
+            Unable to load results: {error}
+          </div>
+        )}
+
         <section className="grid gap-6 xl:grid-cols-[1.2fr_0.85fr]">
           <div className="space-y-6">
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
@@ -148,7 +274,7 @@ function ResultsPageContent() {
                 <MetricCard label="Overall Score" value={String(score)} tone={scoreTone} />
                 <MetricCard
                   label="Tests Included"
-                  value={String(selectedTests.length)}
+                  value={selectedTests.join(", ")}
                   tone="moderate"
                 />
                 <MetricCard label="Session Status" value={status} tone="default" />
@@ -165,6 +291,32 @@ function ResultsPageContent() {
                 </div>
               )}
             </section>
+
+            {hasLinkedResult && clinicalAnalysis && (
+              <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+                <h2 className="text-2xl font-bold text-white">Clinical Analysis</h2>
+                <p className="mt-2 text-sm leading-7 text-white/70">
+                  Structured, rule-based insight from the latest backend result for this patient.
+                </p>
+                <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  <MetricCard
+                    label="Severity"
+                    value={clinicalAnalysis.severity}
+                    tone={severityTone}
+                  />
+                  <MetricCard
+                    label="Clinical Interpretation"
+                    value={clinicalAnalysis.interpretation}
+                    tone="default"
+                  />
+                  <MetricCard
+                    label="Recommended Next Step"
+                    value={clinicalAnalysis.nextStep}
+                    tone="default"
+                  />
+                </div>
+              </section>
+            )}
 
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
               <h2 className="text-2xl font-bold text-white">Tests Included</h2>

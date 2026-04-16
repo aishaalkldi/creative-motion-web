@@ -91,10 +91,18 @@ function InClinicAssessmentContent() {
 
   const patientAccessLink = useMemo(() => {
     if (!patientId || !assessmentId || typeof window === "undefined") return "";
-    return `${window.location.origin}/assessment?patientId=${encodeURIComponent(
+    const origin = window.location.origin;
+    if (selectedTests.includes("squat")) {
+      return `${origin}/body-axis-ai?patientId=${encodeURIComponent(
+        patientId
+      )}&assessmentId=${encodeURIComponent(
+        assessmentId
+      )}&test=${encodeURIComponent("squat")}`;
+    }
+    return `${origin}/assessment?patientId=${encodeURIComponent(
       patientId
     )}&assessmentId=${encodeURIComponent(assessmentId)}`;
-  }, [patientId, assessmentId]);
+  }, [patientId, assessmentId, selectedTests]);
 
   function toggleTest(testId: string) {
     setSelectedTests((prev) =>

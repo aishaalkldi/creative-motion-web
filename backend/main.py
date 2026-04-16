@@ -52,6 +52,22 @@ def init_db():
     );
     """)
 
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS assessments (
+        id SERIAL PRIMARY KEY,
+        patient_code TEXT NOT NULL,
+        assessment_id TEXT NOT NULL,
+        test_type TEXT NOT NULL,
+        score REAL NOT NULL,
+        summary TEXT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    """)
+
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_assessments_patient_code ON assessments (patient_code);"
+    )
+
     conn.commit()
     conn.close()
 
@@ -75,6 +91,15 @@ class Patient(BaseModel):
     diagnosis: str
     condition: str | None = ""
     status: str = "Active"
+
+
+class AssessmentCreate(BaseModel):
+    patient_code: str
+    assessment_id: str
+    test_type: str
+    score: float
+    summary: str = ""
+
 
 @app.post("/results")
 def save_result(result: Result):
@@ -231,6 +256,64 @@ def get_patient_by_code(patient_code: str):
         "condition": row[7] or "",
         "status": row[8],
     }
+
+
+@app.post("/assessments")
+def save_assessment(assessment: AssessmentCreate):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        INSERT INTO assessments (
+            patient_code, assessment_id, test_type, score, summary
+        ) VALUES (%s, %s, %s, %s, %s)
+        """,
+        (
+            assessment.patient_code.strip(),
+            assessment.assessment_id.strip(),
+            assessment.test_type.strip(),
+            assessment.score,
+            assessment.summary or "",
+        ),
+    )
+
+    conn.commit()
+    conn.close()
+
+    return {"status": "assessment_saved", "data": assessment.dict()}
+
+
+@app.get("/patients/{patient_code}/assessments")
+def list_patient_assessments(patient_code: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT id, patient_code, assessment_id, test_type, score, summary, created_at
+        FROM assessments
+        WHERE patient_code = %s
+        ORDER BY created_at DESC, id DESC
+        """,
+        (patient_code.strip(),),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+
+    return [
+        {
+            "id": row[0],
+            "patient_code": row[1],
+            "assessment_id": row[2],
+            "test_type": row[3],
+            "score": float(row[4]),
+            "summary": row[5] or "",
+            "created_at": row[6].isoformat() if row[6] else "",
+        }
+        for row in rows
+    ]
+
 
 @app.delete("/cleanup/patients")
 def cleanup_fake_patients():

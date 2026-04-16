@@ -2,27 +2,51 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import type { PatientRecord } from "../../lib/domain-types";
-import { patientsRepository } from "../../lib/repositories";
+import { getPatients, type BackendPatient } from "../../lib/api";
 
 export default function PatientsPage() {
-  const [patients, setPatients] = useState<PatientRecord[]>([]);
+  const [patients, setPatients] = useState<BackendPatient[]>([]);
   const [search, setSearch] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const data = patientsRepository.getAll();
-    setPatients(data);
+    let isMounted = true;
+
+    async function loadPatients() {
+      try {
+        setIsLoading(true);
+        setError("");
+        const data = await getPatients();
+        if (isMounted) setPatients(data);
+      } catch (err) {
+        if (!isMounted) return;
+        setPatients([]);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Failed to load patients. Please try again."
+        );
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+
+    loadPatients();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const filtered = patients.filter((patient) =>
-    `${patient.fullName} ${patient.id} ${patient.phone} ${patient.diagnosis}`
+    `${patient.name} ${patient.patient_code} ${patient.phone} ${patient.diagnosis || ""} ${patient.condition || ""}`
       .toLowerCase()
       .includes(search.toLowerCase())
   );
   const hasPatients = patients.length > 0;
   const hasSearch = search.trim().length > 0;
   const activeCasesCount = patients.filter(
-    (patient) => patient.status.toLowerCase() === "active"
+    (patient) => (patient.status || "").toLowerCase() === "active"
   ).length;
 
   return (
@@ -114,13 +138,21 @@ export default function PatientsPage() {
               </thead>
 
               <tbody>
-                {filtered.length === 0 ? (
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={6} className="px-5 py-8 text-sm text-white/60">
+                      Loading patients from backend...
+                    </td>
+                  </tr>
+                ) : filtered.length === 0 ? (
                   <tr>
                     <td
                       colSpan={6}
                       className="px-5 py-8 text-sm text-white/60"
                     >
-                      {hasPatients && hasSearch
+                      {error
+                        ? `Unable to load patients: ${error}`
+                        : hasPatients && hasSearch
                         ? "No patients match the current search."
                         : "No patient records yet. Add a patient to start the workflow."}
                     </td>
@@ -128,23 +160,25 @@ export default function PatientsPage() {
                 ) : (
                   filtered.map((patient) => (
                     <tr
-                      key={patient.id}
+                      key={patient.id || patient.patient_code}
                       className="border-t border-white/10 text-sm text-white/80 transition hover:bg-white/[0.02]"
                     >
-                      <td className="px-5 py-4 font-medium text-cyan-100">{patient.id}</td>
-                      <td className="px-5 py-4 font-medium text-white">{patient.fullName}</td>
+                      <td className="px-5 py-4 font-medium text-cyan-100">
+                        {patient.patient_code || patient.id}
+                      </td>
+                      <td className="px-5 py-4 font-medium text-white">{patient.name}</td>
                       <td className="px-5 py-4">{patient.phone}</td>
                       <td className="px-5 py-4">
                         <span className="rounded-full border border-white/12 bg-white/[0.03] px-3 py-1 text-xs text-white/75">
-                          {patient.diagnosis || "Not specified"}
+                          {patient.diagnosis || patient.condition || "Not specified"}
                         </span>
                       </td>
                       <td className="px-5 py-4">
-                        <StatusBadge status={patient.status} />
+                        <StatusBadge status={patient.status || "new"} />
                       </td>
                       <td className="px-5 py-4">
                         <Link
-                          href={`/clinician/patients/${patient.id}`}
+                          href={`/clinician/patients/${encodeURIComponent(patient.patient_code || patient.id)}`}
                           className="inline-flex items-center rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white transition hover:bg-white/10"
                         >
                           Open Profile →

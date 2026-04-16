@@ -4,7 +4,30 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import type { AssessmentRecord, PatientRecord } from "../../../lib/domain-types";
+import {
+  getAssessmentsForPatient,
+  getPatients,
+  type BackendAssessmentHistory,
+  type BackendPatient,
+} from "../../../lib/api";
 import { assessmentsRepository, patientsRepository } from "../../../lib/repositories";
+
+function backendPatientToRecord(p: BackendPatient): PatientRecord {
+  const canonicalId =
+    (p.patient_code && p.patient_code.trim()) || String(p.id);
+  return {
+    id: canonicalId,
+    fullName: p.name || "—",
+    phone: String(p.phone ?? ""),
+    age: p.age === null || p.age === undefined ? "" : String(p.age),
+    gender: p.gender ?? "",
+    diagnosis: p.diagnosis ?? "",
+    notes: p.condition ?? "",
+    initialAssessment: "",
+    status: (p.status ?? "new") as PatientRecord["status"],
+    createdAt: new Date().toISOString(),
+  };
+}
 
 export default function PatientProfilePage() {
   const params = useParams();
@@ -17,14 +40,58 @@ export default function PatientProfilePage() {
   const [copyFeedback, setCopyFeedback] = useState<"idle" | "success" | "error">(
     "idle"
   );
+  const [backendAssessmentHistory, setBackendAssessmentHistory] = useState<
+    BackendAssessmentHistory[]
+  >([]);
 
   useEffect(() => {
-    const foundPatient = patientsRepository.getById(id);
-    setPatient(foundPatient);
+    let isMounted = true;
 
-    const patientAssessments = assessmentsRepository.listByPatientId(id);
-    setAssessments(patientAssessments);
-    setIsLoading(false);
+    async function loadPatient() {
+      setIsLoading(true);
+      const routeKey = decodeURIComponent(id);
+
+      let resolved: PatientRecord | null = null;
+
+      try {
+        const list = await getPatients();
+        const rk = routeKey.trim();
+        const apiMatch =
+          list.find(
+            (p) =>
+              (p.patient_code && p.patient_code.trim() === rk) ||
+              String(p.id).trim() === rk
+          ) || null;
+        if (apiMatch) resolved = backendPatientToRecord(apiMatch);
+      } catch {
+        // Same roster may be unavailable; fall through to local storage.
+      }
+
+      if (!resolved) {
+        resolved = patientsRepository.getByPatientCodeOrId(routeKey);
+      }
+
+      if (!isMounted) return;
+
+      setPatient(resolved);
+      const patientKeyForAssessments = resolved?.id ?? routeKey;
+      setAssessments(assessmentsRepository.listByPatientId(patientKeyForAssessments));
+
+      let history: BackendAssessmentHistory[] = [];
+      try {
+        history = await getAssessmentsForPatient(patientKeyForAssessments);
+      } catch {
+        history = [];
+      }
+      if (isMounted) setBackendAssessmentHistory(history);
+
+      setIsLoading(false);
+    }
+
+    loadPatient();
+    return () => {
+      isMounted = false;
+    };
   }, [id]);
 
   const latestAssessment = useMemo(() => {
@@ -437,6 +504,61 @@ export default function PatientProfilePage() {
             </section>
 
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+              <h2 className="text-2xl font-bold text-white">Assessment History</h2>
+              <p className="mt-2 text-sm text-white/70">
+                Completed assessments saved from Body Axis AI and linked to this patient
+                record in the clinical database.
+              </p>
+
+              <div className="mt-5 space-y-3">
+                {backendAssessmentHistory.length > 0 ? (
+                  backendAssessmentHistory.map((row) => (
+                    <div
+                      key={`backend-${row.id}`}
+                      className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <h3 className="text-base font-semibold text-white">
+                            {formatTestLabel(row.test_type)}
+                          </h3>
+                          <p className="mt-1 text-sm text-white/60">
+                            {row.created_at
+                              ? new Date(row.created_at).toLocaleString()
+                              : "—"}
+                          </p>
+                          <p className="mt-2 text-xs text-white/50">
+                            Session: {row.assessment_id}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <ResultPill
+                            label={`Score ${row.score}%`}
+                            tone="score"
+                          />
+                          <ResultPill
+                            label={backendHistoryStatusLabel(row.score)}
+                            tone={
+                              row.score >= 80 ? "good" : "neutral"
+                            }
+                          />
+                        </div>
+                      </div>
+                      {row.summary ? (
+                        <p className="mt-3 text-sm leading-6 text-white/70">{row.summary}</p>
+                      ) : null}
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-5 text-sm text-white/65">
+                    No saved assessment results yet. Complete a Body Axis AI session for this
+                    patient to build history here.
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
               <h2 className="text-2xl font-bold text-white">Full Assessment History</h2>
               <p className="mt-2 text-sm text-white/70">
                 Complete session archive preserved for longitudinal tracking and future trends.
@@ -586,6 +708,10 @@ function formatStatusLabel(status: string) {
   if (status === "completed") return "Completed";
   if (status === "draft") return "Draft";
   return status;
+}
+
+function backendHistoryStatusLabel(score: number) {
+  return score >= 80 ? "Good" : "Needs attention";
 }
 
 function ResultPill({

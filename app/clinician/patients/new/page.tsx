@@ -2,15 +2,18 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createPatientId } from "../../../lib/ids";
-import type { PatientRecord } from "../../../lib/domain-types";
-import { patientsRepository } from "../../../lib/repositories";
+import { createPatient } from "../../../lib/api";
 
 export default function AddPatientPage() {
   const router = useRouter();
 
-  const [patientId] = useState(createPatientId());
+  const [patientId, setPatientId] = useState("");
+
+  useEffect(() => {
+    setPatientId(createPatientId());
+  }, []);
   const [fullName, setFullName] = useState("AISHA");
   const [phone, setPhone] = useState("0500000000");
   const [age, setAge] = useState("25");
@@ -20,91 +23,95 @@ export default function AddPatientPage() {
   const [initialAssessment, setInitialAssessment] = useState("Gait Screening");
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
-  function buildPatient(): PatientRecord {
-    return {
-      id: patientId,
-      fullName: fullName.trim(),
+  async function persistPatientToBackend() {
+    const validationError = validate();
+    if (validationError) throw new Error(validationError);
+
+    await createPatient({
+      patient_code: patientId.trim(),
+      name: fullName.trim(),
       phone: phone.trim(),
       age: age.trim(),
       gender: gender.trim(),
       diagnosis: diagnosis.trim(),
-      notes: notes.trim(),
-      initialAssessment: initialAssessment.trim(),
-      status: "Saved",
-      createdAt: new Date().toISOString(),
-    };
+      condition: notes.trim(),
+      status: "Active",
+    });
   }
 
   function validate() {
+    if (!patientId.trim()) return "Patient ID is still loading. Please wait a moment.";
     if (!fullName.trim()) return "Full Name is required.";
     if (!phone.trim()) return "Phone is required.";
     if (!age.trim()) return "Age is required.";
     return "";
   }
 
-  function handleSavePatient() {
-    const validationError = validate();
-
-    if (validationError) {
-      setError(validationError);
-      setSaved(false);
-      return;
-    }
-
-    const patient = buildPatient();
-    patientsRepository.create(patient);
-    setSaved(true);
+  async function handleSavePatient() {
+    setIsSaving(true);
     setError("");
-    alert("Patient saved successfully");
+    setSaved(false);
+    try {
+      await persistPatientToBackend();
+      setSaved(true);
+    } catch (err) {
+      setSaved(false);
+      setError(err instanceof Error ? err.message : "Save failed. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
-  function handleOpenProfile() {
-    const validationError = validate();
-
-    if (validationError) {
-      setError(validationError);
-      setSaved(false);
-      return;
-    }
-
-    const patient = buildPatient();
-    patientsRepository.create(patient);
-    setSaved(true);
+  async function handleOpenProfile() {
+    setIsSaving(true);
     setError("");
-    router.push(`/clinician/patients/${patient.id}`);
+    setSaved(false);
+    try {
+      await persistPatientToBackend();
+      setSaved(true);
+      router.push(`/clinician/patients/${encodeURIComponent(patientId.trim())}`);
+    } catch (err) {
+      setSaved(false);
+      setError(err instanceof Error ? err.message : "Save failed. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
-  function handleStartAssessment() {
-    const validationError = validate();
-
-    if (validationError) {
-      setError(validationError);
-      setSaved(false);
-      return;
-    }
-
-    const patient = buildPatient();
-    patientsRepository.create(patient);
-    setSaved(true);
+  async function handleStartAssessment() {
+    setIsSaving(true);
     setError("");
-    router.push(`/clinician/assessment/start?patientId=${patient.id}`);
+    setSaved(false);
+    try {
+      await persistPatientToBackend();
+      setSaved(true);
+      router.push(
+        `/clinician/assessment/start?patientId=${encodeURIComponent(patientId.trim())}`
+      );
+    } catch (err) {
+      setSaved(false);
+      setError(err instanceof Error ? err.message : "Save failed. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
-  function handleViewPatients() {
-    const validationError = validate();
-
-    if (validationError) {
-      setError(validationError);
-      setSaved(false);
-      return;
-    }
-
-    const patient = buildPatient();
-    patientsRepository.create(patient);
-    setSaved(true);
+  async function handleViewPatients() {
+    setIsSaving(true);
     setError("");
-    router.push("/clinician/patients");
+    setSaved(false);
+    try {
+      await persistPatientToBackend();
+      setSaved(true);
+      router.push("/clinician/patients");
+    } catch (err) {
+      setSaved(false);
+      setError(err instanceof Error ? err.message : "Save failed. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -234,32 +241,36 @@ export default function AddPatientPage() {
             <div className="mt-5 flex flex-col gap-3">
               <button
                 type="button"
-                onClick={handleSavePatient}
-                className="rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300"
+                onClick={() => void handleSavePatient()}
+                disabled={isSaving}
+                className="rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Save Patient File
+                {isSaving ? "Saving…" : "Save Patient File"}
               </button>
 
               <button
                 type="button"
-                onClick={handleOpenProfile}
-                className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-center font-semibold text-white transition hover:bg-white/10"
+                onClick={() => void handleOpenProfile()}
+                disabled={isSaving}
+                className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-center font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Open Patient Profile
               </button>
 
               <button
                 type="button"
-                onClick={handleStartAssessment}
-                className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-center font-semibold text-white transition hover:bg-white/10"
+                onClick={() => void handleStartAssessment()}
+                disabled={isSaving}
+                className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-center font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 Start Assessment
               </button>
 
               <button
                 type="button"
-                onClick={handleViewPatients}
-                className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-center font-semibold text-white transition hover:bg-white/10"
+                onClick={() => void handleViewPatients()}
+                disabled={isSaving}
+                className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-center font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 View All Patients
               </button>

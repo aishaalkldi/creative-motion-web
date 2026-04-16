@@ -138,7 +138,7 @@ function BodyAxisAIPageContent() {
   const displayPatientName =
     patientName === "Unknown Patient" ? "Not provided" : patientName;
 
-  const aclMode = isAclSingleLegSquatTest(test);
+  const aclMode = isAclSingleLegSquatTest(test) || test === "squat";
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const poseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
