@@ -5,27 +5,25 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import type { AssessmentRecord, PatientRecord } from "../../../lib/domain-types";
 import {
-  getAssessmentsForPatient,
+  getPatientAssessments,
   getPatients,
-  type BackendAssessmentHistory,
+  type AssessmentOut,
   type BackendPatient,
 } from "../../../lib/api";
 import { assessmentsRepository, patientsRepository } from "../../../lib/repositories";
 
 function backendPatientToRecord(p: BackendPatient): PatientRecord {
-  const canonicalId =
-    (p.patient_code && p.patient_code.trim()) || String(p.id);
   return {
-    id: canonicalId,
-    fullName: p.name || "—",
+    id: String(p.id),
+    fullName: p.full_name || "—",
     phone: String(p.phone ?? ""),
     age: p.age === null || p.age === undefined ? "" : String(p.age),
     gender: p.gender ?? "",
     diagnosis: p.diagnosis ?? "",
-    notes: p.condition ?? "",
+    notes: p.sport ?? "",
     initialAssessment: "",
-    status: (p.status ?? "new") as PatientRecord["status"],
-    createdAt: "",
+    status: (p.status ?? "Active") as PatientRecord["status"],
+    createdAt: p.created_at ?? new Date().toISOString(),
   };
 }
 
@@ -41,7 +39,7 @@ export default function PatientProfilePage() {
     "idle"
   );
   const [backendAssessmentHistory, setBackendAssessmentHistory] = useState<
-    BackendAssessmentHistory[]
+    AssessmentOut[]
   >([]);
 
   useEffect(() => {
@@ -56,15 +54,10 @@ export default function PatientProfilePage() {
       try {
         const list = await getPatients();
         const rk = routeKey.trim();
-        const apiMatch =
-          list.find(
-            (p) =>
-              (p.patient_code && p.patient_code.trim() === rk) ||
-              String(p.id).trim() === rk
-          ) || null;
+        const apiMatch = list.find((p) => String(p.id) === rk) || null;
         if (apiMatch) resolved = backendPatientToRecord(apiMatch);
       } catch {
-        // Same roster may be unavailable; fall through to local storage.
+        // Backend may be unavailable; fall through to local storage.
       }
 
       if (!resolved) {
@@ -77,9 +70,12 @@ export default function PatientProfilePage() {
       const patientKeyForAssessments = resolved?.id ?? routeKey;
       setAssessments(assessmentsRepository.listByPatientId(patientKeyForAssessments));
 
-      let history: BackendAssessmentHistory[] = [];
+      let history: AssessmentOut[] = [];
       try {
-        history = await getAssessmentsForPatient(patientKeyForAssessments);
+        const numericId = parseInt(String(patientKeyForAssessments), 10);
+        if (!isNaN(numericId)) {
+          history = await getPatientAssessments(numericId);
+        }
       } catch {
         history = [];
       }
@@ -520,32 +516,31 @@ export default function PatientProfilePage() {
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <h3 className="text-base font-semibold text-white">
-                            {formatTestLabel(row.test_type)}
+                            {row.type}
                           </h3>
                           <p className="mt-1 text-sm text-white/60">
                             {row.created_at
                               ? new Date(row.created_at).toLocaleString()
                               : "—"}
                           </p>
-                          <p className="mt-2 text-xs text-white/50">
-                            Session: {row.assessment_id}
-                          </p>
+                          {row.selected_tests.length > 0 && (
+                            <p className="mt-1 text-xs text-white/50">
+                              Tests: {row.selected_tests.join(", ")}
+                            </p>
+                          )}
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
                           <ResultPill
-                            label={`Score ${row.score}%`}
-                            tone="score"
+                            label={row.status}
+                            tone={row.status === "completed" ? "good" : row.status === "in_progress" ? "score" : "neutral"}
                           />
-                          <ResultPill
-                            label={backendHistoryStatusLabel(row.score)}
-                            tone={
-                              row.score >= 80 ? "good" : "neutral"
-                            }
-                          />
+                          {row.mode && (
+                            <ResultPill label={row.mode} tone="neutral" />
+                          )}
                         </div>
                       </div>
-                      {row.summary ? (
-                        <p className="mt-3 text-sm leading-6 text-white/70">{row.summary}</p>
+                      {row.notes ? (
+                        <p className="mt-3 text-sm leading-6 text-white/70">{row.notes}</p>
                       ) : null}
                     </div>
                   ))
@@ -710,9 +705,6 @@ function formatStatusLabel(status: string) {
   return status;
 }
 
-function backendHistoryStatusLabel(score: number) {
-  return score >= 80 ? "Good" : "Needs attention";
-}
 
 function ResultPill({
   label,

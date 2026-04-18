@@ -3,12 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import {
-  getPatients,
-  getResults,
-  matchPatientByKey,
-  type BackendResult,
-} from "../lib/api";
+import { getResultsByPatient, type ResultOut } from "../lib/api";
 import { patientsRepository } from "../lib/repositories";
 
 function ResultsPageContent() {
@@ -20,19 +15,21 @@ function ResultsPageContent() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
-  const [results, setResults] = useState<BackendResult[]>([]);
-  const [rosterPatientName, setRosterPatientName] = useState<string | null>(
-    null
-  );
+  const [results, setResults] = useState<ResultOut[]>([]);
 
   useEffect(() => {
     let isMounted = true;
 
     async function load() {
+      const numericPatientId = parseInt(patientId, 10);
+      if (isNaN(numericPatientId)) {
+        setIsLoading(false);
+        return;
+      }
       try {
         setIsLoading(true);
         setError("");
-        const data = await getResults();
+        const data = await getResultsByPatient(numericPatientId);
         if (isMounted) setResults(data);
       } catch (err) {
         if (!isMounted) return;
@@ -51,53 +48,27 @@ function ResultsPageContent() {
     };
   }, []);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadName() {
-      if (patientId === "—") {
-        if (isMounted) setRosterPatientName(null);
-        return;
-      }
-      try {
-        const list = await getPatients();
-        if (!isMounted) return;
-        const match = matchPatientByKey(list, patientId);
-        setRosterPatientName(match?.name?.trim() || null);
-      } catch {
-        if (isMounted) setRosterPatientName(null);
-      }
-    }
-
-    loadName();
-    return () => {
-      isMounted = false;
-    };
-  }, [patientId]);
-
   const result = useMemo(() => {
-    if (!hasValidContext) return null;
-
-    const matches = results.filter(
-      (item) => String(item.patient_id) === String(patientId)
-    );
-    if (matches.length === 0) return null;
-
-    // "Latest" = last item in backend response order for that patient.
-    return matches[matches.length - 1] || null;
-  }, [hasValidContext, patientId, results]);
+    if (!hasValidContext || results.length === 0) return null;
+    // Filter by assessmentId if provided, otherwise take the latest result.
+    if (assessmentId !== "—") {
+      const byAssessment = results.filter(
+        (item) => String(item.assessment_id) === assessmentId
+      );
+      return byAssessment[byAssessment.length - 1] ?? results[results.length - 1] ?? null;
+    }
+    return results[results.length - 1] ?? null;
+  }, [hasValidContext, assessmentId, results]);
 
   const hasLinkedResult = hasValidContext && Boolean(result);
   const patientName =
-    patientId === "—"
-      ? "Not available"
-      : rosterPatientName ||
-        patientsRepository.getByPatientCodeOrId(patientId)?.fullName ||
-        "Not available";
+    patientId !== "—"
+      ? patientsRepository.getById(patientId)?.fullName || "Not available"
+      : "Not available";
 
   const mode = hasLinkedResult ? "Motion Result (Backend)" : "Not available";
 
-  const selectedTests = result?.test ? [result.test] : [];
+  const selectedTests = result?.test_name ? [result.test_name] : [];
   const bodyRegion = "—";
   const side = "—";
   const visitType = "—";
@@ -122,7 +93,8 @@ function ResultsPageContent() {
           ? "moderate"
           : "attention";
   const reportSummary = hasLinkedResult
-    ? `Result received from backend for test “${selectedTests[0] || "unknown"}”. Use score and session context to confirm progression and next care step.`
+    ? (result?.summary ||
+        `Result received from backend for test "${selectedTests[0] || "unknown"}". Use score and session context to confirm progression and next care step.`)
     : "No linked result available yet.";
   const assessmentContext =
     hasLinkedResult
@@ -159,7 +131,7 @@ function ResultsPageContent() {
   const clinicalAnalysis = useMemo(() => {
     if (!hasLinkedResult || !result || analysisScore === null) return null;
 
-    const testKey = String(result.test ?? "").toLowerCase().trim();
+    const testKey = String(result.test_name ?? "").toLowerCase().trim();
 
     let severity: string;
     if (analysisScore >= 85) severity = "Mild";

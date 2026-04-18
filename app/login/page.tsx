@@ -1,43 +1,42 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { loginClinician } from "../lib/api";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const returnTo = searchParams.get("returnTo") || "/clinician";
 
-  const [email, setEmail] = useState("admin@creativemotionlabs.com");
-  const [password, setPassword] = useState("123456");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
+    if (!email.trim() || !password) {
+      setError("Please enter your email and password.");
+      return;
+    }
+
     setError("");
     setLoading(true);
 
     try {
-      // Temporary demo credentials
-      if (
-        email === "admin@creativemotionlabs.com" &&
-        password === "123456"
-      ) {
-        document.cookie = "cm_auth=logged_in; path=/; max-age=86400";
-        document.cookie = `cm_user_email=${encodeURIComponent(
-          email
-        )}; path=/; max-age=86400`;
-
-        router.push("/clinician");
-        router.refresh();
-        return;
-      }
-
-      setError("Invalid email or password");
+      await loginClinician(email.trim(), password);
+      router.push(returnTo);
+      router.refresh();
     } catch (err) {
-      console.error(err);
-      setError("Something went wrong");
+      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") void handleLogin();
   };
 
   return (
@@ -53,52 +52,65 @@ export default function LoginPage() {
           </p>
         </div>
 
-        <div className="space-y-5">
+        <div className="space-y-5" onKeyDown={handleKeyDown}>
           <div>
             <label className="mb-2 block text-sm text-slate-300">Email</label>
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="admin@creativemotionlabs.com"
+              placeholder="you@clinic.com"
+              autoComplete="email"
               className="w-full rounded-xl border border-white/10 bg-[#0F172A] px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-cyan-400"
             />
           </div>
 
           <div>
-            <label className="mb-2 block text-sm text-slate-300">
-              Password
-            </label>
+            <label className="mb-2 block text-sm text-slate-300">Password</label>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="Enter password"
+              autoComplete="current-password"
               className="w-full rounded-xl border border-white/10 bg-[#0F172A] px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-cyan-400"
             />
           </div>
 
-          {error ? (
+          {error && (
             <div className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-300">
               {error}
             </div>
-          ) : null}
+          )}
 
           <button
-            onClick={handleLogin}
+            onClick={() => void handleLogin()}
             disabled={loading}
             className="w-full rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 font-semibold text-black transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            {loading ? "Signing in..." : "Login"}
+            {loading ? "Signing in…" : "Login"}
           </button>
 
-          <div className="rounded-2xl border border-white/10 bg-[#0F172A] p-4 text-sm text-slate-400">
-            <p className="font-semibold text-white">Demo credentials</p>
-            <p className="mt-2">Email: admin@creativemotionlabs.com</p>
-            <p>Password: 123456</p>
-          </div>
+          <p className="text-center text-sm text-slate-400">
+            Don&apos;t have an account?{" "}
+            <Link href="/signup" className="text-cyan-300 hover:text-cyan-200">
+              Sign up
+            </Link>
+          </p>
         </div>
       </div>
     </main>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen bg-[#0B1220] flex items-center justify-center">
+        <div className="text-cyan-300 text-sm">Loading…</div>
+      </main>
+    }>
+      <LoginForm />
+    </Suspense>
   );
 }

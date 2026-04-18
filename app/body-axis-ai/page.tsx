@@ -2,12 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  getPatients,
-  matchPatientByKey,
-  saveAssessmentRecord,
-  saveMotionResultRecord,
-} from "../lib/api";
+import { createAssessment, saveResult } from "../lib/api";
 import {
   AclSingleLegSquatTracker,
   isAclSingleLegSquatTest,
@@ -138,49 +133,10 @@ function BodyAxisAIPageContent() {
     () => assessmentsRepository.getById(assessmentId),
     [assessmentId]
   );
+  const hasLinkedAssessment = Boolean(assessment);
   const displayPatientId = patientId === "UNKNOWN" ? "Not provided" : patientId;
-
-  const [rosterPatientName, setRosterPatientName] = useState<string | null>(
-    null
-  );
-  const [linkedAssessmentResolved, setLinkedAssessmentResolved] = useState<
-    boolean | null
-  >(null);
-
-  useEffect(() => {
-    setLinkedAssessmentResolved(
-      Boolean(assessmentsRepository.getById(assessmentId))
-    );
-  }, [assessmentId]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    async function loadName() {
-      if (patientId === "UNKNOWN" || !patientId.trim()) {
-        if (isMounted) setRosterPatientName(null);
-        return;
-      }
-      try {
-        const list = await getPatients();
-        if (!isMounted) return;
-        const match = matchPatientByKey(list, patientId);
-        setRosterPatientName(match?.name?.trim() || null);
-      } catch {
-        if (isMounted) setRosterPatientName(null);
-      }
-    }
-
-    loadName();
-    return () => {
-      isMounted = false;
-    };
-  }, [patientId]);
-
   const displayPatientName =
-    rosterPatientName ||
-    (patientName !== "Unknown Patient" ? patientName : null) ||
-    "Not provided";
+    patientName === "Unknown Patient" ? "Not provided" : patientName;
 
   const aclMode = isAclSingleLegSquatTest(test) || test === "squat";
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -739,18 +695,24 @@ function BodyAxisAIPageContent() {
 
       if (patientId && patientId !== "UNKNOWN") {
         try {
-          await saveAssessmentRecord({
-            patient_code: patientId,
-            assessment_id: assessmentId,
-            test_type: test,
-            score: finalScore,
-            summary: finalSummary,
-          });
-          await saveMotionResultRecord({
-            patient_id: patientId,
-            test: test,
-            score: finalScore,
-          });
+          const numericPatientId = parseInt(patientId, 10);
+          if (!isNaN(numericPatientId)) {
+            const assessment = await createAssessment({
+              patient_id: numericPatientId,
+              type: "Body Axis AI Session",
+              selected_tests: [test],
+              mode: "Live Camera",
+              status: "completed",
+              notes: null,
+            });
+            await saveResult({
+              patient_id: numericPatientId,
+              assessment_id: assessment.id,
+              test_name: test,
+              score: finalScore,
+              summary: finalSummary,
+            });
+          }
         } catch (err) {
           setSessionMessage(
             err instanceof Error
@@ -779,7 +741,7 @@ function BodyAxisAIPageContent() {
 
   const canSubmit =
     sessionState === "stopped" &&
-    linkedAssessmentResolved === true &&
+    hasLinkedAssessment &&
     (!aclMode || movementScore !== null);
 
   return (
@@ -1044,17 +1006,11 @@ function BodyAxisAIPageContent() {
               <InfoBox label="Test Type" value={formatTestTitle(test)} />
               <InfoBox
                 label="Linked Assessment"
-                value={
-                  linkedAssessmentResolved === null
-                    ? "—"
-                    : linkedAssessmentResolved
-                      ? "Connected"
-                      : "Not linked"
-                }
+                value={hasLinkedAssessment ? "Connected" : "Not linked"}
               />
             </div>
 
-            {linkedAssessmentResolved === false && (
+            {!hasLinkedAssessment && (
               <div className="mt-5 rounded-2xl border border-amber-300/25 bg-amber-400/10 p-4 text-sm leading-6 text-amber-100">
                 No linked assessment record found. You can run the session, but submission requires a valid assessment context.
               </div>

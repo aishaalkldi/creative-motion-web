@@ -1,38 +1,50 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+/**
+ * Public routes that never require a session.
+ * Every other route is protected — unauthenticated visitors are sent to /login.
+ */
+const PUBLIC_PREFIXES = [
+  "/login",
+  "/signup",
+  // Patient-facing remote assessment link (sent via secure URL)
+  "/assessment",
+  // Next.js internals and static assets
+  "/_next",
+  "/favicon.ico",
+  "/fonts",
+];
+
+function isPublic(pathname: string): boolean {
+  if (pathname === "/") return true;
+  return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const authCookie = request.cookies.get("cm_auth")?.value;
 
-  const protectedRoutes = [
-    "/clinician",
-    "/live-results",
-    "/library",
-    "/sessions",
-  ];
+  // cm_token holds the real JWT (set by auth.ts after a successful login).
+  // The old cm_auth=logged_in flag cookie is intentionally ignored here so
+  // stale sessions from the previous demo login cannot bypass the guard.
+  const token = request.cookies.get("cm_token")?.value;
+  const authed = Boolean(token && token.length > 10);
 
-  const isProtected = protectedRoutes.some((route) =>
-    pathname.startsWith(route)
-  );
-
-  if (isProtected && authCookie !== "logged_in") {
-    return NextResponse.redirect(new URL("/login", request.url));
+  // Already authenticated — bounce away from auth pages
+  if (authed && (pathname === "/login" || pathname === "/signup")) {
+    return NextResponse.redirect(new URL("/clinician", request.url));
   }
 
-  if (pathname === "/login" && authCookie === "logged_in") {
-    return NextResponse.redirect(new URL("/clinician", request.url));
+  // Protected route — redirect to /login, preserving the intended destination
+  if (!isPublic(pathname) && !authed) {
+    const loginUrl = new URL("/login", request.url);
+    loginUrl.searchParams.set("returnTo", pathname);
+    return NextResponse.redirect(loginUrl);
   }
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: [
-    "/clinician/:path*",
-    "/live-results",
-    "/library",
-    "/sessions",
-    "/login",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

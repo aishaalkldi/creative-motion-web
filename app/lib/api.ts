@@ -1,233 +1,322 @@
-export type BackendPatient = {
-  id: string;
-  patient_code: string;
-  name: string;
-  phone: string;
-  age: number | string | null;
-  gender: string | null;
-  diagnosis: string | null;
-  condition: string | null;
-  status: string | null;
+import { type ClinicianInfo, getAuthHeaders, setAuthSession } from "./auth";
+
+// ── Auth ──────────────────────────────────────────────────────────────
+
+export type LoginResponse = {
+  access_token: string;
+  token_type: string;
+  clinician: ClinicianInfo;
 };
 
-/** Same matching rules as clinician patient profile: `patient_code` or numeric `id` string. */
-export function matchPatientByKey(
-  patients: BackendPatient[],
-  patientKey: string
-): BackendPatient | null {
-  const rk = patientKey.trim();
-  if (!rk) return null;
-  return (
-    patients.find(
-      (p) =>
-        (p.patient_code && p.patient_code.trim() === rk) ||
-        String(p.id).trim() === rk
-    ) ?? null
-  );
+/**
+ * Authenticates a clinician and stores the JWT + session cookie.
+ * Backend expects application/x-www-form-urlencoded (OAuth2PasswordRequestForm).
+ */
+export async function loginClinician(
+  email: string,
+  password: string
+): Promise<LoginResponse> {
+  const body = new URLSearchParams({ username: email, password });
+  const response = await fetch(`${baseUrl()}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: body.toString(),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let message = "Invalid email or password.";
+    try {
+      const err = (await response.json()) as { detail?: string };
+      if (typeof err.detail === "string") message = err.detail;
+    } catch { /* keep default */ }
+    throw new Error(message);
+  }
+  const data = (await response.json()) as LoginResponse;
+  setAuthSession(data.access_token, data.clinician);
+  return data;
 }
 
-export type BackendResult = {
-  id: string;
-  patient_id: string;
-  test: string;
-  score: number | string | null;
+export type RegisterPayload = {
+  full_name: string;
+  email: string;
+  password: string;
 };
 
-/** Body for `POST /patients` (matches FastAPI `Patient` model). */
-export type CreatePatientPayload = {
-  patient_code: string;
-  name: string;
+/** Registers a new clinician account. Does NOT auto-login. */
+export async function registerClinician(payload: RegisterPayload): Promise<ClinicianInfo> {
+  const response = await fetch(`${baseUrl()}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let message = "Registration failed.";
+    try {
+      const err = (await response.json()) as { detail?: string };
+      if (typeof err.detail === "string") message = err.detail;
+    } catch { /* keep default */ }
+    throw new Error(message);
+  }
+  return (await response.json()) as ClinicianInfo;
+}
+
+// ── Patients ──────────────────────────────────────────────────────────
+
+/** Matches FastAPI `PatientOut` exactly. */
+export type BackendPatient = {
+  id: number;
+  full_name: string;
   phone: string;
-  age?: string | null;
-  gender?: string | null;
+  age: number | null;
+  gender: string | null;
+  sport: string | null;
   diagnosis: string;
-  condition?: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Matches FastAPI `PatientCreate`. */
+export type CreatePatientPayload = {
+  full_name: string;
+  phone: string;
+  age?: number | string | null;
+  gender?: string | null;
+  sport?: string | null;
+  diagnosis: string;
   status?: string | null;
 };
 
-/** Row from `assessments` table (POST submit + GET by patient). */
-export type BackendAssessmentHistory = {
-  id: number;
-  patient_code: string;
-  assessment_id: string;
-  test_type: string;
-  score: number;
-  summary: string;
-  created_at: string;
-};
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+/** Returns true if the phone number is already registered to another patient. */
+export async function checkPhoneExists(phone: string): Promise<boolean> {
+  const response = await fetch(
+    `${baseUrl()}/patients/check-phone?phone=${encodeURIComponent(phone.trim())}`,
+    {
+      method: "GET",
+      headers: { Accept: "application/json", ...getAuthHeaders() },
+      cache: "no-store",
+    }
+  );
+  if (!response.ok) return false;
+  const data = (await response.json()) as { exists: boolean };
+  return data.exists;
+}
 
 export async function getPatients(): Promise<BackendPatient[]> {
-  if (!API_BASE_URL) {
-    throw new Error("NEXT_PUBLIC_API_BASE_URL is not configured.");
-  }
-
-  const response = await fetch(`${API_BASE_URL}/patients`, {
+  const response = await fetch(`${baseUrl()}/patients`, {
     method: "GET",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...getAuthHeaders() },
     cache: "no-store",
   });
-
-  if (!response.ok) {
-    throw new Error(`Failed to load patients (${response.status}).`);
-  }
-
+  if (!response.ok) throw new Error(`Failed to load patients (${response.status}).`);
   const data: unknown = await response.json();
   return Array.isArray(data) ? (data as BackendPatient[]) : [];
 }
 
-export async function saveAssessmentRecord(payload: {
-  patient_code: string;
-  assessment_id: string;
-  test_type: string;
-  score: number;
-  summary: string;
-}): Promise<void> {
-  if (!API_BASE_URL) {
-    throw new Error("NEXT_PUBLIC_API_BASE_URL is not configured.");
-  }
+export async function createPatient(payload: CreatePatientPayload): Promise<BackendPatient> {
+  const rawAge = payload.age;
+  const age =
+    rawAge === null || rawAge === undefined || rawAge === ""
+      ? null
+      : typeof rawAge === "number"
+        ? rawAge
+        : parseInt(String(rawAge), 10) || null;
 
-  const response = await fetch(`${API_BASE_URL}/assessments`, {
+  const response = await fetch(`${baseUrl()}/patients`, {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({
-      patient_code: payload.patient_code.trim(),
-      assessment_id: payload.assessment_id.trim(),
-      test_type: payload.test_type.trim(),
-      score: payload.score,
-      summary: payload.summary.trim(),
+      full_name: payload.full_name.trim(),
+      phone: payload.phone.trim(),
+      age,
+      gender: payload.gender?.trim() || null,
+      sport: payload.sport?.trim() || null,
+      diagnosis: payload.diagnosis.trim(),
+      status: payload.status?.trim() || "Active",
     }),
     cache: "no-store",
   });
-
-  if (!response.ok) {
-    let message = `Failed to save assessment (${response.status}).`;
-    try {
-      const err = (await response.json()) as { detail?: string | unknown };
-      if (typeof err.detail === "string") message = err.detail;
-    } catch {
-      // keep default
-    }
-    throw new Error(message);
-  }
-}
-
-export async function getAssessmentsForPatient(
-  patientCode: string
-): Promise<BackendAssessmentHistory[]> {
-  if (!API_BASE_URL) {
-    throw new Error("NEXT_PUBLIC_API_BASE_URL is not configured.");
-  }
-
-  const code = patientCode.trim();
-  const response = await fetch(
-    `${API_BASE_URL}/patients/${encodeURIComponent(code)}/assessments`,
-    {
-      method: "GET",
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    }
-  );
-
-  if (!response.ok) {
-    throw new Error(`Failed to load assessment history (${response.status}).`);
-  }
-
-  const data: unknown = await response.json();
-  return Array.isArray(data) ? (data as BackendAssessmentHistory[]) : [];
-}
-
-export async function createPatient(payload: CreatePatientPayload): Promise<void> {
-  if (!API_BASE_URL) {
-    throw new Error("NEXT_PUBLIC_API_BASE_URL is not configured.");
-  }
-  const body = {
-    patient_code: payload.patient_code.trim(),
-    name: payload.name.trim(),
-    phone: payload.phone.trim(),
-    age: String(payload.age ?? ""), // ✅ هذا المهم
-    gender: payload.gender?.trim() ?? "",
-    diagnosis: payload.diagnosis.trim(),
-    condition: payload.condition?.trim() ?? "",
-    status: payload.status ?? "active",
-  };
-  const response = await fetch(`${API_BASE_URL}/patients`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-    cache: "no-store",
-  });
-
   if (!response.ok) {
     let message = `Failed to save patient (${response.status}).`;
     try {
       const err = (await response.json()) as { detail?: string | unknown };
       if (typeof err.detail === "string") message = err.detail;
-    } catch {
-      // keep default message
-    }
+    } catch { /* keep default */ }
     throw new Error(message);
   }
+  return (await response.json()) as BackendPatient;
 }
 
-/** Persists a row in the `results` table (used by `/results` review). Separate from `saveAssessmentRecord` (`/assessments`). */
-export async function saveMotionResultRecord(payload: {
-  patient_id: string;
-  test: string;
-  score: number;
-}): Promise<void> {
-  if (!API_BASE_URL) {
-    throw new Error("NEXT_PUBLIC_API_BASE_URL is not configured.");
-  }
+// ── Assessments ───────────────────────────────────────────────────────
 
-  const response = await fetch(`${API_BASE_URL}/results`, {
+/** Matches FastAPI `AssessmentOut`. */
+export type AssessmentOut = {
+  id: number;
+  patient_id: number;
+  clinician_id: number | null;
+  type: string;
+  selected_tests: string[];
+  mode: string | null;
+  status: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Matches FastAPI `AssessmentCreate`. */
+export type AssessmentCreate = {
+  patient_id: number;
+  type: string;
+  selected_tests?: string[];
+  mode?: string | null;
+  status?: string;
+  notes?: string | null;
+};
+
+export async function createAssessment(payload: AssessmentCreate): Promise<AssessmentOut> {
+  const response = await fetch(`${baseUrl()}/assessments`, {
     method: "POST",
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
+      ...getAuthHeaders(),
     },
     body: JSON.stringify({
-      patient_id: payload.patient_id.trim(),
-      test: payload.test.trim(),
-      score: payload.score,
+      patient_id: payload.patient_id,
+      type: payload.type,
+      selected_tests: payload.selected_tests ?? [],
+      mode: payload.mode ?? null,
+      status: payload.status ?? "pending",
+      notes: payload.notes ?? null,
     }),
     cache: "no-store",
   });
-
   if (!response.ok) {
-    let message = `Failed to save motion result (${response.status}).`;
+    let message = `Failed to create assessment (${response.status}).`;
     try {
       const err = (await response.json()) as { detail?: string | unknown };
       if (typeof err.detail === "string") message = err.detail;
-    } catch {
-      // keep default
-    }
+    } catch { /* keep default */ }
     throw new Error(message);
   }
+  return (await response.json()) as AssessmentOut;
 }
 
-export async function getResults(): Promise<BackendResult[]> {
-  if (!API_BASE_URL) {
-    throw new Error("NEXT_PUBLIC_API_BASE_URL is not configured.");
-  }
-
-  const response = await fetch(`${API_BASE_URL}/results`, {
+export async function getAssessment(assessmentId: number): Promise<AssessmentOut> {
+  const response = await fetch(`${baseUrl()}/assessments/${assessmentId}`, {
     method: "GET",
-    headers: { Accept: "application/json" },
+    headers: { Accept: "application/json", ...getAuthHeaders() },
     cache: "no-store",
   });
+  if (!response.ok) throw new Error(`Failed to load assessment (${response.status}).`);
+  return (await response.json()) as AssessmentOut;
+}
 
-  if (!response.ok) {
-    throw new Error(`Failed to load results (${response.status}).`);
-  }
-
+export async function getPatientAssessments(patientId: number): Promise<AssessmentOut[]> {
+  const response = await fetch(`${baseUrl()}/patients/${patientId}/assessments`, {
+    method: "GET",
+    headers: { Accept: "application/json", ...getAuthHeaders() },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Failed to load assessments (${response.status}).`);
   const data: unknown = await response.json();
-  return Array.isArray(data) ? (data as BackendResult[]) : [];
+  return Array.isArray(data) ? (data as AssessmentOut[]) : [];
+}
+
+// ── Results ───────────────────────────────────────────────────────────
+
+/** Matches FastAPI `ResultOut`. */
+export type ResultOut = {
+  id: number;
+  patient_id: number;
+  assessment_id: number;
+  test_name: string;
+  score: number | null;
+  reps: number | null;
+  duration: number | null;
+  movement_metrics: Record<string, unknown> | null;
+  summary: string | null;
+  soap_subjective: string | null;
+  soap_objective: string | null;
+  soap_assessment: string | null;
+  soap_plan: string | null;
+  created_at: string;
+};
+
+export type SOAPNotes = {
+  subjective?: string | null;
+  objective?: string | null;
+  assessment?: string | null;
+  plan?: string | null;
+};
+
+/** Matches FastAPI `ResultCreate`. */
+export type ResultCreate = {
+  patient_id: number;
+  assessment_id: number;
+  test_name: string;
+  score?: number | null;
+  reps?: number | null;
+  duration?: number | null;
+  movement_metrics?: Record<string, unknown> | null;
+  summary?: string | null;
+  soap?: SOAPNotes | null;
+};
+
+export async function saveResult(payload: ResultCreate): Promise<ResultOut> {
+  const response = await fetch(`${baseUrl()}/results`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let message = `Failed to save result (${response.status}).`;
+    try {
+      const err = (await response.json()) as { detail?: string | unknown };
+      if (typeof err.detail === "string") message = err.detail;
+    } catch { /* keep default */ }
+    throw new Error(message);
+  }
+  return (await response.json()) as ResultOut;
+}
+
+export async function getResultsByAssessment(assessmentId: number): Promise<ResultOut[]> {
+  const response = await fetch(`${baseUrl()}/results/${assessmentId}`, {
+    method: "GET",
+    headers: { Accept: "application/json", ...getAuthHeaders() },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Failed to load results (${response.status}).`);
+  const data: unknown = await response.json();
+  return Array.isArray(data) ? (data as ResultOut[]) : [];
+}
+
+export async function getResultsByPatient(patientId: number): Promise<ResultOut[]> {
+  const response = await fetch(`${baseUrl()}/patients/${patientId}/results`, {
+    method: "GET",
+    headers: { Accept: "application/json", ...getAuthHeaders() },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Failed to load results (${response.status}).`);
+  const data: unknown = await response.json();
+  return Array.isArray(data) ? (data as ResultOut[]) : [];
+}
+
+// ── Config (private) ──────────────────────────────────────────────────
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+function baseUrl(): string {
+  if (!API_BASE_URL) throw new Error("NEXT_PUBLIC_API_BASE_URL is not configured.");
+  return API_BASE_URL;
 }
