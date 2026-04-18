@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { getResults } from "../lib/api";
 
 type ResultItem = {
   patient_id: string;
@@ -17,13 +18,17 @@ export default function LiveResultsPage() {
   useEffect(() => {
     async function fetchResults() {
       try {
-        const response = await fetch("http://127.0.0.1:8000/results");
-        if (!response.ok) {
-          throw new Error("Failed to fetch results");
-        }
-
-        const data = await response.json();
-        setResults(data);
+        const rows = await getResults();
+        setResults(
+          rows.map((r) => ({
+            patient_id: String(r.patient_id),
+            test: String(r.test),
+            score:
+              typeof r.score === "number"
+                ? r.score
+                : Number.parseFloat(String(r.score ?? "")) || 0,
+          }))
+        );
       } catch (err) {
         setError("Could not load live results");
         console.error(err);

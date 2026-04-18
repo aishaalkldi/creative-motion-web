@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { getResults, type BackendResult } from "../lib/api";
+import {
+  getPatients,
+  getResults,
+  matchPatientByKey,
+  type BackendResult,
+} from "../lib/api";
 import { patientsRepository } from "../lib/repositories";
 
 function ResultsPageContent() {
@@ -16,6 +21,9 @@ function ResultsPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [results, setResults] = useState<BackendResult[]>([]);
+  const [rosterPatientName, setRosterPatientName] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -43,6 +51,30 @@ function ResultsPageContent() {
     };
   }, []);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadName() {
+      if (patientId === "—") {
+        if (isMounted) setRosterPatientName(null);
+        return;
+      }
+      try {
+        const list = await getPatients();
+        if (!isMounted) return;
+        const match = matchPatientByKey(list, patientId);
+        setRosterPatientName(match?.name?.trim() || null);
+      } catch {
+        if (isMounted) setRosterPatientName(null);
+      }
+    }
+
+    loadName();
+    return () => {
+      isMounted = false;
+    };
+  }, [patientId]);
+
   const result = useMemo(() => {
     if (!hasValidContext) return null;
 
@@ -57,9 +89,11 @@ function ResultsPageContent() {
 
   const hasLinkedResult = hasValidContext && Boolean(result);
   const patientName =
-    patientId !== "—"
-      ? patientsRepository.getById(patientId)?.fullName || "Not available"
-      : "Not available";
+    patientId === "—"
+      ? "Not available"
+      : rosterPatientName ||
+        patientsRepository.getByPatientCodeOrId(patientId)?.fullName ||
+        "Not available";
 
   const mode = hasLinkedResult ? "Motion Result (Backend)" : "Not available";
 

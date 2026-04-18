@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { assessmentsRepository } from "../../lib/repositories";
 
@@ -63,24 +63,31 @@ function RemoteRequestContent() {
   const assessmentId = searchParams.get("assessmentId") || "";
   const patientName = searchParams.get("patientName") || "";
 
-  const existingAssessment = assessmentId
-    ? assessmentsRepository.getById(assessmentId)
-    : null;
+  const [selectedTests, setSelectedTests] = useState<string[]>([]);
 
-  const [selectedTests, setSelectedTests] = useState<string[]>(
-    existingAssessment?.selectedTests || []
-  );
   const [generatedLink, setGeneratedLink] = useState("");
+  const [patientAccessLink, setPatientAccessLink] = useState("");
   const [feedback, setFeedback] = useState<{
     type: "idle" | "success" | "error";
     message: string;
   }>({ type: "idle", message: "" });
 
-  const patientAccessLink = useMemo(() => {
-    if (!patientId || !assessmentId || typeof window === "undefined") return "";
-    return `${window.location.origin}/assessment?patientId=${encodeURIComponent(
-      patientId
-    )}&assessmentId=${encodeURIComponent(assessmentId)}`;
+  useEffect(() => {
+    if (!assessmentId) return;
+    const stored = assessmentsRepository.getById(assessmentId);
+    setSelectedTests(stored?.selectedTests ?? []);
+  }, [assessmentId]);
+
+  useEffect(() => {
+    if (!patientId || !assessmentId) {
+      setPatientAccessLink("");
+      return;
+    }
+    setPatientAccessLink(
+      `${window.location.origin}/assessment?patientId=${encodeURIComponent(
+        patientId
+      )}&assessmentId=${encodeURIComponent(assessmentId)}`
+    );
   }, [patientId, assessmentId]);
 
   function toggleTest(testId: string) {
@@ -109,8 +116,9 @@ function RemoteRequestContent() {
     }
 
     try {
+      const stored = assessmentsRepository.getById(assessmentId);
       const baseAssessment =
-        existingAssessment || {
+        stored || {
           id: assessmentId,
           patientId,
           mode: "remote" as const,

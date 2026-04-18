@@ -10,6 +10,22 @@ export type BackendPatient = {
   status: string | null;
 };
 
+/** Same matching rules as clinician patient profile: `patient_code` or numeric `id` string. */
+export function matchPatientByKey(
+  patients: BackendPatient[],
+  patientKey: string
+): BackendPatient | null {
+  const rk = patientKey.trim();
+  if (!rk) return null;
+  return (
+    patients.find(
+      (p) =>
+        (p.patient_code && p.patient_code.trim() === rk) ||
+        String(p.id).trim() === rk
+    ) ?? null
+  );
+}
+
 export type BackendResult = {
   id: string;
   patient_id: string;
@@ -129,18 +145,16 @@ export async function createPatient(payload: CreatePatientPayload): Promise<void
   if (!API_BASE_URL) {
     throw new Error("NEXT_PUBLIC_API_BASE_URL is not configured.");
   }
-
   const body = {
     patient_code: payload.patient_code.trim(),
     name: payload.name.trim(),
     phone: payload.phone.trim(),
-    age: payload.age?.trim() ?? "",
+    age: String(payload.age ?? ""), // ✅ هذا المهم
     gender: payload.gender?.trim() ?? "",
     diagnosis: payload.diagnosis.trim(),
     condition: payload.condition?.trim() ?? "",
-    status: (payload.status?.trim() || "Active") as string,
+    status: payload.status ?? "active",
   };
-
   const response = await fetch(`${API_BASE_URL}/patients`, {
     method: "POST",
     headers: {

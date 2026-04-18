@@ -25,7 +25,7 @@ function backendPatientToRecord(p: BackendPatient): PatientRecord {
     notes: p.condition ?? "",
     initialAssessment: "",
     status: (p.status ?? "new") as PatientRecord["status"],
-    createdAt: new Date().toISOString(),
+    createdAt: "",
   };
 }
 
