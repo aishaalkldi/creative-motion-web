@@ -296,7 +296,7 @@ export default function AddPatientPage() {
             <div className="mt-5 flex flex-col gap-3">
               <button
                 type="button"
-                onClick={() => void withSave()}
+                onClick={() => void withSave(() => router.push("/clinician/patients"))}
                 disabled={isSaving}
                 className="rounded-2xl bg-cyan-400 px-5 py-3 font-semibold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60"
               >
@@ -329,14 +329,6 @@ export default function AddPatientPage() {
                 Save & Start Assessment
               </button>
 
-              <button
-                type="button"
-                onClick={() => void withSave(() => router.push("/clinician/patients"))}
-                disabled={isSaving}
-                className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-center font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Save & View All Patients
-              </button>
 
               <Link
                 href="/clinician"

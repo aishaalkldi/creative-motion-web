@@ -17,7 +17,7 @@ export async function loginClinician(
   password: string
 ): Promise<LoginResponse> {
   const body = new URLSearchParams({ username: email, password });
-  const response = await fetch(`${baseUrl()}/auth/login`, {
+  const response = await fetch(`${baseUrl()}/api/v1/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: body.toString(),
@@ -44,7 +44,7 @@ export type RegisterPayload = {
 
 /** Registers a new clinician account. Does NOT auto-login. */
 export async function registerClinician(payload: RegisterPayload): Promise<ClinicianInfo> {
-  const response = await fetch(`${baseUrl()}/auth/register`, {
+ const response = await fetch(`${baseUrl()}/api/v1/auth/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(payload),
@@ -91,8 +91,8 @@ export type CreatePatientPayload = {
 /** Returns true if the phone number is already registered to another patient. */
 export async function checkPhoneExists(phone: string): Promise<boolean> {
   const response = await fetch(
-    `${baseUrl()}/patients/check-phone?phone=${encodeURIComponent(phone.trim())}`,
-    {
+   `${baseUrl()}/api/v1/patients/check-phone?phone=${encodeURIComponent(phone.trim())}` 
+   ,{
       method: "GET",
       headers: { Accept: "application/json", ...getAuthHeaders() },
       cache: "no-store",
@@ -104,7 +104,7 @@ export async function checkPhoneExists(phone: string): Promise<boolean> {
 }
 
 export async function getPatients(): Promise<BackendPatient[]> {
-  const response = await fetch(`${baseUrl()}/patients`, {
+  const response = await fetch(`${baseUrl()}/api/v1/patients`, {
     method: "GET",
     headers: { Accept: "application/json", ...getAuthHeaders() },
     cache: "no-store",
@@ -123,7 +123,7 @@ export async function createPatient(payload: CreatePatientPayload): Promise<Back
         ? rawAge
         : parseInt(String(rawAge), 10) || null;
 
-  const response = await fetch(`${baseUrl()}/patients`, {
+  const response = await fetch(`${baseUrl()}/api/v1/patients`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -145,6 +145,52 @@ export async function createPatient(payload: CreatePatientPayload): Promise<Back
     let message = `Failed to save patient (${response.status}).`;
     try {
       const err = (await response.json()) as { detail?: string | unknown };
+      if (typeof err.detail === "string") message = err.detail;
+    } catch { /* keep default */ }
+    throw new Error(message);
+  }
+  return (await response.json()) as BackendPatient;
+}
+
+export async function getPatient(patientId: number): Promise<BackendPatient> {
+  const response = await fetch(`${baseUrl()}/api/v1/patients/${patientId}`, {
+    method: "GET",
+    headers: { Accept: "application/json", ...getAuthHeaders() },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Failed to load patient (${response.status}).`);
+  return (await response.json()) as BackendPatient;
+}
+
+/** Partial update — only provided fields are changed. */
+export type UpdatePatientPayload = {
+  full_name?: string;
+  phone?: string;
+  age?: number | null;
+  gender?: string | null;
+  sport?: string | null;
+  diagnosis?: string;
+  status?: string;
+};
+
+export async function updatePatient(
+  patientId: number,
+  payload: UpdatePatientPayload
+): Promise<BackendPatient> {
+  const response = await fetch(`${baseUrl()}/api/v1/patients/${patientId}`, {
+    method: "PUT",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let message = `Failed to update patient (${response.status}).`;
+    try {
+      const err = (await response.json()) as { detail?: string };
       if (typeof err.detail === "string") message = err.detail;
     } catch { /* keep default */ }
     throw new Error(message);
@@ -179,7 +225,7 @@ export type AssessmentCreate = {
 };
 
 export async function createAssessment(payload: AssessmentCreate): Promise<AssessmentOut> {
-  const response = await fetch(`${baseUrl()}/assessments`, {
+  const response = await fetch(`${baseUrl()}/api/v1/assessments`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -208,7 +254,7 @@ export async function createAssessment(payload: AssessmentCreate): Promise<Asses
 }
 
 export async function getAssessment(assessmentId: number): Promise<AssessmentOut> {
-  const response = await fetch(`${baseUrl()}/assessments/${assessmentId}`, {
+  const response = await fetch(`${baseUrl()}/api/v1/assessments/${assessmentId}`, {
     method: "GET",
     headers: { Accept: "application/json", ...getAuthHeaders() },
     cache: "no-store",
@@ -218,7 +264,7 @@ export async function getAssessment(assessmentId: number): Promise<AssessmentOut
 }
 
 export async function getPatientAssessments(patientId: number): Promise<AssessmentOut[]> {
-  const response = await fetch(`${baseUrl()}/patients/${patientId}/assessments`, {
+  const response = await fetch(`${baseUrl()}/api/v1/patients/${patientId}/assessments`, {
     method: "GET",
     headers: { Accept: "application/json", ...getAuthHeaders() },
     cache: "no-store",
@@ -269,7 +315,7 @@ export type ResultCreate = {
 };
 
 export async function saveResult(payload: ResultCreate): Promise<ResultOut> {
-  const response = await fetch(`${baseUrl()}/results`, {
+  const response = await fetch(`${baseUrl()}/api/v1/results`, {
     method: "POST",
     headers: {
       Accept: "application/json",
@@ -291,7 +337,7 @@ export async function saveResult(payload: ResultCreate): Promise<ResultOut> {
 }
 
 export async function getResultsByAssessment(assessmentId: number): Promise<ResultOut[]> {
-  const response = await fetch(`${baseUrl()}/results/${assessmentId}`, {
+  const response = await fetch(`${baseUrl()}/api/v1/results/${assessmentId}`, {
     method: "GET",
     headers: { Accept: "application/json", ...getAuthHeaders() },
     cache: "no-store",
@@ -302,7 +348,7 @@ export async function getResultsByAssessment(assessmentId: number): Promise<Resu
 }
 
 export async function getResultsByPatient(patientId: number): Promise<ResultOut[]> {
-  const response = await fetch(`${baseUrl()}/patients/${patientId}/results`, {
+  const response = await fetch(`${baseUrl()}/api/v1/patients/${patientId}/results`, {
     method: "GET",
     headers: { Accept: "application/json", ...getAuthHeaders() },
     cache: "no-store",
@@ -312,11 +358,53 @@ export async function getResultsByPatient(patientId: number): Promise<ResultOut[
   return Array.isArray(data) ? (data as ResultOut[]) : [];
 }
 
+// ── Body Axis AI ──────────────────────────────────────────────────────
+
+export type BodyAxisResultPayload = {
+  patient_id: number;
+  assessment_id: number;
+  test_name: string;
+  score?: number | null;
+  reps?: number | null;
+  duration?: number | null;
+  movement_metrics?: Record<string, unknown> | null;
+  summary?: string | null;
+};
+
+/** Saves a processed Body Axis AI movement analysis result to the backend. */
+export async function saveBodyAxisResult(payload: BodyAxisResultPayload): Promise<ResultOut> {
+  const response = await fetch(`${baseUrl()}/api/v1/body-axis/result`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      ...getAuthHeaders(),
+    },
+    body: JSON.stringify(payload),
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let message = `Failed to save Body Axis result (${response.status}).`;
+    try {
+      const err = (await response.json()) as { detail?: string };
+      if (typeof err.detail === "string") message = err.detail;
+    } catch { /* keep default */ }
+    throw new Error(message);
+  }
+  return (await response.json()) as ResultOut;
+}
+
 // ── Config (private) ──────────────────────────────────────────────────
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
-
+/**
+ * API origin for fetch().
+ * - Set `NEXT_PUBLIC_API_BASE_URL` to a full URL (e.g. http://127.0.0.1:8000) only if you accept browser CORS from the API.
+ * - Leave unset, empty, or `same-origin` to call `/api/v1/...` on this app (Next.js rewrites → BACKEND_URL / default :8000), avoiding CORS.
+ */
 function baseUrl(): string {
-  if (!API_BASE_URL) throw new Error("NEXT_PUBLIC_API_BASE_URL is not configured.");
-  return API_BASE_URL;
+  const raw = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  if (!raw || raw.toLowerCase() === "same-origin") {
+    return "";
+  }
+  return raw.replace(/\/$/, "");
 }

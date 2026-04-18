@@ -8,10 +8,10 @@ import { registerClinician } from "../lib/api";
 export default function SignupPage() {
   const router = useRouter();
 
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
+  const [fullName, setFullName] = useState("Admin");
+  const [email, setEmail] = useState("admin@admin.com");
+  const [password, setPassword] = useState("admin123");
+  const [confirm, setConfirm] = useState("admin123");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -20,7 +20,7 @@ export default function SignupPage() {
 
     if (!fullName.trim()) return setError("Full name is required.");
     if (!email.trim()) return setError("Email is required.");
-    if (password.length < 8) return setError("Password must be at least 8 characters.");
+    if (password.length < 6) return setError("Password must be at least 6 characters.");
     if (password !== confirm) return setError("Passwords do not match.");
 
     setLoading(true);
@@ -88,7 +88,7 @@ export default function SignupPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 8 characters"
+                placeholder="At least 6 characters"
                 autoComplete="new-password"
                 className="w-full rounded-xl border border-white/10 bg-[#0F172A] px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
               />

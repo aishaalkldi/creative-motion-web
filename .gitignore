@@ -9,6 +9,9 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+# Backend — separate git repo, not tracked here
+/backend/
+backend/
 
 # testing
 /coverage

@@ -8,6 +8,9 @@ import type { NextRequest } from "next/server";
 const PUBLIC_PREFIXES = [
   "/login",
   "/signup",
+  // All FastAPI routes — FastAPI handles its own JWT auth (Bearer token).
+  // Middleware must not intercept these or it returns HTML instead of JSON.
+  "/api/v1/",
   // Patient-facing remote assessment link (sent via secure URL)
   "/assessment",
   // Next.js internals and static assets
