@@ -152,6 +152,22 @@ export async function createPatient(payload: CreatePatientPayload): Promise<Back
   return (await response.json()) as BackendPatient;
 }
 
+export async function deletePatient(patientId: number): Promise<void> {
+  const response = await fetch(`${baseUrl()}/api/v1/patients/${patientId}`, {
+    method: "DELETE",
+    headers: { Accept: "application/json", ...getAuthHeaders() },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    let message = `Failed to delete patient (${response.status}).`;
+    try {
+      const err = (await response.json()) as { detail?: string };
+      if (typeof err.detail === "string") message = err.detail;
+    } catch { /* keep default */ }
+    throw new Error(message);
+  }
+}
+
 export async function getPatient(patientId: number): Promise<BackendPatient> {
   const response = await fetch(`${baseUrl()}/api/v1/patients/${patientId}`, {
     method: "GET",
@@ -356,6 +372,25 @@ export async function getResultsByPatient(patientId: number): Promise<ResultOut[
   if (!response.ok) throw new Error(`Failed to load results (${response.status}).`);
   const data: unknown = await response.json();
   return Array.isArray(data) ? (data as ResultOut[]) : [];
+}
+
+// ── Dashboard Stats ───────────────────────────────────────────────────
+
+export type DashboardStats = {
+  total_patients: number;
+  active_cases: number;
+  pending_reviews: number;
+  remote_assessments_pending: number;
+};
+
+export async function getDashboardStats(): Promise<DashboardStats> {
+  const response = await fetch(`${baseUrl()}/api/v1/stats`, {
+    method: "GET",
+    headers: { Accept: "application/json", ...getAuthHeaders() },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Failed to load stats (${response.status}).`);
+  return (await response.json()) as DashboardStats;
 }
 
 // ── Body Axis AI ──────────────────────────────────────────────────────

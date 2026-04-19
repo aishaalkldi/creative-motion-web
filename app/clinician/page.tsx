@@ -1,38 +1,10 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { getDashboardStats, type DashboardStats } from "@/app/lib/api";
 
 type MetricTone = "default" | "attention" | "moderate";
-
-const overviewCards: {
-  title: string;
-  value: string;
-  subtitle: string;
-  tone: MetricTone;
-}[] = [
-  {
-    title: "Total Patients",
-    value: "0",
-    subtitle: "Connected patient records",
-    tone: "default",
-  },
-  {
-    title: "Active Cases",
-    value: "0",
-    subtitle: "Current active patients",
-    tone: "default",
-  },
-  {
-    title: "Pending Reviews",
-    value: "0",
-    subtitle: "Results awaiting clinician review",
-    tone: "attention",
-  },
-  {
-    title: "Remote Assessments Pending",
-    value: "0",
-    subtitle: "Patient links not completed yet",
-    tone: "moderate",
-  },
-];
 
 const quickActions = [
   {
@@ -60,12 +32,6 @@ const quickActions = [
     description: "Open recent assessment outcomes",
     href: "/results",
   },
-];
-
-const activityQueue = [
-  "No pending reviews yet",
-  "No remote assessments awaiting completion",
-  "No follow-up alerts yet",
 ];
 
 const workflowSteps = [
@@ -96,6 +62,56 @@ const workflowSteps = [
 ];
 
 export default function ClinicianDashboardPage() {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    getDashboardStats()
+      .then(setStats)
+      .catch(() => setStats(null))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const metricCards: { title: string; value: string; subtitle: string; tone: MetricTone }[] = [
+    {
+      title: "Total Patients",
+      value: loading ? "…" : String(stats?.total_patients ?? "–"),
+      subtitle: "Connected patient records",
+      tone: "default",
+    },
+    {
+      title: "Active Cases",
+      value: loading ? "…" : String(stats?.active_cases ?? "–"),
+      subtitle: "Current active patients",
+      tone: "default",
+    },
+    {
+      title: "Pending Reviews",
+      value: loading ? "…" : String(stats?.pending_reviews ?? "–"),
+      subtitle: "Results awaiting clinician review",
+      tone: "attention",
+    },
+    {
+      title: "Remote Assessments Pending",
+      value: loading ? "…" : String(stats?.remote_assessments_pending ?? "–"),
+      subtitle: "Patient links not completed yet",
+      tone: "moderate",
+    },
+  ];
+
+  const activityQueue =
+    !loading && stats
+      ? [
+          stats.pending_reviews === 0
+            ? "No pending reviews yet"
+            : `${stats.pending_reviews} assessment${stats.pending_reviews > 1 ? "s" : ""} awaiting review`,
+          stats.remote_assessments_pending === 0
+            ? "No remote assessments awaiting completion"
+            : `${stats.remote_assessments_pending} remote assessment${stats.remote_assessments_pending > 1 ? "s" : ""} pending`,
+          "No follow-up alerts yet",
+        ]
+      : ["No pending reviews yet", "No remote assessments awaiting completion", "No follow-up alerts yet"];
+
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
       <div className="mx-auto max-w-7xl">
@@ -133,7 +149,7 @@ export default function ClinicianDashboardPage() {
         </div>
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {overviewCards.map((card) => (
+          {metricCards.map((card) => (
             <MetricCard
               key={card.title}
               title={card.title}
