@@ -352,6 +352,17 @@ export async function saveResult(payload: ResultCreate): Promise<ResultOut> {
   return (await response.json()) as ResultOut;
 }
 
+export async function getResults(): Promise<ResultOut[]> {
+  const response = await fetch(`${baseUrl()}/api/v1/results`, {
+    method: "GET",
+    headers: { Accept: "application/json", ...getAuthHeaders() },
+    cache: "no-store",
+  });
+  if (!response.ok) throw new Error(`Failed to load results (${response.status}).`);
+  const data: unknown = await response.json();
+  return Array.isArray(data) ? (data as ResultOut[]) : [];
+}
+
 export async function getResultsByAssessment(assessmentId: number): Promise<ResultOut[]> {
   const response = await fetch(`${baseUrl()}/api/v1/results/${assessmentId}`, {
     method: "GET",

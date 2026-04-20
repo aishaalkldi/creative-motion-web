@@ -22,7 +22,7 @@ export default function LiveResultsPage() {
         setResults(
           rows.map((r) => ({
             patient_id: String(r.patient_id),
-            test: String(r.test),
+            test: String(r.test_name),
             score:
               typeof r.score === "number"
                 ? r.score

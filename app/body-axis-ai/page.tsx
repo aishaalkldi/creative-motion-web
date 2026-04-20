@@ -9,6 +9,12 @@ import {
   type NormLandmark,
 } from "../lib/body-axis-acl-squat";
 import { assessmentsRepository } from "../lib/repositories";
+import {
+  analysePostureFrame,
+  aggregatePostureResults,
+  type PostureCheckResult,
+} from "../lib/posture-analyzer";
+import PostureReport from "../components/PostureReport";
 
 type SessionState = "idle" | "ready" | "running" | "stopped";
 
@@ -139,6 +145,7 @@ function BodyAxisAIPageContent() {
     patientName === "Unknown Patient" ? "Not provided" : patientName;
 
   const aclMode = isAclSingleLegSquatTest(test) || test === "squat";
+  const postureMode = test === "posture";
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const poseCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -157,6 +164,7 @@ function BodyAxisAIPageContent() {
   /** Wall-clock session bounds for duration (strict end − start). */
   const sessionWallStartMsRef = useRef<number | null>(null);
   const lastSessionDurationSecondsRef = useRef(0);
+  const postureFrameResultsRef = useRef<PostureCheckResult[]>([]);
   const [poseReloadNonce, setPoseReloadNonce] = useState(0);
 
   const [sessionState, setSessionState] = useState<SessionState>("idle");
@@ -184,6 +192,7 @@ function BodyAxisAIPageContent() {
   });
   const [aclStanceLegVisPoor, setAclStanceLegVisPoor] = useState(false);
   const [aclGuidanceIdx, setAclGuidanceIdx] = useState(0);
+  const [postureLiveLabel, setPostureLiveLabel] = useState("Waiting for data");
 
   useEffect(() => {
     sessionStateRef.current = sessionState;
@@ -198,7 +207,7 @@ function BodyAxisAIPageContent() {
   }, [aclMode, aclStanceLegVisPoor, sessionState]);
 
   useEffect(() => {
-    if (!aclMode) {
+    if (!aclMode && !postureMode) {
       setAclPoseStatus("idle");
       return;
     }
@@ -294,10 +303,10 @@ function BodyAxisAIPageContent() {
       poseLandmarkerRef.current?.close();
       poseLandmarkerRef.current = null;
     };
-  }, [aclMode, poseReloadNonce]);
+  }, [aclMode, postureMode, poseReloadNonce]);
 
   useEffect(() => {
-    if (!aclMode || !cameraReady || aclPoseStatus !== "ready") {
+    if ((!aclMode && !postureMode) || !cameraReady || aclPoseStatus !== "ready") {
       if (poseRafRef.current !== null) {
         cancelAnimationFrame(poseRafRef.current);
         poseRafRef.current = null;
@@ -354,17 +363,25 @@ function BodyAxisAIPageContent() {
               console.log(
                 "[BodyAxisAI] Pose detected:",
                 frame.length,
-                "landmarks (single_leg_squat)"
+                "landmarks"
               );
             }
             if (sessionStateRef.current === "running") {
-              aclPoseFramesThisRunRef.current += 1;
-              const out = aclTrackerRef.current.process(frame, performance.now());
-              setAclLiveOk(out.liveOk);
-              setAclStanceLegVisPoor(
-                Boolean(out.landmarksValidThisFrame && out.stanceLegVisPoor)
-              );
-              syncAclDisplayFromTracker();
+              if (aclMode) {
+                aclPoseFramesThisRunRef.current += 1;
+                const out = aclTrackerRef.current.process(frame, performance.now());
+                setAclLiveOk(out.liveOk);
+                setAclStanceLegVisPoor(
+                  Boolean(out.landmarksValidThisFrame && out.stanceLegVisPoor)
+                );
+                syncAclDisplayFromTracker();
+              } else if (postureMode) {
+                const pr = analysePostureFrame(frame);
+                if (pr) {
+                  postureFrameResultsRef.current.push(pr);
+                  setPostureLiveLabel(pr.label);
+                }
+              }
             }
           }
         } catch (err) {
@@ -382,7 +399,7 @@ function BodyAxisAIPageContent() {
         poseRafRef.current = null;
       }
     };
-  }, [aclMode, cameraReady, aclPoseStatus]);
+  }, [aclMode, postureMode, cameraReady, aclPoseStatus]);
 
   useEffect(() => {
     return () => {
@@ -518,6 +535,10 @@ function BodyAxisAIPageContent() {
       setAclStanceLegVisPoor(false);
       setAclGuidanceIdx(0);
     }
+    if (postureMode) {
+      postureFrameResultsRef.current = [];
+      setPostureLiveLabel("Analysing posture…");
+    }
     setSessionState("running");
     startTimer();
   }
@@ -607,9 +628,11 @@ function BodyAxisAIPageContent() {
 
       console.log("[BodyAxisAI] FINAL TRACKER SNAPSHOT", snapshot);
       console.log("[BodyAxisAI] FINAL REPORT VALUES", { score, summary });
-      console.log("[BodyAxisAI] SESSION START TIME", sessionStartMs);
-      console.log("[BodyAxisAI] SESSION END TIME", sessionEndMs);
-      console.log("[BodyAxisAI] FINAL DURATION SECONDS", durationSec);
+    } else if (postureMode) {
+      const agg = aggregatePostureResults(postureFrameResultsRef.current);
+      setMovementScore(agg.score);
+      setReportSummary(agg.summary);
+      console.log("[BodyAxisAI] POSTURE FINAL", agg.score, agg.label);
     } else {
       const score = generateMockScore(test, durationSec);
       const summary = generateReportSummary(test, score, durationSec);
@@ -617,10 +640,10 @@ function BodyAxisAIPageContent() {
       setReportSummary(summary);
       console.log("[BodyAxisAI] FINAL TRACKER SNAPSHOT", null);
       console.log("[BodyAxisAI] FINAL REPORT VALUES", { score, summary });
-      console.log("[BodyAxisAI] SESSION START TIME", sessionStartMs);
-      console.log("[BodyAxisAI] SESSION END TIME", sessionEndMs);
-      console.log("[BodyAxisAI] FINAL DURATION SECONDS", durationSec);
     }
+    console.log("[BodyAxisAI] SESSION START TIME", sessionStartMs);
+    console.log("[BodyAxisAI] SESSION END TIME", sessionEndMs);
+    console.log("[BodyAxisAI] FINAL DURATION SECONDS", durationSec);
   }
 
   function handleUploadVideoClick() {
@@ -744,6 +767,8 @@ function BodyAxisAIPageContent() {
     hasLinkedAssessment &&
     (!aclMode || movementScore !== null);
 
+  const lastPostureFrame = postureFrameResultsRef.current.at(-1) ?? null;
+
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
       <div className="mx-auto max-w-7xl">
@@ -815,7 +840,13 @@ function BodyAxisAIPageContent() {
                     ? aclLiveOk
                       ? "ring-4 ring-emerald-500/55"
                       : "ring-4 ring-rose-500/60"
-                    : ""
+                    : postureMode && sessionState === "running" && aclPoseStatus === "ready"
+                      ? postureLiveLabel === "Good alignment"
+                        ? "ring-4 ring-emerald-500/55"
+                        : postureLiveLabel === "Postural deviation observed"
+                          ? "ring-4 ring-rose-500/60"
+                          : "ring-4 ring-amber-500/55"
+                      : ""
                 }`}
               >
                 <video
@@ -851,13 +882,66 @@ function BodyAxisAIPageContent() {
                   </div>
                 )}
 
+                {postureMode && sessionState === "running" && aclPoseStatus === "ready" && postureLiveLabel !== "Analysing posture…" && (
+                  <div className="pointer-events-none absolute bottom-12 left-1/2 z-20 max-w-[90%] -translate-x-1/2 rounded-lg bg-black/65 px-3 py-1.5 text-center text-[11px] font-medium text-cyan-100">
+                    {postureLiveLabel}
+                  </div>
+                )}
+
                 <div className="absolute bottom-4 left-4 rounded-xl bg-black/60 px-4 py-2 text-sm text-white">
                   Elapsed: {seconds}s
                 </div>
               </div>
             </div>
 
-            {aclMode && aclPoseStatus === "error" && (
+            {postureMode && (
+              <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/85">
+                <p className="font-semibold text-cyan-200">Posture Analysis (live)</p>
+                <p className="mt-2 text-xs text-white/60">
+                  Pose:{" "}
+                  {aclPoseStatus === "loading"
+                    ? "Loading MediaPipe (CDN)…"
+                    : aclPoseStatus === "ready"
+                      ? "Tracking alignment"
+                      : aclPoseStatus === "error"
+                        ? "Error — check network and retry."
+                        : "Idle"}
+                </p>
+                {sessionState === "running" && aclPoseStatus === "ready" && (
+                  <p
+                    className={`mt-2 text-xs font-medium ${
+                      postureLiveLabel === "Good alignment"
+                        ? "text-emerald-200"
+                        : postureLiveLabel === "Mild asymmetry detected"
+                          ? "text-amber-200"
+                          : "text-rose-200"
+                    }`}
+                  >
+                    {postureLiveLabel}
+                  </p>
+                )}
+                <div className="mt-3 grid gap-2 sm:grid-cols-2 md:grid-cols-4">
+                  <StatusCard
+                    label="Shoulder Alignment"
+                    value={lastPostureFrame ? `${lastPostureFrame.shoulderTilt.toFixed(1)}°` : "—"}
+                  />
+                  <StatusCard
+                    label="Head Position"
+                    value={lastPostureFrame ? (lastPostureFrame.headOffset < 0.03 ? "Centered" : "Offset") : "—"}
+                  />
+                  <StatusCard
+                    label="Trunk Alignment"
+                    value={lastPostureFrame ? (lastPostureFrame.trunkOffset < 0.03 ? "Aligned" : "Shifted") : "—"}
+                  />
+                  <StatusCard
+                    label="Hip Symmetry"
+                    value={lastPostureFrame ? `${lastPostureFrame.hipTilt.toFixed(1)}°` : "—"}
+                  />
+                </div>
+              </div>
+            )}
+
+            {(aclMode || postureMode) && aclPoseStatus === "error" && (
               <div className="mt-4 rounded-2xl border border-rose-300/35 bg-rose-500/10 p-4 text-sm text-rose-100">
                 <p className="font-semibold text-rose-200">Pose model failed to load</p>
                 <p className="mt-2 text-white/85">{aclPoseError}</p>
@@ -991,6 +1075,17 @@ function BodyAxisAIPageContent() {
                   )}
                 </div>
               </div>
+            )}
+
+            {sessionState === "stopped" && postureMode && (
+              <PostureReport
+                score={movementScore}
+                assessmentId={assessmentId}
+                patientId={displayPatientId}
+                patientName={displayPatientName}
+                lastFrame={lastPostureFrame}
+                reportSummary={reportSummary}
+              />
             )}
           </section>
 
