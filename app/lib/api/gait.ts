@@ -42,41 +42,14 @@ export type GaitSummary = {
   recommendations: string[];
 };
 
-/** Optional envelope used by `app/results/page.tsx` (legacy / alternate API shape). */
-export type GaitObjectiveFindingsEnvelope = {
-  overall_score?: number | null;
-  classification?: string | null;
-  metrics?: {
-    cadence_steps_per_min?: number | null;
-    stride_length_cm?: number | null;
-    step_symmetry_pct?: number | null;
-    gait_speed_m_per_s?: number | null;
-  };
-  flags?: string[];
-};
-
-export type GaitClinicalInterpretationEnvelope = {
-  severity?: string | null;
-  impairment_level?: string | null;
-  summary?: string | null;
-  details?: string | null;
-};
-
-/** Top-level recommendations block (distinct from `summary.recommendations: string[]`). */
-export type GaitRecommendationsEnvelope = {
-  primary?: string | null;
-  exercise_plan?: string[] | null;
-  reassessment_timeline?: string | null;
-  referrals?: string[] | null;
-};
-
-export type GaitConfidenceLimitationsEnvelope = {
-  confidence_score?: number | null;
-  video_quality?: string | null;
-  limitations?: string[] | null;
-  notes?: string | null;
-};
-
+/**
+ * Full gait analysis payload from the API, plus optional UI / legacy blocks
+ * used by `app/results/page.tsx`.
+ *
+ * Note: `objective_findings`, `clinical_interpretation`, and `recommendations`
+ * here are structured objects when present — not `string[]` / plain `string` —
+ * because the results page reads nested fields (e.g. `overall_score`, `metrics`).
+ */
 export type GaitAnalysisResponse = {
   session_id: string;
   video_filename: string;
@@ -90,16 +63,42 @@ export type GaitAnalysisResponse = {
   /** Relative path to the saved per-frame CSV on the gait AI server. */
   csv_path: string;
 
-  /** @deprecated Prefer `summary.flags`; optional duplicate for alternate clients. */
+  /** Optional top-level flags (e.g. alternate API envelope). */
   flags?: string[];
-  /** Results-page “objective findings” card (not returned by current gait AI). */
-  objective_findings?: GaitObjectiveFindingsEnvelope;
-  /** Results-page clinical interpretation block. */
-  clinical_interpretation?: GaitClinicalInterpretationEnvelope;
-  /** Results-page recommendations block (object form; not `summary.recommendations`). */
-  recommendations?: GaitRecommendationsEnvelope;
-  /** Results-page confidence / limitations block. */
-  confidence_limitations?: GaitConfidenceLimitationsEnvelope;
+
+  objective_findings?: {
+    overall_score?: number | null;
+    classification?: string | null;
+    metrics?: {
+      cadence_steps_per_min?: number | null;
+      stride_length_cm?: number | null;
+      step_symmetry_pct?: number | null;
+      gait_speed_m_per_s?: number | null;
+    };
+    flags?: string[];
+  };
+
+  clinical_interpretation?: {
+    severity?: string | null;
+    impairment_level?: string | null;
+    summary?: string | null;
+    details?: string | null;
+  };
+
+  /** Object form for results UI (distinct from `summary.recommendations: string[]`). */
+  recommendations?: {
+    primary?: string | null;
+    exercise_plan?: string[] | null;
+    reassessment_timeline?: string | null;
+    referrals?: string[] | null;
+  };
+
+  confidence_limitations?: {
+    confidence_score?: number | null;
+    video_quality?: string | null;
+    limitations?: string[] | null;
+    notes?: string | null;
+  };
 };
 
 // ─── API call ─────────────────────────────────────────────────────────────────
