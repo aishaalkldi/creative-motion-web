@@ -51,6 +51,8 @@ export default function ClinicianLayout({
             <NavLink href="/clinician/assessment/start">Assess</NavLink>
             <NavLink href="/live-results">Results</NavLink>
             <NavLink href="/library">Library</NavLink>
+            {/* TODO: Gate /sessions behind feature flag or role when rehab assignments are persisted server-side. */}
+            <NavLink href="/sessions">Programs</NavLink>
           </nav>
         </div>
 
@@ -118,6 +120,20 @@ export default function ClinicianLayout({
                   className="rounded-xl px-3 py-2 text-sm text-white/80 transition hover:bg-white/8 hover:text-white"
                 >
                   My Patients
+                </Link>
+                <Link
+                  href="/sessions"
+                  onClick={() => setMenuOpen(false)}
+                  className="rounded-xl px-3 py-2 text-sm text-white/80 transition hover:bg-white/8 hover:text-white"
+                >
+                  Programs / Sessions
+                </Link>
+                <Link
+                  href="/therapy"
+                  onClick={() => setMenuOpen(false)}
+                  className="rounded-xl px-3 py-2 text-sm text-white/80 transition hover:bg-white/8 hover:text-white"
+                >
+                  Gait therapy
                 </Link>
                 <div className="my-1 border-t border-white/8" />
                 <button

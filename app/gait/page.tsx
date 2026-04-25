@@ -1,11 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
+import Link from "next/link";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   analyzeGaitVideo,
   type GaitAnalysisResponse,
 } from "../lib/api/gait";
+import { clinicalFlowQuery, getMockClinicalDecision } from "../lib/clinical-decision";
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
@@ -375,11 +377,84 @@ export default function GaitPage() {
               </div>
             )}
 
+            <GaitClinicalDecisionPanel result={result} />
+
           </div>
         )}
 
       </div>
     </main>
+  );
+}
+
+// ─── Clinical decision (mock rules) — mirrors results page flow ────────────────
+
+function GaitClinicalDecisionPanel({ result }: { result: GaitAnalysisResponse }) {
+  const decision = useMemo(
+    () =>
+      getMockClinicalDecision({
+        symmetry01: result.features.symmetry_score,
+        trunkSwayDeg: result.features.trunk_sway_score,
+        overallScore: result.objective_findings?.overall_score ?? null,
+      }),
+    [result]
+  );
+
+  const flowQuery = useMemo(
+    () =>
+      clinicalFlowQuery({
+        recommended: decision.primaryProgram.id,
+        symmetry01: result.features.symmetry_score,
+        trunkSwayDeg: result.features.trunk_sway_score,
+        overallScore: result.objective_findings?.overall_score ?? null,
+      }),
+    [result, decision.primaryProgram.id]
+  );
+
+  return (
+    <div className="mt-8 space-y-6">
+      <div className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+        <h3 className="text-xl font-bold text-white">Clinical summary</h3>
+        <p className="mt-2 text-xs text-white/50">
+          {/* TODO: ML recommendation + EHR-linked prescription. */}
+          Mock decision support from symmetry, trunk sway, and overall score.
+        </p>
+        <ul className="mt-4 space-y-2 text-sm leading-7 text-white/75">
+          {decision.summaryLines.map((line, i) => (
+            <li key={i} className="flex gap-2">
+              <span className="shrink-0 text-cyan-400">•</span>
+              <span>{line}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+        <h3 className="text-xl font-bold text-white">Recommended program</h3>
+        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+          <Link
+            href={`${decision.primaryProgram.href}${flowQuery}`}
+            className="rounded-2xl bg-cyan-400 px-6 py-3 text-center text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+          >
+            Recommended therapy
+          </Link>
+          <Link
+            href={`/library${flowQuery}`}
+            className="rounded-2xl border border-cyan-300/35 bg-cyan-400/10 px-6 py-3 text-center text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20"
+          >
+            Open rehabilitation library
+          </Link>
+        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-2">
+          {decision.programs.map((p) => (
+            <div key={p.id} className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+              <p className="text-sm font-semibold text-cyan-100">{p.title}</p>
+              <p className="mt-2 text-sm text-white/70">{p.rationale}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 

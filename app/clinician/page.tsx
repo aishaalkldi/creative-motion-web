@@ -32,32 +32,48 @@ const quickActions = [
     description: "Open recent assessment outcomes",
     href: "/results",
   },
+  {
+    title: "Rehab programs",
+    description: "Gait assessment → therapy session flow",
+    href: "/sessions",
+  },
 ];
 
-const workflowSteps = [
+const workflowSteps: {
+  title: string;
+  description: string;
+  /** Deep links are best-effort until assignments are persisted per patient (TODO: backend). */
+  href?: string;
+}[] = [
   {
     title: "1. Add Patient",
     description: "Create a new patient file from the clinician portal.",
+    href: "/clinician/patients/new",
   },
   {
     title: "2. Open Patient Profile",
     description: "Review patient details, case status, and latest clinical context.",
+    href: "/clinician/patients",
   },
   {
     title: "3. Start Assessment",
     description: "Choose In-Clinic Guided Assessment or Remote Online Assessment.",
+    href: "/clinician/assessment/start",
   },
   {
     title: "4. Review Results",
     description: "Open findings, summaries, and returned patient assessments.",
+    href: "/live-results",
   },
   {
     title: "5. Assign Program",
-    description: "Select the right rehabilitation plan and next clinical action.",
+    description: "Open the rehabilitation library, then run gait / stepping therapy when prescribed.",
+    href: "/library",
   },
   {
-    title: "6. Track Progress",
-    description: "Follow reassessment trends and recovery progress over time.",
+    title: "6. Therapy & outcomes",
+    description: "Complete or supervise movement sessions; review longitudinal progress on the patient chart.",
+    href: "/sessions",
   },
 ];
 
@@ -148,6 +164,26 @@ export default function ClinicianDashboardPage() {
           </div>
         </div>
 
+        <div className="mb-6 rounded-[24px] border border-white/10 bg-white/[0.04] px-5 py-4 text-sm leading-7 text-white/75 shadow-[0_8px_20px_rgba(0,0,0,0.12)] backdrop-blur-md">
+          <span className="font-semibold text-cyan-200">Clinical pathway:</span> select a patient → run assessments →
+          open{" "}
+          <Link
+            href="/clinician/patients"
+            className="text-cyan-300 underline-offset-2 hover:text-cyan-200 hover:underline"
+          >
+            assessment result
+          </Link>{" "}
+          → <Link href="/library" className="text-cyan-300 underline-offset-2 hover:text-cyan-200 hover:underline">rehabilitation library</Link>{" "}
+          → therapy session → saved outcomes on the patient chart. For cross-patient review use{" "}
+          <Link href="/live-results" className="text-cyan-300 underline-offset-2 hover:text-cyan-200 hover:underline">
+            live results
+          </Link>
+          .{" "}
+          <span className="text-white/45">
+            {/* TODO: Dashboard feed of recent completions + therapy saves from API. */}
+          </span>
+        </div>
+
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {metricCards.map((card) => (
             <MetricCard
@@ -215,6 +251,14 @@ export default function ClinicianDashboardPage() {
                 >
                   <h3 className="text-base font-semibold text-white">{step.title}</h3>
                   <p className="mt-2 text-sm leading-6 text-white/70">{step.description}</p>
+                  {step.href ? (
+                    <Link
+                      href={step.href}
+                      className="mt-3 inline-flex text-sm font-semibold text-cyan-200 transition hover:text-cyan-100"
+                    >
+                      Open step →
+                    </Link>
+                  ) : null}
                 </div>
               ))}
             </div>

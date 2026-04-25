@@ -14,6 +14,7 @@ import {
 } from "../../../lib/api";
 import { assessmentsRepository } from "../../../lib/repositories";
 import ConfirmModal from "../../../components/ConfirmModal";
+import { listTherapySessionsForPatient, type TherapySessionLog } from "../../../lib/therapy-sessions-store";
 
 export default function PatientProfilePage() {
   const params = useParams();
@@ -37,6 +38,7 @@ export default function PatientProfilePage() {
   // Delete state
   const [deleting, setDeleting] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [therapySessions, setTherapySessions] = useState<TherapySessionLog[]>([]);
 
   useEffect(() => {
     if (isNaN(numericId)) { setIsLoading(false); return; }
@@ -65,12 +67,42 @@ export default function PatientProfilePage() {
     return () => { isMounted = false; };
   }, [numericId]);
 
+  useEffect(() => {
+    if (!patient || isNaN(numericId)) return;
+    const pid = String(patient.id);
+    const refresh = () => setTherapySessions(listTherapySessionsForPatient(pid));
+    refresh();
+    window.addEventListener("focus", refresh);
+    window.addEventListener("cm-therapy-saved", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("cm-therapy-saved", refresh);
+    };
+  }, [patient, numericId]);
+
   const latestAssessment = useMemo(() => assessments[0] ?? null, [assessments]);
   const recentAssessments = useMemo(() => assessments.slice(0, 3), [assessments]);
   const latestRemoteAssessment = useMemo(
     () => assessments.find((a) => a.mode === "remote") ?? null,
     [assessments]
   );
+
+  const progressSnapshot = useMemo(() => {
+    const completedAssessments = assessments.filter((a) => a.status === "completed").length;
+    const scored = assessments.filter((a) => typeof a.score === "number");
+    const avgScore =
+      scored.length > 0
+        ? Math.round(
+            scored.reduce((sum, a) => sum + (a.score ?? 0), 0) / scored.length
+          )
+        : null;
+    return {
+      completedAssessments,
+      avgScore,
+      therapyCount: therapySessions.length,
+      lastTherapy: therapySessions[0] ?? null,
+    };
+  }, [assessments, therapySessions]);
 
   function handleCreateRemoteRequest() {
     if (!patient) return;
@@ -340,6 +372,68 @@ export default function PatientProfilePage() {
               </div>
             </section>
 
+            {/* Clinical care pathway — mirrors in-clinic sequence */}
+            <section className="rounded-[28px] border border-cyan-300/22 bg-gradient-to-br from-cyan-500/8 via-white/[0.03] to-transparent p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+              <h2 className="text-2xl font-bold text-white">Clinical care pathway</h2>
+              <p className="mt-2 text-sm leading-7 text-white/70">
+                Use the same order you would at the bedside: run assessments, review the structured result, open the
+                rehabilitation library to choose a field, then run therapy and confirm the save on this chart.
+                {/* TODO: Episode-level state machine from API (phase, assigned program, locks). */}
+              </p>
+              <ol className="mt-4 list-decimal space-y-2 pl-5 text-sm text-white/75">
+                <li>
+                  <span className="text-white/90">Patient assessments</span> — in-clinic, remote link, or gait capture.
+                </li>
+                <li>
+                  <span className="text-white/90">Assessment result</span> — review scores, summary, and mock
+                  recommendations.
+                </li>
+                <li>
+                  <span className="text-white/90">Rehabilitation library</span> — pick the clinical field and module.
+                </li>
+                <li>
+                  <span className="text-white/90">Therapy session &amp; save</span> — session logs appear below when the
+                  patient ID on save matches this record.
+                </li>
+              </ol>
+              <div className="mt-5 flex flex-wrap gap-2">
+                <Link
+                  href={`/clinician/assessment/start?patientId=${patient.id}`}
+                  className="rounded-2xl border border-white/12 bg-white/5 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-white/10"
+                >
+                  Assessments
+                </Link>
+                <Link
+                  href={
+                    latestAssessment
+                      ? `/results?patientId=${patient.id}&assessmentId=${latestAssessment.id}`
+                      : `/clinician/assessment/start?patientId=${patient.id}`
+                  }
+                  className="rounded-2xl border border-white/12 bg-white/5 px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-white/10"
+                >
+                  Latest result
+                </Link>
+                <Link
+                  href={`/library?patientId=${patient.id}`}
+                  className="rounded-2xl bg-cyan-400 px-4 py-2.5 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300"
+                >
+                  Open rehabilitation library
+                </Link>
+                <Link
+                  href={`/therapy?patientId=${patient.id}`}
+                  className="rounded-2xl border border-cyan-300/30 bg-cyan-400/10 px-4 py-2.5 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-400/20"
+                >
+                  Start therapy
+                </Link>
+                <Link
+                  href={`/clinician/patients/${patient.id}#assessment-timeline`}
+                  className="rounded-2xl border border-white/12 bg-white/5 px-4 py-2.5 text-xs font-semibold text-white/80 transition hover:bg-white/10"
+                >
+                  All assessments
+                </Link>
+              </div>
+            </section>
+
             {/* Quick Actions */}
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
               <h2 className="text-2xl font-bold text-white">Quick Actions</h2>
@@ -372,11 +466,33 @@ export default function PatientProfilePage() {
                   </p>
                 </Link>
                 <Link
-                  href="/library"
+                  href={`/library?patientId=${patient.id}`}
                   className="rounded-[22px] border border-cyan-300/18 bg-[#123a8a]/25 p-4 transition hover:border-cyan-300/35 hover:bg-[#123a8a]/35"
                 >
-                  <h3 className="text-base font-semibold text-white">Assign Program</h3>
-                  <p className="mt-2 text-sm leading-6 text-white/70">Select the appropriate rehab pathway or treatment program.</p>
+                  <h3 className="text-base font-semibold text-white">Open rehabilitation library</h3>
+                  <p className="mt-2 text-sm leading-6 text-white/70">
+                    Browse clinical fields and active modules after you have reviewed the assessment result.{" "}
+                    {/* TODO: Deep-link assigned field when prescription exists in API. */}
+                  </p>
+                </Link>
+                <Link
+                  href={`/therapy?patientId=${patient.id}`}
+                  className="rounded-[22px] border border-cyan-300/18 bg-[#123a8a]/25 p-4 transition hover:border-cyan-300/35 hover:bg-[#123a8a]/35"
+                >
+                  <h3 className="text-base font-semibold text-white">Gait / stepping therapy</h3>
+                  <p className="mt-2 text-sm leading-6 text-white/70">
+                    Launch the in-browser stepping session for this case (clinician-supervised or kiosk).
+                    {/* TODO: Tokenized patient links + progress sync (no auth wall for patients). */}
+                  </p>
+                </Link>
+                <Link
+                  href="/sessions"
+                  className="rounded-[22px] border border-cyan-300/18 bg-[#123a8a]/25 p-4 transition hover:border-cyan-300/35 hover:bg-[#123a8a]/35"
+                >
+                  <h3 className="text-base font-semibold text-white">Guided gait → therapy flow</h3>
+                  <p className="mt-2 text-sm leading-6 text-white/70">
+                    Combined demo path: assessment iframe → therapy module (for training).
+                  </p>
                 </Link>
                 <Link
                   href={`/clinician/patients/${patient.id}#assessment-timeline`}
@@ -459,6 +575,66 @@ export default function PatientProfilePage() {
                 ) : (
                   <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-5 text-sm text-white/65">No assessment history yet.</div>
                 )}
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+              <h2 className="text-2xl font-bold text-white">Therapy sessions</h2>
+              <p className="mt-2 text-sm text-white/70">
+                Stepping / gait therapy completed in-app. Matches patient ID entered on save (
+                <span className="font-medium text-cyan-200/90">{patient.id}</span>).
+              </p>
+              <p className="mt-1 text-[11px] text-white/45">
+                {/* TODO: Persist therapy sessions via API; replace localStorage aggregation. */}
+              </p>
+              <div className="mt-5 space-y-3">
+                {therapySessions.length > 0 ? (
+                  therapySessions.map((t) => (
+                    <div key={t.id} className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="text-sm font-semibold text-white">{t.programLabel}</p>
+                          <p className="mt-1 text-xs text-white/55">
+                            {t.recordedAt ? new Date(t.recordedAt).toLocaleString() : "—"}
+                          </p>
+                        </div>
+                        <ResultPill label={`Score ${t.score}`} tone="score" />
+                      </div>
+                      <p className="mt-2 text-xs text-white/60">
+                        Steps {t.totalSteps} · Symmetry {t.symmetryPct}%
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-5 text-sm text-white/65">
+                    No therapy sessions logged for this patient ID yet. Run /therapy and save using this patient&apos;s
+                    numeric ID.
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+              <h2 className="text-2xl font-bold text-white">Progress</h2>
+              <p className="mt-2 text-sm text-white/70">
+                Mock longitudinal view from local assessments and therapy saves.
+                {/* TODO: Trend charts from backend outcomes service. */}
+              </p>
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                <InfoCard label="Completed assessments (local)" value={String(progressSnapshot.completedAssessments)} />
+                <InfoCard
+                  label="Avg session score (local)"
+                  value={progressSnapshot.avgScore != null ? `${progressSnapshot.avgScore}%` : "—"}
+                />
+                <InfoCard label="Therapy sessions logged" value={String(progressSnapshot.therapyCount)} />
+                <InfoCard
+                  label="Last therapy"
+                  value={
+                    progressSnapshot.lastTherapy
+                      ? `${new Date(progressSnapshot.lastTherapy.recordedAt).toLocaleDateString()} · score ${progressSnapshot.lastTherapy.score}`
+                      : "—"
+                  }
+                />
               </div>
             </section>
           </div>

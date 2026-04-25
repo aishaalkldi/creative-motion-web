@@ -97,6 +97,15 @@ function LoginForm() {
               Sign up
             </Link>
           </p>
+
+          {process.env.NODE_ENV === "development" && (
+            <p className="text-center text-[11px] leading-relaxed text-slate-600">
+              Local dev: ensure the API is running on port 8000 and PostgreSQL is configured in{" "}
+              <code className="text-slate-500">backend/creative-motion-backend/.env</code>. Seeded admin
+              email/password default to the fields above (
+              <code className="text-slate-500">SEED_ADMIN_*</code> overrides).
+            </p>
+          )}
         </div>
       </div>
     </main>

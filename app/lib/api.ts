@@ -1,5 +1,24 @@
 import { type ClinicianInfo, getAuthHeaders, setAuthSession } from "./auth";
 
+/** FastAPI may return `detail` as a string or a validation error list. */
+function formatErrorDetail(detail: unknown): string | null {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const parts = detail.map((item) => {
+      if (item && typeof item === "object" && "msg" in item) {
+        return String((item as { msg: unknown }).msg);
+      }
+      try {
+        return JSON.stringify(item);
+      } catch {
+        return String(item);
+      }
+    });
+    return parts.join(" ");
+  }
+  return null;
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────
 
 export type LoginResponse = {
@@ -26,8 +45,9 @@ export async function loginClinician(
   if (!response.ok) {
     let message = "Invalid email or password.";
     try {
-      const err = (await response.json()) as { detail?: string };
-      if (typeof err.detail === "string") message = err.detail;
+      const err = (await response.json()) as { detail?: unknown };
+      const formatted = formatErrorDetail(err.detail);
+      if (formatted) message = formatted;
     } catch { /* keep default */ }
     throw new Error(message);
   }
@@ -53,8 +73,9 @@ export async function registerClinician(payload: RegisterPayload): Promise<Clini
   if (!response.ok) {
     let message = "Registration failed.";
     try {
-      const err = (await response.json()) as { detail?: string };
-      if (typeof err.detail === "string") message = err.detail;
+      const err = (await response.json()) as { detail?: unknown };
+      const formatted = formatErrorDetail(err.detail);
+      if (formatted) message = formatted;
     } catch { /* keep default */ }
     throw new Error(message);
   }

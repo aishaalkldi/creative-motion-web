@@ -39,6 +39,7 @@ import {
   type StepMetrics,
   type BiomechanicsData,
 } from "../lib/gait/biomechanics";
+import { recordTherapySessionLog } from "@/app/lib/therapy-sessions-store";
 
 const PoseCamera = dynamic(() => import("./PoseCamera"), { ssr: false });
 
@@ -949,6 +950,20 @@ export default function SessionPage() {
     storePatientId(pid);
     setPatientId(pid);
     setSavedRecord(record);
+
+    try {
+      recordTherapySessionLog({
+        id: record.id,
+        patientId: pid,
+        recordedAt: record.date,
+        programLabel: "Side stepping / gait therapy",
+        score: record.score,
+        totalSteps: record.totalSteps,
+        symmetryPct: record.symmetryPct,
+      });
+    } catch {
+      /* localStorage unavailable */
+    }
 
     // Non-blocking sync to the Creative Motion platform.
     // Local save above is already complete and is the primary UX path.

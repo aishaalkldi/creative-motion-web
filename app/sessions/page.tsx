@@ -140,6 +140,18 @@ export default function SessionsPage() {
               <p className="mt-2 max-w-2xl text-sm leading-6 text-white/70">
                 Link structured assessment with the therapy session in one guided flow.
               </p>
+              <p className="mt-3 max-w-2xl text-xs leading-5 text-white/50">
+                <span className="font-medium text-white/60">Clinical journey:</span> patient profile → assessment
+                (remote link or in-clinic) → results → assign program in{" "}
+                <Link href="/library" className="text-cyan-300/90 underline hover:text-cyan-200">
+                  Library
+                </Link>{" "}
+                →{" "}
+                <Link href="/therapy" className="text-cyan-300/90 underline hover:text-cyan-200">
+                  Therapy session
+                </Link>
+                . {/* TODO: Persist prescribed module per patient; generate patient-facing magic links (no clinician login). */}
+              </p>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               {(["start", "assessment", "therapy"] as const).map((s, i) => (
