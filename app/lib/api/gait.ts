@@ -42,6 +42,41 @@ export type GaitSummary = {
   recommendations: string[];
 };
 
+/** Optional envelope used by `app/results/page.tsx` (legacy / alternate API shape). */
+export type GaitObjectiveFindingsEnvelope = {
+  overall_score?: number | null;
+  classification?: string | null;
+  metrics?: {
+    cadence_steps_per_min?: number | null;
+    stride_length_cm?: number | null;
+    step_symmetry_pct?: number | null;
+    gait_speed_m_per_s?: number | null;
+  };
+  flags?: string[];
+};
+
+export type GaitClinicalInterpretationEnvelope = {
+  severity?: string | null;
+  impairment_level?: string | null;
+  summary?: string | null;
+  details?: string | null;
+};
+
+/** Top-level recommendations block (distinct from `summary.recommendations: string[]`). */
+export type GaitRecommendationsEnvelope = {
+  primary?: string | null;
+  exercise_plan?: string[] | null;
+  reassessment_timeline?: string | null;
+  referrals?: string[] | null;
+};
+
+export type GaitConfidenceLimitationsEnvelope = {
+  confidence_score?: number | null;
+  video_quality?: string | null;
+  limitations?: string[] | null;
+  notes?: string | null;
+};
+
 export type GaitAnalysisResponse = {
   session_id: string;
   video_filename: string;
@@ -54,6 +89,17 @@ export type GaitAnalysisResponse = {
   summary: GaitSummary;
   /** Relative path to the saved per-frame CSV on the gait AI server. */
   csv_path: string;
+
+  /** @deprecated Prefer `summary.flags`; optional duplicate for alternate clients. */
+  flags?: string[];
+  /** Results-page “objective findings” card (not returned by current gait AI). */
+  objective_findings?: GaitObjectiveFindingsEnvelope;
+  /** Results-page clinical interpretation block. */
+  clinical_interpretation?: GaitClinicalInterpretationEnvelope;
+  /** Results-page recommendations block (object form; not `summary.recommendations`). */
+  recommendations?: GaitRecommendationsEnvelope;
+  /** Results-page confidence / limitations block. */
+  confidence_limitations?: GaitConfidenceLimitationsEnvelope;
 };
 
 // ─── API call ─────────────────────────────────────────────────────────────────
