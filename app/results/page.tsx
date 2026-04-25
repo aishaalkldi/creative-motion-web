@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getResultsByPatient, type ResultOut } from "../lib/api";
 import { patientsRepository } from "../lib/repositories";
+import {
+  analyzeGaitVideo,
+  type GaitAnalysisResponse,
+} from "../lib/api/gait";
 
 function ResultsPageContent() {
   const searchParams = useSearchParams();
@@ -16,6 +20,12 @@ function ResultsPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [results, setResults] = useState<ResultOut[]>([]);
+
+  // Gait AI analysis state (only active when test_name === "gait")
+  const [gaitResult, setGaitResult] = useState<GaitAnalysisResponse | null>(null);
+  const [gaitLoading, setGaitLoading] = useState(false);
+  const [gaitError, setGaitError] = useState("");
+  const gaitFileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -48,6 +58,26 @@ function ResultsPageContent() {
     };
   }, []);
 
+  async function handleGaitUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setGaitLoading(true);
+    setGaitError("");
+    setGaitResult(null);
+    try {
+      const data = await analyzeGaitVideo(file);
+      setGaitResult(data);
+    } catch (err) {
+      setGaitError(
+        err instanceof Error ? err.message : "Gait analysis failed. Please try again."
+      );
+    } finally {
+      setGaitLoading(false);
+      // Reset input so the same file can be re-uploaded if needed
+      if (gaitFileRef.current) gaitFileRef.current.value = "";
+    }
+  }
+
   const result = useMemo(() => {
     if (!hasValidContext || results.length === 0) return null;
     // Filter by assessmentId if provided, otherwise take the latest result.
@@ -78,11 +108,7 @@ function ResultsPageContent() {
   const completedAt = "—";
 
   const score =
-    typeof result?.score === "number"
-      ? `${result.score}%`
-      : typeof result?.score === "string" && result.score.trim()
-        ? result.score
-        : "—";
+    typeof result?.score === "number" ? `${result.score}%` : "—";
   const scoreValue = typeof result?.score === "number" ? result.score : null;
   const scoreTone =
     scoreValue === null
@@ -121,10 +147,6 @@ function ResultsPageContent() {
     if (!result) return null;
     const raw = result.score;
     if (typeof raw === "number" && Number.isFinite(raw)) return raw;
-    if (typeof raw === "string") {
-      const n = Number.parseFloat(raw.replace(/%/g, "").trim());
-      return Number.isFinite(n) ? n : null;
-    }
     return null;
   }, [result]);
 
@@ -353,6 +375,269 @@ function ResultsPageContent() {
                 <ActionBox text={`Structured findings summary: ${reportSummary}`} />
               </div>
             </section>
+
+            {/* ── Gait AI Analysis — only shown when test is "gait" ── */}
+            {selectedTests.includes("gait") && (
+              <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+                <h2 className="text-2xl font-bold text-white">Gait AI Analysis</h2>
+                <p className="mt-2 text-sm leading-7 text-white/70">
+                  Upload a gait video to run automated analysis and receive structured clinical findings.
+                </p>
+
+                {/* Hidden file input */}
+                <input
+                  ref={gaitFileRef}
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={handleGaitUpload}
+                />
+
+                {/* Upload trigger — shown only when no result and not loading */}
+                {!gaitResult && !gaitLoading && (
+                  <div className="mt-5">
+                    <button
+                      type="button"
+                      onClick={() => gaitFileRef.current?.click()}
+                      className="flex w-full flex-col items-center gap-3 rounded-[20px] border border-dashed border-cyan-300/35 bg-cyan-400/5 px-6 py-10 text-center transition hover:border-cyan-300/60 hover:bg-cyan-400/8"
+                    >
+                      <span className="text-3xl">🎥</span>
+                      <span className="text-sm font-semibold text-cyan-200">
+                        Click to upload gait video
+                      </span>
+                      <span className="text-xs text-white/45">
+                        MP4, MOV, AVI — full lower body must be visible
+                      </span>
+                    </button>
+                    {gaitError && (
+                      <div className="mt-4 rounded-[18px] border border-rose-300/25 bg-rose-500/10 px-4 py-4 text-sm text-rose-100">
+                        {gaitError}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Loading state */}
+                {gaitLoading && (
+                  <div className="mt-5 rounded-[20px] border border-cyan-300/20 bg-cyan-400/8 px-4 py-6 text-center text-sm text-cyan-200">
+                    Analysing gait video — this may take a few seconds…
+                  </div>
+                )}
+
+                {/* ── Section 1: Objective Findings ── */}
+                {gaitResult?.objective_findings && (
+                  <div className="mt-6">
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
+                      Objective Findings
+                    </p>
+                    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                      <MetricCard
+                        label="Overall Score"
+                        value={
+                          gaitResult.objective_findings.overall_score != null
+                            ? `${gaitResult.objective_findings.overall_score}%`
+                            : "Not available"
+                        }
+                        tone={
+                          (gaitResult.objective_findings.overall_score ?? 0) >= 80
+                            ? "good"
+                            : (gaitResult.objective_findings.overall_score ?? 0) >= 60
+                              ? "moderate"
+                              : "attention"
+                        }
+                      />
+                      <MetricCard
+                        label="Classification"
+                        value={gaitResult.objective_findings.classification ?? "Not available"}
+                        tone="default"
+                      />
+                      <MetricCard
+                        label="Cadence"
+                        value={
+                          gaitResult.objective_findings.metrics?.cadence_steps_per_min != null
+                            ? `${gaitResult.objective_findings.metrics.cadence_steps_per_min} steps/min`
+                            : "Not available"
+                        }
+                        tone="pending"
+                      />
+                      <MetricCard
+                        label="Stride Length"
+                        value={
+                          gaitResult.objective_findings.metrics?.stride_length_cm != null
+                            ? `${gaitResult.objective_findings.metrics.stride_length_cm} cm`
+                            : "Not available"
+                        }
+                        tone="pending"
+                      />
+                      <MetricCard
+                        label="Step Symmetry"
+                        value={
+                          gaitResult.objective_findings.metrics?.step_symmetry_pct != null
+                            ? `${gaitResult.objective_findings.metrics.step_symmetry_pct}%`
+                            : "Not available"
+                        }
+                        tone="pending"
+                      />
+                      <MetricCard
+                        label="Gait Speed"
+                        value={
+                          gaitResult.objective_findings.metrics?.gait_speed_m_per_s != null
+                            ? `${gaitResult.objective_findings.metrics.gait_speed_m_per_s} m/s`
+                            : "Not available"
+                        }
+                        tone="pending"
+                      />
+                    </div>
+                    {(gaitResult.objective_findings.flags ?? []).length > 0 && (
+                      <div className="mt-4 rounded-[18px] border border-amber-300/25 bg-amber-400/10 px-4 py-4">
+                        <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-amber-300">
+                          Flagged Deviations
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {gaitResult.objective_findings.flags!.map((flag) => (
+                            <span
+                              key={flag}
+                              className="rounded-full border border-amber-300/30 bg-amber-400/15 px-3 py-1 text-xs font-medium text-amber-200"
+                            >
+                              {flag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* ── Section 2: Clinical Interpretation ── */}
+                {gaitResult?.clinical_interpretation && (
+                  <div className="mt-6">
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
+                      Clinical Interpretation
+                    </p>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <InfoCard
+                        label="Severity"
+                        value={gaitResult.clinical_interpretation.severity ?? "Not available"}
+                      />
+                      <InfoCard
+                        label="Impairment Level"
+                        value={gaitResult.clinical_interpretation.impairment_level ?? "Not available"}
+                      />
+                    </div>
+                    <div className="mt-4 rounded-[20px] border-l-4 border-cyan-400/60 bg-white/[0.04] px-5 py-4">
+                      <p className="text-sm font-semibold text-white/80">Summary</p>
+                      <p className="mt-2 text-sm leading-7 text-white/70">
+                        {gaitResult.clinical_interpretation.summary ?? "Not available"}
+                      </p>
+                      {gaitResult.clinical_interpretation.details && (
+                        <p className="mt-3 text-sm leading-7 text-white/60">
+                          {gaitResult.clinical_interpretation.details}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Section 3: Recommendations ── */}
+                {gaitResult?.recommendations && (
+                  <div className="mt-6">
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
+                      Recommendations
+                    </p>
+                    {gaitResult.recommendations.primary && (
+                      <div className="mb-3 rounded-[18px] border border-cyan-300/20 bg-cyan-400/8 px-4 py-4 text-sm font-semibold text-cyan-100">
+                        {gaitResult.recommendations.primary}
+                      </div>
+                    )}
+                    {(gaitResult.recommendations.exercise_plan ?? []).length > 0 && (
+                      <div className="mb-3">
+                        <p className="mb-2 text-xs text-white/50">Exercise Plan</p>
+                        <div className="space-y-2">
+                          {gaitResult.recommendations.exercise_plan!.map((item, i) => (
+                            <div key={i} className="flex gap-3 text-sm text-white/75">
+                              <span className="mt-0.5 flex-none rounded-full bg-cyan-400/20 px-2 py-0.5 text-[10px] font-bold text-cyan-300">
+                                {String(i + 1).padStart(2, "0")}
+                              </span>
+                              {item}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <InfoCard
+                        label="Reassessment Timeline"
+                        value={gaitResult.recommendations.reassessment_timeline ?? "Not available"}
+                      />
+                      <InfoCard
+                        label="Referrals"
+                        value={
+                          (gaitResult.recommendations.referrals ?? []).length > 0
+                            ? gaitResult.recommendations.referrals!.join(", ")
+                            : "None indicated"
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Section 4: Confidence / Limitations ── */}
+                {gaitResult?.confidence_limitations && (
+                  <div className="mt-6">
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
+                      Confidence / Limitations
+                    </p>
+                    <div className="grid gap-4 md:grid-cols-2">
+                      <MetricCard
+                        label="AI Confidence"
+                        value={
+                          gaitResult.confidence_limitations.confidence_score != null
+                            ? `${Math.round(gaitResult.confidence_limitations.confidence_score * 100)}%`
+                            : "Not available"
+                        }
+                        tone={
+                          (gaitResult.confidence_limitations.confidence_score ?? 0) >= 0.8
+                            ? "good"
+                            : (gaitResult.confidence_limitations.confidence_score ?? 0) >= 0.6
+                              ? "moderate"
+                              : "attention"
+                        }
+                      />
+                      <MetricCard
+                        label="Video Quality"
+                        value={gaitResult.confidence_limitations.video_quality ?? "Not available"}
+                        tone="default"
+                      />
+                    </div>
+                    {(gaitResult.confidence_limitations.limitations ?? []).length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        {gaitResult.confidence_limitations.limitations!.map((lim, i) => (
+                          <ActionBox key={i} text={lim} />
+                        ))}
+                      </div>
+                    )}
+                    {gaitResult.confidence_limitations.notes && (
+                      <div className="mt-3 rounded-[18px] border border-white/10 bg-white/[0.03] px-4 py-4 text-sm text-white/60">
+                        {gaitResult.confidence_limitations.notes}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Re-upload link once result is shown */}
+                {gaitResult && (
+                  <div className="mt-5 flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => gaitFileRef.current?.click()}
+                      className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                    >
+                      Re-upload Video
+                    </button>
+                  </div>
+                )}
+              </section>
+            )}
 
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
               <h2 className="text-2xl font-bold text-white">Clinical Summary</h2>
