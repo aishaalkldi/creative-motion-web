@@ -215,11 +215,10 @@ export default function SessionsPage() {
               <p className="text-sm text-white/70">
                 Therapy / gamification module (embedded below).
               </p>
-              {/* TODO: Replace iframe src with the dedicated therapy or gamification route when it exists (e.g. /therapy or /game). Using /gait as a temporary placeholder. */}
               <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
                 <iframe
                   title="Therapy session"
-                  src="/gait"
+                  src="/therapy"
                   className="h-[min(70vh,720px)] w-full border-0"
                 />
               </div>
