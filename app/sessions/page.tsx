@@ -1,4 +1,9 @@
+"use client";
+
 import Link from "next/link";
+import { useState } from "react";
+
+type FlowStep = "start" | "assessment" | "therapy";
 
 const categories = [
   {
@@ -63,7 +68,15 @@ const categories = [
   },
 ];
 
+const STEP_LABELS: Record<FlowStep, string> = {
+  start: "Start",
+  assessment: "Assessment",
+  therapy: "Therapy",
+};
+
 export default function SessionsPage() {
+  const [flowStep, setFlowStep] = useState<FlowStep>("start");
+
   return (
     <main className="min-h-screen bg-[#071a2f] text-white">
       <section className="relative overflow-hidden border-b border-white/10 bg-[radial-gradient(circle_at_top,_rgba(0,200,255,0.15),_transparent_35%),linear-gradient(135deg,#071a2f_0%,#0b2d4f_55%,#0c4066_100%)]">
@@ -111,6 +124,123 @@ export default function SessionsPage() {
               and continue into structured therapy programs and protocol-based care.
             </p>
           </div>
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-7xl px-6 pb-6 pt-2">
+        <div className="rounded-[28px] border border-cyan-300/20 bg-white/5 p-6 shadow-[0_10px_30px_rgba(0,0,0,0.18)] backdrop-blur-md md:p-8">
+          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-left">
+              <p className="text-xs font-medium uppercase tracking-[0.22em] text-cyan-200">
+                Smart Rehab Session
+              </p>
+              <h2 className="mt-2 text-xl font-bold text-white md:text-2xl">
+                Assessment → Therapy flow
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-white/70">
+                Link structured assessment with the therapy session in one guided flow.
+              </p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {(["start", "assessment", "therapy"] as const).map((s, i) => (
+                <div key={s} className="flex items-center gap-2">
+                  {i > 0 && (
+                    <span className="text-white/30" aria-hidden>
+                      →
+                    </span>
+                  )}
+                  <span
+                    className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${
+                      flowStep === s
+                        ? "border-cyan-300/40 bg-cyan-400/15 text-cyan-100"
+                        : "border-white/10 bg-white/[0.03] text-white/50"
+                    }`}
+                  >
+                    {STEP_LABELS[s]}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {flowStep === "start" && (
+            <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
+              <p className="max-w-md text-sm text-white/70">
+                Begin a combined session: gait assessment first, then continue into the
+                therapy experience.
+              </p>
+              <button
+                type="button"
+                onClick={() => setFlowStep("assessment")}
+                className="rounded-2xl bg-cyan-400 px-8 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+              >
+                Start Smart Rehab Session
+              </button>
+            </div>
+          )}
+
+          {flowStep === "assessment" && (
+            <div className="space-y-4">
+              <p className="text-sm text-white/70">
+                Complete the gait assessment below, then continue to the therapy session.
+              </p>
+              <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+                <iframe
+                  title="Gait assessment"
+                  src="/gait"
+                  className="h-[min(70vh,720px)] w-full border-0"
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFlowStep("therapy")}
+                  className="rounded-2xl bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+                >
+                  Continue to Therapy Session
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFlowStep("start")}
+                  className="rounded-2xl border border-white/20 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                >
+                  Back to start
+                </button>
+              </div>
+            </div>
+          )}
+
+          {flowStep === "therapy" && (
+            <div className="space-y-4">
+              <p className="text-sm text-white/70">
+                Therapy / gamification module (embedded below).
+              </p>
+              {/* TODO: Replace iframe src with the dedicated therapy or gamification route when it exists (e.g. /therapy or /game). Using /gait as a temporary placeholder. */}
+              <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+                <iframe
+                  title="Therapy session"
+                  src="/gait"
+                  className="h-[min(70vh,720px)] w-full border-0"
+                />
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFlowStep("assessment")}
+                  className="rounded-2xl border border-white/20 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                >
+                  Back to assessment
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFlowStep("start")}
+                  className="rounded-2xl border border-white/20 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+                >
+                  Back to start
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
