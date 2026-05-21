@@ -139,7 +139,10 @@ export interface SessionRecord {
   leftSteps: number;
   /** Right knee lifts only. */
   rightSteps: number;
-  /** Bilateral symmetry score 0–100. */
+  /**
+   * Bilateral symmetry 0–100, or −1 when step count is too low for a valid estimate
+   * (avoids implying perfect symmetry from insufficient data).
+   */
   symmetryPct: number;
   /** Highest consecutive step streak recorded in this session. */
   bestCombo: number;
@@ -451,19 +454,25 @@ export function clearPatientSessions(patientId: string): void {
 
 /**
  * Read the last-used patient ID from localStorage.
- * Falls back to "PT-001" if none is stored.
+ * Returns "" when unset — never invent a default chart ID (would corrupt linkage).
  */
 export function getStoredPatientId(): string {
-  if (!isClient()) return "PT-001";
-  return localStorage.getItem(PID_KEY) ?? "PT-001";
+  if (!isClient()) return "";
+  return localStorage.getItem(PID_KEY)?.trim() ?? "";
 }
 
 /**
  * Persist the current patient ID so it pre-fills on next visit.
+ * Empty string clears storage (no placeholder patient).
  */
 export function storePatientId(id: string): void {
   if (!isClient()) return;
-  localStorage.setItem(PID_KEY, id.trim() || "PT-001");
+  const t = id.trim();
+  if (!t) {
+    localStorage.removeItem(PID_KEY);
+    return;
+  }
+  localStorage.setItem(PID_KEY, t);
 }
 
 /* ── Therapist labeling ─────────────────────────────────────────────────── */
@@ -652,10 +661,10 @@ export function importDatasetFromCSV(csvText: string): { imported: number; skipp
       // romScore and postureScore may be null (insufficient data) — preserve that
       romScore:            romScore ?? null,
       postureScore:        num("postureScore") ?? null,
-      controlScore:        num("controlScore")        ?? 75,
+      controlScore:        num("controlScore")        ?? null,
       // symmetryScore may be null (fewer than 3 steps on either side) — preserve that
       symmetryScore:       num("symmetryScore") ?? null,
-      movementQualityScore: num("movementQualityScore") ?? 50,
+      movementQualityScore: num("movementQualityScore") ?? null,
       stepCount:           num("stepCount")           ?? 0,
       avgBodySpan:         num("avgBodySpan")         ?? 0,
       bodySpanConfidence:  num("bodySpanConfidence")  ?? 0,

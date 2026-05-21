@@ -2,84 +2,57 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { getDashboardStats, type DashboardStats } from "@/app/lib/api";
 
-type MetricTone = "default" | "attention" | "moderate";
+// ── Static data ────────────────────────────────────────────────────────────────
 
-const quickActions = [
-  {
-    title: "Add Patient",
-    description: "Create a new patient file",
-    href: "/clinician/patients/new",
-  },
-  {
-    title: "Patients",
-    description: "Open all patient records",
-    href: "/clinician/patients",
-  },
-  {
-    title: "Start Assessment",
-    description: "Begin in-clinic or remote workflow",
-    href: "/clinician/assessment/start",
-  },
-  {
-    title: "Generate Link",
-    description: "Create a remote assessment request",
-    href: "/clinician/request",
-  },
-  {
-    title: "Review Results",
-    description: "Open recent assessment outcomes",
-    href: "/results",
-  },
-  {
-    title: "Rehab programs",
-    description: "Gait assessment → therapy session flow",
-    href: "/sessions",
-  },
+const QUICK_ACTIONS = [
+  { title: "Add Patient",            description: "Create a new patient file",                 href: "/clinician/patients/new" },
+  { title: "Start Assessment",       description: "Begin in-clinic or remote workflow",         href: "/clinician/assessment/start" },
+  { title: "Generate Remote Link",   description: "Create a remote assessment request",         href: "/clinician/request" },
+  { title: "View Programs",          description: "Browse rehabilitation protocols",            href: "/library" },
+  { title: "Active Sessions",        description: "Manage ongoing therapy sessions",            href: "/sessions" },
+  { title: "Gait Analysis",          description: "10MWT gait assessment tool",                href: "/gait" },
 ];
 
-const workflowSteps: {
-  title: string;
-  description: string;
-  /** Deep links are best-effort until assignments are persisted per patient (TODO: backend). */
-  href?: string;
-}[] = [
-  {
-    title: "1. Add Patient",
-    description: "Create a new patient file from the clinician portal.",
-    href: "/clinician/patients/new",
-  },
-  {
-    title: "2. Open Patient Profile",
-    description: "Review patient details, case status, and latest clinical context.",
-    href: "/clinician/patients",
-  },
-  {
-    title: "3. Start Assessment",
-    description: "Choose In-Clinic Guided Assessment or Remote Online Assessment.",
-    href: "/clinician/assessment/start",
-  },
-  {
-    title: "4. Review Results",
-    description: "Open findings, summaries, and returned patient assessments.",
-    href: "/live-results",
-  },
-  {
-    title: "5. Assign Program",
-    description: "Open the rehabilitation library, then run gait / stepping therapy when prescribed.",
-    href: "/library",
-  },
-  {
-    title: "6. Therapy & outcomes",
-    description: "Complete or supervise movement sessions; review longitudinal progress on the patient chart.",
-    href: "/sessions",
-  },
+const WORKFLOW_STEPS = [
+  { title: "1. Add Patient",          description: "Create a patient file from the clinician portal.",                    href: "/clinician/patients/new" },
+  { title: "2. Open Patient Profile", description: "Review patient details, case status, and clinical context.",          href: "/clinician/patients" },
+  { title: "3. Start Assessment",     description: "In-clinic guided assessment or remote patient link.",                  href: "/clinician/assessment/start" },
+  { title: "4. Review Results",       description: "Open findings, summaries, and returned assessments.",                 href: "/clinician/results" },
+  { title: "5. Assign Program",       description: "Select an appropriate rehabilitation protocol.",                       href: "/library" },
+  { title: "6. Start Session",        description: "Execute therapy: live, AI-guided, remote, or XR mode.",               href: "/sessions" },
+  { title: "7. Track Progress",       description: "Review session logs, outcomes, and longitudinal progress.",            href: "/clinician/patients" },
 ];
+
+// ── Components ─────────────────────────────────────────────────────────────────
+
+function MetricCard({ title, value, subtitle, attention = false }: {
+  title: string; value: string; subtitle: string; attention?: boolean;
+}) {
+  return (
+    <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
+      <p className="text-xs font-semibold uppercase tracking-wider text-white/35">{title}</p>
+      <p className={`mt-3 font-mono text-3xl font-bold ${attention ? "text-amber-300" : "text-[#5DCAA5]"}`}
+         style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}>
+        {value}
+      </p>
+      <p className="mt-1.5 text-xs text-white/35">{subtitle}</p>
+    </div>
+  );
+}
+
+// ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function ClinicianDashboardPage() {
-  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const router = useRouter();
+  const [stats, setStats]   = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    router.replace("/clinician/dashboard");
+  }, [router]);
 
   useEffect(() => {
     getDashboardStats()
@@ -88,148 +61,100 @@ export default function ClinicianDashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const metricCards: { title: string; value: string; subtitle: string; tone: MetricTone }[] = [
-    {
-      title: "Total Patients",
-      value: loading ? "…" : String(stats?.total_patients ?? "–"),
-      subtitle: "Connected patient records",
-      tone: "default",
-    },
-    {
-      title: "Active Cases",
-      value: loading ? "…" : String(stats?.active_cases ?? "–"),
-      subtitle: "Current active patients",
-      tone: "default",
-    },
-    {
-      title: "Pending Reviews",
-      value: loading ? "…" : String(stats?.pending_reviews ?? "–"),
-      subtitle: "Results awaiting clinician review",
-      tone: "attention",
-    },
-    {
-      title: "Remote Assessments Pending",
-      value: loading ? "…" : String(stats?.remote_assessments_pending ?? "–"),
-      subtitle: "Patient links not completed yet",
-      tone: "moderate",
-    },
+  const metricCards = [
+    { title: "Total Patients",              value: loading ? "…" : String(stats?.total_patients ?? "–"),              subtitle: "Connected patient records",           attention: false },
+    { title: "Active Cases",                value: loading ? "…" : String(stats?.active_cases ?? "–"),                subtitle: "Currently active patients",           attention: false },
+    { title: "Pending Reviews",             value: loading ? "…" : String(stats?.pending_reviews ?? "–"),             subtitle: "Awaiting clinician review",           attention: true  },
+    { title: "Remote Assessments Pending",  value: loading ? "…" : String(stats?.remote_assessments_pending ?? "–"), subtitle: "Patient links not yet completed",     attention: false },
   ];
 
   const activityQueue =
     !loading && stats
       ? [
           stats.pending_reviews === 0
-            ? "No pending reviews yet"
+            ? "No pending reviews"
             : `${stats.pending_reviews} assessment${stats.pending_reviews > 1 ? "s" : ""} awaiting review`,
           stats.remote_assessments_pending === 0
-            ? "No remote assessments awaiting completion"
+            ? "No remote assessments pending"
             : `${stats.remote_assessments_pending} remote assessment${stats.remote_assessments_pending > 1 ? "s" : ""} pending`,
-          "No follow-up alerts yet",
+          "No follow-up alerts",
         ]
-      : ["No pending reviews yet", "No remote assessments awaiting completion", "No follow-up alerts yet"];
+      : ["No pending reviews", "No remote assessments pending", "No follow-up alerts"];
 
   return (
-    <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
+    <div className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8 rounded-[28px] border border-cyan-300/18 bg-gradient-to-br from-cyan-500/8 via-white/[0.04] to-white/[0.02] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-100">
-                Clinician Workspace
-              </div>
 
-              <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
-                Creative Motion Dashboard
-              </h1>
-
-              <p className="mt-3 max-w-3xl text-sm leading-7 text-white/70 md:text-base">
-                Monitor patient flow, coordinate assessments, review outcomes, and continue rehabilitation planning from one structured clinical workspace.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <Link
-                href="/clinician/patients/new"
-                className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-              >
-                + Add Patient
-              </Link>
-              <Link
-                href="/clinician/assessment/start"
-                className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-              >
-                Start Assessment
-              </Link>
-            </div>
+        {/* ── Header ── */}
+        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">Provider workspace</p>
+            <h1 className="mt-1.5 text-2xl font-bold text-white">Dashboard</h1>
+            <p className="mt-1 text-sm text-white/40">
+              Manage patients, assessments, and rehabilitation plans from one place.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link href="/clinician/patients/new" className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]">
+              + Add Patient
+            </Link>
+            <Link href="/clinician/assessment/start" className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-4 py-2.5 text-sm font-semibold text-white/70 transition hover:border-[#1D9E75]/25 hover:text-white">
+              Start Assessment
+            </Link>
           </div>
         </div>
 
-        <div className="mb-6 rounded-[24px] border border-white/10 bg-white/[0.04] px-5 py-4 text-sm leading-7 text-white/75 shadow-[0_8px_20px_rgba(0,0,0,0.12)] backdrop-blur-md">
-          <span className="font-semibold text-cyan-200">Clinical pathway:</span> select a patient → run assessments →
-          open{" "}
-          <Link
-            href="/clinician/patients"
-            className="text-cyan-300 underline-offset-2 hover:text-cyan-200 hover:underline"
-          >
-            assessment result
-          </Link>{" "}
-          → <Link href="/library" className="text-cyan-300 underline-offset-2 hover:text-cyan-200 hover:underline">rehabilitation library</Link>{" "}
-          → therapy session → saved outcomes on the patient chart. For cross-patient review use{" "}
-          <Link href="/live-results" className="text-cyan-300 underline-offset-2 hover:text-cyan-200 hover:underline">
-            live results
-          </Link>
-          .{" "}
-          <span className="text-white/45">
-            {/* TODO: Dashboard feed of recent completions + therapy saves from API. */}
-          </span>
+        {/* ── Clinical pathway hint ── */}
+        <div className="mb-6 rounded-[8px] border border-[#1E2D42] bg-[#0F1825] px-5 py-3.5 text-sm text-white/40">
+          <span className="font-semibold text-white/65">Clinical pathway:</span>{" "}
+          Patient →{" "}
+          <Link href="/clinician/assessment/start" className="text-[#5DCAA5] hover:text-[#1D9E75]">Assessment</Link>{" "}
+          →{" "}
+          <Link href="/clinician/results" className="text-[#5DCAA5] hover:text-[#1D9E75]">Results</Link>{" "}
+          →{" "}
+          <Link href="/library" className="text-[#5DCAA5] hover:text-[#1D9E75]">Assign Program</Link>{" "}
+          →{" "}
+          <Link href="/sessions" className="text-[#5DCAA5] hover:text-[#1D9E75]">Session</Link>{" "}
+          → Progress
         </div>
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {metricCards.map((card) => (
-            <MetricCard
-              key={card.title}
-              title={card.title}
-              value={card.value}
-              subtitle={card.subtitle}
-              tone={card.tone}
-            />
+        {/* ── Metric cards ── */}
+        <section className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {metricCards.map((c) => (
+            <MetricCard key={c.title} title={c.title} value={c.value} subtitle={c.subtitle} attention={c.attention} />
           ))}
         </section>
 
-        <section className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_1fr]">
-          <div className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-            <h2 className="text-2xl font-bold text-white">Quick Actions</h2>
-            <p className="mt-2 text-sm text-white/70">
-              Open the most common clinician tasks to keep care workflow moving.
-            </p>
+        {/* ── Main columns ── */}
+        <section className="grid gap-5 xl:grid-cols-[1.3fr_1fr]">
 
-            <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {quickActions.map((action) => (
-                <Link
-                  key={action.title}
-                  href={action.href}
-                  className="rounded-[22px] border border-cyan-300/18 bg-[#123a8a]/25 p-4 transition hover:border-cyan-300/35 hover:bg-[#123a8a]/35"
-                >
-                  <div className="inline-flex rounded-full border border-cyan-300/18 bg-cyan-400/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-cyan-100">
-                    Action
-                  </div>
-                  <h3 className="text-base font-semibold text-white">{action.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-white/70">{action.description}</p>
-                </Link>
-              ))}
+          {/* Quick actions + activity */}
+          <div className="space-y-5">
+            <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+              <h2 className="text-base font-bold text-white">Quick Actions</h2>
+              <p className="mt-1 text-sm text-white/35">Common tasks to keep your workflow moving.</p>
+
+              <div className="mt-4 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
+                {QUICK_ACTIONS.map((action) => (
+                  <Link
+                    key={action.title}
+                    href={action.href}
+                    className="group rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4 transition hover:border-[#1D9E75]/25 hover:bg-[#0d1f18]"
+                  >
+                    <p className="text-sm font-semibold text-white group-hover:text-[#5DCAA5]">{action.title}</p>
+                    <p className="mt-1 text-xs leading-5 text-white/35">{action.description}</p>
+                  </Link>
+                ))}
+              </div>
             </div>
 
-            <div className="mt-8">
-              <h3 className="text-xl font-semibold text-white">Clinical Activity</h3>
-              <p className="mt-2 text-sm text-white/65">
-                Live queue for pending review and follow-up workload.
-              </p>
-              <div className="mt-4 space-y-3">
+            <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+              <h2 className="text-base font-bold text-white">Clinical Activity</h2>
+              <p className="mt-1 text-sm text-white/35">Pending review and follow-up queue.</p>
+              <div className="mt-4 space-y-2">
                 {activityQueue.map((item) => (
-                  <div
-                    key={item}
-                    className="rounded-[18px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-white/70"
-                  >
+                  <div key={item} className="flex items-center gap-3 rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3 text-sm text-white/50">
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#1E2D42]" />
                     {item}
                   </div>
                 ))}
@@ -237,61 +162,38 @@ export default function ClinicianDashboardPage() {
             </div>
           </div>
 
-          <aside className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-            <h2 className="text-2xl font-bold text-white">Workflow Map</h2>
-            <p className="mt-2 text-sm text-white/70">
-              Recommended clinical sequence from intake to outcomes follow-up.
-            </p>
+          {/* Workflow map */}
+          <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+            <h2 className="text-base font-bold text-white">Workflow Map</h2>
+            <p className="mt-1 text-sm text-white/35">Recommended clinical sequence from intake to outcome.</p>
 
-            <div className="mt-5 space-y-3">
-              {workflowSteps.map((step) => (
-                <div
-                  key={step.title}
-                  className="rounded-[18px] border border-cyan-300/16 bg-[#123a8a]/22 p-4"
-                >
-                  <h3 className="text-base font-semibold text-white">{step.title}</h3>
-                  <p className="mt-2 text-sm leading-6 text-white/70">{step.description}</p>
-                  {step.href ? (
-                    <Link
-                      href={step.href}
-                      className="mt-3 inline-flex text-sm font-semibold text-cyan-200 transition hover:text-cyan-100"
-                    >
-                      Open step →
-                    </Link>
-                  ) : null}
+            <div className="mt-4 space-y-2">
+              {WORKFLOW_STEPS.map((step, i) => (
+                <div key={step.title} className="flex gap-3">
+                  {/* Step number */}
+                  <div className="flex flex-col items-center">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1E2D42] bg-[#0B1220] text-[11px] font-bold text-[#5DCAA5]/60">
+                      {i + 1}
+                    </span>
+                    {i < WORKFLOW_STEPS.length - 1 && (
+                      <span className="mt-1 w-px flex-1 bg-[#1E2D42]" />
+                    )}
+                  </div>
+                  <div className="pb-4 min-w-0">
+                    <p className="text-sm font-semibold text-white">{step.title.replace(/^\d+\. /, "")}</p>
+                    <p className="mt-0.5 text-xs leading-5 text-white/35">{step.description}</p>
+                    {step.href && (
+                      <Link href={step.href} className="mt-1 inline-block text-xs font-semibold text-[#5DCAA5] hover:text-[#1D9E75]">
+                        Open →
+                      </Link>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
-          </aside>
+          </div>
         </section>
       </div>
-    </main>
-  );
-}
-
-function MetricCard({
-  title,
-  value,
-  subtitle,
-  tone,
-}: {
-  title: string;
-  value: string;
-  subtitle: string;
-  tone: MetricTone;
-}) {
-  const toneClass =
-    tone === "attention"
-      ? "text-amber-200"
-      : tone === "moderate"
-        ? "text-cyan-200"
-        : "text-cyan-300";
-
-  return (
-    <div className="rounded-[24px] border border-cyan-300/18 bg-white/[0.04] p-5 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-      <p className="text-sm text-white/65">{title}</p>
-      <p className={`mt-3 text-4xl font-bold ${toneClass}`}>{value}</p>
-      <p className="mt-2 text-sm text-white/60">{subtitle}</p>
     </div>
   );
 }

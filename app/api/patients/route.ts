@@ -1,0 +1,198 @@
+import { createServerClient } from "@supabase/ssr";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import type { PatientRow } from "../../lib/validate-patient-ownership";
+
+// ── Shared client factory ──────────────────────────────────────────────────────
+
+async function buildClients() {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !anonKey) return null;
+
+  const cookieStore = await cookies();
+
+  const sessionClient = createServerClient(supabaseUrl, anonKey, {
+    cookies: {
+      getAll: () => cookieStore.getAll(),
+      setAll: (cookiesToSet) => {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) =>
+            cookieStore.set(name, value, options),
+          );
+        } catch {
+          // Route Handler context may not allow cookie writes
+        }
+      },
+    },
+  });
+
+  // Service-role client for data operations — bypasses any misconfigured RLS
+  // during the transition period while migration 003 is being applied.
+  const adminClient = serviceKey
+    ? createAdminClient(supabaseUrl, serviceKey, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      })
+    : sessionClient;
+
+  return { sessionClient, adminClient };
+}
+
+/** Returns a consistent 500 when migration 003 has not been applied yet. */
+function migrationPending() {
+  return NextResponse.json(
+    {
+      error:
+        "patients.provider_id column missing. Apply migration 003_patients_provider_id.sql.",
+    },
+    { status: 500 },
+  );
+}
+
+// ── GET /api/patients ──────────────────────────────────────────────────────────
+
+/**
+ * Returns all patients owned by the requesting provider
+ * (patients.provider_id = session.user.id).
+ *
+ * Response 200: PatientRow[]
+ * Response 401: { error: string }
+ * Response 500: { error: string }  — includes migration-pending message
+ */
+export async function GET(_req: NextRequest) {
+  const clients = await buildClients();
+  if (!clients) {
+    return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+  }
+  const { sessionClient, adminClient } = clients;
+
+  // ── Auth ────────────────────────────────────────────────────────────────────
+  const {
+    data: { user },
+    error: authError,
+  } = await sessionClient.auth.getUser();
+
+  if (authError ?? !user) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  // ── Query own patients directly by provider_id ───────────────────────────────
+  const { data: patients, error: queryError } = await adminClient
+    .from("patients")
+    .select("*")
+    .eq("provider_id", user.id)
+    .order("created_at", { ascending: false });
+
+  if (queryError) {
+    // 42703 = column does not exist → migration 003 not applied
+    if (queryError.code === "42703") return migrationPending();
+
+    console.error("[GET /api/patients] query failed:", queryError.message);
+    return NextResponse.json({ error: "Failed to load patients." }, { status: 500 });
+  }
+
+  return NextResponse.json((patients ?? []) as PatientRow[]);
+}
+
+// ── POST /api/patients ─────────────────────────────────────────────────────────
+
+type CreatePatientBody = {
+  full_name: string;
+  phone: string;
+  age?: number | null;
+  gender?: string | null;
+  diagnosis?: string | null;
+  sport?: string | null;
+  status?: string | null;
+};
+
+/**
+ * Creates a new patient owned by the requesting provider.
+ * provider_id is set to session.user.id — callers cannot override it.
+ *
+ * Body (JSON):
+ *   full_name  string  required
+ *   phone      string  required
+ *   age        number  optional
+ *   gender     string  optional
+ *   diagnosis  string  optional
+ *   sport      string  optional
+ *   status     string  optional  (defaults to 'new')
+ *
+ * Response 201: PatientRow
+ * Response 400: { error: string }
+ * Response 401: { error: string }
+ * Response 500: { error: string }  — includes migration-pending message
+ */
+export async function POST(req: NextRequest) {
+  const clients = await buildClients();
+  if (!clients) {
+    return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+  }
+  const { sessionClient, adminClient } = clients;
+
+  // ── Auth ────────────────────────────────────────────────────────────────────
+  const {
+    data: { user },
+    error: authError,
+  } = await sessionClient.auth.getUser();
+
+  if (authError ?? !user) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  // ── Parse + validate body ────────────────────────────────────────────────────
+  let body: CreatePatientBody;
+  try {
+    body = (await req.json()) as CreatePatientBody;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
+  const fullName = body.full_name?.trim();
+  const phone = body.phone?.trim();
+
+  if (!fullName) {
+    return NextResponse.json({ error: "full_name is required." }, { status: 400 });
+  }
+  if (!phone) {
+    return NextResponse.json({ error: "phone is required." }, { status: 400 });
+  }
+
+  const age =
+    body.age === undefined || body.age === null
+      ? null
+      : typeof body.age === "number" && Number.isFinite(body.age)
+        ? Math.floor(body.age)
+        : null;
+
+  // ── Insert ───────────────────────────────────────────────────────────────────
+  // provider_id is ALWAYS set from the verified session — never from the body.
+  const { data: patient, error: insertError } = await adminClient
+    .from("patients")
+    .insert({
+      provider_id: user.id,
+      full_name: fullName,
+      phone,
+      age,
+      gender: body.gender?.trim() || null,
+      diagnosis: body.diagnosis?.trim() || null,
+      sport: body.sport?.trim() || null,
+      status: body.status?.trim() || "new",
+    })
+    .select()
+    .single();
+
+  if (insertError) {
+    if (insertError.code === "42703") return migrationPending();
+
+    console.error("[POST /api/patients] insert failed:", insertError.message);
+    return NextResponse.json({ error: "Failed to create patient." }, { status: 500 });
+  }
+
+  return NextResponse.json(patient as PatientRow, { status: 201 });
+}

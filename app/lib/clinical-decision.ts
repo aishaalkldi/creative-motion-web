@@ -138,6 +138,7 @@ export function getMockClinicalDecision(signals: AssessmentSignals): ClinicalDec
 /** Build query string to pass patient + return path + optional mock signals into therapy/library */
 export function clinicalFlowQuery(params: {
   patientId?: string;
+  assessmentId?: string;
   returnTo?: string;
   recommended?: ProgramSuggestionId;
   symmetry01?: number | null;
@@ -146,6 +147,7 @@ export function clinicalFlowQuery(params: {
 }): string {
   const q = new URLSearchParams();
   if (params.patientId && params.patientId !== "—") q.set("patientId", params.patientId);
+  if (params.assessmentId && params.assessmentId !== "—") q.set("assessmentId", params.assessmentId);
   if (params.returnTo) q.set("returnTo", params.returnTo);
   if (params.recommended) q.set("recommended", params.recommended);
   if (params.symmetry01 != null && Number.isFinite(params.symmetry01)) {

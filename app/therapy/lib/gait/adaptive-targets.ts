@@ -100,9 +100,12 @@ export function computeAdaptiveTargets(sessions: SessionRecord[]): AdaptiveTarge
   const baseReps     = Math.round(mean(baseSessions.map((s) => s.totalSteps)));
   const baseROMs     = baseSessions.filter((s) => s.biomechanics).map((s) => s.biomechanics!.romScore).filter((v): v is number => v !== null);
   const baseROM      = baseROMs.length > 0 ? Math.round(mean(baseROMs)) : 50;
-  const baseSym      = Math.round(mean(baseSessions.map((s) => s.symmetryPct)));
-  const baseQuals    = baseSessions.filter((s) => s.biomechanics).map((s) => s.biomechanics!.movementQualityScore);
-  const baseQual     = baseQuals.length > 0 ? Math.round(mean(baseQuals)) : 50;
+  const baseSymVals  = baseSessions.map((s) => s.symmetryPct).filter((v) => v >= 0);
+  const baseSym      = baseSymVals.length > 0 ? Math.round(mean(baseSymVals)) : 75;
+  const baseQuals = baseSessions
+    .map((s) => s.biomechanics?.movementQualityScore)
+    .filter((q): q is number => q != null);
+  const baseQual = baseQuals.length > 0 ? Math.round(mean(baseQuals)) : 50;
 
   /* ── Recent performance window (last 3 sessions or all if fewer) ── */
   const recent  = sessions.slice(-3);
@@ -117,8 +120,8 @@ export function computeAdaptiveTargets(sessions: SessionRecord[]): AdaptiveTarge
 
   /* ── Readiness check: last 2 sessions both meet quality threshold ── */
   const last2Qualities = last2
-    .filter((s) => s.biomechanics)
-    .map((s) => s.biomechanics!.movementQualityScore);
+    .map((s) => s.biomechanics?.movementQualityScore)
+    .filter((q): q is number => q != null);
 
   const readyToAdvance =
     !hasUnsafe &&
@@ -154,7 +157,8 @@ export function computeAdaptiveTargets(sessions: SessionRecord[]): AdaptiveTarge
   /* ── Apply multiplier to current averages ── */
   const avgRecentReps = mean(recent.map((s) => s.totalSteps));
   const avgRecentROMs = mean(recent.filter((s) => s.biomechanics).map((s) => s.biomechanics!.romScore).filter((v): v is number => v !== null));
-  const avgRecentSym  = mean(recent.map((s) => s.symmetryPct));
+  const recentSymVals = recent.map((s) => s.symmetryPct).filter((v) => v >= 0);
+  const avgRecentSym  = recentSymVals.length > 0 ? mean(recentSymVals) : baseSym;
 
   const mult =
     direction === "increasing" ? 1.08 :   // +8 % increment

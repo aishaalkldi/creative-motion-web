@@ -4,110 +4,256 @@ import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { registerClinician } from "../lib/api";
+import { ensureProviderProfile } from "../lib/auth/ensure-provider-client";
+import { createClient as createSupabaseClient } from "../lib/supabase/browser";
 
+const SUPABASE_CONFIGURED = Boolean(
+  process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+);
+
+/* ─── Arc mark (self-contained, no external dependency) ─────────────────── */
+function ArcMark({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 20 20" fill="none" aria-hidden="true" className="shrink-0">
+      <path d="M10 2C5.582 2 2 5.582 2 10s3.582 8 8 8" stroke="#1D9E75" strokeWidth="2.2" strokeLinecap="round" />
+      <path d="M10 5.5C7.515 5.5 5.5 7.515 5.5 10S7.515 14.5 10 14.5" stroke="#5DCAA5" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="10" cy="10" r="1.5" fill="#1D9E75" />
+    </svg>
+  );
+}
+
+/* ─── Field ──────────────────────────────────────────────────────────────── */
+function Field({
+  label,
+  type = "text",
+  value,
+  onChange,
+  placeholder,
+  autoComplete,
+}: {
+  label: string;
+  type?: string;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+  autoComplete?: string;
+}) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-white/35">
+        {label}
+      </label>
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        className="w-full rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-[#1D9E75]/50 focus:bg-[#0d1c14] transition-colors"
+      />
+    </div>
+  );
+}
+
+/* ─── Page ───────────────────────────────────────────────────────────────── */
 export default function SignupPage() {
   const router = useRouter();
 
-  const [fullName, setFullName] = useState("Admin");
-  const [email, setEmail] = useState("admin@admin.com");
-  const [password, setPassword] = useState("admin123");
-  const [confirm, setConfirm] = useState("admin123");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [name,         setName]         = useState("");
+  const [email,        setEmail]        = useState("");
+  const [practice,     setPractice]     = useState("");
+  const [password,     setPassword]     = useState("");
+  const [confirm,      setConfirm]      = useState("");
+  const [error,        setError]        = useState("");
+  const [loading,      setLoading]      = useState(false);
+  const [confirmSent,  setConfirmSent]  = useState(false);
 
-  const handleSignup = async () => {
+  async function handleSignup() {
     setError("");
 
-    if (!fullName.trim()) return setError("Full name is required.");
-    if (!email.trim()) return setError("Email is required.");
-    if (password.length < 6) return setError("Password must be at least 6 characters.");
-    if (password !== confirm) return setError("Passwords do not match.");
+    if (!name.trim())         return setError("Full name is required.");
+    if (!email.trim())        return setError("Email is required.");
+    if (password.length < 6)  return setError("Password must be at least 6 characters.");
+    if (password !== confirm)  return setError("Passwords do not match.");
 
     setLoading(true);
     try {
-      await registerClinician({
-        full_name: fullName.trim(),
-        email: email.trim().toLowerCase(),
-        password,
-      });
-      router.push("/login?registered=1");
+      if (SUPABASE_CONFIGURED) {
+        // ── Supabase Auth signup ─────────────────────────────────────────
+        const supabase = createSupabaseClient();
+        const { data, error: sbError } = await supabase.auth.signUp({
+          email: email.trim().toLowerCase(),
+          password,
+          options: {
+            // Store display metadata in user_metadata (visible to the provider)
+            data: {
+              full_name: name.trim(),
+              clinic_name: practice.trim() || null,
+            },
+          },
+        });
+
+        if (sbError) {
+          setError(sbError.message);
+          return;
+        }
+
+        if (data.session) {
+          // Session active — providers row required before clinician entry
+          await ensureProviderProfile({
+            name: name.trim(),
+            clinic_name: practice.trim() || null,
+            email: email.trim().toLowerCase(),
+          });
+
+          if (practice.trim()) {
+            localStorage.setItem("cm_practice_name", practice.trim());
+          }
+
+          router.push("/clinician/dashboard");
+          router.refresh();
+        } else {
+          // Email confirmation required — no session yet; check-email UI only
+          setConfirmSent(true);
+        }
+      } else {
+        // ── FastAPI fallback (pre-Supabase accounts) ─────────────────────
+        await registerClinician({
+          full_name: name.trim(),
+          email:     email.trim().toLowerCase(),
+          password,
+        });
+
+        if (practice.trim()) {
+          localStorage.setItem("cm_practice_name", practice.trim());
+        }
+
+        router.push("/login?registered=1");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed. Please try again.");
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") void handleSignup();
-  };
+  }
 
   return (
-    <main className="min-h-screen bg-[#0B1220] text-[#F8FAFC]">
-      <section className="flex min-h-screen items-center justify-center px-6 py-24">
-        <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-md shadow-[0_0_40px_rgba(34,211,238,0.08)]">
-          <div className="mb-8 text-center">
-            <p className="mb-3 inline-block rounded-full bg-cyan-400/10 px-4 py-1 text-sm text-cyan-300">
-              Create Your Account
-            </p>
-            <h1 className="mb-3 text-3xl font-bold text-cyan-300">Sign Up</h1>
-            <p className="text-sm leading-7 text-slate-300">
-              Join Creative Motion Lab to access digital rehabilitation tools,
-              movement analysis, and connected care workflows.
+    <main className="relative flex min-h-screen items-center justify-center bg-[#080E14] px-6 py-16 text-white">
+      {/* Subtle teal ambient */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(29,158,117,0.05) 0%, transparent 70%)",
+        }}
+      />
+
+      <div className="relative w-full max-w-sm">
+
+        {/* Top bar */}
+        <div className="mb-8 flex items-center justify-between">
+          <Link
+            href="/"
+            className="flex items-center gap-2 text-sm font-medium text-white/35 transition hover:text-white/65"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            <ArcMark size={16} />
+            <span
+              className="font-bold tracking-[-0.03em]"
+              style={{ fontFamily: "var(--rasq-font-display, sans-serif)" }}
+            >
+              RASQ
+            </span>
+          </Link>
+          <span className="rounded-[5px] border border-[#1E2D42] bg-[#0F1825] px-2.5 py-1 text-[11px] font-semibold text-white/35">
+            Provider signup
+          </span>
+        </div>
+
+        {/* Card */}
+        <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-7">
+
+          {/* Header */}
+          <div className="mb-7">
+            <h1
+              className="text-xl font-bold text-white"
+              style={{ fontFamily: "var(--rasq-font-display, sans-serif)" }}
+            >
+              Create your workspace
+            </h1>
+            <p className="mt-1.5 text-sm leading-6 text-white/40">
+              Start managing patients, assessments, and rehabilitation plans.
             </p>
           </div>
 
-          <div className="space-y-4" onKeyDown={handleKeyDown}>
-            <div>
-              <label className="mb-2 block text-sm text-slate-300">Full Name</label>
-              <input
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                placeholder="Dr. Sarah Ahmed"
-                autoComplete="name"
-                className="w-full rounded-xl border border-white/10 bg-[#0F172A] px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
-              />
+          {/* Email confirmation screen */}
+          {confirmSent ? (
+            <div className="space-y-4">
+              <div className="rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-4 py-4">
+                <p className="text-sm font-semibold text-[#5DCAA5]">Check your email</p>
+                <p className="mt-1 text-sm leading-6 text-white/50">
+                  We sent a confirmation link to{" "}
+                  <span className="font-semibold text-white/70">{email}</span>.
+                  Click it to activate your account, then{" "}
+                  <Link href="/login" className="font-semibold text-[#5DCAA5] underline underline-offset-2">
+                    sign in
+                  </Link>
+                  .
+                </p>
+              </div>
             </div>
+          ) : null}
 
-            <div>
-              <label className="mb-2 block text-sm text-slate-300">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@clinic.com"
-                autoComplete="email"
-                className="w-full rounded-xl border border-white/10 bg-[#0F172A] px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm text-slate-300">Password</label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="At least 6 characters"
-                autoComplete="new-password"
-                className="w-full rounded-xl border border-white/10 bg-[#0F172A] px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
-              />
-            </div>
-
-            <div>
-              <label className="mb-2 block text-sm text-slate-300">Confirm Password</label>
-              <input
-                type="password"
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                placeholder="Repeat your password"
-                autoComplete="new-password"
-                className="w-full rounded-xl border border-white/10 bg-[#0F172A] px-4 py-3 text-white outline-none transition placeholder:text-slate-500 focus:border-cyan-400"
-              />
-            </div>
+          {/* Fields */}
+          {!confirmSent && (
+          <div
+            className="space-y-4"
+            onKeyDown={(e) => { if (e.key === "Enter") void handleSignup(); }}
+          >
+            <Field
+              label="Full name"
+              value={name}
+              onChange={setName}
+              placeholder="Dr. Sarah Ahmed"
+              autoComplete="name"
+            />
+            <Field
+              label="Email"
+              type="email"
+              value={email}
+              onChange={setEmail}
+              placeholder="you@clinic.com"
+              autoComplete="email"
+            />
+            <Field
+              label="Practice / clinic name"
+              value={practice}
+              onChange={setPractice}
+              placeholder="City Rehabilitation Centre"
+              autoComplete="organization"
+            />
+            <Field
+              label="Password"
+              type="password"
+              value={password}
+              onChange={setPassword}
+              placeholder="At least 6 characters"
+              autoComplete="new-password"
+            />
+            <Field
+              label="Confirm password"
+              type="password"
+              value={confirm}
+              onChange={setConfirm}
+              placeholder="Repeat password"
+              autoComplete="new-password"
+            />
 
             {error && (
-              <div className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-300">
+              <div className="rounded-[7px] border border-rose-400/20 bg-rose-400/8 px-3.5 py-3 text-sm text-rose-300">
                 {error}
               </div>
             )}
@@ -116,20 +262,28 @@ export default function SignupPage() {
               type="button"
               onClick={() => void handleSignup()}
               disabled={loading}
-              className="w-full rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-6 py-3 font-semibold text-black transition duration-300 hover:scale-[1.02] hover:shadow-[0_0_25px_rgba(34,211,238,0.35)] disabled:cursor-not-allowed disabled:opacity-60"
+              className="w-full rounded-[7px] bg-[#1D9E75] py-3.5 text-sm font-bold text-white transition hover:bg-[#179165] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loading ? "Creating account…" : "Create Account"}
+              {loading ? "Creating workspace…" : "Create workspace"}
             </button>
 
-            <p className="text-center text-sm text-slate-400">
+            <p className="pt-1 text-center text-sm text-white/30">
               Already have an account?{" "}
-              <Link href="/login" className="text-cyan-300 hover:text-cyan-200">
+              <Link
+                href="/login"
+                className="font-semibold text-white/55 transition hover:text-white"
+              >
                 Sign in
               </Link>
             </p>
           </div>
+          )}
         </div>
-      </section>
+
+        <p className="mt-6 text-center text-xs text-white/15">
+          Rehabilitation, precisely.
+        </p>
+      </div>
     </main>
   );
 }

@@ -227,7 +227,7 @@ export function getMetricActualValue(
   const bio = session.biomechanics;
   switch (metric) {
     case "totalSteps":           return session.totalSteps;
-    case "symmetryPct":          return session.symmetryPct;
+    case "symmetryPct":          return session.symmetryPct < 0 ? -1 : session.symmetryPct;
     case "stepsPerMin":          return session.stepsPerMin;
     case "fatigueIndex":         return session.fatigueIndex         ?? 0;
     case "cameraVisibilityScore":return session.cameraVisibilityScore ?? 0;

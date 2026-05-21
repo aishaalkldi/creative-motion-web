@@ -195,16 +195,17 @@ function InClinicAssessmentContent() {
   }
 
   return (
-    <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
+    <main className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8 rounded-[28px] border border-cyan-300/18 bg-gradient-to-br from-cyan-500/8 via-white/[0.04] to-white/[0.02] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+        <div className="mb-8 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <div className="inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-100">
+              <div className="inline-flex items-center gap-2 rounded-[6px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-3 py-1.5 text-xs font-semibold text-[#5DCAA5]">
+                <span className="h-1.5 w-1.5 rounded-full bg-[#1D9E75]" />
                 In-Clinic Session Setup
               </div>
 
-              <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">
+              <h1 className="mt-4 text-2xl font-bold text-white">
                 In-Clinic Assessment
               </h1>
 
@@ -220,23 +221,33 @@ function InClinicAssessmentContent() {
               </div>
             </div>
 
-            <Link
-              href={
-                patientId
-                  ? `/clinician/patients/${patientId}`
-                  : "/clinician/patients"
-              }
-              className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-            >
-              ← Back to Patient Profile
-            </Link>
+            <div className="flex flex-col gap-2 sm:items-end">
+              {patientId && assessmentId ? (
+                <Link
+                  href={`/clinician/assessment/workflow?patientId=${encodeURIComponent(patientId)}&assessmentId=${encodeURIComponent(assessmentId)}`}
+                  className="rounded-[7px] bg-[#1D9E75] px-5 py-2.5 text-center text-sm font-bold text-white transition hover:bg-[#179165]"
+                >
+                  Full clinical workflow
+                </Link>
+              ) : null}
+              <Link
+                href={
+                  patientId
+                    ? `/clinician/patients/${patientId}`
+                    : "/clinician/patients"
+                }
+                className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-5 py-2.5 text-center text-sm font-semibold text-white/60 transition hover:text-white"
+              >
+                ← Back to Patient Profile
+              </Link>
+            </div>
           </div>
         </div>
 
         <section className="grid gap-6 xl:grid-cols-[1.2fr_0.85fr]">
           <div className="space-y-6">
-            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-              <h2 className="text-2xl font-bold text-white">
+            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+              <h2 className="text-base font-bold text-white">
                 Select PT Assessment
               </h2>
 
@@ -254,13 +265,13 @@ function InClinicAssessmentContent() {
                       key={test.id}
                       type="button"
                       onClick={() => toggleTest(test.id)}
-                      className={`rounded-[24px] border p-5 text-left transition ${
+                      className={`rounded-[8px] border p-4 text-left transition ${
                         isSelected
-                          ? "border-cyan-300 bg-cyan-400/10"
-                          : "border-cyan-300/18 bg-[#123a8a]/25 hover:border-cyan-300/35 hover:bg-[#123a8a]/35"
+                          ? "border-[#1D9E75]/40 bg-[#1D9E75]/10"
+                          : "border-[#1E2D42] bg-[#0B1220] hover:border-[#1D9E75]/20"
                       }`}
                     >
-                      <div className="mb-3 inline-flex rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100">
+                      <div className="mb-3 inline-flex rounded-[5px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-2.5 py-1 text-[11px] font-semibold text-[#5DCAA5]">
                         PT Assessment
                       </div>
 
@@ -272,15 +283,11 @@ function InClinicAssessmentContent() {
                         {test.description}
                       </p>
 
-                      <div className="mt-4">
-                        <span
-                          className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${
-                            isSelected
-                              ? "bg-cyan-400 text-slate-950"
-                              : "bg-white/10 text-white/70"
-                          }`}
-                        >
-                          {isSelected ? "Selected" : "Tap to select"}
+                      <div className="mt-3">
+                        <span className={`inline-flex rounded-[5px] px-2.5 py-1 text-xs font-semibold ${
+                          isSelected ? "bg-[#1D9E75] text-white" : "bg-[#1E2D42] text-white/50"
+                        }`}>
+                          {isSelected ? "Selected" : "Select"}
                         </span>
                       </div>
                     </button>
@@ -289,33 +296,28 @@ function InClinicAssessmentContent() {
               </div>
             </section>
 
-            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-              <h2 className="text-2xl font-bold text-white">Selected Tests Summary</h2>
+            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+              <h2 className="text-base font-bold text-white">Selected Tests Summary</h2>
               <p className="mt-2 text-sm leading-7 text-white/70">
                 Confirm the selected PT assessments before generating secure in-clinic access.
               </p>
 
-              <div className="mt-4 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-sm text-white/65">
-                  {selectedTests.length > 0
-                    ? `${selectedTests.length} assessment(s) selected`
-                    : "No PT assessments selected yet."}
+              <div className="mt-4 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
+                <p className="text-sm text-white/50">
+                  {selectedTests.length > 0 ? `${selectedTests.length} assessment(s) selected` : "No PT assessments selected yet."}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {selectedTests.length > 0 ? (
                     selectedTests.map((id) => {
                       const test = assessmentTests.find((item) => item.id === id);
                       return (
-                        <span
-                          key={id}
-                          className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100"
-                        >
+                        <span key={id} className="rounded-[5px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-2.5 py-1 text-xs font-semibold text-[#5DCAA5]">
                           {test?.title || id}
                         </span>
                       );
                     })
                   ) : (
-                    <p className="text-sm text-white/55">Select tests above to continue.</p>
+                    <p className="text-sm text-white/35">Select tests above to continue.</p>
                   )}
                 </div>
               </div>
@@ -323,8 +325,8 @@ function InClinicAssessmentContent() {
           </div>
 
           <aside className="space-y-6">
-            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
-              <h2 className="text-2xl font-bold text-white">
+            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+              <h2 className="text-base font-bold text-white">
                 Session Summary
               </h2>
 
@@ -337,12 +339,12 @@ function InClinicAssessmentContent() {
                 />
               </div>
 
-              <div className="mt-6 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-                <h3 className="text-base font-semibold text-cyan-300">Patient Link</h3>
+              <div className="mt-6 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
+                <h3 className="text-sm font-semibold text-[#5DCAA5]">Patient Link</h3>
                 <p className="mt-2 text-sm text-white/65">
                   Generate and share the in-clinic session link with the patient device.
                 </p>
-                <div className="mt-4 rounded-xl border border-white/10 bg-[#123a8a]/25 px-4 py-3 text-sm text-white/80 break-all">
+                <div className="mt-4 rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3 text-sm text-white/60 break-all font-mono">
                   {generatedLink || "No link generated yet."}
                 </div>
 
@@ -350,7 +352,7 @@ function InClinicAssessmentContent() {
                   <button
                     type="button"
                     onClick={handleGeneratePatientLink}
-                    className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+                    className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]"
                   >
                     Generate In-Clinic Link
                   </button>
@@ -359,29 +361,25 @@ function InClinicAssessmentContent() {
                     type="button"
                     onClick={handleCopyLink}
                     disabled={!generatedLink && !patientAccessLink}
-                    className="rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white/5"
+                    className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-2.5 text-sm font-semibold text-white/55 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Copy Link
                   </button>
                 </div>
 
                 {feedback.type !== "idle" && (
-                  <p
-                    className={`mt-3 rounded-xl border px-3 py-2 text-sm ${
-                      feedback.type === "success" ? "text-cyan-200" : "text-rose-200"
-                    } ${
-                      feedback.type === "success"
-                        ? "border-cyan-300/20 bg-cyan-400/10"
-                        : "border-rose-300/20 bg-rose-400/10"
-                    }`}
-                  >
+                  <p className={`mt-3 rounded-[7px] border px-3 py-2 text-sm ${
+                    feedback.type === "success"
+                      ? "border-[#1D9E75]/25 bg-[#1D9E75]/8 text-[#5DCAA5]"
+                      : "border-rose-300/20 bg-rose-400/8 text-rose-300"
+                  }`}>
                     {feedback.message}
                   </p>
                 )}
               </div>
 
-              <div className="mt-6 rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-                <h3 className="text-base font-semibold text-cyan-300">
+              <div className="mt-6 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
+                <h3 className="text-sm font-semibold text-[#5DCAA5]">
                   Recommended Flow
                 </h3>
 
@@ -410,16 +408,16 @@ function SummaryCard({
   value: string;
 }) {
   return (
-    <div className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4">
-      <p className="text-sm text-white/60">{label}</p>
-      <p className="mt-2 text-base font-semibold text-white">{value}</p>
+    <div className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3">
+      <p className="text-[11px] text-white/35">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-white">{value}</p>
     </div>
   );
 }
 
 function MetaBadge({ label }: { label: string }) {
   return (
-    <span className="rounded-full border border-cyan-300/15 bg-cyan-400/10 px-3 py-1 text-xs text-cyan-100">
+    <span className="rounded-[5px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-2.5 py-1 text-[11px] font-semibold text-[#5DCAA5]">
       {label}
     </span>
   );

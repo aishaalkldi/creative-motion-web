@@ -217,7 +217,7 @@ function classify(
 
   // Needs Attention always takes priority
   const movQuality = latestBio?.movementQualityScore;
-  if (avgSymmetry < 75 || (movQuality !== undefined && movQuality < 60)) {
+  if (avgSymmetry < 75 || (movQuality != null && movQuality < 60)) {
     return "Needs Attention";
   }
 
@@ -272,7 +272,7 @@ function computeRiskWarnings(
       });
     }
 
-    if (bio.controlScore < 70) {
+    if (bio.controlScore != null && bio.controlScore < 70) {
       warnings.push({
         id: "control_low",
         severity: "caution",
@@ -563,7 +563,15 @@ function averageBiomechanics(sessions: SessionRecord[]): { avg: BiomechanicsData
   const romScore      = avgNullable("romScore");
   const postureScore  = avgNullable("postureScore");
   const symmetryScore = avgNullable("symmetryScore");
-  const controlScore  = avgNum("controlScore");
+  const avgNullableControl = (): number | null => {
+    const vals = bio
+      .map((b) => b.controlScore)
+      .filter((v): v is number => v !== null && v !== undefined);
+    return vals.length > 0
+      ? Math.round(vals.reduce((s, v) => s + v, 0) / vals.length)
+      : null;
+  };
+  const controlScore = avgNullableControl();
 
   // Recompute composite from averaged components (don't average a composite of composites)
   const movementQualityScore = calculateMovementQualityScore(
@@ -653,7 +661,7 @@ function buildNextFocus(
   if (sessions.length < 5)
     items.push("Complete at least 5 sessions to enable more reliable trend analysis and classification.");
 
-  if (avgSteps >= 80 && avgSymmetry >= 80 && (bio?.movementQualityScore ?? 0) >= 75)
+  if (avgSteps >= 80 && avgSymmetry >= 80 && bio?.movementQualityScore != null && bio.movementQualityScore >= 75)
     items.push("Excellent baseline established. Consider extending session duration to 90 seconds or introducing side-step variations.");
 
   return items.length > 0
@@ -704,7 +712,7 @@ function generateAISummary(
     strongestArea = `Bilateral symmetry is strong at ${bio.symmetryScore}/100 — both limbs are contributing evenly.`;
   else if (avgSymmetry >= 85)
     strongestArea = `Symmetry is strong at ${Math.round(avgSymmetry)}%, indicating balanced bilateral contribution.`;
-  else if (bio && bio.controlScore >= 80)
+  else if (bio && bio.controlScore != null && bio.controlScore >= 80)
     strongestArea = `Step-height consistency is strong (${bio.controlScore}/100) — repeatable lift heights indicate solid motor control.`;
   else if (bio && bio.romScore != null && bio.romScore >= 75)
     strongestArea = `Range of motion is strong (ROM score ${bio.romScore}/100) — the patient achieves good knee elevation at peak lift.`;
@@ -725,7 +733,7 @@ function generateAISummary(
       weakestArea = `${ws === "left" ? "Left" : "Right"} side appears weaker: ${ws} knee lift height is ${Math.round(heightDiffPct)}% lower than the opposite side.`;
     } else if (bio.romScore != null && bio.romScore < 60) {
       weakestArea = `ROM is below target (${bio.romScore}/100). Encourage higher knee lift at peak if pain-free.`;
-    } else if (bio.controlScore < 70) {
+    } else if (bio.controlScore != null && bio.controlScore < 70) {
       weakestArea = `Step-height consistency is reduced (${bio.controlScore}/100). Slower, more deliberate repetitions are recommended.`;
     } else if (avgSymmetry < 70) {
       weakestArea = `Symmetry is below target at ${Math.round(avgSymmetry)}% — one side may need additional therapeutic focus.`;
@@ -768,7 +776,8 @@ export function aggregate(sessions: SessionRecord[]): AggregatedData | null {
   const totalReps     = sessions.reduce((s, r) => s + r.totalSteps, 0);
   const avgScore      = Math.round(mean(sessions.map((s) => s.score)));
   const avgSteps      = Math.round(mean(sessions.map((s) => s.totalSteps)));
-  const avgSymmetry   = Math.round(mean(sessions.map((s) => s.symmetryPct)));
+  const symVals       = sessions.map((s) => s.symmetryPct).filter((v) => v >= 0);
+  const avgSymmetry   = symVals.length > 0 ? Math.round(mean(symVals)) : 0;
   const leftTotal     = sessions.reduce((s, r) => s + r.leftSteps, 0);
   const rightTotal    = sessions.reduce((s, r) => s + r.rightSteps, 0);
   const bestSession   = [...sessions].sort((a, b) => b.score - a.score)[0];

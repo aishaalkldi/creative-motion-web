@@ -20,6 +20,19 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Development Authentication
+
+The project includes a dev-only authentication bypass for frontend development when the backend is not available:
+
+1. Navigate to any protected route (e.g., `/clinician`)
+2. You'll be redirected to the login page
+3. Click **"🛠️ Dev Bypass (Skip Backend Login)"**
+4. You'll be logged in as a mock therapist user
+
+**Note:** This feature only works in development mode and is completely disabled in production builds.
+
+For more details, see [docs/dev-auth-bypass.md](./docs/dev-auth-bypass.md)
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

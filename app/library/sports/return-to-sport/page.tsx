@@ -1,4 +1,9 @@
 import Link from "next/link";
+import {
+  ProgramSessionModeButtons,
+  patientIdFromSearchParams,
+  slugSessionType,
+} from "../../../components/ProgramSessionModeButtons";
 
 const readinessBlocks = [
   {
@@ -39,7 +44,14 @@ const readinessBlocks = [
   },
 ];
 
-export default function ReturnToSportPage() {
+export default async function ReturnToSportPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const patientId = patientIdFromSearchParams(sp);
+
   return (
     <main className="min-h-screen bg-[#071a2f] text-white">
       <section className="mx-auto max-w-7xl px-6 py-10">
@@ -94,7 +106,7 @@ export default function ReturnToSportPage() {
           />
           <InfoCard
             title="Dual Modes"
-            description="Each session can later be delivered through Sensor + Screen mode or immersive VR mode."
+            description="Each session can be started in camera-based CV mode now; XR immersive delivery is planned next."
           />
           <InfoCard
             title="Clinical Progression"
@@ -142,7 +154,7 @@ export default function ReturnToSportPage() {
         </div>
 
         <div className="space-y-6">
-          {readinessBlocks.map((block) => (
+          {readinessBlocks.map((block, blockIndex) => (
             <article
               key={block.title}
               className="rounded-[24px] border border-cyan-300/20 bg-white/5 p-5 shadow-[0_10px_30px_rgba(0,0,0,0.18)] backdrop-blur-md"
@@ -169,15 +181,12 @@ export default function ReturnToSportPage() {
                   >
                     <h4 className="text-base font-semibold text-white">{session}</h4>
 
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <button className="rounded-2xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
-                        Start Sensor Mode
-                      </button>
-
-                      <button className="rounded-2xl border border-white/20 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">
-                        Start VR Mode
-                      </button>
-                    </div>
+                    <ProgramSessionModeButtons
+                      programId="sports-return-to-sport"
+                      phase={blockIndex + 1}
+                      sessionType={slugSessionType(session)}
+                      patientId={patientId}
+                    />
                   </div>
                 ))}
               </div>

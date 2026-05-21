@@ -183,8 +183,8 @@ function printReport(payload: {
 <body>
   <div class="header">
     <div>
-      <div class="clinic-name">Creative Motion</div>
-      <div class="clinic-sub">Physiotherapy &amp; Sports Performance</div>
+      <div class="clinic-name">RASQ</div>
+      <div class="clinic-sub">Rehabilitation Platform</div>
     </div>
     <div style="text-align:right">
       <div style="font-size:12px;color:#64748b">Report generated</div>
@@ -241,7 +241,7 @@ function printReport(payload: {
   <ul>${recList}</ul>
 
   <div class="footer">
-    <span>Creative Motion — Physiotherapy &amp; Sports Performance</span>
+    <span>RASQ — Rehabilitation, precisely.</span>
     <span>This report is generated from automated postural analysis. Clinical judgement must be applied.</span>
   </div>
 </body>

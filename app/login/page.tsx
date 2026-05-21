@@ -4,121 +4,266 @@ import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { loginClinician } from "../lib/api";
+import { ensureProviderProfile } from "../lib/auth/ensure-provider-client";
+import { setupDevAuthSession } from "../lib/dev-auth";
+import { createClient as createSupabaseClient } from "../lib/supabase/browser";
+
+const SUPABASE_CONFIGURED = Boolean(
+  process.env.NEXT_PUBLIC_SUPABASE_URL &&
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+);
+
+// ── Role config ────────────────────────────────────────────────────────────────
+
+type Role = "clinician" | "admin";
+
+interface RoleConfig {
+  title: string;
+  subtitle: string;
+  badge: string;
+  defaultRedirect: string;
+}
+
+const ROLE_CONFIG: Record<Role, RoleConfig> = {
+  clinician: {
+    title:           "Provider Access",
+    subtitle:        "Manage patients, assessments, reports, treatment plans, and rehabilitation progress.",
+    badge:           "Provider workspace",
+    defaultRedirect: "/clinician",
+  },
+  admin: {
+    title:           "Admin Access",
+    subtitle:        "Manage clinic operations, providers, patients, and system assignments.",
+    badge:           "Admin workspace",
+    defaultRedirect: "/admin",
+  },
+};
+
+function resolveRole(raw: string | null): Role {
+  if (raw === "admin") return "admin";
+  return "clinician";
+}
+
+// ── Login form ─────────────────────────────────────────────────────────────────
 
 function LoginForm() {
-  const router = useRouter();
+  const router       = useRouter();
   const searchParams = useSearchParams();
-  const returnTo = searchParams.get("returnTo") || "/clinician";
 
-  const [email, setEmail] = useState("admin@admin.com");
+  const urlRole  = resolveRole(searchParams.get("role"));
+  const returnTo = searchParams.get("returnTo") ?? "";
+
+  const [role, setRole]         = useState<Role>(urlRole);
+  const [email, setEmail]       = useState("admin@admin.com");
   const [password, setPassword] = useState("admin123");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [error, setError]       = useState("");
+  const [loading, setLoading]   = useState(false);
 
-  const handleLogin = async () => {
+  const cfg = ROLE_CONFIG[role];
+  const redirectDest = returnTo || cfg.defaultRedirect;
+
+  async function handleLogin() {
     if (!email.trim() || !password) {
       setError("Please enter your email and password.");
       return;
     }
-
     setError("");
     setLoading(true);
 
     try {
+      // ── Primary: Supabase Auth ───────────────────────────────────────────
+      // Used for all new accounts created via /signup.
+      if (SUPABASE_CONFIGURED) {
+        const supabase = createSupabaseClient();
+        const { error: sbError } = await supabase.auth.signInWithPassword({
+          email: email.trim().toLowerCase(),
+          password,
+        });
+
+        if (!sbError) {
+          // Repair missing providers row from auth metadata before clinician entry
+          await ensureProviderProfile({
+            email: email.trim().toLowerCase(),
+          });
+          router.push(redirectDest);
+          router.refresh();
+          return;
+        }
+
+        // "Invalid login credentials" means either wrong password OR user doesn't
+        // exist in Supabase yet. Fall through to FastAPI for legacy accounts.
+        // All other Supabase errors (rate limit, service unavailable) surface directly.
+        if (sbError.message !== "Invalid login credentials") {
+          setError(sbError.message);
+          return;
+        }
+      }
+
+      // ── Fallback: FastAPI JWT ────────────────────────────────────────────
+      // Handles accounts that pre-date Supabase migration.
+      // Sets cm_token cookie; proxy.ts accepts it during the transition period.
       await loginClinician(email.trim(), password);
-      router.push(returnTo);
+      router.push(redirectDest);
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") void handleLogin();
-  };
+  function handleDevBypass() {
+    if (process.env.NODE_ENV !== "development") {
+      setError("Dev bypass is only available in development mode.");
+      return;
+    }
+    setupDevAuthSession();
+    router.push(redirectDest);
+    router.refresh();
+  }
 
   return (
-    <main className="min-h-screen bg-[#0B1220] px-6 py-20 text-white">
-      <div className="mx-auto max-w-md rounded-3xl border border-white/10 bg-white/5 p-8 backdrop-blur-md">
-        <div className="mb-8 text-center">
-          <p className="mb-3 inline-block rounded-full bg-cyan-400/10 px-4 py-1 text-sm text-cyan-300">
-            Creative Motion
-          </p>
-          <h1 className="text-3xl font-bold text-cyan-300">Clinician Login</h1>
-          <p className="mt-2 text-slate-300">
-            Sign in to access the dashboard, patients, and assessment tools.
-          </p>
+    <main className="relative flex min-h-screen items-center justify-center bg-[#080E14] px-6 py-16 text-white">
+      {/* Subtle teal ambient — single, soft, not glowy */}
+      <div className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(29,158,117,0.06) 0%, transparent 70%)" }} />
+
+      <div className="relative w-full max-w-sm">
+
+        {/* Back to home */}
+        <div className="mb-8 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-1.5 text-sm font-medium text-white/35 transition hover:text-white/65">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            <span className="font-bold tracking-[-0.03em]">RASQ</span>
+          </Link>
+          <span className="rounded-[5px] border border-[#1E2D42] bg-[#0F1825] px-2.5 py-1 text-[11px] font-semibold text-white/40">
+            {cfg.badge}
+          </span>
         </div>
 
-        <div className="space-y-5" onKeyDown={handleKeyDown}>
-          <div>
-            <label className="mb-2 block text-sm text-slate-300">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@clinic.com"
-              autoComplete="email"
-              className="w-full rounded-xl border border-white/10 bg-[#0F172A] px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-cyan-400"
-            />
+        {/* Card — flat, no blur */}
+        <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-7">
+
+          {/* Role switcher */}
+          <div className="mb-7 flex rounded-[7px] border border-[#1E2D42] bg-[#0B1220] p-0.5">
+            {(["clinician", "admin"] as Role[]).map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRole(r)}
+                className={`flex-1 rounded-[6px] py-2.5 text-sm font-bold transition ${
+                  role === r
+                    ? "bg-[#1D9E75] text-white"
+                    : "text-white/35 hover:text-white/60"
+                }`}
+              >
+                {r === "clinician" ? "Provider" : "Admin"}
+              </button>
+            ))}
           </div>
 
-          <div>
-            <label className="mb-2 block text-sm text-slate-300">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Enter password"
-              autoComplete="current-password"
-              className="w-full rounded-xl border border-white/10 bg-[#0F172A] px-4 py-3 text-white outline-none placeholder:text-slate-500 focus:border-cyan-400"
-            />
+          {/* Header */}
+          <div className="mb-7">
+            <h1 className="text-xl font-bold text-white">{cfg.title}</h1>
+            <p className="mt-1.5 text-sm leading-6 text-white/45">{cfg.subtitle}</p>
           </div>
 
-          {error && (
-            <div className="rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-300">
-              {error}
-            </div>
-          )}
-
-          <button
-            onClick={() => void handleLogin()}
-            disabled={loading}
-            className="w-full rounded-xl bg-gradient-to-r from-cyan-400 to-blue-500 px-5 py-3 font-semibold text-black transition hover:scale-[1.02] disabled:cursor-not-allowed disabled:opacity-60"
+          {/* Fields */}
+          <div
+            className="space-y-4"
+            onKeyDown={(e) => { if (e.key === "Enter") void handleLogin(); }}
           >
-            {loading ? "Signing in…" : "Login"}
-          </button>
+            <div>
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-white/35">
+                Email
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@clinic.com"
+                autoComplete="email"
+                className="w-full rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-[#1D9E75]/40 focus:bg-[#0d1c14]"
+              />
+            </div>
 
-          <p className="text-center text-sm text-slate-400">
-            Don&apos;t have an account?{" "}
-            <Link href="/signup" className="text-cyan-300 hover:text-cyan-200">
-              Sign up
-            </Link>
-          </p>
+            <div>
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-white/35">
+                Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password"
+                autoComplete="current-password"
+                className="w-full rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-[#1D9E75]/40 focus:bg-[#0d1c14]"
+              />
+            </div>
 
-          {process.env.NODE_ENV === "development" && (
-            <p className="text-center text-[11px] leading-relaxed text-slate-600">
-              Local dev: ensure the API is running on port 8000 and PostgreSQL is configured in{" "}
-              <code className="text-slate-500">backend/creative-motion-backend/.env</code>. Seeded admin
-              email/password default to the fields above (
-              <code className="text-slate-500">SEED_ADMIN_*</code> overrides).
+            {error && (
+              <div className="rounded-[7px] border border-rose-400/20 bg-rose-400/8 px-3.5 py-3 text-sm text-rose-300">
+                {error}
+              </div>
+            )}
+
+            {/* Primary CTA */}
+            <button
+              type="button"
+              onClick={() => void handleLogin()}
+              disabled={loading}
+              className="w-full rounded-[7px] bg-[#1D9E75] py-3.5 text-sm font-bold text-white transition hover:bg-[#179165] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {loading ? "Signing in…" : `Sign in as ${role === "clinician" ? "Provider" : "Admin"}`}
+            </button>
+
+            {/* Dev bypass */}
+            {process.env.NODE_ENV === "development" && (
+              <button
+                type="button"
+                onClick={handleDevBypass}
+                className="w-full rounded-[7px] border border-amber-400/20 bg-amber-400/6 py-3 text-sm font-semibold text-amber-300/80 transition hover:border-amber-400/30 hover:text-amber-300"
+              >
+                Dev bypass → {redirectDest}
+              </button>
+            )}
+
+            <p className="pt-1 text-center text-sm text-white/30">
+              Don&apos;t have an account?{" "}
+              <Link href="/signup" className="font-semibold text-white/55 transition hover:text-white">
+                Sign up
+              </Link>
             </p>
-          )}
+
+            {process.env.NODE_ENV === "development" && (
+              <p className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5 text-center text-[11px] leading-5 text-white/20">
+                Local dev: API on <code className="text-white/35">:8000</code> · PostgreSQL in{" "}
+                <code className="text-white/35">backend/.env</code>
+              </p>
+            )}
+          </div>
         </div>
+
+        <p className="mt-6 text-center text-xs text-white/15">
+          Secure · Privacy-conscious · Built for clinical workflows
+        </p>
       </div>
     </main>
   );
 }
 
+// ── Page wrapper ───────────────────────────────────────────────────────────────
+
 export default function LoginPage() {
   return (
-    <Suspense fallback={
-      <main className="min-h-screen bg-[#0B1220] flex items-center justify-center">
-        <div className="text-cyan-300 text-sm">Loading…</div>
-      </main>
-    }>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-[#080E14]">
+          <p className="text-sm text-white/30">Loading…</p>
+        </div>
+      }
+    >
       <LoginForm />
     </Suspense>
   );

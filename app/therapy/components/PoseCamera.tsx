@@ -78,6 +78,13 @@ const TYPICAL_BODY_SPAN = 0.55;
  */
 const MIN_DETECTION_VISIBILITY = 0.5;
 
+/**
+ * Raised leg must exceed the other leg's raise by this margin (normalised coords)
+ * before a rep can start, unless the other leg is below passiveLegMaxRaise.
+ * Prevents single-leg lifts from triggering mirrored ghost reps on the stance side.
+ */
+const DOMINANCE_MARGIN_MIN = 0.012;
+
 /* ── Public types ─────────────────────────────────────────────────────────── */
 
 export type PoseStatus =
@@ -367,28 +374,16 @@ export default function PoseCamera({
           ? Math.abs(lhLM.y - rhLM.y) * 1000
           : 0;
 
+      /* ── Pass 1: stance body-span EMA only (same as before, both sides) ── */
       for (const side of ["left", "right"] as const) {
         const hipIdx  = side === "left" ? LM.leftHip  : LM.rightHip;
         const kneeIdx = side === "left" ? LM.leftKnee : LM.rightKnee;
-
         const hip  = landmarks[hipIdx];
         const knee = landmarks[kneeIdx];
         if (!hip || !knee) continue;
-        // Accept landmarks with as little as 10 % confidence — the right knee
-        // is partially occluded during a left-leg raise (single-leg stance),
-        // so keeping this floor very low prevents the right side from going dark.
         if ((hip.visibility  ?? 0) < 0.1) continue;
         if ((knee.visibility ?? 0) < 0.1) continue;
 
-        // ── Body-span normalisation (stance-side, shared EMA) ──────────────
-        //
-        // During a left knee raise, the RIGHT leg is the stance leg (planted).
-        // Using the stance-side shoulder → ankle gives a stable body-height
-        // reference that does not fluctuate as the raised knee lifts.
-        //
-        // Both sides pool into a SINGLE shared EMA so left and right detection
-        // thresholds are always identical — eliminating asymmetric sensitivity
-        // caused by differing per-side EMA convergence rates.
         const stanceSide        = side === "left" ? "right" : "left";
         const stanceShoulderIdx = stanceSide === "left" ? LM.leftShoulder : LM.rightShoulder;
         const stanceAnkleIdx    = stanceSide === "left" ? LM.leftAnkle    : LM.rightAnkle;
@@ -402,46 +397,60 @@ export default function PoseCamera({
             ? Math.max(0, stanceAnkleLM.y - stanceShoulderLM.y)
             : 0;
 
-        // Shared EMA (α = 0.15): initialise directly on first valid reading.
         if (rawBodySpan > 0.1) {
           bodySpanRef.current.shared = bodySpanRef.current.shared > 0.1
             ? bodySpanRef.current.shared * 0.85 + rawBodySpan * 0.15
             : rawBodySpan;
         }
+      }
 
-        // Both sides read the same smoothed span — equal thresholds, equal sensitivity.
-        const smoothedSpan = bodySpanRef.current.shared;
+      const smoothedSpan = bodySpanRef.current.shared;
+      const effectiveThreshold = smoothedSpan > 0.1
+        ? (raiseThreshold / TYPICAL_BODY_SPAN) * smoothedSpan
+        : raiseThreshold;
+      const effectiveHipOffset = smoothedSpan > 0.1
+        ? (hipOffset / TYPICAL_BODY_SPAN) * smoothedSpan
+        : hipOffset;
 
-        // Effective raise threshold: nominal / TYPICAL × smoothed span
-        const effectiveThreshold = smoothedSpan > 0.1
-          ? (raiseThreshold / TYPICAL_BODY_SPAN) * smoothedSpan
-          : raiseThreshold;
+      const dominanceMargin = Math.max(DOMINANCE_MARGIN_MIN, effectiveThreshold * 0.32);
+      /** Stance-leg raise below this is treated as "passive" so the active leg need not beat it by a large delta. */
+      const passiveLegMaxRaise = effectiveThreshold * 0.42;
 
-        // Effective hip offset: same normalisation as effectiveThreshold.
-        // hipOffset shifts the detection baseline below the hip; without this
-        // normalisation the baseline is proportionally too large for distant
-        // patients (small body span), creating camera-distance detection bias.
-        const effectiveHipOffset = smoothedSpan > 0.1
-          ? (hipOffset / TYPICAL_BODY_SPAN) * smoothedSpan
-          : hipOffset;
+      /* ── Pass 2: compute BOTH raises before any rising-edge logic ── */
+      const hipKnee: Record<"left" | "right", { hip: typeof landmarks[0]; knee: typeof landmarks[0] } | null> = {
+        left: null,
+        right: null,
+      };
 
-        /*
-         * Raise formula:  (hip.y + effectiveHipOffset) - knee.y
-         *
-         * In normalised coords y increases downward.
-         * effectiveHipOffset shifts the detection zero-point below the hip
-         * proportionally to the patient's visible body size, so that the
-         * formula remains consistent regardless of camera distance.
-         */
+      for (const side of ["left", "right"] as const) {
+        const hipIdx  = side === "left" ? LM.leftHip  : LM.rightHip;
+        const kneeIdx = side === "left" ? LM.leftKnee : LM.rightKnee;
+        const hip  = landmarks[hipIdx];
+        const knee = landmarks[kneeIdx];
+        if (!hip || !knee) continue;
+        if ((hip.visibility  ?? 0) < 0.1) continue;
+        if ((knee.visibility ?? 0) < 0.1) continue;
+
         const raise = Math.max(0, (hip.y + effectiveHipOffset) - knee.y);
         raises[side] = raise;
+        hipKnee[side] = { hip, knee };
+      }
+
+      /* ── Pass 3: peak windows + rising edges with bilateral context ── */
+      for (const side of ["left", "right"] as const) {
+        const other = side === "left" ? "right" : "left";
+        const raise = raises[side];
+        const otherRaise = raises[other];
+        const pair = hipKnee[side];
+        if (!pair) {
+          prevRaise.current[side] = raise;
+          continue;
+        }
+        const { hip, knee } = pair;
 
         const prev = prevRaise.current[side];
         prevRaise.current[side] = raise;
 
-        // ── Compute joint angles when needed (peak window active or rising edge) ──
-        // Always use the RAISED side's ankle for the knee-angle calculation —
-        // the hip→knee→ankle angle still refers to the moving leg.
         const raisedAnkleIdx    = side === "left" ? LM.leftAnkle    : LM.rightAnkle;
         const raisedShoulderIdx = side === "left" ? LM.leftShoulder : LM.rightShoulder;
 
@@ -473,7 +482,6 @@ export default function PoseCamera({
           pk.frameCount++;
 
           if (pk.frameCount >= PEAK_FRAMES) {
-            // Window complete — emit step with peak biomechanics
             if (detectingRef.current) {
               const metrics: StepMetrics = {
                 kneeAngle:       pk.peakKneeAngle,
@@ -489,17 +497,27 @@ export default function PoseCamera({
         }
 
         // ── Rising edge: start a new peak window ──
-        //
-        // Quality gate: require both raised-side hip and knee to have MediaPipe
-        // visibility ≥ MIN_DETECTION_VISIBILITY before opening a peak window.
-        // Frames below this level (occlusion, blur, poor lighting) produce
-        // unreliable knee-height estimates; they are shown in the VU meter
-        // but do not trigger step counts.
         const detectionQualityOK =
           (hip.visibility  ?? 0) >= MIN_DETECTION_VISIBILITY &&
           (knee.visibility ?? 0) >= MIN_DETECTION_VISIBILITY;
 
-        if (raise > effectiveThreshold && prev <= effectiveThreshold && detectionQualityOK) {
+        const clearlyDominant =
+          raise > effectiveThreshold &&
+          (raise >= otherRaise + dominanceMargin ||
+            (otherRaise < passiveLegMaxRaise && raise > effectiveThreshold));
+
+        const otherPeak = peakWindows.current[other];
+        const blockedByOtherPeak =
+          otherPeak !== null &&
+          !(raise >= otherRaise + dominanceMargin * 1.35);
+
+        if (
+          raise > effectiveThreshold &&
+          prev <= effectiveThreshold &&
+          detectionQualityOK &&
+          clearlyDominant &&
+          !blockedByOtherPeak
+        ) {
           const now = Date.now();
           if (now - cooldown.current[side] > stepCooldownMs) {
             cooldown.current[side] = now;
@@ -510,7 +528,6 @@ export default function PoseCamera({
                 peakKneeAngle: kneeAngle,
                 hipAngle,
                 hipTilt,
-                // Store the smoothed span — this is what the threshold was based on
                 bodySpan:      smoothedSpan,
               };
             }

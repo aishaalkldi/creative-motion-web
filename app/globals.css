@@ -1,32 +1,100 @@
 @import "tailwindcss";
+@import "./tokens.css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* ═══════════════════════════════════════════════════════════
+   RASQ DESIGN SYSTEM — Global tokens
+   Rehabilitation, precisely.
+   ═══════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── RASQ teal palette — replaces cyan across all files ── */
+  --color-cyan-50:  #edf7f3;
+  --color-cyan-100: #d4ede5;
+  --color-cyan-200: #a9dbc9;
+  --color-cyan-300: #5DCAA5;   /* sense-mint */
+  --color-cyan-400: #1D9E75;   /* brand teal  — was #22d3ee */
+  --color-cyan-500: #179165;
+  --color-cyan-600: #0D6B4F;   /* deep teal */
+  --color-cyan-700: #0a5440;
+  --color-cyan-800: #073d2e;
+  --color-cyan-900: #04261c;
+  --color-cyan-950: #021510;
+
+  /* ── RASQ surface palette ── */
+  --color-rasq-void:    #080E14;   /* homepage hero */
+  --color-rasq-base:    #0B1220;   /* clinician base */
+  --color-rasq-card:    #0F1825;   /* clinician cards */
+  --color-rasq-border:  #1E2D42;   /* clinician borders */
+  --color-rasq-light:   #F4F6F5;   /* patient light surface */
+  --color-rasq-mist:    #E8F5F1;   /* recovery mist */
+
+  /* ── Border radius — tighter, more clinical ── */
+  --radius-sm:   4px;
+  --radius-md:   6px;
+  --radius-lg:   8px;    /* buttons */
+  --radius-xl:   10px;   /* cards */
+  --radius-2xl:  12px;   /* large cards */
+  --radius-3xl:  12px;   /* replaces 24px over-rounding */
+
+  /* ── Typography ── */
+  --font-sans:  var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono:  var(--font-ibm-plex-mono), ui-monospace, monospace;
+  --font-display: var(--font-geist), var(--font-inter), ui-sans-serif, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ── Base resets ── */
+:root {
+  --background: #080E14;
+  --foreground: #e8edf2;
+  color-scheme: dark;
+}
+
+html {
+  font-family: var(--font-sans);
+  background: var(--background);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
 }
 
+/* ── Disable glassmorphism globally (RASQ: flat surfaces only) ── */
+@layer utilities {
+  .backdrop-blur-sm,
+  .backdrop-blur,
+  .backdrop-blur-md,
+  .backdrop-blur-lg,
+  .backdrop-blur-xl,
+  .backdrop-blur-2xl,
+  .backdrop-blur-3xl {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+}
+
+/* ── Fade-in animation ── */
 .fade-in {
   opacity: 0;
-  transform: translateY(20px);
-  animation: fadeIn 1s ease forwards;
+  transform: translateY(12px);
+  animation: rasq-fade-in 0.4s ease forwards;
 }
 
-@keyframes fadeIn {
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+@keyframes rasq-fade-in {
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── IBM Plex Mono for data/report surfaces ── */
+.font-data {
+  font-family: var(--font-mono);
+}
+
+/* ── Patient portal: force light background ── */
+.surface-light {
+  background-color: #F4F6F5;
+  color: #0f1c2e;
 }

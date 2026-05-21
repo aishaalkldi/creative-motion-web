@@ -6,8 +6,8 @@ const sportsProtocols = [
     description:
       "A structured sports rehabilitation pathway focused on knee control, strength progression, movement confidence, and return-to-sport readiness.",
     tags: ["Knee Control", "Strength", "Return to Sport"],
-    href: "",
-    available: false,
+    href: "/library/sports/acl",
+    available: true,
   },
   {
     title: "Meniscus Injury",

@@ -82,15 +82,18 @@ export interface BiomechanicsData {
    * null when fewer than 3 bilateral samples were captured.
    */
   postureScore:         number | null;
-  /** Step-height consistency score (0–100). Coefficient of variation of raise heights. */
-  controlScore:         number;
+  /**
+   * Step-height consistency score (0–100). Coefficient of variation of raise heights.
+   * null when fewer than two valid height samples (no fabricated default).
+   */
+  controlScore:         number | null;
   /**
    * Bilateral lift-height symmetry score (0–100).
    * null when fewer than 3 steps were detected on either side.
    */
   symmetryScore:        number | null;
-  /** Weighted composite of available scores (0–100). */
-  movementQualityScore: number;
+  /** Weighted composite of available scores (0–100). null if no component could be scored. */
+  movementQualityScore: number | null;
   /** Number of detected steps that contributed to this biomechanics record. */
   stepCount:            number;
   /**
@@ -198,14 +201,14 @@ export function calculatePostureScore(hipTilts: number[]): number | null {
  *   CV  0% → 100 pts  (perfectly consistent)
  *   CV 40% →   0 pts  (highly variable)
  *
- * Returns 75 when fewer than 2 samples exist (insufficient for CV).
+ * Returns null when fewer than 2 samples exist — no numeric guess.
  * NOTE: this is a step-height consistency score, not a timing measure.
  */
-export function calculateControlScore(heights: number[]): number {
-  if (heights.length < 2) return 75;
+export function calculateControlScore(heights: number[]): number | null {
+  if (heights.length < 2) return null;
   const n    = heights.length;
   const mean = heights.reduce((a, b) => a + b, 0) / n;
-  if (mean < 1e-4) return 50;
+  if (mean < 1e-4) return null;
   const variance = heights.reduce((acc, h) => acc + (h - mean) ** 2, 0) / n;
   const cv = (Math.sqrt(variance) / mean) * 100;
   return Math.max(0, Math.min(100, Math.round(100 - (cv / 40) * 100)));
@@ -243,24 +246,22 @@ export function calculateSymmetryScore(
  *   Posture  15%  (pelvic stability)
  *
  * When any component is null (insufficient data), its weight is redistributed
- * proportionally across the remaining components, preserving the 0–100 scale
- * without fabricating values.  Control is always present (never null).
+ * across the remaining components. Returns null if nothing could be scored.
  */
 export function calculateMovementQualityScore(
   rom: number | null,
   posture: number | null,
-  control: number,
+  control: number | null,
   symmetry: number | null,
-): number {
-  // Control is the only always-present component
-  const components: Array<[number, number]> = [[control, 0.35]];
+): number | null {
+  const components: Array<[number, number]> = [];
+  if (control !== null) components.push([control, 0.35]);
   if (symmetry !== null) components.push([symmetry, 0.25]);
-  if (rom      !== null) components.push([rom,      0.25]);
-  if (posture  !== null) components.push([posture,  0.15]);
-
+  if (rom !== null) components.push([rom, 0.25]);
+  if (posture !== null) components.push([posture, 0.15]);
+  if (components.length === 0) return null;
   const totalWeight = components.reduce((s, [, w]) => s + w, 0);
-  const weighted    = components.reduce((s, [v, w]) => s + v * w, 0);
-  // Normalise so missing components don't deflate the composite
+  const weighted = components.reduce((s, [v, w]) => s + v * w, 0);
   return Math.round(weighted / totalWeight);
 }
 

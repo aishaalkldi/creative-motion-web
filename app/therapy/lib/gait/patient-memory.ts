@@ -183,7 +183,7 @@ export function computeSessionDeltas(sessions: SessionRecord[]): SessionDelta[] 
     const dSym      = curr.symmetryPct - prev.symmetryPct;
     const prevQ     = prev.biomechanics?.movementQualityScore;
     const currQ     = curr.biomechanics?.movementQualityScore;
-    const dQuality  = prevQ !== undefined && currQ !== undefined ? currQ - prevQ : null;
+    const dQuality  = prevQ != null && currQ != null ? currQ - prevQ : null;
     const dFatigue  = prev.fatigueIndex !== undefined && curr.fatigueIndex !== undefined
       ? Math.round((curr.fatigueIndex - prev.fatigueIndex) * 100) / 100
       : null;
@@ -238,18 +238,20 @@ export function detectRiskFlags(sessions: SessionRecord[]): RiskFlag[] {
 
   /* ── 1. Asymmetry increase ── */
   if (n >= 3) {
-    const syms = recent3.map((s) => s.symmetryPct);
-    const sl   = slope(syms);
-    if (sl < -4) {
-      flags.push({
-        id: "asymmetry_increase",
-        type: "asymmetry_increase",
-        severity: sl < -10 ? "high" : "medium",
-        detectedAt: latest.date,
-        description: `Symmetry declining ${syms[0]}% → ${syms[syms.length - 1]}% across last ${recent3.length} sessions (${sl.toFixed(1)}%/session).`,
-        deltaValue: sl,
-        requiresImmediateReview: sl < -10,
-      });
+    const syms = recent3.map((s) => s.symmetryPct).filter((v) => v >= 0);
+    if (syms.length >= 3) {
+      const sl = slope(syms);
+      if (sl < -4) {
+        flags.push({
+          id: "asymmetry_increase",
+          type: "asymmetry_increase",
+          severity: sl < -10 ? "high" : "medium",
+          detectedAt: latest.date,
+          description: `Symmetry declining ${syms[0]}% → ${syms[syms.length - 1]}% across last ${recent3.length} sessions (${sl.toFixed(1)}%/session).`,
+          deltaValue: sl,
+          requiresImmediateReview: sl < -10,
+        });
+      }
     }
   }
 
@@ -332,7 +334,7 @@ export function detectRiskFlags(sessions: SessionRecord[]): RiskFlag[] {
 
 function computeTrendAnalysis(sessions: SessionRecord[]): TrendAnalysis {
   const steps   = sessions.map((s) => s.totalSteps);
-  const syms    = sessions.map((s) => s.symmetryPct);
+  const syms    = sessions.map((s) => s.symmetryPct).filter((v) => v >= 0);
   const quals   = sessions.map((s) => s.biomechanics?.movementQualityScore).filter((v): v is number => v !== undefined);
   const fatigues = sessions.map((s) => s.fatigueIndex).filter((v): v is number => v !== undefined);
 

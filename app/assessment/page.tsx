@@ -38,7 +38,7 @@ function PatientAssessmentContent() {
       <div className="mx-auto max-w-4xl">
         <div className="rounded-[28px] border border-cyan-300/18 bg-gradient-to-br from-cyan-500/8 via-white/[0.04] to-white/[0.02] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md md:p-8">
           <div className="inline-flex rounded-full border border-cyan-400/20 bg-cyan-400/10 px-4 py-1 text-sm font-medium text-cyan-300">
-            Creative Motion Assessment
+            RASQ Assessment
           </div>
 
           <h1 className="mt-4 text-3xl font-bold text-cyan-300 md:text-4xl">

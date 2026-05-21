@@ -1,377 +1,221 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 
-type FlowStep = "start" | "assessment" | "therapy";
+// ── Types ─────────────────────────────────────────────────────────────────────
 
-const categories = [
-  {
-    title: "Orthopedic Rehabilitation",
-    description:
-      "Musculoskeletal and post-operative rehabilitation pathways with protocol-based recovery programs.",
-    items: [
-      "Post-Operative Rehab",
-      "Rotator Cuff Syndrome",
-      "Knee Rehabilitation",
-      "Hip Mobility",
-    ],
-    href: "/sessions/orthopedic",
-  },
-  {
-    title: "Neurological Rehabilitation",
-    description:
-      "Therapy programs focused on motor recovery, coordination, balance, and neurological rehabilitation.",
-    items: [
-      "Stroke Recovery",
-      "Balance Training",
-      "Motor Control",
-      "Coordination Flow",
-    ],
-    href: "/sessions/neurological",
-  },
-  {
-    title: "Sports Rehabilitation",
-    description:
-      "Sport-focused rehabilitation protocols supporting return-to-play readiness and injury recovery.",
-    items: [
-      "ACL Rehabilitation",
-      "Meniscus Injury",
-      "Return to Sport",
-      "Landing Control",
-    ],
-    href: "/sessions/sports",
-  },
-  {
-    title: "Cognitive Training",
-    description:
-      "XR cognitive modules combining attention, reaction speed, dual-task control, and structured engagement.",
-    items: [
-      "Attention Training",
-      "Reaction Drills",
-      "Dual-Task Challenge",
-      "Cognitive-Motor Tasks",
-    ],
-    href: "/sessions/cognitive",
-  },
-  {
-    title: "Mental Wellness",
-    description:
-      "Immersive calming experiences supporting relaxation, breathing, and guided recovery.",
-    items: [
-      "Mindful Movement",
-      "Breathing Flow",
-      "Stress Reset",
-      "Pain Relief Support",
-    ],
-    href: "/sessions/wellness",
-  },
-];
+type SessionStatus = "in-progress" | "ready";
 
-const STEP_LABELS: Record<FlowStep, string> = {
-  start: "Start",
-  assessment: "Assessment",
-  therapy: "Therapy",
-};
+interface AssignedSession {
+  id: number;
+  patientName: string;
+  patientId: number;
+  program: string;
+  phase: string;
+  progress: number;
+  lastActivity: string | null;
+  status: SessionStatus;
+  sessionHref: string;
+}
 
-export default function SessionsPage() {
-  const [flowStep, setFlowStep] = useState<FlowStep>("start");
+// ── Mock data (replace with API fetch: GET /api/v1/sessions) ──────────────────
 
+const ACTIVE_SESSIONS: AssignedSession[] = [];
+const READY_SESSIONS: AssignedSession[]  = [];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const h = Math.floor(diff / 3_600_000);
+  if (h < 1) return "just now";
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+// ── Session card ──────────────────────────────────────────────────────────────
+
+function SessionCard({ session }: { session: AssignedSession }) {
   return (
-    <main className="min-h-screen bg-[#071a2f] text-white">
-      <section className="relative overflow-hidden border-b border-white/10 bg-[radial-gradient(circle_at_top,_rgba(0,200,255,0.15),_transparent_35%),linear-gradient(135deg,#071a2f_0%,#0b2d4f_55%,#0c4066_100%)]">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,0.03)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.03)_1px,transparent_1px)] bg-[size:34px_34px] opacity-15" />
-
-        <div className="relative mx-auto max-w-7xl px-6 py-6">
-          <div className="flex items-center justify-between">
-            <Link href="/" className="text-2xl font-bold tracking-tight">
-              Creative <span className="text-lime-300">Motion</span>
-            </Link>
-
-            <nav className="hidden items-center gap-6 text-sm text-white/80 md:flex">
-              <Link href="/" className="transition hover:text-white">
-                Home
-              </Link>
-              <Link href="/library" className="transition hover:text-white">
-                Library
-              </Link>
-              <Link href="/sessions" className="font-semibold text-cyan-300">
-                Sessions
-              </Link>
-              <Link href="/body-axis-ai" className="transition hover:text-white">
-                Body Axis AI
-              </Link>
-              <Link href="/clinician" className="transition hover:text-white">
-                Clinician Portal
-              </Link>
-            </nav>
-          </div>
-
-          <div className="mx-auto max-w-4xl py-14 text-center md:py-16">
-            <div className="inline-flex rounded-full border border-cyan-300/25 bg-cyan-400/10 px-4 py-1 text-sm text-cyan-100 backdrop-blur">
-              XR Therapy Sessions
-            </div>
-
-            <h1 className="mt-5 text-3xl font-bold leading-tight md:text-5xl">
-              Choose the right
-              <span className="block bg-gradient-to-r from-cyan-300 to-lime-300 bg-clip-text text-transparent">
-                rehabilitation pathway
-              </span>
-            </h1>
-
-            <p className="mx-auto mt-4 max-w-3xl text-sm leading-7 text-white/75 md:text-base">
-              Select the rehabilitation category that matches the patient’s condition
-              and continue into structured therapy programs and protocol-based care.
-            </p>
-          </div>
+    <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5 transition hover:border-[#1D9E75]/25">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-wider text-white/30">{session.program}</p>
+          <h3 className="mt-1 text-base font-semibold text-white">{session.patientName}</h3>
+          <p className="mt-0.5 text-sm text-white/45">{session.phase}</p>
         </div>
-      </section>
+        <span className={`shrink-0 rounded-[5px] px-2.5 py-1 text-xs font-semibold ${
+          session.status === "in-progress"
+            ? "border border-[#1D9E75]/25 bg-[#1D9E75]/10 text-[#5DCAA5]"
+            : "border border-amber-300/25 bg-amber-400/10 text-amber-200"
+        }`}>
+          {session.status === "in-progress" ? "In Progress" : "Ready to Start"}
+        </span>
+      </div>
 
-      <section className="mx-auto max-w-7xl px-6 pb-6 pt-2">
-        <div className="rounded-[28px] border border-cyan-300/20 bg-white/5 p-6 shadow-[0_10px_30px_rgba(0,0,0,0.18)] backdrop-blur-md md:p-8">
-          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="text-left">
-              <p className="text-xs font-medium uppercase tracking-[0.22em] text-cyan-200">
-                Smart Rehab Session
-              </p>
-              <h2 className="mt-2 text-xl font-bold text-white md:text-2xl">
-                Assessment → Therapy flow
-              </h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-white/70">
-                Link structured assessment with the therapy session in one guided flow.
-              </p>
-              <p className="mt-3 max-w-2xl text-xs leading-5 text-white/50">
-                <span className="font-medium text-white/60">Clinical journey:</span> patient profile → assessment
-                (remote link or in-clinic) → results → assign program in{" "}
-                <Link href="/library" className="text-cyan-300/90 underline hover:text-cyan-200">
-                  Library
-                </Link>{" "}
-                →{" "}
-                <Link href="/therapy" className="text-cyan-300/90 underline hover:text-cyan-200">
-                  Therapy session
-                </Link>
-                . {/* TODO: Persist prescribed module per patient; generate patient-facing magic links (no clinician login). */}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {(["start", "assessment", "therapy"] as const).map((s, i) => (
-                <div key={s} className="flex items-center gap-2">
-                  {i > 0 && (
-                    <span className="text-white/30" aria-hidden>
-                      →
-                    </span>
-                  )}
-                  <span
-                    className={`rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${
-                      flowStep === s
-                        ? "border-cyan-300/40 bg-cyan-400/15 text-cyan-100"
-                        : "border-white/10 bg-white/[0.03] text-white/50"
-                    }`}
-                  >
-                    {STEP_LABELS[s]}
-                  </span>
-                </div>
-              ))}
-            </div>
+      {session.status === "in-progress" && (
+        <div className="mb-4">
+          <div className="mb-1.5 flex justify-between text-xs">
+            <span className="text-white/40">Session progress</span>
+            <span className="font-semibold text-[#5DCAA5]">{session.progress}%</span>
           </div>
-
-          {flowStep === "start" && (
-            <div className="flex flex-col items-center justify-center gap-4 py-10 text-center">
-              <p className="max-w-md text-sm text-white/70">
-                Begin a combined session: gait assessment first, then continue into the
-                therapy experience.
-              </p>
-              <button
-                type="button"
-                onClick={() => setFlowStep("assessment")}
-                className="rounded-2xl bg-cyan-400 px-8 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-              >
-                Start Smart Rehab Session
-              </button>
-            </div>
-          )}
-
-          {flowStep === "assessment" && (
-            <div className="space-y-4">
-              <p className="text-sm text-white/70">
-                Complete the gait assessment below, then continue to the therapy session.
-              </p>
-              <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
-                <iframe
-                  title="Gait assessment"
-                  src="/gait"
-                  className="h-[min(70vh,720px)] w-full border-0"
-                />
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setFlowStep("therapy")}
-                  className="rounded-2xl bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-                >
-                  Continue to Therapy Session
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFlowStep("start")}
-                  className="rounded-2xl border border-white/20 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-                >
-                  Back to start
-                </button>
-              </div>
-            </div>
-          )}
-
-          {flowStep === "therapy" && (
-            <div className="space-y-4">
-              <p className="text-sm text-white/70">
-                Therapy / gamification module (embedded below).
-              </p>
-              <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
-                <iframe
-                  title="Therapy session"
-                  src="/therapy"
-                  className="h-[min(70vh,720px)] w-full border-0"
-                />
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setFlowStep("assessment")}
-                  className="rounded-2xl border border-white/20 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-                >
-                  Back to assessment
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFlowStep("start")}
-                  className="rounded-2xl border border-white/20 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-                >
-                  Back to start
-                </button>
-              </div>
-            </div>
+          <div className="h-1 overflow-hidden rounded-full bg-[#1E2D42]">
+            <div className="h-full bg-[#1D9E75] transition-all" style={{ width: `${session.progress}%` }} />
+          </div>
+          {session.lastActivity && (
+            <p className="mt-1.5 text-right text-xs text-white/30">Last activity {relativeTime(session.lastActivity)}</p>
           )}
         </div>
-      </section>
+      )}
 
-      <section className="mx-auto max-w-7xl px-6 py-10">
-        <div className="grid gap-4 md:grid-cols-3">
-          <InfoCard
-            title="Category-Based Flow"
-            description="Organized by rehabilitation area so clinicians can move directly to the right treatment pathway."
-          />
-          <InfoCard
-            title="Protocol Ready"
-            description="Each category can later expand into detailed protocols, patient programs, and session logic."
-          />
-          <InfoCard
-            title="Clinical Navigation"
-            description="A simpler and more practical structure for real clinician use inside Creative Motion."
-          />
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-6 pb-14">
-        <div className="mb-5">
-          <h2 className="text-2xl font-bold text-white md:text-3xl">
-            Rehabilitation Categories
-          </h2>
-          <p className="mt-2 text-sm text-white/70">
-            Choose the therapy category to access protocols and structured session pathways.
-          </p>
-        </div>
-
-        <div className="grid gap-5 lg:grid-cols-2">
-          {categories.map((category) => (
-            <article
-              key={category.title}
-              className="rounded-[24px] border border-cyan-300/20 bg-white/5 p-5 shadow-[0_10px_30px_rgba(0,0,0,0.18)] backdrop-blur-md transition hover:border-cyan-300/40 hover:bg-white/[0.07]"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h3 className="text-xl font-semibold text-white">{category.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-white/70">
-                    {category.description}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-3 py-1 text-[11px] font-medium text-cyan-100">
-                  Category
-                </div>
-              </div>
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                {category.items.map((item) => (
-                  <div
-                    key={item}
-                    className="rounded-2xl border border-white/10 bg-[#123a8a]/35 px-4 py-3 text-sm text-white/90"
-                  >
-                    {item}
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-5">
-                <Link
-                  href={category.href}
-                  className="inline-flex rounded-2xl bg-cyan-400 px-5 py-2.5 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-                >
-                  Open Category
-                </Link>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-6 pb-16">
-        <div className="rounded-[28px] border border-cyan-300/20 bg-white/5 p-8 text-center shadow-[0_10px_30px_rgba(0,0,0,0.18)] backdrop-blur-md">
-          <p className="text-xs font-medium uppercase tracking-[0.22em] text-cyan-200">
-            Next Step
-          </p>
-
-          <h2 className="mt-3 text-2xl font-bold text-white md:text-3xl">
-            Continue into condition-specific protocols
-          </h2>
-
-          <p className="mx-auto mt-4 max-w-2xl text-sm leading-7 text-white/70">
-            Each category will lead into dedicated programs such as ACL rehabilitation,
-            meniscus recovery, post-operative care, and other structured treatment flows.
-          </p>
-
-          <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
-            <Link
-              href="/library"
-              className="rounded-2xl border border-white/20 bg-white/5 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
-            >
-              Back to Library
-            </Link>
-
-            <Link
-              href="/body-axis-ai"
-              className="rounded-2xl bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
-            >
-              Explore AI Tools
-            </Link>
-          </div>
-        </div>
-      </section>
-    </main>
+      <div className="flex gap-2">
+        <Link href={session.sessionHref}
+          className="flex-1 rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-center text-sm font-bold text-white transition hover:bg-[#179165]">
+          {session.status === "in-progress" ? "Resume Session" : "Start Session"}
+        </Link>
+        <Link href={`/clinician/patients/${session.patientId}`}
+          className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-2.5 text-sm font-semibold text-white/60 transition hover:text-white">
+          Patient
+        </Link>
+      </div>
+    </div>
   );
 }
 
-function InfoCard({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
+// ── Empty state ───────────────────────────────────────────────────────────────
+
+function EmptyState({ icon, title, body }: { icon: React.ReactNode; title: string; body: string }) {
   return (
-    <div className="rounded-[22px] border border-white/10 bg-white/5 p-5 backdrop-blur-md">
-      <h3 className="text-base font-semibold text-white">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-white/70">{description}</p>
+    <div className="flex flex-col items-center rounded-[10px] border border-[#1E2D42] bg-[#0F1825] px-8 py-10 text-center">
+      <span className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-[#1E2D42] bg-[#0B1220] text-white/25">
+        {icon}
+      </span>
+      <p className="mt-4 text-sm font-semibold text-white/65">{title}</p>
+      <p className="mt-1.5 max-w-xs text-sm leading-6 text-white/35">{body}</p>
+    </div>
+  );
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+
+export default function SessionsPage() {
+  const hasActive = ACTIVE_SESSIONS.length > 0;
+  const hasReady  = READY_SESSIONS.length > 0;
+
+  return (
+    <div className="min-h-screen bg-[#0B1220] text-white">
+      <div className="mx-auto max-w-7xl px-6 py-8">
+
+        {/* ── Header ── */}
+        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <Link href="/clinician" className="text-sm text-white/35 transition hover:text-white/70">← Dashboard</Link>
+            <h1 className="mt-3 text-2xl font-bold text-white">Sessions</h1>
+            <p className="mt-1 text-sm text-white/40">
+              Execute assigned rehabilitation programs — resume in-progress or launch newly assigned.
+            </p>
+          </div>
+
+          {/* Quick stats */}
+          <div className="flex gap-2">
+            <div className="rounded-[8px] border border-[#1E2D42] bg-[#0F1825] px-4 py-3 text-center">
+              <p className="text-xl font-bold text-[#5DCAA5]" style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}>
+                {ACTIVE_SESSIONS.length}
+              </p>
+              <p className="mt-0.5 text-[11px] text-white/35">In Progress</p>
+            </div>
+            <div className="rounded-[8px] border border-[#1E2D42] bg-[#0F1825] px-4 py-3 text-center">
+              <p className="text-xl font-bold text-amber-300" style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}>
+                {READY_SESSIONS.length}
+              </p>
+              <p className="mt-0.5 text-[11px] text-white/35">Ready</p>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Badge: therapy execution ── */}
+        <div className="mb-6 inline-flex items-center gap-2 rounded-[6px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-3 py-1.5 text-xs font-semibold text-[#5DCAA5]">
+          <span className="h-1.5 w-1.5 rounded-full bg-[#1D9E75]" />
+          Therapy Execution
+        </div>
+
+        {/* ── In Progress ── */}
+        <section className="mb-8">
+          <div className="mb-4 flex items-center gap-2.5">
+            <h2 className="text-base font-bold text-white">In Progress</h2>
+            {hasActive && (
+              <span className="rounded-[5px] bg-[#1D9E75]/15 px-2 py-0.5 text-xs font-semibold text-[#5DCAA5]">
+                {ACTIVE_SESSIONS.length}
+              </span>
+            )}
+          </div>
+
+          {hasActive ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {ACTIVE_SESSIONS.map((s) => <SessionCard key={s.id} session={s} />)}
+            </div>
+          ) : (
+            <EmptyState
+              icon={<svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" /></svg>}
+              title="No sessions in progress"
+              body="Sessions appear here once a patient starts an assigned program."
+            />
+          )}
+        </section>
+
+        {/* ── Assigned / Ready ── */}
+        <section className="mb-8">
+          <div className="mb-4 flex items-center gap-2.5">
+            <h2 className="text-base font-bold text-white">Assigned — Ready to Start</h2>
+            {hasReady && (
+              <span className="rounded-[5px] bg-amber-400/15 px-2 py-0.5 text-xs font-semibold text-amber-300">
+                {READY_SESSIONS.length}
+              </span>
+            )}
+          </div>
+
+          {hasReady ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {READY_SESSIONS.map((s) => <SessionCard key={s.id} session={s} />)}
+            </div>
+          ) : (
+            <EmptyState
+              icon={<svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25Z" /></svg>}
+              title="No assigned sessions"
+              body="Assign a rehabilitation program from the patient profile. Sessions appear here ready to launch."
+            />
+          )}
+
+          {!hasActive && !hasReady && (
+            <div className="mt-5 flex flex-wrap gap-2">
+              <Link href="/clinician/patients" className="rounded-[7px] bg-[#1D9E75] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]">
+                Go to Patients
+              </Link>
+              <Link href="/clinician/assessment/start" className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-5 py-2.5 text-sm font-semibold text-white/60 transition hover:text-white">
+                Start Assessment
+              </Link>
+            </div>
+          )}
+        </section>
+
+        {/* ── Session flow reference ── */}
+        <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] px-6 py-5">
+          <p className="mb-4 text-[10px] font-bold uppercase tracking-widest text-white/25">Session Flow</p>
+          <ol className="flex flex-wrap items-center gap-y-2">
+            {["Assigned Session", "Pre-screen", "Camera Setup", "Calibration", "Exercise Execution", "AI Coach", "Session Summary"].map((step, i, arr) => (
+              <li key={step} className="flex items-center gap-2">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[#1E2D42] bg-[#0B1220] text-[10px] font-bold text-[#5DCAA5]/60">{i + 1}</span>
+                <span className="text-sm text-white/50">{step}</span>
+                {i < arr.length - 1 && (
+                  <svg className="mx-1 h-3 w-3 shrink-0 text-white/15" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                )}
+              </li>
+            ))}
+          </ol>
+        </div>
+      </div>
     </div>
   );
 }

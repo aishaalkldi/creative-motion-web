@@ -14,6 +14,22 @@ import {
   getMockClinicalDecision,
   type AssessmentSignals,
 } from "../lib/clinical-decision";
+import {
+  deriveRecommendedTherapyContextFromAssessment,
+  inferSeverityFromScore,
+} from "../lib/assessment-to-therapy-context";
+import {
+  resolveTherapyProgramContext,
+  type TherapySessionLog,
+} from "../lib/therapy-sessions-store";
+import { loadTherapySessionsForDisplay } from "../lib/therapy-session-persistence";
+
+function asClinicalSeverity(
+  s: string | null | undefined,
+): "Mild" | "Moderate" | "Needs Attention" | null {
+  if (s === "Mild" || s === "Moderate" || s === "Needs Attention") return s;
+  return null;
+}
 
 function ResultsPageContent() {
   const searchParams = useSearchParams();
@@ -21,10 +37,16 @@ function ResultsPageContent() {
   const patientId = searchParams.get("patientId") || "—";
   const assessmentId = searchParams.get("assessmentId") || "—";
   const hasValidContext = patientId !== "—";
+  const hasNumericPatientId = useMemo(() => {
+    const n = Number.parseInt(patientId, 10);
+    return patientId !== "—" && Number.isFinite(n) && n > 0;
+  }, [patientId]);
 
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState("");
   const [results, setResults] = useState<ResultOut[]>([]);
+  const [therapyLogs, setTherapyLogs] = useState<TherapySessionLog[]>([]);
+  const [therapyLoading, setTherapyLoading] = useState(false);
 
   // Gait AI analysis state (only active when test_name === "gait")
   const [gaitResult, setGaitResult] = useState<GaitAnalysisResponse | null>(null);
@@ -61,7 +83,34 @@ function ResultsPageContent() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [patientId]);
+
+  useEffect(() => {
+    if (patientId === "—") {
+      setTherapyLogs([]);
+      setTherapyLoading(false);
+      return;
+    }
+    const refresh = () => {
+      setTherapyLoading(true);
+      void loadTherapySessionsForDisplay(patientId, {
+        assessmentId: assessmentId !== "—" ? assessmentId : undefined,
+      })
+        .then((data) => {
+          console.log("Loaded therapy reports", data);
+          setTherapyLogs(data);
+        })
+        .catch(() => {
+          setTherapyLogs([]);
+        })
+        .finally(() => {
+          setTherapyLoading(false);
+        });
+    };
+    refresh();
+    window.addEventListener("cm-therapy-saved", refresh);
+    return () => window.removeEventListener("cm-therapy-saved", refresh);
+  }, [patientId, assessmentId]);
 
   async function handleGaitUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -95,26 +144,91 @@ function ResultsPageContent() {
     return results[results.length - 1] ?? null;
   }, [hasValidContext, assessmentId, results]);
 
+  const latestTherapy = useMemo(() => therapyLogs[0] ?? null, [therapyLogs]);
+
   const hasLinkedResult = hasValidContext && Boolean(result);
   const patientName =
     patientId !== "—"
       ? patientsRepository.getById(patientId)?.fullName || "Not available"
       : "Not available";
 
-  const mode = hasLinkedResult ? "Motion Result (Backend)" : "Not available";
+  const mode = useMemo(() => {
+    if (hasLinkedResult) return "Motion Result (Backend)";
+    if (latestTherapy) {
+      return latestTherapy.backendRowId != null
+        ? "Therapy session (camera CV · server)"
+        : "Therapy session (camera CV · local only)";
+    }
+    return "Not available";
+  }, [hasLinkedResult, latestTherapy]);
 
-  const selectedTests = result?.test_name ? [result.test_name] : [];
-  const bodyRegion = "—";
+  const selectedTests = useMemo(() => {
+    if (result?.test_name) return [result.test_name];
+    if (latestTherapy) return ["gait"];
+    return [];
+  }, [result, latestTherapy]);
+
+  const therapyCtx = useMemo(
+    () => resolveTherapyProgramContext(latestTherapy ?? undefined),
+    [latestTherapy],
+  );
+
+  const bodyRegion = useMemo(() => {
+    if (hasLinkedResult) return "—";
+    if (latestTherapy) return "Gait / lower limb (camera therapy)";
+    return "—";
+  }, [hasLinkedResult, latestTherapy]);
+
   const side = "—";
-  const visitType = "—";
-  const sessionLabel = "—";
-  const status = hasLinkedResult ? "completed" : "—";
-  const createdAt = "—";
-  const completedAt = "—";
+  const visitType = useMemo(() => {
+    if (hasLinkedResult) return "—";
+    if (latestTherapy) return "Camera-based gait therapy";
+    return "—";
+  }, [hasLinkedResult, latestTherapy]);
 
-  const score =
-    typeof result?.score === "number" ? `${result.score}%` : "—";
-  const scoreValue = typeof result?.score === "number" ? result.score : null;
+  const sessionLabel = useMemo(() => {
+    if (!latestTherapy) return "—";
+    return `${therapyCtx.programId} · Phase ${therapyCtx.phase} · ${formatResultsSessionType(therapyCtx.sessionType)}`;
+  }, [latestTherapy, therapyCtx]);
+
+  const status = useMemo(() => {
+    if (hasLinkedResult) return "completed";
+    if (latestTherapy) return "completed";
+    return "—";
+  }, [hasLinkedResult, latestTherapy]);
+
+  const createdAt = useMemo(() => {
+    if (hasLinkedResult && result?.created_at) {
+      return new Date(result.created_at).toLocaleString();
+    }
+    if (latestTherapy?.recordedAt) {
+      return new Date(latestTherapy.recordedAt).toLocaleString();
+    }
+    return "—";
+  }, [hasLinkedResult, result, latestTherapy]);
+
+  const completedAt = useMemo(() => {
+    if (hasLinkedResult && result?.created_at) {
+      return new Date(result.created_at).toLocaleString();
+    }
+    if (latestTherapy?.recordedAt) {
+      return new Date(latestTherapy.recordedAt).toLocaleString();
+    }
+    return "—";
+  }, [hasLinkedResult, result, latestTherapy]);
+
+  const score = useMemo(() => {
+    if (typeof result?.score === "number") return `${result.score}%`;
+    if (latestTherapy) return `${latestTherapy.score}%`;
+    return "—";
+  }, [result, latestTherapy]);
+
+  const scoreValue = useMemo(() => {
+    if (typeof result?.score === "number") return result.score;
+    if (latestTherapy) return latestTherapy.score;
+    return null;
+  }, [result, latestTherapy]);
+
   const scoreTone =
     scoreValue === null
       ? "pending"
@@ -123,35 +237,72 @@ function ResultsPageContent() {
         : scoreValue >= 60
           ? "moderate"
           : "attention";
-  const reportSummary = hasLinkedResult
-    ? (result?.summary ||
-        `Result received from backend for test "${selectedTests[0] || "unknown"}". Use score and session context to confirm progression and next care step.`)
-    : "No linked result available yet.";
-  const assessmentContext =
-    hasLinkedResult
-      ? `${mode} linked to patient ${patientId}.`
-      : "No linked assessment context available.";
-  const movementQuality =
-    scoreValue === null
-      ? "Movement quality is pending until a scored result is available."
-      : scoreValue >= 80
-        ? "Movement quality appears stable with good control across the selected tasks."
-        : scoreValue >= 60
-          ? "Movement quality is functional with moderate control variability."
-          : "Movement quality indicates reduced control and requires close follow-up.";
+
+  const reportSummary = useMemo(() => {
+    if (hasLinkedResult) {
+      return (
+        result?.summary ||
+        `Result received from backend for test "${selectedTests[0] || "unknown"}". Use score and session context to confirm progression and next care step.`
+      );
+    }
+    if (latestTherapy?.therapyRecommendation) {
+      const rec = latestTherapy.therapyRecommendation;
+      return `${rec.progressionStatus} ${rec.nextAction}`.trim();
+    }
+    if (latestTherapy) {
+      const sym = latestTherapy.symmetryPct ?? latestTherapy.symmetry;
+      return `Camera therapy: ${latestTherapy.totalSteps} steps${sym != null ? `, symmetry ${sym}%` : ""}, L/R ${latestTherapy.leftKneeCount ?? "—"}/${latestTherapy.rightKneeCount ?? "—"}.`;
+    }
+    return "No linked result available yet.";
+  }, [hasLinkedResult, result, latestTherapy, selectedTests]);
+
+  const assessmentContext = useMemo(() => {
+    if (hasLinkedResult) return `${mode} linked to patient ${patientId}.`;
+    if (latestTherapy) {
+      return `Camera CV therapy for patient ${patientId} (${therapyCtx.programId}, phase ${therapyCtx.phase}).`;
+    }
+    return "No linked assessment context available.";
+  }, [hasLinkedResult, mode, patientId, latestTherapy, therapyCtx]);
+
+  const movementQuality = useMemo(() => {
+    if (scoreValue === null) {
+      return "Movement quality is pending until a scored result is available.";
+    }
+    if (scoreValue >= 80) {
+      return "Movement quality appears stable with good control across the selected tasks.";
+    }
+    if (scoreValue >= 60) {
+      return "Movement quality is functional with moderate control variability.";
+    }
+    return "Movement quality indicates reduced control and requires close follow-up.";
+  }, [scoreValue]);
+
   const compensationPatterns =
     selectedTests.includes("compensation")
       ? "Compensation-focused capture was included. Review asymmetry and substitution patterns."
       : "No dedicated compensation capture was selected in this session.";
-  const functionalPerformance =
-    selectedTests.length > 0
-      ? `Functional performance was evaluated across ${selectedTests.length} selected test${selectedTests.length > 1 ? "s" : ""}.`
-      : "Functional performance tests are not linked to this result yet.";
+
+  const functionalPerformance = useMemo(() => {
+    if (selectedTests.length > 0) {
+      return `Functional performance was evaluated across ${selectedTests.length} selected test${selectedTests.length > 1 ? "s" : ""}.`;
+    }
+    if (latestTherapy) {
+      return "Camera-based stepping session recorded from therapy.";
+    }
+    return "Functional performance tests are not linked to this result yet.";
+  }, [selectedTests, latestTherapy]);
 
   const analysisScore = useMemo(() => {
     if (!result) return null;
     const raw = result.score;
     if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+    return null;
+  }, [result]);
+
+  const movementMetricsForDerive = useMemo((): Record<string, unknown> | null => {
+    if (result?.movement_metrics && typeof result.movement_metrics === "object") {
+      return result.movement_metrics as Record<string, unknown>;
+    }
     return null;
   }, [result]);
 
@@ -254,29 +405,110 @@ function ResultsPageContent() {
     return { overallScore: scoreValue };
   }, [gaitResult, result, scoreValue]);
 
+  const recommendedTherapyContext = useMemo(
+    () =>
+      deriveRecommendedTherapyContextFromAssessment({
+        testName: result?.test_name ?? null,
+        analysisScore,
+        severity:
+          asClinicalSeverity(clinicalAnalysis?.severity) ??
+          inferSeverityFromScore(analysisScore) ??
+          null,
+        signals: assessmentSignals,
+        movementMetrics: movementMetricsForDerive,
+      }),
+    [
+      result?.test_name,
+      analysisScore,
+      clinicalAnalysis?.severity,
+      assessmentSignals,
+      movementMetricsForDerive,
+    ],
+  );
+
+  const symmetry01ForFlow = useMemo(() => {
+    return (
+      assessmentSignals.symmetry01 ??
+      (assessmentSignals.symmetryPct != null
+        ? assessmentSignals.symmetryPct / 100
+        : null)
+    );
+  }, [assessmentSignals]);
+
   const clinicalDecision = useMemo(
     () => getMockClinicalDecision(assessmentSignals),
     [assessmentSignals]
   );
 
   const flowQuery = useMemo(() => {
-    const sym01 =
-      assessmentSignals.symmetry01 ??
-      (assessmentSignals.symmetryPct != null
-        ? assessmentSignals.symmetryPct / 100
-        : null);
     return clinicalFlowQuery({
       patientId: patientId !== "—" ? patientId : undefined,
+      assessmentId: assessmentId !== "—" ? assessmentId : undefined,
       returnTo:
         patientId !== "—"
           ? `/results?patientId=${encodeURIComponent(patientId)}&assessmentId=${encodeURIComponent(assessmentId)}`
           : undefined,
       recommended: clinicalDecision.primaryProgram.id,
-      symmetry01: sym01,
+      symmetry01: symmetry01ForFlow,
       trunkSwayDeg: assessmentSignals.trunkSwayDeg ?? null,
       overallScore: assessmentSignals.overallScore ?? null,
     });
-  }, [patientId, assessmentId, assessmentSignals, clinicalDecision.primaryProgram.id]);
+  }, [
+    patientId,
+    assessmentId,
+    symmetry01ForFlow,
+    assessmentSignals.trunkSwayDeg,
+    assessmentSignals.overallScore,
+    clinicalDecision.primaryProgram.id,
+  ]);
+
+  const recommendedTherapyHref = useMemo(() => {
+    const primary = new URLSearchParams();
+    primary.set("source", "assessment");
+    if (patientId !== "—") primary.set("patientId", patientId);
+    if (assessmentId !== "—") primary.set("assessmentId", assessmentId);
+    primary.set("programId", recommendedTherapyContext.programId);
+    primary.set("phase", recommendedTherapyContext.phase);
+    primary.set("sessionType", recommendedTherapyContext.sessionType);
+    primary.set("reason", recommendedTherapyContext.reason);
+    const extra = clinicalFlowQuery({
+      patientId: patientId !== "—" ? patientId : undefined,
+      assessmentId: assessmentId !== "—" ? assessmentId : undefined,
+      returnTo:
+        patientId !== "—"
+          ? `/results?patientId=${encodeURIComponent(patientId)}&assessmentId=${encodeURIComponent(assessmentId)}`
+          : undefined,
+      recommended: clinicalDecision.primaryProgram.id,
+      symmetry01: symmetry01ForFlow,
+      trunkSwayDeg: assessmentSignals.trunkSwayDeg ?? null,
+      overallScore: assessmentSignals.overallScore ?? null,
+    });
+    const extraStr = extra.startsWith("?") ? extra.slice(1) : extra;
+    const merged = new URLSearchParams(primary.toString());
+    if (extraStr) new URLSearchParams(extraStr).forEach((v, k) => merged.set(k, v));
+    return `/therapy?${merged.toString()}`;
+  }, [
+    patientId,
+    assessmentId,
+    recommendedTherapyContext.programId,
+    recommendedTherapyContext.phase,
+    recommendedTherapyContext.sessionType,
+    recommendedTherapyContext.reason,
+    clinicalDecision.primaryProgram.id,
+    symmetry01ForFlow,
+    assessmentSignals.trunkSwayDeg,
+    assessmentSignals.overallScore,
+  ]);
+
+  const linkedTherapyForAssessment = useMemo(() => {
+    if (patientId === "—" || assessmentId === "—") return null;
+    const aid = assessmentId.trim();
+    return (
+      therapyLogs.find(
+        (t) => t.assessmentId != null && String(t.assessmentId).trim() === aid,
+      ) ?? null
+    );
+  }, [patientId, assessmentId, therapyLogs]);
 
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">
@@ -307,7 +539,7 @@ function ResultsPageContent() {
               </Link>
 
               <Link
-                href={`${clinicalDecision.primaryProgram.href}${flowQuery}`}
+                href={recommendedTherapyHref}
                 className="rounded-2xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
               >
                 Recommended therapy
@@ -373,11 +605,20 @@ function ResultsPageContent() {
                 <MetricCard label="Completed At" value={completedAt} tone="pending" />
                 <MetricCard label="Assessment Context" value={assessmentContext} tone="default" />
               </div>
-              {!hasLinkedResult && (
+              {!hasLinkedResult && !latestTherapy && (
                 <div className="mt-5 rounded-[20px] border border-cyan-300/20 bg-cyan-400/8 p-4">
                   <p className="text-sm font-semibold text-cyan-100">No linked result found</p>
                   <p className="mt-2 text-sm leading-6 text-white/70">
                     This report layout is ready, but no valid assessment result is currently attached to this URL.
+                  </p>
+                </div>
+              )}
+              {!hasLinkedResult && latestTherapy && (
+                <div className="mt-5 rounded-[20px] border border-cyan-300/20 bg-cyan-400/8 p-4">
+                  <p className="text-sm font-semibold text-cyan-100">Therapy session data</p>
+                  <p className="mt-2 text-sm leading-6 text-white/70">
+                    Showing saved camera CV therapy for this patient (loaded from the therapy API when signed in, merged
+                    with any local-only saves). Backend assessment results will appear here when linked.
                   </p>
                 </div>
               )}
@@ -408,6 +649,198 @@ function ResultsPageContent() {
                 </div>
               </section>
             )}
+
+            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+              <h2 className="text-2xl font-bold text-white">Recommended therapy context</h2>
+              <p className="mt-2 text-sm leading-7 text-white/70">
+                Rule-based mapping from this review to the camera therapy session (used in the Recommended therapy link).
+              </p>
+              <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                <InfoCard label="Program ID" value={recommendedTherapyContext.programId} />
+                <InfoCard label="Phase" value={recommendedTherapyContext.phase} />
+                <InfoCard
+                  label="Session type"
+                  value={formatResultsSessionType(recommendedTherapyContext.sessionType)}
+                />
+                <div className="md:col-span-2 xl:col-span-3">
+                  <InfoCard label="Clinical rationale" value={recommendedTherapyContext.reason} />
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
+              <h2 className="text-2xl font-bold text-white">Linked camera therapy</h2>
+              <p className="mt-2 text-sm leading-7 text-white/70">
+                Saved camera CV sessions from{" "}
+                <code className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] text-cyan-100/90">
+                  GET /api/v1/therapy/camera-reports
+                </code>
+                , merged with local-only rows when the API is unavailable.
+              </p>
+
+              {therapyLoading && (
+                <div className="mt-5 rounded-[20px] border border-cyan-300/20 bg-cyan-400/8 p-4 text-sm text-cyan-100">
+                  Loading therapy reports from server…
+                </div>
+              )}
+
+              {!therapyLoading && hasNumericPatientId && therapyLogs.length === 0 && (
+                <div className="mt-5 rounded-[20px] border border-white/10 bg-white/[0.03] p-4 text-sm text-white/65">
+                  No saved therapy sessions yet.
+                </div>
+              )}
+
+              {!therapyLoading && therapyLogs.length > 0 && (
+                <div className="mt-6 space-y-4">
+                  <p className="text-xs font-medium uppercase tracking-widest text-slate-500">
+                    All saved sessions (newest first)
+                  </p>
+                  {therapyLogs.map((t) => (
+                    <div
+                      key={t.id}
+                      className="rounded-[20px] border border-white/10 bg-white/[0.03] p-4"
+                    >
+                      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-white/5 pb-3 text-xs text-slate-500">
+                        <span>
+                          Recorded{" "}
+                          <span className="text-slate-300">
+                            {t.recordedAt
+                              ? new Date(t.recordedAt).toLocaleString()
+                              : "—"}
+                          </span>
+                          {t.createdAt && t.createdAt !== t.recordedAt ? (
+                            <span className="text-slate-600">
+                              {" "}
+                              · Stored {new Date(t.createdAt).toLocaleString()}
+                            </span>
+                          ) : null}
+                        </span>
+                        {t.backendRowId != null ? (
+                          <span className="rounded-full border border-cyan-300/25 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-medium text-cyan-200">
+                            Server #{t.backendRowId}
+                          </span>
+                        ) : (
+                          <span className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] text-slate-500">
+                            Local only
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                        <MetricCard
+                          label="Steps (total)"
+                          value={String(t.totalSteps ?? "—")}
+                          tone="default"
+                        />
+                        <MetricCard
+                          label="Left / right steps"
+                          value={`${t.leftKneeCount ?? "—"} / ${t.rightKneeCount ?? "—"}`}
+                          tone="default"
+                        />
+                        <MetricCard
+                          label="Symmetry"
+                          value={
+                            t.symmetryPct != null
+                              ? `${t.symmetryPct}%`
+                              : t.symmetry != null
+                                ? `${t.symmetry}%`
+                                : "—"
+                          }
+                          tone="moderate"
+                        />
+                        <MetricCard
+                          label="Duration (s)"
+                          value={
+                            t.duration != null && Number.isFinite(t.duration)
+                              ? String(t.duration)
+                              : "—"
+                          }
+                          tone="pending"
+                        />
+                        <MetricCard
+                          label="Movement quality"
+                          value={
+                            t.movementQuality != null
+                              ? String(t.movementQuality)
+                              : "—"
+                          }
+                          tone="default"
+                        />
+                        <MetricCard
+                          label="Score"
+                          value={String(t.score ?? "—")}
+                          tone="default"
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {assessmentId === "—" ? (
+                <p className="mt-6 text-sm text-white/60">
+                  Add an Assessment ID to this report URL to highlight therapy rows tied to a specific assessment.
+                </p>
+              ) : linkedTherapyForAssessment ? (
+                <div className="mt-6 border-t border-white/10 pt-6">
+                  <p className="mb-3 text-xs font-medium uppercase tracking-widest text-slate-500">
+                    Matched to this assessment
+                  </p>
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    <MetricCard
+                      label="Latest therapy (reps)"
+                      value={String(linkedTherapyForAssessment.totalSteps)}
+                      tone="default"
+                    />
+                    <MetricCard
+                      label="Symmetry"
+                      value={
+                        linkedTherapyForAssessment.symmetryPct != null
+                          ? `${linkedTherapyForAssessment.symmetryPct}%`
+                          : linkedTherapyForAssessment.symmetry != null
+                            ? `${linkedTherapyForAssessment.symmetry}%`
+                            : "—"
+                      }
+                      tone="moderate"
+                    />
+                    <MetricCard
+                      label="Movement quality"
+                      value={
+                        linkedTherapyForAssessment.movementQuality != null
+                          ? String(linkedTherapyForAssessment.movementQuality)
+                          : "—"
+                      }
+                      tone="default"
+                    />
+                    <MetricCard
+                      label="Therapy recommendation"
+                      value={
+                        linkedTherapyForAssessment.therapyRecommendation?.nextAction ??
+                        "—"
+                      }
+                      tone="default"
+                    />
+                    <InfoCard
+                      label="Saved at"
+                      value={
+                        linkedTherapyForAssessment.recordedAt
+                          ? new Date(
+                              linkedTherapyForAssessment.recordedAt,
+                            ).toLocaleString()
+                          : "—"
+                      }
+                    />
+                    <InfoCard
+                      label="Program / phase / type"
+                      value={`${linkedTherapyForAssessment.programId ?? "—"} · ${linkedTherapyForAssessment.phase ?? "—"} · ${formatResultsSessionType(linkedTherapyForAssessment.sessionType ?? "")}`}
+                    />
+                  </div>
+                </div>
+              ) : !therapyLoading && hasNumericPatientId ? (
+                <p className="mt-6 text-sm text-white/70">
+                  No therapy session saved for this assessment ID yet (see list above for other sessions).
+                </p>
+              ) : null}
+            </section>
 
             <section className="rounded-[28px] border border-cyan-300/18 bg-white/[0.04] p-6 shadow-[0_10px_24px_rgba(0,0,0,0.14)] backdrop-blur-md">
               <h2 className="text-2xl font-bold text-white">Tests Included</h2>
@@ -809,6 +1242,17 @@ function ResultsPageContent() {
       </div>
     </main>
   );
+}
+
+/** Kebab slug → title for therapy session types on the results report. */
+function formatResultsSessionType(slug: string): string {
+  const s = slug.trim();
+  if (!s) return s;
+  return s
+    .split("-")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
 }
 
 function formatTestLabel(test: string) {

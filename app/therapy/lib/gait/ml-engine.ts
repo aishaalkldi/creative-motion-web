@@ -115,22 +115,25 @@ const DISPLAY: Record<keyof FeatureVector, string> = {
 
 /**
  * Extract and normalise a session's metrics into a fixed-length [0,1] vector.
- * Missing biomechanics fields are filled with conservative defaults so that
- * pre-biomechanics sessions can still participate in kNN as reference points.
+ * Missing biomechanics fields map to 0.5 in feature space (explicit “unknown”
+ * neutral for distance — not a claim about the patient’s true score).
  */
+const FEAT_UNKNOWN = 0.5;
+
 export function extractFeatures(s: SessionRecord): FeatureVector {
   const bio  = s.biomechanics;
   const maxS = Math.max(s.leftSteps, s.rightSteps, 1);
   const minS = Math.min(s.leftSteps, s.rightSteps);
   return {
     steps:      Math.min(s.totalSteps / 120, 1),
-    symmetry:   s.symmetryPct / 100,
-    rom:        (bio?.romScore        ?? 50) / 100,
-    posture:    (bio?.postureScore    ?? 75) / 100,
-    control:    (bio?.controlScore    ?? 75) / 100,
-    quality:    (bio?.movementQualityScore ?? 50) / 100,
+    symmetry:   s.symmetryPct >= 0 ? s.symmetryPct / 100 : FEAT_UNKNOWN,
+    rom:        bio?.romScore != null ? bio.romScore / 100 : FEAT_UNKNOWN,
+    posture:    bio?.postureScore != null ? bio.postureScore / 100 : FEAT_UNKNOWN,
+    control:    bio?.controlScore != null ? bio.controlScore / 100 : FEAT_UNKNOWN,
+    quality:    bio?.movementQualityScore != null ? bio.movementQualityScore / 100 : FEAT_UNKNOWN,
     noFatigue:  1 - Math.min(s.fatigueIndex ?? 0, 1),
-    visibility: (s.cameraVisibilityScore ?? 75) / 100,
+    visibility:
+      s.cameraVisibilityScore != null ? s.cameraVisibilityScore / 100 : FEAT_UNKNOWN,
     balance:    minS / maxS,
   };
 }
@@ -248,13 +251,14 @@ function buildExplanations(
   // Raw (display) values for each feature
   const raw: Record<keyof FeatureVector, number> = {
     steps:      session.totalSteps,
-    symmetry:   session.symmetryPct,
-    rom:        session.biomechanics?.romScore        ?? 50,
-    posture:    session.biomechanics?.postureScore    ?? 75,
-    control:    session.biomechanics?.controlScore    ?? 75,
-    quality:    session.biomechanics?.movementQualityScore ?? 50,
+    symmetry:   session.symmetryPct >= 0 ? session.symmetryPct : -1,
+    /** −1 = not computed (display / copy only; kNN uses FEAT_UNKNOWN in cf). */
+    rom:        session.biomechanics?.romScore ?? -1,
+    posture:    session.biomechanics?.postureScore ?? -1,
+    control:    session.biomechanics?.controlScore ?? -1,
+    quality:    session.biomechanics?.movementQualityScore ?? -1,
     noFatigue:  Math.round((1 - (session.fatigueIndex ?? 0)) * 100),
-    visibility: session.cameraVisibilityScore ?? 75,
+    visibility: session.cameraVisibilityScore ?? -1,
     balance:    Math.round(
       (Math.min(session.leftSteps, session.rightSteps) /
         Math.max(session.leftSteps, session.rightSteps, 1)) * 100,
@@ -308,22 +312,27 @@ function describeFeature(
         ? `${raw} steps — below reference group average`
         : `${raw} steps — meets or exceeds reference group`;
     case "symmetry":
+      if (raw < 0) return "Step-count symmetry — insufficient reps for a reliable percentage";
       return below
         ? `Symmetry ${raw}% — asymmetric loading may be present`
         : `Symmetry ${raw}% — balanced bilateral contribution`;
     case "rom":
+      if (raw < 0) return "ROM score — not computed (need more valid knee-lift samples)";
       return below
         ? `ROM score ${raw} — knee lift height below target`
         : `ROM score ${raw} — good range of motion achieved`;
     case "posture":
+      if (raw < 0) return "Posture score — not computed (insufficient hip samples)";
       return below
         ? `Posture score ${raw} — pelvic stability was inconsistent`
         : `Posture score ${raw} — stable trunk pattern`;
     case "control":
+      if (raw < 0) return "Control score — not computed (need ≥2 step height samples)";
       return below
         ? `Control score ${raw} — step heights varied noticeably`
         : `Control score ${raw} — consistent movement quality`;
     case "quality":
+      if (raw < 0) return "Movement quality — not computed (no composite could be formed)";
       return below
         ? `Movement quality ${raw} — composite score below target`
         : `Movement quality ${raw} — strong composite score`;
@@ -332,6 +341,7 @@ function describeFeature(
         ? `Low fatigue — pace maintained throughout session`
         : `Fatigue detected — output declined in second half`;
     case "visibility":
+      if (raw < 0) return "Camera visibility — not recorded for this session";
       return below
         ? `Camera visibility ${raw}% — body not consistently in frame`
         : `Camera visibility ${raw}% — clear tracking`;

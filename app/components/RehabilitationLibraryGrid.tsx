@@ -38,8 +38,6 @@ const LIBRARY_FIELDS: LibraryField[] = [
     status: "active",
     primaryHref: "/therapy",
     primaryLabel: "Start therapy session",
-    secondaryHref: "/sessions",
-    secondaryLabel: "Guided assessment → therapy demo",
   },
   {
     key: "neurological",
@@ -86,6 +84,14 @@ function withPatientId(base: string, patientId: string | null): string {
   return `${base}${sep}patientId=${encodeURIComponent(patientId)}`;
 }
 
+/** Therapy entry from library — always include patientId + source for /therapy routing. */
+function therapyHrefFromLibrary(patientId: string | null): string {
+  const q = new URLSearchParams();
+  q.set("source", "library");
+  q.set("patientId", patientId ?? "");
+  return `/therapy?${q.toString()}`;
+}
+
 export function RehabilitationLibraryGrid() {
   const searchParams = useSearchParams();
   const patientId = searchParams.get("patientId");
@@ -122,7 +128,7 @@ export function RehabilitationLibraryGrid() {
               <p className="mt-3 flex-1 text-sm leading-7 text-white/70">{field.description}</p>
               <div className="mt-6 flex flex-col gap-2">
                 <Link
-                  href={withPatientId(field.primaryHref, patientId)}
+                  href={field.key === "gait" ? therapyHrefFromLibrary(patientId) : withPatientId(field.primaryHref, patientId)}
                   className="inline-flex items-center justify-center rounded-2xl bg-cyan-400 px-4 py-3 text-center text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
                 >
                   {field.primaryLabel ?? "Open"}

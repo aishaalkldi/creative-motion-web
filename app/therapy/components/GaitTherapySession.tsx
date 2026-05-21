@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import type { PoseStatus } from "./PoseCamera";
@@ -18,7 +18,6 @@ import { syncPatientSessions, getSyncConfig } from "../lib/api-adapter";
 import {
   saveSession,
   loadPatientSessions,
-  getStoredPatientId,
   storePatientId,
   type SessionRecord,
 } from "../lib/session-store";
@@ -39,7 +38,17 @@ import {
   type StepMetrics,
   type BiomechanicsData,
 } from "../lib/gait/biomechanics";
-import { recordTherapySessionLog } from "@/app/lib/therapy-sessions-store";
+import {
+  normalizeTherapySessionSource,
+  resolveTherapyProgramContext,
+  type TherapyLibraryQueryContext,
+  type TherapySessionLog,
+} from "@/app/lib/therapy-sessions-store";
+import {
+  isValidChartPatientId,
+  persistTherapySessionWithFallback,
+} from "@/app/lib/therapy-session-persistence";
+import { generateTherapyRecommendation } from "../lib/clinicalDecisionEngine";
 
 const PoseCamera = dynamic(() => import("./PoseCamera"), { ssr: false });
 
@@ -109,6 +118,136 @@ function qualityStatus(quality: number, hasData: boolean) {
   if (quality >= 0.65)  return { label: `${Math.round(quality * 100)}%  Good`,    color: "text-green-400"  };
   if (quality >= 0.40)  return { label: `${Math.round(quality * 100)}%  Reduced`, color: "text-yellow-400" };
   return                       { label: `${Math.round(quality * 100)}%  Poor`,    color: "text-red-400"    };
+}
+
+/** Landmark mean below this (0–1) → session labelled Low confidence. */
+const LANDMARK_CONFIDENCE_POOR = 0.4;
+
+function deriveConfidenceLevel(totalSteps: number, meanLandmarkQuality: number): "High" | "Medium" | "Low" {
+  if (totalSteps === 0) return "Low";
+  if (meanLandmarkQuality < LANDMARK_CONFIDENCE_POOR) return "Low";
+  if (totalSteps < 2 || meanLandmarkQuality < 0.55) return "Medium";
+  return "High";
+}
+
+type StepMetricsBuckets = { left: StepMetrics[]; right: StepMetrics[] };
+
+/** Single source for end-of-session analytics (UI card + save + therapy log). */
+function buildSessionMetricsSnapshot(args: {
+  leftSteps: number;
+  rightSteps: number;
+  score: number;
+  bestCombo: number;
+  stepMetrics: StepMetricsBuckets;
+  lmQualitySum: number;
+  lmQualityCount: number;
+  stepTimestamps: number[];
+  poseFrames: number;
+  /** Actual time in the playing phase (seconds). Defaults to full session if omitted. */
+  elapsedPlayingSec?: number;
+}): {
+  totalSteps: number;
+  symmetryPct: number;
+  sessionLandmarkQuality: number;
+  fatigueIndex: number;
+  /** Set when enough step events exist to compare first vs second half; otherwise null. */
+  fatigueIndexDisplay: number | null;
+  cameraVisibilityScore: number;
+  biomechanics?: BiomechanicsData;
+  movementQuality: number | null;
+  confidenceLevel: "High" | "Medium" | "Low";
+  warnings: string[];
+  feedbackMessages: string[];
+  stepsPerMin: number;
+} {
+  const {
+    leftSteps,
+    rightSteps,
+    bestCombo,
+    stepMetrics,
+    lmQualitySum,
+    lmQualityCount,
+    stepTimestamps,
+    poseFrames,
+    elapsedPlayingSec: elapsedRaw,
+  } = args;
+
+  const elapsedPlayingSec = Math.min(
+    SESSION_DURATION,
+    Math.max(1, elapsedRaw ?? SESSION_DURATION),
+  );
+
+  const totalSteps = leftSteps + rightSteps;
+  const sessionLandmarkQuality = lmQualityCount > 0 ? lmQualitySum / lmQualityCount : 0;
+  /** Left/right step-count ratio (0–100). −1 = insufficient reps. Not a substitute for lift-height symmetry from pose. */
+  const symmetryPct =
+    totalSteps < 2
+      ? -1
+      : Math.round((Math.min(leftSteps, rightSteps) / Math.max(leftSteps, rightSteps)) * 100);
+
+  const { left: leftMetrics, right: rightMetrics } = stepMetrics;
+  const biomechanics: BiomechanicsData | undefined =
+    leftMetrics.length + rightMetrics.length >= 5
+      ? computeSessionBiomechanics(leftMetrics, rightMetrics, sessionLandmarkQuality)
+      : undefined;
+
+  const ts = stepTimestamps;
+  let fatigueIndex = 0;
+  let fatigueIndexDisplay: number | null = null;
+  if (ts.length >= 4) {
+    const mid = (ts[0] + ts[ts.length - 1]) / 2;
+    const first = ts.filter((t) => t <= mid).length;
+    const second = ts.filter((t) => t > mid).length;
+    fatigueIndex = first > 0 ? Math.max(0, Math.min(1, 1 - second / first)) : 0;
+    fatigueIndexDisplay = Math.round(fatigueIndex * 100) / 100;
+  }
+
+  const cameraVisibilityScore = Math.min(
+    100,
+    Math.round((poseFrames / (elapsedPlayingSec * 30)) * 100),
+  );
+
+  /** Prefer CV bilateral lift-height symmetry when computed; else step-count balance. */
+  const symmetryForRules =
+    biomechanics?.symmetryScore ?? (symmetryPct >= 0 ? symmetryPct : null);
+  const warnings = [
+    ...computeSessionWarnings(
+      totalSteps,
+      symmetryForRules,
+      fatigueIndex,
+      cameraVisibilityScore,
+      biomechanics,
+    ),
+    ...(fatigueIndexDisplay != null
+      ? [
+          "Fatigue index is a within-session step-timing proxy only — not a validated clinical fatigue measure.",
+        ]
+      : []),
+  ];
+  const feedbackMessages = computeSessionFeedback(
+    totalSteps,
+    symmetryForRules,
+    bestCombo,
+    biomechanics,
+  );
+
+  let confidenceLevel = deriveConfidenceLevel(totalSteps, sessionLandmarkQuality);
+  if (confidenceLevel === "High" && symmetryPct < 0 && totalSteps > 0) confidenceLevel = "Medium";
+
+  return {
+    totalSteps,
+    symmetryPct,
+    sessionLandmarkQuality,
+    fatigueIndex,
+    fatigueIndexDisplay,
+    cameraVisibilityScore,
+    biomechanics,
+    movementQuality: biomechanics?.movementQualityScore ?? null,
+    confidenceLevel,
+    warnings,
+    feedbackMessages,
+    stepsPerMin: Math.round((totalSteps / elapsedPlayingSec) * 60),
+  };
 }
 
 /* ── Helpers ── */
@@ -642,7 +781,11 @@ function useBgMusic() {
 /* ═══════════════════════════════════════════════════════════════════════════
    Main component
 ═══════════════════════════════════════════════════════════════════════════ */
-export default function SessionPage() {
+export default function SessionPage({
+  libraryQueryContext,
+}: {
+  libraryQueryContext?: TherapyLibraryQueryContext;
+} = {}) {
   /* Sound effects (step ticks, GO!, done chime) */
   const sound    = useSoundFX();
   const soundRef = useRef(sound);
@@ -699,7 +842,10 @@ export default function SessionPage() {
 
   /* Patient identity & session persistence */
   const router = useRouter();
-  const [patientId,   setPatientId]   = useState<string>("PT-001");
+  const searchParams = useSearchParams();
+  const urlPatientParam = searchParams.get("patientId");
+  const [patientId,   setPatientId]   = useState<string>("");
+  const [savePatientError, setSavePatientError] = useState<string>("");
   const [savedRecord, setSavedRecord] = useState<SessionRecord | null>(null);
 
   /* Active session plan — loaded on mount, refreshed after each saved session */
@@ -722,15 +868,21 @@ export default function SessionPage() {
     }
   }, [phase]);
 
-  /* Load stored patient ID and active plan on first render */
+  /* URL patientId wins (library / chart deep links); else last stored ID — never overwrite URL with PT-001 default */
   useEffect(() => {
-    const pid      = getStoredPatientId();
-    const sessions = loadPatientSessions(pid);
-    const plan     = loadOrGeneratePlan(pid, sessions);
-    setPatientId(pid);
+    const urlPid = urlPatientParam?.trim() ?? "";
+    let resolved = urlPid;
+    if (!resolved && typeof window !== "undefined") {
+      const raw = window.localStorage.getItem("cm_patient_id");
+      if (raw?.trim()) resolved = raw.trim();
+    }
+    setPatientId(resolved);
+    const planPid = resolved;
+    const sessions = loadPatientSessions(planPid);
+    const plan     = loadOrGeneratePlan(planPid, sessions);
     setActivePlan(plan);
     activePlanRef.current = plan;
-  }, []);
+  }, [urlPatientParam]);
 
   /* Camera status */
   const [poseReady,  setPoseReady]  = useState(false);
@@ -742,15 +894,24 @@ export default function SessionPage() {
   const cdRef         = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  /** Prevents duplicate local save + therapy POST when auto-save and Save both run */
+  const sessionPersistedForRunRef = useRef(false);
+  const patientIdForTherapyRef      = useRef(patientId);
+  const totalStepsForTherapyRef       = useRef(0);
+  const handleSaveSessionRef =
+    useRef<() => Promise<void>>(async () => {});
 
   phaseRef.current = phase; // keep ref in sync on every render
 
   /* ── Derived values ── */
   const totalSteps  = leftSteps + rightSteps;
+  patientIdForTherapyRef.current = patientId;
+  totalStepsForTherapyRef.current = totalSteps;
   const timerPct    = (timeLeft / SESSION_DURATION) * 100;
-  const symmetryPct = totalSteps < 2
-    ? 100
-    : Math.round((Math.min(leftSteps, rightSteps) / Math.max(leftSteps, rightSteps)) * 100);
+  const symmetryPct =
+    totalSteps < 2
+      ? -1
+      : Math.round((Math.min(leftSteps, rightSteps) / Math.max(leftSteps, rightSteps)) * 100);
   const stepsPerMin = timeLeft < SESSION_DURATION
     ? Math.round((totalSteps / (SESSION_DURATION - timeLeft)) * 60)
     : 0;
@@ -870,63 +1031,122 @@ export default function SessionPage() {
     if (phaseRef.current === "playing") poseFramesRef.current++;
   }, []);
 
+  const doneMetrics = useMemo(() => {
+    if (phase !== "done") return null;
+    const elapsedPlayingSec = Math.max(1, SESSION_DURATION - timeLeft);
+    return buildSessionMetricsSnapshot({
+      leftSteps,
+      rightSteps,
+      score,
+      bestCombo,
+      stepMetrics: {
+        left: stepMetricsRef.current.left.slice(),
+        right: stepMetricsRef.current.right.slice(),
+      },
+      lmQualitySum: lmQualityRef.current.sum,
+      lmQualityCount: lmQualityRef.current.count,
+      stepTimestamps: stepTimestampsRef.current.slice(),
+      poseFrames: poseFramesRef.current,
+      elapsedPlayingSec,
+    });
+  }, [phase, leftSteps, rightSteps, score, bestCombo, timeLeft]);
+
+  const resolvedProgram = useMemo(
+    () => resolveTherapyProgramContext(libraryQueryContext),
+    [
+      libraryQueryContext?.programId,
+      libraryQueryContext?.phase,
+      libraryQueryContext?.sessionType,
+    ],
+  );
+
+  const therapyGuidance = useMemo(() => {
+    if (phase !== "done" || !doneMetrics) return null;
+    const symResolved =
+      doneMetrics.biomechanics?.symmetryScore ??
+      (doneMetrics.symmetryPct >= 0 ? doneMetrics.symmetryPct : null);
+    return generateTherapyRecommendation({
+      totalSteps: doneMetrics.totalSteps,
+      leftKneeCount: leftSteps,
+      rightKneeCount: rightSteps,
+      symmetry: symResolved,
+      controlScore: doneMetrics.biomechanics?.controlScore ?? null,
+      movementQuality: doneMetrics.movementQuality,
+      fatigueIndex:
+        doneMetrics.fatigueIndexDisplay != null ? doneMetrics.fatigueIndex : null,
+      durationSec: Math.max(1, SESSION_DURATION - timeLeft),
+      programId: resolvedProgram.programId,
+      phase: resolvedProgram.phase,
+      sessionType: resolvedProgram.sessionType,
+    });
+  }, [
+    phase,
+    doneMetrics,
+    leftSteps,
+    rightSteps,
+    resolvedProgram.programId,
+    resolvedProgram.phase,
+    resolvedProgram.sessionType,
+    timeLeft,
+  ]);
+
   /* ── Save completed session to localStorage ── */
-  const handleSaveSession = useCallback(() => {
-    const pid    = patientId.trim() || "PT-001";
-    const { left: leftMetrics, right: rightMetrics } = stepMetricsRef.current;
-
-    // Landmark quality: mean lower-body visibility across all playing frames
-    const lmQ = lmQualityRef.current;
-    const sessionLandmarkQuality = lmQ.count > 0 ? lmQ.sum / lmQ.count : 0;
-
-    // Biomechanics — requires ≥5 detected steps for statistically meaningful scores.
-    // Below this, individual-sample noise would dominate the CV and angle averages.
-    const biomechanics: BiomechanicsData | undefined =
-      leftMetrics.length + rightMetrics.length >= 5
-        ? computeSessionBiomechanics(leftMetrics, rightMetrics, sessionLandmarkQuality)
-        : undefined;
-
-    // Fatigue index: compare step density in first half vs second half of session
-    const ts = stepTimestampsRef.current;
-    let fatigueIndex = 0;
-    if (ts.length >= 4) {
-      const mid   = (ts[0] + ts[ts.length - 1]) / 2;
-      const first = ts.filter((t) => t <= mid).length;
-      const second = ts.filter((t) => t > mid).length;
-      fatigueIndex = first > 0 ? Math.max(0, Math.min(1, 1 - second / first)) : 0;
+  const handleSaveSession = useCallback(async () => {
+    if (sessionPersistedForRunRef.current) return;
+    const pid = patientId.trim();
+    if (!pid) {
+      setSavePatientError(
+        "Select or enter a patient ID first. Sessions are not saved without a real chart ID.",
+      );
+      return;
     }
+    if (!isValidChartPatientId(pid)) {
+      setSavePatientError(
+        "Use a numeric patient ID that matches a patient in the system (e.g. chart number from the profile URL).",
+      );
+      return;
+    }
+    setSavePatientError("");
 
-    // Camera visibility: pose-detected frames out of expected 30fps × SESSION_DURATION
-    const cameraVisibilityScore = Math.min(
-      100,
-      Math.round((poseFramesRef.current / (SESSION_DURATION * 30)) * 100),
-    );
+    const elapsedPlayingSec = Math.max(1, SESSION_DURATION - timeLeft);
+    const snap = buildSessionMetricsSnapshot({
+      leftSteps,
+      rightSteps,
+      score,
+      bestCombo,
+      stepMetrics: {
+        left: stepMetricsRef.current.left.slice(),
+        right: stepMetricsRef.current.right.slice(),
+      },
+      lmQualitySum: lmQualityRef.current.sum,
+      lmQualityCount: lmQualityRef.current.count,
+      stepTimestamps: stepTimestampsRef.current.slice(),
+      poseFrames: poseFramesRef.current,
+      elapsedPlayingSec,
+    });
 
-    // Session-level warnings
-    const sessionSymmetry = totalSteps < 2
-      ? 100
-      : Math.round((Math.min(leftSteps, rightSteps) / Math.max(leftSteps, rightSteps)) * 100);
-    const warnings = computeSessionWarnings(
-      totalSteps, sessionSymmetry, fatigueIndex, cameraVisibilityScore, biomechanics,
-    );
-
-    // Positive feedback messages
-    const feedbackMessages = computeSessionFeedback(
-      totalSteps, sessionSymmetry, bestCombo, biomechanics,
-    );
+    const {
+      symmetryPct: sessionSymmetry,
+      biomechanics,
+      fatigueIndex,
+      cameraVisibilityScore,
+      warnings,
+      feedbackMessages,
+      stepsPerMin,
+    } = snap;
 
     // Build the session metrics snapshot used for both storage and plan evaluation
     const sessionMetrics = {
       patientId:   pid,
       date:        new Date().toISOString(),
-      durationSec: SESSION_DURATION,
+      durationSec: elapsedPlayingSec,
       score,
       totalSteps,
       leftSteps,
       rightSteps,
       symmetryPct: sessionSymmetry,
       bestCombo,
-      stepsPerMin: Math.round((totalSteps / SESSION_DURATION) * 60),
+      stepsPerMin,
       biomechanics,
       fatigueIndex:          Math.round(fatigueIndex * 100) / 100,
       cameraVisibilityScore,
@@ -952,17 +1172,62 @@ export default function SessionPage() {
     setSavedRecord(record);
 
     try {
-      recordTherapySessionLog({
+      const plan = activePlanRef.current;
+      const exName = plan?.exerciseName ?? exerciseConfig.exerciseName;
+      const prog = resolveTherapyProgramContext(libraryQueryContext);
+      const ctrl = snap.biomechanics?.controlScore ?? null;
+      const fatigue = snap.fatigueIndexDisplay ?? null;
+      const mq = snap.movementQuality ?? null;
+      const cvSymmetry = snap.biomechanics?.symmetryScore ?? null;
+      const stepBalancePct = record.symmetryPct < 0 ? null : record.symmetryPct;
+      const symmetryForTherapy = cvSymmetry ?? stepBalancePct;
+      const therapyRecommendation = generateTherapyRecommendation({
+        totalSteps: snap.totalSteps,
+        leftKneeCount: leftSteps,
+        rightKneeCount: rightSteps,
+        symmetry: symmetryForTherapy,
+        controlScore: ctrl,
+        movementQuality: mq,
+        fatigueIndex: snap.fatigueIndexDisplay != null ? snap.fatigueIndex : null,
+        durationSec: elapsedPlayingSec,
+        programId: prog.programId,
+        phase: prog.phase,
+        sessionType: prog.sessionType,
+      });
+      const sessionSource = normalizeTherapySessionSource(libraryQueryContext?.source);
+      const assessmentLink = libraryQueryContext?.assessmentId?.trim();
+      const connected: TherapySessionLog = {
         id: record.id,
         patientId: pid,
         recordedAt: record.date,
+        createdAt: record.date,
         programLabel: "Side stepping / gait therapy",
+        exerciseName: exName,
+        source: sessionSource,
+        assessmentId: assessmentLink || undefined,
+        therapyContextReason: libraryQueryContext?.reason?.trim() || undefined,
+        mode: "camera-cv",
         score: record.score,
         totalSteps: record.totalSteps,
-        symmetryPct: record.symmetryPct,
-      });
+        duration: elapsedPlayingSec,
+        leftKneeCount: leftSteps,
+        rightKneeCount: rightSteps,
+        symmetryPct: symmetryForTherapy,
+        symmetry: cvSymmetry,
+        accuracy: stepBalancePct,
+        accuracyPct: stepBalancePct,
+        controlScore: ctrl,
+        fatigueIndex: fatigue,
+        movementQuality: mq,
+        confidenceLevel: snap.confidenceLevel,
+        therapyRecommendation,
+        programId: prog.programId,
+        phase: prog.phase,
+        sessionType: prog.sessionType,
+      };
+      await persistTherapySessionWithFallback(connected);
     } catch {
-      /* localStorage unavailable */
+      /* persistence unavailable */
     }
 
     // Non-blocking sync to the Creative Motion platform.
@@ -990,10 +1255,35 @@ export default function SessionPage() {
       setActivePlan(nextPlan);
       activePlanRef.current = nextPlan;
     }
-  }, [patientId, score, totalSteps, leftSteps, rightSteps, bestCombo]);
+
+    sessionPersistedForRunRef.current = true;
+  }, [
+    patientId,
+    score,
+    totalSteps,
+    leftSteps,
+    rightSteps,
+    bestCombo,
+    exerciseConfig.exerciseName,
+    libraryQueryContext,
+    timeLeft,
+  ]);
+
+  handleSaveSessionRef.current = handleSaveSession;
+
+  /* Auto-send therapy report + local save when the timer completes (patient ID already set) */
+  useEffect(() => {
+    if (phase !== "done") return;
+    if (sessionPersistedForRunRef.current) return;
+    const pid = patientIdForTherapyRef.current.trim();
+    if (totalStepsForTherapyRef.current < 1) return;
+    if (!pid || !isValidChartPatientId(pid)) return;
+    void handleSaveSessionRef.current();
+  }, [phase]);
 
   /* ── Reset all session state ── */
   const resetState = useCallback(() => {
+    sessionPersistedForRunRef.current = false;
     doneRef.current   = false;
     comboRef.current  = 0;
     clearTimeout(comboTimerRef.current!);
@@ -1229,13 +1519,18 @@ export default function SessionPage() {
             <input
               type="text"
               value={patientId}
-              onChange={(e) => setPatientId(e.target.value)}
-              placeholder="e.g. PT-001"
+              onChange={(e) => { setSavePatientError(""); setPatientId(e.target.value); }}
+              placeholder="e.g. chart ID from patient profile"
               className="w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm text-white placeholder:text-slate-700 outline-none focus:border-cyan-400/30 transition-colors"
             />
             <p className="mt-1 text-[10px] text-slate-700">
               Used to link this session to your progress report
             </p>
+            {patientId.trim() === "" && (
+              <p className="mt-2 text-[10px] leading-relaxed text-yellow-300/90">
+                Enter the patient ID before starting — required so saved sessions appear on the correct profile.
+              </p>
+            )}
           </div>
 
           {/* Prescribed session plan */}
@@ -1260,7 +1555,8 @@ export default function SessionPage() {
           {/* Start button */}
           <button
             onClick={() => { resetState(); setPhase("countdown"); }}
-            className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-blue-500 px-10 py-4 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition-all duration-200 hover:scale-105 active:scale-95"
+            disabled={patientId.trim() === ""}
+            className="inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-cyan-400 to-blue-500 px-10 py-4 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition-all duration-200 hover:scale-105 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
           >
             ▶&nbsp; Start Session
           </button>
@@ -1445,9 +1741,103 @@ export default function SessionPage() {
             <div className="mb-2 text-5xl">{totalSteps > 0 ? "🏆" : "📷"}</div>
             <h1 className="text-3xl font-bold text-white">Session Complete</h1>
             <p className="mt-1 text-sm text-slate-500">
-              {SESSION_DURATION}s · Camera · Real Movement
+              {Math.max(1, SESSION_DURATION - timeLeft)}s active · Camera · Real Movement
             </p>
           </div>
+
+          {doneMetrics && (
+            <div className="w-full rounded-2xl border border-white/8 bg-white/3 p-4 text-left">
+              <p className="mb-3 text-[10px] font-medium uppercase tracking-widest text-slate-600">
+                Session result
+              </p>
+              <dl className="grid grid-cols-1 gap-2.5 text-xs">
+                <div className="flex justify-between gap-3 border-b border-white/5 pb-2">
+                  <dt className="text-slate-600">Patient ID</dt>
+                  <dd className="text-right font-medium text-slate-300">{patientId.trim() || "—"}</dd>
+                </div>
+                <div className="flex justify-between gap-3 border-b border-white/5 pb-2">
+                  <dt className="text-slate-600">Exercise</dt>
+                  <dd className="text-right font-medium text-slate-300">
+                    {activePlan?.exerciseName ?? exerciseConfig.exerciseName}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3 border-b border-white/5 pb-2">
+                  <dt className="text-slate-600">Total reps</dt>
+                  <dd className="text-right font-medium tabular-nums text-slate-300">{doneMetrics.totalSteps}</dd>
+                </div>
+                <div className="flex justify-between gap-3 border-b border-white/5 pb-2">
+                  <dt className="text-slate-600">Score</dt>
+                  <dd className="text-right font-medium tabular-nums text-slate-300">
+                    {doneMetrics.totalSteps === 0 ? "—" : score.toLocaleString()}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3 border-b border-white/5 pb-2">
+                  <dt className="text-slate-600">Step balance (L/R reps)</dt>
+                  <dd className="text-right font-medium tabular-nums text-slate-300">
+                    {doneMetrics.symmetryPct >= 0 ? `${doneMetrics.symmetryPct}%` : "—"}
+                  </dd>
+                </div>
+                {doneMetrics.biomechanics?.symmetryScore != null ? (
+                  <div className="flex justify-between gap-3 border-b border-white/5 pb-2">
+                    <dt className="text-slate-600">Symmetry (lift height, CV)</dt>
+                    <dd className="text-right font-medium tabular-nums text-slate-300">
+                      {doneMetrics.biomechanics.symmetryScore}%
+                    </dd>
+                  </div>
+                ) : null}
+                <div className="flex justify-between gap-3 border-b border-white/5 pb-2">
+                  <dt className="text-slate-600">Fatigue index</dt>
+                  <dd className="text-right font-medium tabular-nums text-slate-300">
+                    {doneMetrics.fatigueIndexDisplay != null ? String(doneMetrics.fatigueIndexDisplay) : "—"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3 border-b border-white/5 pb-2">
+                  <dt className="text-slate-600">Movement quality</dt>
+                  <dd className="text-right font-medium tabular-nums text-slate-300">
+                    {doneMetrics.movementQuality != null ? `${doneMetrics.movementQuality}` : "—"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <dt className="text-slate-600">Confidence</dt>
+                  <dd className="text-right font-medium text-slate-300">{doneMetrics.confidenceLevel}</dd>
+                </div>
+              </dl>
+              <p className="mt-3 text-[10px] leading-relaxed text-slate-600">
+                Numbers come from in-browser 2D pose estimation. Use them to track this patient&apos;s trends over
+                time — not as stand-alone clinical measures.
+              </p>
+            </div>
+          )}
+
+          {therapyGuidance && (
+            <div className="w-full rounded-2xl border border-cyan-400/20 bg-white/3 p-4 text-left">
+              <p className="mb-1 text-[10px] font-medium uppercase tracking-widest text-slate-600">
+                Therapy recommendation
+              </p>
+              <p className="mb-3 text-[10px] leading-relaxed text-slate-600">
+                Clinical guidance (rule-based) · Does not replace therapist judgment · Not a medical diagnosis
+              </p>
+              <ul className="mb-4 list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-slate-400">
+                {therapyGuidance.interpretation.map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ul>
+              <div className="space-y-2 border-t border-white/5 pt-3 text-xs">
+                <p className="text-slate-500">
+                  <span className="font-medium text-slate-600">Progression: </span>
+                  <span className="text-slate-300">{therapyGuidance.progressionStatus}</span>
+                </p>
+                <p className="text-slate-500">
+                  <span className="font-medium text-slate-600">Recommended next action: </span>
+                  <span className="text-slate-300">{therapyGuidance.nextAction}</span>
+                </p>
+                <p className="text-[11px] leading-relaxed text-slate-600">
+                  <span className="font-medium text-slate-600">Safety / intensity: </span>
+                  {therapyGuidance.intensityNote}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* No-movement warning */}
           {totalSteps === 0 ? (
@@ -1466,7 +1856,7 @@ export default function SessionPage() {
                 <ResultCard label="Left Knee"      value={String(leftSteps)}        unit="reps"     />
                 <ResultCard label="Right Knee"     value={String(rightSteps)}       unit="reps"     />
                 <ResultCard label="Best Streak"    value={String(bestCombo)}        unit="× streak" />
-                <ResultCard label="Symmetry"       value={`${symmetryPct}`}         unit="%"        />
+                <ResultCard label="Symmetry"       value={symmetryPct < 0 ? "—" : `${symmetryPct}`} unit="%" />
               </div>
               <p className="text-center text-xs text-slate-600">
                 Avg pace:{" "}
@@ -1516,7 +1906,7 @@ export default function SessionPage() {
                 {activePlan.targets.map((t, i) => {
                   const live =
                     t.metric === "totalSteps"  ? totalSteps  :
-                    t.metric === "symmetryPct" ? symmetryPct :
+                    t.metric === "symmetryPct" ? (symmetryPct >= 0 ? symmetryPct : null) :
                     t.metric === "stepsPerMin" ? stepsPerMin : null;
                   const met = live !== null && (
                     t.operator === ">=" ? live >= t.threshold :
@@ -1570,21 +1960,30 @@ export default function SessionPage() {
                 <input
                   type="text"
                   value={patientId}
-                  onChange={(e) => setPatientId(e.target.value)}
-                  placeholder="Patient ID (e.g. PT-001)"
+                  onChange={(e) => { setSavePatientError(""); setPatientId(e.target.value); }}
+                  placeholder="Patient ID (chart ID)"
                   className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white placeholder:text-slate-700 outline-none focus:border-cyan-400/30 transition-colors"
                 />
                 <button
                   onClick={handleSaveSession}
-                  disabled={totalSteps === 0}
+                  disabled={totalSteps === 0 || patientId.trim() === ""}
                   className="rounded-xl border border-cyan-400/25 bg-cyan-400/10 px-4 py-2 text-sm font-medium text-cyan-400 transition-colors hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Save
                 </button>
               </div>
+              {savePatientError ? (
+                <p className="mt-1.5 text-[10px] text-yellow-300/90">{savePatientError}</p>
+              ) : null}
               {totalSteps === 0 && (
                 <p className="mt-1.5 text-[10px] text-slate-700">
                   Complete at least one step to save a session.
+                </p>
+              )}
+              {totalSteps > 0 && patientId.trim() === "" && (
+                <p className="mt-1.5 text-[10px] text-yellow-300/90">
+                  Select patient first: enter the chart ID from the patient profile. Nothing is saved without it (no
+                  placeholder patient).
                 </p>
               )}
             </div>
@@ -1668,15 +2067,17 @@ export default function SessionPage() {
 
 function computeSessionWarnings(
   totalSteps: number,
-  symmetryPct: number,
+  symmetryPct: number | null,
   fatigueIndex: number,
   cameraVisibilityScore: number,
   bio?: BiomechanicsData,
 ): string[] {
   const w: string[] = [];
   if (totalSteps === 0)           w.push("No movement detected");
-  if (symmetryPct < 75)           w.push("Bilateral symmetry below 75%");
-  if (fatigueIndex > 0.5)         w.push("High fatigue index — output declined over session");
+  if (symmetryPct != null && symmetryPct < 75)
+    w.push("Bilateral symmetry below 75%");
+  if (fatigueIndex > 0.5)
+    w.push("Step cadence slowed in the second half of the session (timing proxy — not a clinical fatigue test)");
   if (cameraVisibilityScore < 50) w.push("Poor camera visibility — consider repositioning");
   if (bio?.postureScore  != null && bio.postureScore  < 70) w.push("Postural stability reduced");
   if (bio?.controlScore  != null && bio.controlScore  < 70) w.push("Step-height consistency reduced");
@@ -1686,7 +2087,7 @@ function computeSessionWarnings(
 
 function computeSessionFeedback(
   totalSteps: number,
-  symmetryPct: number,
+  symmetryPct: number | null,
   bestCombo: number,
   bio?: BiomechanicsData,
 ): string[] {
@@ -1694,10 +2095,11 @@ function computeSessionFeedback(
   if (totalSteps >= 60)      msgs.push(`Strong output: ${totalSteps} steps completed`);
   else if (totalSteps >= 30) msgs.push(`Good session: ${totalSteps} steps completed`);
   else if (totalSteps > 0)   msgs.push(`Session complete: ${totalSteps} steps recorded`);
-  if (symmetryPct >= 85)     msgs.push(`Excellent bilateral symmetry at ${symmetryPct}%`);
+  if (symmetryPct != null && symmetryPct >= 85)
+    msgs.push(`Excellent bilateral symmetry at ${symmetryPct}%`);
   if (bestCombo >= 10)       msgs.push(`Great rhythm: best streak of ${bestCombo} consecutive steps`);
-  if ((bio?.movementQualityScore ?? 0) >= 75)
-    msgs.push(`Movement quality score: ${bio!.movementQualityScore}/100`);
+  if (bio?.movementQualityScore != null && bio.movementQualityScore >= 75)
+    msgs.push(`Movement quality score: ${bio.movementQualityScore}/100`);
   return msgs;
 }
 

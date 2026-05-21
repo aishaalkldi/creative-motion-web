@@ -35,7 +35,9 @@ export function setAuthSession(token: string, clinician: ClinicianInfo): void {
 
 export function getToken(): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(TOKEN_KEY);
+  const primary = localStorage.getItem(TOKEN_KEY);
+  if (primary) return primary;
+  return localStorage.getItem("access_token");
 }
 
 export function getClinician(): ClinicianInfo | null {

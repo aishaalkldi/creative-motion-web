@@ -1,4 +1,9 @@
 import Link from "next/link";
+import {
+  ProgramSessionModeButtons,
+  patientIdFromSearchParams,
+  slugSessionType,
+} from "../../../components/ProgramSessionModeButtons";
 
 const rehabPhases = [
   {
@@ -71,7 +76,14 @@ const rehabPhases = [
   },
 ];
 
-export default function PostOpPage() {
+export default async function PostOpPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const patientId = patientIdFromSearchParams(sp);
+
   return (
     <main className="min-h-screen bg-[#071a2f] text-white">
       <section className="mx-auto max-w-7xl px-6 py-10">
@@ -127,7 +139,7 @@ export default function PostOpPage() {
           />
           <InfoCard
             title="Dual Delivery Modes"
-            description="Each session can later be delivered either as Sensor + Screen mode or as an immersive VR mode."
+            description="Each session can be started in camera-based CV mode now; XR immersive delivery is planned next."
           />
           <InfoCard
             title="Clinical Flow"
@@ -171,12 +183,12 @@ export default function PostOpPage() {
         <div className="mb-5">
           <h2 className="text-2xl font-bold text-white">Program Phases & Sessions</h2>
           <p className="mt-2 text-sm text-white/70">
-            Each phase contains sessions that can later be launched in either Sensor Mode or VR Mode.
+            Each phase contains sessions you can start in Camera-based CV mode; XR immersive mode is coming soon.
           </p>
         </div>
 
         <div className="space-y-6">
-          {rehabPhases.map((phase) => (
+          {rehabPhases.map((phase, phaseIndex) => (
             <article
               key={phase.title}
               className="rounded-[24px] border border-cyan-300/20 bg-white/5 p-5 shadow-[0_10px_30px_rgba(0,0,0,0.18)] backdrop-blur-md"
@@ -213,15 +225,12 @@ export default function PostOpPage() {
                       Duration: {session.duration}
                     </p>
 
-                    <div className="mt-4 flex flex-wrap gap-3">
-                      <button className="rounded-2xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300">
-                        Start Sensor Mode
-                      </button>
-
-                      <button className="rounded-2xl border border-white/20 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10">
-                        Start VR Mode
-                      </button>
-                    </div>
+                    <ProgramSessionModeButtons
+                      programId="sports-post-op"
+                      phase={phaseIndex + 1}
+                      sessionType={slugSessionType(session.name)}
+                      patientId={patientId}
+                    />
                   </div>
                 ))}
               </div>

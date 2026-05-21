@@ -1,0 +1,124 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   RASQ Design System — Token Layer
+   Rehabilitation, precisely.
+   Import this file in globals.css — every token is used by the homepage.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Surfaces ── */
+  --rasq-void:    #080E14;   /* homepage background          */
+  --rasq-base:    #0B1220;   /* clinician base / provider    */
+  --rasq-card:    #0F1825;   /* all dark product cards       */
+  --rasq-border:  #1E2D42;   /* universal border             */
+
+  /* ── Brand teal ── */
+  --rasq-teal:    #1D9E75;   /* primary accent               */
+  --rasq-teal-d:  #0D6B4F;   /* deep teal                   */
+  --rasq-mint:    #5DCAA5;   /* sense mint / secondary tint  */
+
+  /* ── Patient surfaces (light warm) ── */
+  --rasq-warm:       #F4F6F5;
+  --rasq-mist:       #E8F5F1;
+  --rasq-warm-bd:    #d1dbd6;
+  --rasq-warm-tx:    #0f2e22;
+  --rasq-warm-tx2:   #4a7060;
+
+  /* ── Radius ── */
+  --rasq-r-btn:   7px;
+  --rasq-r-card:  10px;
+  --rasq-r-lg:    12px;
+
+  /* ── Motion ── */
+  --rasq-dur-fast: 160ms;
+  --rasq-dur-base: 280ms;
+  --rasq-dur-slow: 600ms;
+  --rasq-ease:     cubic-bezier(0.16, 1, 0.3, 1);
+  --rasq-ease-out: cubic-bezier(0.0, 0.0, 0.2, 1);
+
+  /* ── Typography pointers (actual vars loaded by layout.tsx) ── */
+  --rasq-font-display: var(--font-geist, var(--font-inter), ui-sans-serif, sans-serif);
+  --rasq-font-body:    var(--font-inter), ui-sans-serif, sans-serif;
+  --rasq-font-mono:    var(--font-ibm-plex-mono), ui-monospace, monospace;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Animation keyframes
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Arc mark — stroke-dashoffset draw, fires once */
+@keyframes rasq-arc-draw {
+  from { stroke-dashoffset: var(--arc-len, 40); }
+  to   { stroke-dashoffset: 0; }
+}
+
+.rasq-arc-outer {
+  stroke-dasharray: 38;
+  stroke-dashoffset: 38;
+  animation: rasq-arc-draw 0.6s ease-in-out forwards;
+}
+
+.rasq-arc-inner {
+  stroke-dasharray: 22;
+  stroke-dashoffset: 22;
+  animation: rasq-arc-draw 0.6s 0.12s ease-in-out forwards;
+}
+
+.rasq-arc-dot {
+  opacity: 0;
+  animation: rasq-dot-appear 0.25s 0.52s ease forwards;
+}
+
+@keyframes rasq-dot-appear {
+  to { opacity: 1; }
+}
+
+/* Hero stagger — each .rasq-stagger-item gets an inline animation-delay */
+@keyframes rasq-slide-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.rasq-stagger-item {
+  opacity: 0;
+  animation: rasq-slide-up 0.5s var(--rasq-ease-out) forwards;
+}
+
+/* Scroll reveal — add .is-revealed via JS IntersectionObserver */
+.rasq-reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity  0.48s var(--rasq-ease-out),
+    transform 0.48s var(--rasq-ease-out);
+}
+
+.rasq-reveal.is-revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Staggered children inside a revealed container */
+.rasq-reveal-children > * {
+  opacity: 0;
+  transform: translateY(14px);
+  transition:
+    opacity  0.42s var(--rasq-ease-out),
+    transform 0.42s var(--rasq-ease-out);
+}
+
+.rasq-reveal-children.is-revealed > *:nth-child(1) { opacity: 1; transform: none; transition-delay: 0ms;   }
+.rasq-reveal-children.is-revealed > *:nth-child(2) { opacity: 1; transform: none; transition-delay: 70ms;  }
+.rasq-reveal-children.is-revealed > *:nth-child(3) { opacity: 1; transform: none; transition-delay: 140ms; }
+.rasq-reveal-children.is-revealed > *:nth-child(4) { opacity: 1; transform: none; transition-delay: 210ms; }
+.rasq-reveal-children.is-revealed > *:nth-child(5) { opacity: 1; transform: none; transition-delay: 280ms; }
+
+/* Workflow connector line — scaleX(0 → 1) on reveal */
+.rasq-connector {
+  transform-origin: left center;
+  transform: scaleX(0);
+  transition: transform 1s var(--rasq-ease);
+}
+
+.rasq-connector.is-revealed {
+  transform: scaleX(1);
+}

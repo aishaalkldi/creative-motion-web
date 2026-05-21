@@ -119,7 +119,7 @@ export function computeMemoryPrediction(
   const dir   = memory.trend.overallDirection;
 
   /* ── EMA-based if both values available ── */
-  if (q !== undefined && emaQ !== null && emaQ > 0) {
+  if (q != null && emaQ !== null && emaQ > 0) {
     const ratio = q / emaQ;
 
     // Assess medium-severity risk flags
@@ -414,9 +414,9 @@ export function generateDecision(
     const metricLimits: string[] = [];
 
     if (latestBio) {
-      if ((latestBio.controlScore ?? 100) < 65)
+      if (latestBio.controlScore != null && latestBio.controlScore < 65)
         metricLimits.push(`Step-height consistency ${Math.round(latestBio.controlScore)} (target ≥ 65)`);
-      if ((latestBio.movementQualityScore ?? 100) < 65)
+      if (latestBio.movementQualityScore != null && latestBio.movementQualityScore < 65)
         metricLimits.push(`Movement quality ${Math.round(latestBio.movementQualityScore)} (target ≥ 65)`);
       // ROM only when control and quality are not already driving the decision,
       // and only when romScore is not null (i.e., ≥3 valid knee-angle samples)
@@ -448,7 +448,7 @@ export function generateDecision(
     const last2Q = sessions
       .slice(-2)
       .map((s) => s.biomechanics?.movementQualityScore)
-      .filter((v): v is number => v !== undefined);
+      .filter((v): v is number => v != null);
     const last2Sym = sessions.slice(-2).map((s) => s.symmetryPct);
 
     if (last2Q.length >= 1 && last2Q.every((q) => q >= 72) && last2Sym.every((s) => s >= 65)) {
