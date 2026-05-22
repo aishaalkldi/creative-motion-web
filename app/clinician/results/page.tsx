@@ -65,7 +65,7 @@ export default function UnifiedResultsPage() {
             <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">
               Clinician workspace
             </p>
-            <h1 className="mt-2 text-2xl font-bold text-white">Patient Progress & Results</h1>
+            <h1 className="mt-2 text-2xl font-bold text-white">Rehabilitation Progress</h1>
             <p className="mt-2 max-w-2xl text-sm text-white/45">
               Rehabilitation outcomes from Supabase — session completions, effort, and pain scores per treatment plan.
             </p>
@@ -151,9 +151,9 @@ function ResultCard({ result }: { result: ClinicianResultCard }) {
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-2">
-        <Metric label="Sessions" value={`${result.sessionsCompleted} / ${result.totalSessions}`} />
-        <Metric label="Progress" value={`${result.progressPct}%`} />
-        <Metric label="Latest effort" value={result.latestEffortScore != null ? `${result.latestEffortScore}/10` : "—"} />
+        <Metric label="Rehabilitation Sessions Completed" value={`${result.sessionsCompleted} / ${result.totalSessions}`} />
+        <Metric label="Rehabilitation Progress" value={`${result.progressPct}%`} />
+        <Metric label="Patient-Reported Effort" value={result.latestEffortScore != null ? `${result.latestEffortScore}/10` : "—"} />
         <Metric label="Latest pain" value={result.latestPainScore != null ? `${result.latestPainScore}/10` : "—"} />
       </div>
 
@@ -167,11 +167,11 @@ function ResultCard({ result }: { result: ClinicianResultCard }) {
       <p className="mt-2 text-[11px] text-white/35">
         {hasReport ? (
           <>
-            Assessment report:{" "}
+            Latest Clinical Assessment:{" "}
             <span className="text-white/55">{assessmentTypeLabel(result.latestAssessmentType)}</span>
           </>
         ) : (
-          <span className="italic text-white/30">No assessment report yet</span>
+          <span className="italic text-white/30">No clinical assessment report available yet</span>
         )}
       </p>
 
@@ -195,7 +195,7 @@ function ResultCard({ result }: { result: ClinicianResultCard }) {
               className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 transition hover:text-white/80"
               title="Opens the clinical report; use Export PDF on that page to print or save as PDF"
             >
-              Open report to export PDF
+              Open Clinical Report to Export PDF
             </Link>
           </>
         ) : (
@@ -210,7 +210,7 @@ function ResultCard({ result }: { result: ClinicianResultCard }) {
               className="inline-flex cursor-not-allowed rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/25"
               aria-disabled="true"
             >
-              Open report to export PDF
+              Open Clinical Report to Export PDF
             </span>
           </>
         )}

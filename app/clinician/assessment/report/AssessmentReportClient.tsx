@@ -39,7 +39,7 @@ import {
 // ── Constants & labels ─────────────────────────────────────────────────────────
 
 const DISCLAIMER =
-  "Clinical decision-support draft — therapist must review before assigning treatment.";
+  "Clinical decision-support draft — this report is generated from patient-submitted data and must be reviewed by a licensed clinician before treatment is assigned.";
 
 const OBJECTIVE_LABELS: Record<ObjectiveKey, string> = {
   posture: "Posture",
@@ -391,7 +391,7 @@ function ProgramRecommendationSection({
   return (
     <ReportSection
       id="programs"
-      title="Recommended Rehab Programs"
+      title="Treatment Recommendations"
       defaultOpen
       accent="border-violet-300/25 bg-violet-400/10 text-violet-300"
       icon={
@@ -784,14 +784,14 @@ export function AssessmentReportClient() {
             </Link>
             <button type="button" onClick={() => window.print()}
               className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white">
-              Export PDF
+              Export Clinical Report (PDF)
             </button>
           </div>
         </header>
         <section className="border-b border-white/10 bg-[#0F1825] px-6 py-8 print:bg-white print:text-black">
           <div className="mx-auto max-w-4xl">
             <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 print:text-gray-600">
-              Structured Assessment Report
+              Clinical Assessment Report
             </p>
             <h1 className="mt-1 text-2xl font-bold text-white print:text-black">
               {patient?.full_name ?? "Patient"}
@@ -857,7 +857,7 @@ export function AssessmentReportClient() {
               onClick={() => window.print()}
               className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 transition hover:text-white"
             >
-              Export PDF
+              Export Clinical Report (PDF)
             </button>
             {serverBacked && (
               <span className="rounded-[5px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-2 py-1 text-[10px] font-semibold text-[#5DCAA5]">
@@ -879,7 +879,7 @@ export function AssessmentReportClient() {
         <div className="mx-auto max-w-4xl px-6 py-10">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="rounded-full border border-white/15 bg-white/[0.06] px-3 py-0.5 text-[11px] font-semibold text-white/50 print:border-gray-300 print:bg-gray-100 print:text-gray-700">
-              General Assessment Report
+              Clinical Assessment Report
             </span>
             {hasFlags && (
               <span className="rounded-full border border-rose-400/30 bg-rose-400/15 px-3 py-0.5 text-[11px] font-semibold text-rose-300">
@@ -924,9 +924,9 @@ export function AssessmentReportClient() {
               { id: "objective", label: "Objective" },
               { id: "functional", label: "Functional" },
               { id: "outcomes", label: "Outcomes" },
-              { id: "ai", label: "AI Interpretation" },
-              { id: "soap", label: "SOAP Notes" },
-              { id: "programs", label: "Programs" },
+              { id: "ai", label: "Clinical Interpretation" },
+              { id: "soap", label: "SOAP Documentation" },
+              { id: "programs", label: "Treatment Recommendations" },
               { id: "assign", label: "Assign Plan" },
             ].filter(Boolean).map((item) => item && (
               <a
@@ -1266,7 +1266,7 @@ export function AssessmentReportClient() {
         {/* ── Section 5: AI Clinical Interpretation ── */}
         <ReportSection
           id="ai"
-          title="AI Clinical Interpretation"
+          title="Clinical Interpretation"
           defaultOpen
           accent="border-amber-300/25 bg-amber-400/10 text-amber-300"
           icon={
@@ -1301,7 +1301,7 @@ export function AssessmentReportClient() {
         {/* ── Section 6: Therapist Notes (SOAP) ── */}
         <ReportSection
           id="soap"
-          title="Therapist Notes & SOAP"
+          title="SOAP Documentation"
           defaultOpen
           accent="border-white/20 bg-white/[0.08] text-white/70"
           icon={

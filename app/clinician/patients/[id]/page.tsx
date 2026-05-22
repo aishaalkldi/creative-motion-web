@@ -543,17 +543,19 @@ export default function PatientProfilePage() {
                 href={`/clinician/assessment/report?patientId=${patient.id}`}
                 className="shrink-0 rounded-[7px] bg-lime-400/15 px-3 py-1.5 text-xs font-semibold text-lime-300 transition hover:bg-lime-400/25"
               >
-                Full Report →
+                Open Clinical Report
               </Link>
             </div>
-            <div className="mt-4 border-t border-lime-300/15 pt-4">
-              <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-white/40">
-                Patient responses (review)
+            <div className="mt-5 border-t border-lime-300/15 pt-5">
+              <p className="mb-4 text-[10px] font-bold uppercase tracking-wider text-white/40">
+                Patient-Submitted Assessment
               </p>
+              <div className="space-y-4">
               <PatientSubmittedAnswersReview
                 patientDraft={submittedRemote[0].patientDraft}
                 includedSections={submittedRemote[0].includedSections}
               />
+              </div>
             </div>
           </div>
         )}
@@ -662,12 +664,12 @@ export default function PatientProfilePage() {
 
         <section className="grid gap-6 xl:grid-cols-[1.35fr_0.85fr]">
           <div className="space-y-6">
-            {/* Patient overview */}
+            {/* Clinical Status */}
             <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
-                  <h2 className="text-sm font-bold text-white">Patient overview</h2>
-                  <p className="mt-1 text-xs text-white/35">Core identity and current case context.</p>
+                  <h2 className="text-lg font-bold text-white">Clinical Status</h2>
+                  <p className="mt-1 text-xs text-white/35">Core identity, case context, and current clinical phase.</p>
                 </div>
                 <span className={`rounded-[5px] border px-2 py-0.5 text-[10px] font-semibold ${
                   patient.status?.toLowerCase() === "active"
@@ -713,13 +715,13 @@ export default function PatientProfilePage() {
                   href={`/clinician/progress/${patient.id}`}
                   className="rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3.5 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/14"
                 >
-                  View Progress
+                  Rehabilitation Progress
                 </Link>
                 <Link
                   href={`/clinician/assessment/report?patientId=${patient.id}`}
                   className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-2 text-xs font-semibold text-white/55 transition hover:border-[#1D9E75]/20 hover:text-white"
                 >
-                  Assessment Report
+                  Open Clinical Report
                 </Link>
               </div>
               {/* Secondary actions */}
@@ -776,12 +778,13 @@ export default function PatientProfilePage() {
               </div>
             )}
 
-            {/* RASQ Baseline Assessments */}
-            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">
-                  Clinical Assessments
-                </p>
+            {/* Clinical Report */}
+            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-bold text-white">Clinical Report</h2>
+                  <p className="mt-1 text-xs text-white/35">Saved assessments and linked clinical reports.</p>
+                </div>
                 <Link
                   href={`/clinician/assessment/new?patientId=${patient.id}`}
                   className="text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
@@ -790,7 +793,9 @@ export default function PatientProfilePage() {
                 </Link>
               </div>
               {rasqAssessments.length === 0 ? (
-                <p className="text-xs text-[#6B7280]">No assessment recorded yet.</p>
+                <p className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
+                  No assessment on record. Send a remote assessment link to begin.
+                </p>
               ) : (
                 <div className="space-y-2">
                   {rasqAssessments.slice(0, 3).map((a) => (
@@ -823,7 +828,7 @@ export default function PatientProfilePage() {
                         href={`/clinician/assessment/report?patientId=${patient.id}&assessmentId=${a.id}`}
                         className="mt-2 inline-flex text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
                       >
-                        View report →
+                        Open Clinical Report
                       </Link>
                     </div>
                   ))}
@@ -921,7 +926,7 @@ export default function PatientProfilePage() {
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
                             <ResultPill
-                              label={`Score: ${scoreDisplay}`}
+                              label={`Functional Score: ${scoreDisplay}`}
                               tone="score"
                             />
                             <ResultPill
@@ -949,12 +954,12 @@ export default function PatientProfilePage() {
                             href={`/clinician/assessment/report?patientId=${patient.id}&assessmentId=${row.id}`}
                             className="inline-flex items-center rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-4 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
                           >
-                            Open Report
+                            Open Clinical Report
                           </Link>
                         </div>
                         <div className="mt-3 rounded-[7px] border border-dashed border-[#1E2D42] bg-[#0B1220] px-3 py-3">
                           <p className="text-[10px] font-semibold uppercase tracking-wider text-white/45">
-                            SOAP / Clinical notes
+                            SOAP Documentation
                           </p>
                           <p className="mt-1 text-[11px] leading-relaxed text-white/50">
                             Placeholder — subjective, objective, assessment, and plan will appear here per encounter.
@@ -965,7 +970,9 @@ export default function PatientProfilePage() {
                   })
                 ) : (
                   <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-5">
-                    <p className="text-xs text-[#6B7280]">No assessment recorded yet.</p>
+                    <p className="text-sm leading-relaxed text-[#6B7280]">
+                      No assessment on record. Send a remote assessment link to begin.
+                    </p>
                   </div>
                 )}
               </div>
@@ -995,8 +1002,8 @@ export default function PatientProfilePage() {
                           <ResultPill
                             label={
                               typeof item.score === "number"
-                                ? `Score: ${item.score}%`
-                                : "Score: —"
+                                ? `Functional Score: ${item.score}%`
+                                : "Functional Score: —"
                             }
                             tone="score"
                           />
@@ -1017,12 +1024,12 @@ export default function PatientProfilePage() {
                           href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
                           className="inline-flex items-center rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-4 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
                         >
-                          Open Report
+                          Open Clinical Report
                         </Link>
                       </div>
                       <div className="mt-3 rounded-[7px] border border-dashed border-[#1E2D42] bg-[#0B1220] px-3 py-3">
                         <p className="text-[10px] font-semibold uppercase tracking-wider text-white/30">
-                          SOAP / Clinical notes
+                          SOAP Documentation
                         </p>
                         <p className="mt-1 text-[11px] leading-relaxed text-white/35">
                           Placeholder — encounter narrative will sync here when documentation is enabled.
@@ -1032,14 +1039,16 @@ export default function PatientProfilePage() {
                   ))
                 ) : (
                   <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-5">
-                    <p className="text-xs text-[#6B7280]">No assessment recorded yet.</p>
+                    <p className="text-sm leading-relaxed text-[#6B7280]">
+                      No assessment on record. Send a remote assessment link to begin.
+                    </p>
                   </div>
                 )}
               </div>
             </section>
 
             <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <h2 className="text-lg font-bold text-white">SOAP / Clinical Notes</h2>
+              <h2 className="text-lg font-bold text-white">SOAP Documentation</h2>
               <p className="mt-2 text-sm text-white/70">
                 Structured encounter documentation (coming soon). This section will hold subjective, objective,
                 assessment, and plan per visit.
@@ -1193,7 +1202,7 @@ export default function PatientProfilePage() {
                               isPending   ? "border-[#1E2D42] bg-[#0B1220] text-white/40" :
                               "border-amber-400/25 bg-amber-400/10 text-amber-300"
                             }`}>
-                              {isSubmitted ? "Submitted" : isPending ? "Pending" : "In Progress"}
+                              {isSubmitted ? "Submitted" : isPending ? "Awaiting Completion" : "In Progress"}
                             </span>
                           </div>
 
@@ -1204,14 +1213,16 @@ export default function PatientProfilePage() {
                           )}
                           {isSubmitted && (
                             <div className="mt-3 border-t border-[#1E2D42] pt-3">
-                              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-white/35">
-                                Patient responses
+                              <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-white/35">
+                                Patient-Submitted Assessment
                               </p>
+                              <div className="space-y-3">
                               <PatientSubmittedAnswersReview
                                 patientDraft={ra.patientDraft}
                                 includedSections={ra.includedSections}
                                 compact
                               />
+                              </div>
                             </div>
                           )}
                         </div>
@@ -1223,7 +1234,7 @@ export default function PatientProfilePage() {
                               href={`/clinician/assessment/report?patientId=${patient.id}`}
                               className="flex-1 px-3 py-2.5 text-center text-[11px] font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/5"
                             >
-                              Full Report →
+                              Open Clinical Report
                             </Link>
                           ) : (
                             <button
@@ -1266,7 +1277,7 @@ export default function PatientProfilePage() {
                           href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
                           className="inline-flex items-center rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-3 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
                         >
-                          View Report →
+                          Open Clinical Report
                         </Link>
                       </div>
                     </div>
@@ -1602,7 +1613,7 @@ function TreatmentPlanSection({
   if (loading) {
     return (
       <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-        <p className="text-sm text-white/40">Loading treatment plan…</p>
+        <p className="text-sm text-white/40">Loading assigned rehabilitation plan…</p>
       </section>
     );
   }
@@ -1612,10 +1623,10 @@ function TreatmentPlanSection({
       <div className="mb-5 flex items-start justify-between gap-4">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">
-            Treatment Plan
+            Assigned Rehabilitation Plan
           </p>
           <h2 className="mt-1 text-lg font-bold text-white">
-            {plan ? plan.programName : "No treatment plan assigned yet."}
+            {plan ? plan.programName : "No rehabilitation plan assigned"}
           </h2>
           {plan && (
             <p className="mt-0.5 text-sm text-white/40">{plan.phaseName}</p>
@@ -1631,7 +1642,9 @@ function TreatmentPlanSection({
       </div>
 
       {!plan && !assignOpen && (
-        <p className="text-xs text-[#6B7280]">No treatment plan assigned yet.</p>
+        <p className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
+          No rehabilitation plan assigned. Complete an assessment first, then assign a plan.
+        </p>
       )}
 
       {/* Current plan summary */}
@@ -1643,13 +1656,25 @@ function TreatmentPlanSection({
           </div>
 
           <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
-              Patient progress (Supabase)
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/25">
+              Rehabilitation Progress Snapshot
             </p>
+            <p className="mb-4 text-xs text-white/35">Session completions and patient-reported outcomes from the portal.</p>
+            {(() => {
+              const sessionsDone = planProgress?.sessionsCompleted ?? adherence?.sessionsCompleted ?? 0;
+              if (sessionsDone === 0) {
+                return (
+                  <p className="mb-4 rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-3 text-sm leading-relaxed text-[#6B7280]">
+                    No rehabilitation progress recorded yet. Progress appears after the patient completes their first session.
+                  </p>
+                );
+              }
+              return null;
+            })()}
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {[
                 {
-                  label: "Sessions",
+                  label: "Rehabilitation Sessions",
                   value: planProgress
                     ? `${planProgress.sessionsCompleted} / ${planProgress.totalSessions}`
                     : adherence
@@ -1657,7 +1682,7 @@ function TreatmentPlanSection({
                       : "—",
                 },
                 {
-                  label: "Progress",
+                  label: "Rehabilitation Progress",
                   value: planProgress
                     ? `${planProgress.progressPct}%`
                     : adherence
@@ -1665,7 +1690,7 @@ function TreatmentPlanSection({
                       : "—",
                 },
                 {
-                  label: "Latest effort",
+                  label: "Patient-Reported Effort",
                   value: planProgress?.latestEffortScore != null
                     ? `${planProgress.latestEffortScore}/10`
                     : "—",
@@ -1703,7 +1728,7 @@ function TreatmentPlanSection({
           {adherence && (
             <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
               <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
-                Weekly Progress
+                Session Adherence (weekly)
               </p>
               <div className="flex items-end gap-1.5">
                 {adherence.weeklyCompletions.map((w) => {
@@ -1902,8 +1927,9 @@ function formatTestLabel(test: string) {
 }
 
 function formatStatusLabel(status: string) {
-  if (status === "completed") return "Completed";
+  if (status === "completed") return "Session Completed";
   if (status === "draft") return "Draft";
+  if (status === "pending") return "Awaiting Completion";
   return status;
 }
 
