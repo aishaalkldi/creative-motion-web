@@ -16,6 +16,8 @@ const PUBLIC_PREFIXES = [
   "/api/auth/callback",
   // Patient portal APIs — token-validated server-side (service role); no Supabase session.
   "/api/patient/",
+  // Remote assessment token APIs — token-validated server-side; no Supabase session.
+  "/api/remote-assessments/",
   // Token-gated patient portal pages — access control is the URL token, not a provider session.
   "/patient/",
   // Patient-facing remote assessment link (sent via secure URL)
