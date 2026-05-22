@@ -176,7 +176,7 @@ function HeroSection() {
                 className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#5DCAA5]/80"
                 style={{ fontFamily: "var(--rasq-font-mono)" }}
               >
-                Rehabilitation Intelligence Platform
+                Clinic-led remote rehabilitation platform
               </span>
             </div>
 
@@ -188,8 +188,8 @@ function HeroSection() {
                 fontFamily: "var(--rasq-font-display)",
               }}
             >
-              Rehabilitation intelligence<br />
-              <span className="text-white/55">for every stage of care.</span>
+              Clinic-led remote rehabilitation<br />
+              <span className="text-white/55">from assessment to progress tracking.</span>
             </h1>
 
             {/* Tagline — muted, below headline, not competing */}
@@ -205,9 +205,8 @@ function HeroSection() {
               className="rasq-stagger-item mt-4 max-w-xl text-base leading-7 text-white/45"
               style={{ animationDelay: "120ms" }}
             >
-              RASQ helps providers assess movement, plan treatment, guide
-              sessions, and track recovery — with intelligence that adapts
-              across every stage of care.
+              A clinic-led remote rehabilitation platform — assess patients, assign plans,
+              track adherence, and export clinical reports from one clinician workspace.
             </p>
 
             {/* CTAs */}
@@ -397,7 +396,7 @@ function TrustBar() {
   const items = [
     "Clinical workflows co-designed with rehabilitation specialists",
     "Tokenised patient access — no login required for remote assessments",
-    "Export-ready clinical reports — structured for referral and insurer review",
+    "Export-ready clinical reports — structured for clinician review and referral",
   ];
 
   return (
@@ -421,11 +420,11 @@ function TrustBar() {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 const WORKFLOW_STEPS = [
-  { num: "01", label: "Assess", desc: "Structured MSK, gait, and functional assessments — in-clinic or remote." },
-  { num: "02", label: "Plan", desc: "Build evidence-based rehabilitation plans across all specialty pathways." },
-  { num: "03", label: "Guide", desc: "Session-by-session coaching with CV movement analysis." },
-  { num: "04", label: "Monitor", desc: "Real-time adherence, pain flags, and session-level outcome data." },
-  { num: "05", label: "Measure", desc: "Quantified progress reports. Outcome data for clinicians and insurers." },
+  { num: "01", label: "Assess", desc: "Structured MSK and functional assessments — in-clinic or via secure remote links." },
+  { num: "02", label: "Report", desc: "Review patient submissions and generate clinician-reviewed clinical reports." },
+  { num: "03", label: "Plan", desc: "Assign rehabilitation plans and share secure patient portal access." },
+  { num: "04", label: "Track", desc: "Patient sessions and adherence tracking with session-level outcome data." },
+  { num: "05", label: "Export", desc: "Progress snapshots and export-ready clinical reports for your records." },
 ];
 
 function WorkflowSection() {
@@ -450,7 +449,7 @@ function WorkflowSection() {
             className="mt-2 text-2xl font-bold tracking-tight text-white lg:text-3xl"
             style={{ fontFamily: "var(--rasq-font-display)" }}
           >
-            One platform. Every stage of care.
+            One platform. Assessment through recovery.
           </h2>
         </div>
 
@@ -527,8 +526,8 @@ function IntelligenceSection() {
             From first session to full recovery.
           </h2>
           <p className="mt-3 max-w-lg text-sm leading-6 text-white/40">
-            RASQ tracks every stage of the patient journey, surfacing clinical signals
-            when they matter — so providers can act, not search.
+            RASQ supports the clinician workflow from remote assessment through plan
+            assignment and progress review — with decision-support drafts for therapist review.
           </p>
         </div>
 
@@ -932,7 +931,7 @@ function Footer() {
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/25">Product</p>
             <ul className="mt-3 space-y-2.5">
-              {[["Assessments", "#platform"], ["Treatment Plans", "#platform"], ["CV Sessions", "#platform"], ["RASQ Sense", "#"], ["RASQ Motion", "#"]].map(([l, h]) => (
+              {[["Assessments", "#platform"], ["Treatment Plans", "#platform"], ["Therapy Sessions", "#platform"], ["RASQ Sense", "#"], ["RASQ Motion", "#"]].map(([l, h]) => (
                 <li key={l}>
                   <a href={h} className="text-xs text-white/35 transition hover:text-white">{l}</a>
                 </li>

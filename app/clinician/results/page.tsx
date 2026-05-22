@@ -67,7 +67,7 @@ export default function UnifiedResultsPage() {
             </p>
             <h1 className="mt-2 text-2xl font-bold text-white">Rehabilitation Progress</h1>
             <p className="mt-2 max-w-2xl text-sm text-white/45">
-              Rehabilitation outcomes from Supabase — session completions, effort, and pain scores per treatment plan.
+              Session outcomes and adherence by treatment plan — linked to patient profiles and clinical reports.
             </p>
           </div>
           <Link
@@ -94,7 +94,7 @@ export default function UnifiedResultsPage() {
           </div>
 
           {loading ? (
-            <p className="py-12 text-center text-sm text-white/40">Loading progress from Supabase…</p>
+            <p className="py-12 text-center text-sm text-white/40">Loading rehabilitation progress…</p>
           ) : error ? (
             <div className="rounded-[7px] border border-rose-400/20 bg-rose-400/8 px-4 py-3 text-sm text-rose-300">
               {error}
@@ -151,10 +151,10 @@ function ResultCard({ result }: { result: ClinicianResultCard }) {
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-2">
-        <Metric label="Rehabilitation Sessions Completed" value={`${result.sessionsCompleted} / ${result.totalSessions}`} />
-        <Metric label="Rehabilitation Progress" value={`${result.progressPct}%`} />
-        <Metric label="Patient-Reported Effort" value={result.latestEffortScore != null ? `${result.latestEffortScore}/10` : "—"} />
-        <Metric label="Latest pain" value={result.latestPainScore != null ? `${result.latestPainScore}/10` : "—"} />
+        <Metric label="Sessions" value={`${result.sessionsCompleted} / ${result.totalSessions}`} />
+        <Metric label="Progress" value={`${result.progressPct}%`} />
+        <Metric label="Effort" value={result.latestEffortScore != null ? `${result.latestEffortScore}/10` : "—"} />
+        <Metric label="Pain" value={result.latestPainScore != null ? `${result.latestPainScore}/10` : "—"} />
       </div>
 
       <p className="mt-3 text-[11px] text-white/35">
@@ -203,18 +203,24 @@ function ResultCard({ result }: { result: ClinicianResultCard }) {
             <span
               className="inline-flex cursor-not-allowed rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/25"
               aria-disabled="true"
+              title="No clinical assessment on record for this plan"
             >
               View Assessment Report
             </span>
             <span
               className="inline-flex cursor-not-allowed rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/25"
               aria-disabled="true"
+              title="Complete an assessment and save a clinical report first"
             >
               Open Clinical Report to Export PDF
             </span>
           </>
         )}
       </div>
+
+      <p className="mt-3 text-[11px] text-white/30">
+        PDF export is available from the clinical report page.
+      </p>
     </article>
   );
 }

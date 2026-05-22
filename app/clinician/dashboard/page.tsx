@@ -86,19 +86,22 @@ export default function ClinicalDashboard() {
             <p className="mt-1 text-sm text-white/40">
               {activeCount} active patients · {pendingCount} assessment{pendingCount !== 1 ? "s" : ""} pending
             </p>
+            <p className="mt-2 max-w-xl text-xs leading-relaxed text-white/30">
+              MVP pilot dashboard — sample overview until live clinic aggregates are connected.
+            </p>
           </div>
           <div className="flex items-center gap-2.5">
             <Link
-              href="/clinician/assessment/new"
+              href="/clinician/patients"
               className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]"
             >
-              + New Assessment
+              Go to Patients
             </Link>
             <Link
-              href="/clinician/patients"
+              href="/clinician/assessment/new"
               className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-4 py-2.5 text-sm font-semibold text-white/60 transition hover:border-[#1D9E75]/25 hover:text-white"
             >
-              View Patients
+              + New Assessment
             </Link>
           </div>
         </div>
@@ -119,19 +122,19 @@ export default function ClinicalDashboard() {
             <div className="flex items-center justify-between border-b border-[#1E2D42] px-5 py-4">
               <div>
                 <h2 className="text-sm font-bold text-white">Active Patients</h2>
-                <p className="mt-0.5 text-xs text-white/35">Last session · Phase · Adherence</p>
+                <p className="mt-0.5 text-xs text-white/35">Sample preview · Last session · Phase · Adherence</p>
               </div>
               <Link href="/clinician/patients" className="text-xs font-semibold text-[#5DCAA5] hover:text-[#1D9E75]">
-                View all →
+                View all patients →
               </Link>
             </div>
 
             <div className="divide-y divide-[#1E2D42]">
               {MOCK_PATIENTS.map((p) => (
-                <Link
+                <div
                   key={p.id}
-                  href={`/clinician/patients/${p.id}`}
-                  className="flex items-center gap-4 px-5 py-3.5 transition hover:bg-[#0B1220] group"
+                  className="flex items-center gap-4 px-5 py-3.5 opacity-90"
+                  aria-label={`${p.name} — sample patient preview`}
                 >
                   {/* Avatar */}
                   <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] bg-[#1D9E75]/10 text-[11px] font-bold text-[#5DCAA5]">
@@ -140,9 +143,14 @@ export default function ClinicalDashboard() {
 
                   {/* Name + diagnosis */}
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-white group-hover:text-[#5DCAA5] truncate">
-                      {p.name}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="truncate text-sm font-semibold text-white/70">
+                        {p.name}
+                      </p>
+                      <span className="shrink-0 rounded-[4px] border border-[#1E2D42] bg-[#0B1220] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white/30">
+                        Sample
+                      </span>
+                    </div>
                     <p className="truncate text-xs text-white/35">{p.diagnosis}</p>
                   </div>
 
@@ -169,12 +177,7 @@ export default function ClinicalDashboard() {
 
                   {/* Status */}
                   <StatusBadge status={p.status} />
-
-                  {/* Arrow */}
-                  <svg className="h-3.5 w-3.5 shrink-0 text-white/15 transition group-hover:text-[#5DCAA5]/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                  </svg>
-                </Link>
+                </div>
               ))}
             </div>
           </div>
@@ -186,7 +189,7 @@ export default function ClinicalDashboard() {
             <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825]">
               <div className="border-b border-[#1E2D42] px-5 py-4">
                 <h2 className="text-sm font-bold text-white">Clinical Activity</h2>
-                <p className="mt-0.5 text-xs text-white/35">Recent events and alerts</p>
+                <p className="mt-0.5 text-xs text-white/35">Sample events and alerts</p>
               </div>
               <div className="divide-y divide-[#1E2D42]">
                 {MOCK_ACTIVITY.map((item) => (
@@ -211,9 +214,9 @@ export default function ClinicalDashboard() {
               <h2 className="text-sm font-bold text-white">Quick access</h2>
               <div className="mt-3 space-y-1.5">
                 {[
-                  { label: "New assessment",    href: "/clinician/assessment/new", primary: true },
+                  { label: "View all patients",    href: "/clinician/patients",    primary: true },
+                  { label: "New assessment",       href: "/clinician/assessment/new", primary: false },
                   { label: "Build treatment plan", href: "/clinician/plans/new",   primary: false },
-                  { label: "View all patients",    href: "/clinician/patients",    primary: false },
                   { label: "Results",              href: "/clinician/results",     primary: false },
                 ].map(({ label, href, primary }) => (
                   <Link

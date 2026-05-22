@@ -696,7 +696,7 @@ export default function PatientProfilePage() {
                   href={`/therapy?patientId=${patient.id}`}
                   className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-2 text-xs font-semibold text-white/50 transition hover:border-[#1D9E75]/20 hover:text-white"
                 >
-                  CV therapy session
+                  Therapy session
                 </Link>
               </div>
               {copyFeedback === "success" && (
@@ -710,12 +710,7 @@ export default function PatientProfilePage() {
             {/* Assessment saved banner */}
             {showAssessmentBanner && (
               <div className="flex items-start justify-between gap-3 rounded-[8px] border border-[#1D9E75]/30 bg-[#1D9E75]/8 px-4 py-3">
-                <p className="text-sm text-[#5DCAA5]">
-                  Assessment saved.{" "}
-                  <span className="text-[#5DCAA5]/70">
-                    Suggested programs will appear here in the next update.
-                  </span>
-                </p>
+                <p className="text-sm text-[#5DCAA5]">Assessment saved successfully.</p>
                 <button
                   type="button"
                   onClick={() => setShowAssessmentBanner(false)}
@@ -726,10 +721,10 @@ export default function PatientProfilePage() {
               </div>
             )}
 
-            {/* Step 1 — Understand the Patient */}
+            {/* Patient-Submitted Assessment */}
             <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <h2 className="text-lg font-bold text-white">Step 1 — Understand the Patient</h2>
-              <p className="mt-1 mb-5 text-xs text-white/35">Review patient-submitted answers and open the clinical report.</p>
+              <h2 className="text-lg font-bold text-white">Patient-Submitted Assessment</h2>
+              <p className="mt-1 mb-5 text-xs text-white/35">Review remote answers, then open the clinical report.</p>
 
               {submittedRemote.length > 0 && submittedRemote[0] && (
                 <div className="mb-5 rounded-[8px] border border-lime-300/20 bg-lime-400/[0.06] px-4 py-3">
@@ -746,16 +741,15 @@ export default function PatientProfilePage() {
               )}
 
               <div className="mb-5">
-                <h3 className="text-sm font-bold text-white">Patient-Submitted Assessment</h3>
                 {submittedRemote.length > 0 && submittedRemote[0] ? (
-                  <div className="mt-3 space-y-4">
+                  <div className="space-y-4">
                     <PatientSubmittedAnswersReview
                       patientDraft={submittedRemote[0].patientDraft}
                       includedSections={submittedRemote[0].includedSections}
                     />
                   </div>
                 ) : (
-                  <p className="mt-3 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
+                  <p className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
                     No assessment yet. Send a remote assessment link to begin.
                   </p>
                 )}
@@ -797,7 +791,7 @@ export default function PatientProfilePage() {
               ) : null}
             </section>
 
-            {/* Step 2 — Assign the Plan */}
+            {/* Rehabilitation Plan */}
             <TreatmentPlanSection
               patientId={patient.id}
               plan={treatmentPlan}
@@ -817,7 +811,7 @@ export default function PatientProfilePage() {
               }}
             />
 
-            {/* Step 3 — Track Progress */}
+            {/* Progress Snapshot */}
             <ProgressSnapshotSection
               patientId={patient.id}
               plan={treatmentPlan}
@@ -865,9 +859,7 @@ export default function PatientProfilePage() {
 
               <div className="mb-6">
                 <h3 className="text-sm font-bold text-white">SOAP Documentation</h3>
-                <p className="mt-1 text-sm text-white/50">
-                  Structured encounter documentation (coming soon).
-                </p>
+                <p className="text-xs text-white/45">Documentation templates are in development for the MVP pilot.</p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <SoapPlaceholderCard title="Subjective" />
                   <SoapPlaceholderCard title="Objective" />
@@ -945,9 +937,9 @@ export default function PatientProfilePage() {
 
             <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
               <h2 className="text-lg font-bold text-white">Therapy Session Results</h2>
-              <p className="mt-2 text-sm text-white/50">
-                Camera CV sessions for chart #{patient.id}.
-              </p>
+                <p className="mt-1 text-sm text-white/50">
+                  In-browser therapy sessions (pilot) for chart #{patient.id}.
+                </p>
 
               <div className="mt-6">
                 <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
@@ -1092,7 +1084,7 @@ export default function PatientProfilePage() {
                             </p>
                           )}
                           {isSubmitted && (
-                            <p className="mt-2 text-[11px] text-[#5DCAA5]/80">Ready for clinician review in Step 1.</p>
+                            <p className="mt-2 text-[11px] text-[#5DCAA5]/80">Ready for review in Patient-Submitted Assessment.</p>
                           )}
                         </div>
 
@@ -1164,7 +1156,7 @@ function TherapyProgressFlow({ nextActionLine }: { nextActionLine: string }) {
   const steps: { label: string; detail: string }[] = [
     { label: "Assessment", detail: "Structured capture & review" },
     { label: "Recommended therapy", detail: "Program routing from results" },
-    { label: "Camera CV session", detail: "In-browser stepping session" },
+    { label: "Therapy session", detail: "In-browser stepping session (pilot)" },
     { label: "Therapy result", detail: "Metrics saved to chart" },
     {
       label: "Next action",
@@ -1201,7 +1193,7 @@ function SoapPlaceholderCard({ title }: { title: string }) {
   return (
     <div className="rounded-[8px] border border-dashed border-[#1E2D42] bg-[#0B1220] p-4">
       <p className="text-xs font-semibold text-white/70">{title}</p>
-      <p className="mt-2 text-[11px] leading-relaxed text-white/45">Coming soon — not recorded.</p>
+      <p className="mt-2 text-[11px] leading-relaxed text-white/45">Not recorded in this MVP pilot.</p>
     </div>
   );
 }
@@ -1236,7 +1228,7 @@ function TherapySessionHistoryEntry({
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-white/8 pb-4">
         <div>
           <p className="text-lg font-semibold text-white">
-            {t.exerciseName?.trim() || t.programLabel || "Camera CV therapy"}
+            {t.exerciseName?.trim() || t.programLabel || "Therapy session"}
           </p>
           <p className="mt-1 text-sm text-white/55">
             {t.recordedAt ? new Date(t.recordedAt).toLocaleString() : "—"}
@@ -1356,9 +1348,8 @@ function ProgressSnapshotSection({
 
   return (
     <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-      <h2 className="text-lg font-bold text-white">Step 3 — Track Progress</h2>
+      <h2 className="text-lg font-bold text-white">Progress Snapshot</h2>
       <div className="mt-4">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">Progress Snapshot</p>
         {!plan ? (
           <p className="mt-3 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
             No progress recorded yet. Progress appears after the patient completes a session.
@@ -1582,13 +1573,10 @@ function TreatmentPlanSection({
 
   return (
     <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-      <h2 className="text-lg font-bold text-white">Step 2 — Assign the Plan</h2>
+      <h2 className="text-lg font-bold text-white">Rehabilitation Plan</h2>
       <div className="mt-4 mb-5 flex items-start justify-between gap-4">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">
-            Rehabilitation Plan
-          </p>
-          <h3 className="mt-1 text-base font-bold text-white">
+          <h3 className="text-base font-bold text-white">
             {plan ? plan.programName : "No plan assigned"}
           </h3>
           {plan && (
