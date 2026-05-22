@@ -3,8 +3,14 @@
 import Link from "next/link";
 import { useEffect, useState, useMemo, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
-import { getPatient, type BackendPatient } from "@/app/lib/api";
-import { loadGeneralAssessmentDraft } from "@/app/lib/general-assessment/storage";
+import type { BackendPatient } from "@/app/lib/api";
+import type { AssessmentData } from "@/app/lib/assessment-types";
+import type { AssessmentDetailResponse } from "@/app/api/assessments/[id]/route";
+import {
+  extractGeneralDraft,
+  extractStructuredData,
+} from "@/app/lib/assessment-payload";
+import { loadGeneralAssessmentDraft, saveGeneralAssessmentDraft } from "@/app/lib/general-assessment/storage";
 import type {
   CvRowStatus,
   FunctionalKey,
@@ -161,6 +167,115 @@ function SoapCard({ label, value }: { label: string; value: string }) {
         <p className="text-sm leading-6 text-white/80 whitespace-pre-wrap">{value}</p>
       ) : (
         <EmptyFieldNote />
+      )}
+    </div>
+  );
+}
+
+function EditableSoapSection({
+  draft,
+  onChange,
+  onSave,
+  saving,
+  saveMessage,
+}: {
+  draft: GeneralAssessmentDraft;
+  onChange: (soap: GeneralAssessmentDraft["soap"]) => void;
+  onSave: () => void;
+  saving: boolean;
+  saveMessage: string;
+}) {
+  const fields: { key: keyof GeneralAssessmentDraft["soap"]; label: string }[] = [
+    { key: "subjective", label: "S — Subjective" },
+    { key: "objective", label: "O — Objective" },
+    { key: "assessment", label: "A — Assessment" },
+    { key: "plan", label: "P — Plan" },
+  ];
+
+  return (
+    <div>
+      <p className="mb-4 text-xs text-white/45 print:hidden">
+        Edit SOAP notes below. Changes are saved to this assessment record.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {fields.map(({ key, label }) => (
+          <div key={key} className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] p-4">
+            <label className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-[#5DCAA5]/60">
+              {label}
+            </label>
+            <textarea
+              value={draft.soap[key]}
+              onChange={(e) => onChange({ ...draft.soap, [key]: e.target.value })}
+              rows={key === "assessment" || key === "plan" ? 4 : 5}
+              className="w-full resize-y rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-sm leading-6 text-white/85 outline-none focus:border-[#1D9E75]/40 print:border-transparent print:bg-white print:text-black"
+            />
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 flex flex-wrap items-center gap-3 print:hidden">
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={saving}
+          className="rounded-[7px] bg-[#1D9E75] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#179165] disabled:opacity-50"
+        >
+          {saving ? "Saving…" : "Save SOAP"}
+        </button>
+        {saveMessage && (
+          <span className={`text-xs ${saveMessage.startsWith("Saved") ? "text-[#5DCAA5]" : "text-rose-300"}`}>
+            {saveMessage}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const DOC_ICON = (
+  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+  </svg>
+);
+
+function StructuredAssessmentReport({ data, notes }: { data: AssessmentData; notes: string | null }) {
+  return (
+    <div className="mx-auto max-w-4xl space-y-5 px-6 py-8">
+      <ReportSection id="summary" title="Structured Assessment Summary" defaultOpen icon={DOC_ICON}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <InfoTile label="Body region" value={data.bodyRegion} />
+          <InfoTile label="Rehab phase" value={data.rehabilitationPhase} />
+          <InfoTile label="Pain at rest" value={`${data.painAtRest}/10`} accent="text-rose-300" />
+          <InfoTile label="Pain on movement" value={`${data.painOnMovement}/10`} accent="text-rose-300" />
+          <InfoTile label="Pain location" value={data.painLocation || "—"} />
+          <InfoTile label="Onset" value={data.onset} />
+        </div>
+        {data.clinicalNotes && <TextBlock label="Clinical notes" value={data.clinicalNotes} />}
+        {notes && <TextBlock label="Provider notes" value={notes} />}
+      </ReportSection>
+      {data.rom?.measurements?.length > 0 && (
+        <ReportSection id="objective" title="Range of Motion" defaultOpen icon={DOC_ICON}>
+          <div className="space-y-2">
+            {data.rom.measurements.map((m) => (
+              <div key={m.label} className="flex justify-between border-b border-white/8 py-2 text-sm">
+                <span className="text-white/70">{m.label}</span>
+                <span className="font-semibold text-[#5DCAA5]">
+                  {m.value}{m.unit ?? "°"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </ReportSection>
+      )}
+      {data.functionalTests?.length > 0 && (
+        <ReportSection id="functional" title="Functional Tests" icon={DOC_ICON}>
+          {data.functionalTests.map((t) => (
+            <div key={t.testName} className="border-b border-white/8 py-3 last:border-0">
+              <p className="text-sm font-semibold text-white">{t.testName}</p>
+              <p className="text-xs text-white/50">Result: {t.result}</p>
+              {t.notes && <p className="mt-1 text-sm text-white/70">{t.notes}</p>}
+            </div>
+          ))}
+        </ReportSection>
       )}
     </div>
   );
@@ -413,34 +528,187 @@ function AssignPlanSection({
 
 export function AssessmentReportClient() {
   const searchParams = useSearchParams();
-  const patientId = searchParams.get("patientId")?.trim() ?? "";
+  const patientIdParam = searchParams.get("patientId")?.trim() ?? "";
+  const assessmentId = searchParams.get("assessmentId")?.trim() ?? "";
 
   const [draft, setDraft] = useState<GeneralAssessmentDraft | null>(null);
+  const [structuredData, setStructuredData] = useState<AssessmentData | null>(null);
+  const [reportKind, setReportKind] = useState<"general_msk" | "structured" | null>(null);
+  const [serverBacked, setServerBacked] = useState(false);
+  const [resolvedPatientId, setResolvedPatientId] = useState(patientIdParam);
+  const [serverNotes, setServerNotes] = useState<string | null>(null);
+  const [reportDate, setReportDate] = useState("");
+  const [loadError, setLoadError] = useState("");
+
   const [patient, setPatient] = useState<BackendPatient | null>(null);
   const [existingPlan, setExistingPlan] = useState<TreatmentPlan | null>(null);
   const [loading, setLoading] = useState(true);
+  const [soapSaving, setSoapSaving] = useState(false);
+  const [soapSaveMessage, setSoapSaveMessage] = useState("");
 
-  // Load draft from localStorage
+  const patientId = resolvedPatientId || patientIdParam;
+
   useEffect(() => {
-    if (!patientId) { setLoading(false); return; }
-    const d = loadGeneralAssessmentDraft(patientId);
-    setDraft(isDraftMeaningful(d) ? d : null);
-    setLoading(false);
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setLoadError("");
+      setStructuredData(null);
+      setReportKind(null);
+      setServerBacked(false);
+
+      if (assessmentId) {
+        try {
+          const res = await fetch(`/api/assessments/${encodeURIComponent(assessmentId)}`);
+          if (!res.ok) {
+            const body = (await res.json().catch(() => ({}))) as { error?: string };
+            throw new Error(body.error ?? `Failed to load assessment (${res.status})`);
+          }
+          const detail = (await res.json()) as AssessmentDetailResponse;
+          if (cancelled) return;
+
+          setResolvedPatientId(detail.patient_id);
+          setServerNotes(detail.notes);
+          setReportDate(detail.created_at);
+          setPatient({
+            full_name: detail.patient.full_name,
+            diagnosis: detail.patient.diagnosis,
+          } as BackendPatient);
+          setServerBacked(true);
+
+          const general = extractGeneralDraft(detail.structured_data, detail.type);
+          if (general) {
+            setDraft(general);
+            setReportKind("general_msk");
+          } else {
+            const structured = extractStructuredData(detail.structured_data);
+            if (structured) {
+              setStructuredData(structured);
+              setReportKind("structured");
+            } else {
+              setLoadError("Assessment data format is not supported for this report.");
+            }
+          }
+        } catch (err) {
+          if (!cancelled) {
+            setLoadError(err instanceof Error ? err.message : "Failed to load assessment.");
+          }
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+        return;
+      }
+
+      if (!patientIdParam) {
+        if (!cancelled) setLoading(false);
+        return;
+      }
+
+      setResolvedPatientId(patientIdParam);
+      const d = loadGeneralAssessmentDraft(patientIdParam);
+      if (!cancelled) {
+        setDraft(isDraftMeaningful(d) ? d : null);
+        setReportKind("general_msk");
+        setServerBacked(false);
+        setReportDate(d.updatedAt);
+        setLoading(false);
+      }
+    }
+
+    void load();
+    return () => { cancelled = true; };
+  }, [assessmentId, patientIdParam]);
+
+  useEffect(() => {
+    if (!patientId) return;
+    let cancelled = false;
+
+    if (patient && patient.full_name) return;
+
+    void fetch(`/api/patients/${encodeURIComponent(patientId)}`)
+      .then(async (res) => {
+        if (!res.ok) return;
+        const p = (await res.json()) as { full_name: string; diagnosis?: string | null };
+        if (!cancelled) {
+          setPatient({ full_name: p.full_name, diagnosis: p.diagnosis ?? null } as BackendPatient);
+        }
+      })
+      .catch(() => { /* optional */ });
+
+    return () => { cancelled = true; };
+  }, [patientId, patient]);
+
+  useEffect(() => {
+    if (!patientId) return;
+    let cancelled = false;
+    void fetch(`/api/plans?patientId=${encodeURIComponent(patientId)}`)
+      .then(async (res) => (res.ok ? res.json() : []))
+      .then((plans: unknown) => {
+        if (cancelled || !Array.isArray(plans) || plans.length === 0) {
+          setExistingPlan(null);
+          return;
+        }
+        const p = plans[0] as {
+          id: string;
+          title: string;
+          created_at: string;
+          clinician_note?: string | null;
+          structured_data?: { programName?: string; phaseName?: string; sessionsPerWeek?: number };
+          sessions?: unknown[];
+        };
+        const sd = p.structured_data;
+        setExistingPlan({
+          id: p.id,
+          patientId: 0,
+          programId: "custom",
+          programName: sd?.programName ?? p.title,
+          phase: "phase-1",
+          phaseName: sd?.phaseName ?? "Phase 1",
+          phaseGoal: "",
+          sessionsPerWeek: sd?.sessionsPerWeek ?? 3,
+          totalSessions: p.sessions?.length ?? 0,
+          clinicianNotes: p.clinician_note ?? "",
+          assignedAt: p.created_at,
+          assignedBy: "Clinician",
+          status: "active",
+          sessions: [],
+        });
+      })
+      .catch(() => {
+        const n = parseInt(patientId, 10);
+        if (!isNaN(n) && n > 0) {
+          getTreatmentPlan(n).then((plan) => { if (!cancelled) setExistingPlan(plan); });
+        }
+      });
+    return () => { cancelled = true; };
   }, [patientId]);
 
-  // Load patient from backend
-  useEffect(() => {
-    const n = parseInt(patientId, 10);
-    if (!patientId || isNaN(n) || n <= 0) return;
-    getPatient(n).then(setPatient).catch(() => setPatient(null));
-  }, [patientId]);
-
-  // Load existing treatment plan from service
-  useEffect(() => {
-    const n = parseInt(patientId, 10);
-    if (!patientId || isNaN(n) || n <= 0) return;
-    getTreatmentPlan(n).then(setExistingPlan).catch(() => setExistingPlan(null));
-  }, [patientId]);
+  async function handleSaveSoap() {
+    if (!assessmentId || !draft) return;
+    setSoapSaving(true);
+    setSoapSaveMessage("");
+    try {
+      const res = await fetch(`/api/assessments/${encodeURIComponent(assessmentId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draft }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `Save failed (${res.status})`);
+      }
+      const detail = (await res.json()) as AssessmentDetailResponse;
+      const updated = extractGeneralDraft(detail.structured_data, detail.type);
+      if (updated) setDraft(updated);
+      if (patientId) saveGeneralAssessmentDraft(patientId, updated ?? draft);
+      setSoapSaveMessage("Saved to server.");
+    } catch (err) {
+      setSoapSaveMessage(err instanceof Error ? err.message : "Save failed.");
+    } finally {
+      setSoapSaving(false);
+    }
+  }
 
   const objectiveKeys = Object.keys(draft?.objective ?? {}) as ObjectiveKey[];
   const functionalKeys = Object.keys(draft?.functional ?? {}) as FunctionalKey[];
@@ -466,19 +734,70 @@ export function AssessmentReportClient() {
     );
   }
 
-  if (!patientId) {
+  if (!patientId && !assessmentId) {
     return (
       <main className="min-h-screen bg-[#0B1220] text-white">
         <div className="mx-auto max-w-2xl px-6 py-20 text-center">
           <h1 className="text-2xl font-bold text-white">No patient selected</h1>
           <p className="mt-3 text-sm text-white/45">
-            Add <code className="rounded-[5px] bg-[#1E2D42] px-1.5 py-0.5 text-xs">?patientId=</code> to the URL.
+            Add <code className="rounded-[5px] bg-[#1E2D42] px-1.5 py-0.5 text-xs">?patientId=</code> or{" "}
+            <code className="rounded-[5px] bg-[#1E2D42] px-1.5 py-0.5 text-xs">?assessmentId=</code> to the URL.
           </p>
           <Link href="/clinician/patients"
             className="mt-8 inline-flex items-center rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-6 py-2.5 text-sm font-semibold text-white transition hover:text-white/80">
             ← Patients list
           </Link>
         </div>
+      </main>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <main className="min-h-screen bg-[#0B1220] text-white">
+        <div className="mx-auto max-w-2xl px-6 py-20 text-center">
+          <h1 className="text-xl font-bold text-white">Could not load report</h1>
+          <p className="mt-2 text-sm text-rose-300">{loadError}</p>
+          {patientId && (
+            <Link href={`/clinician/patients/${patientId}`}
+              className="mt-7 inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-6 py-2.5 text-sm font-semibold text-white">
+              ← Patient profile
+            </Link>
+          )}
+        </div>
+      </main>
+    );
+  }
+
+  if (reportKind === "structured" && structuredData) {
+    return (
+      <main className="assessment-report-root min-h-screen bg-[#0B1220] text-white">
+        <header className="sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220] print:hidden">
+          <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
+            <Link href={patientId ? `/clinician/patients/${patientId}` : "/clinician/patients"}
+              className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white">
+              ← Patient
+            </Link>
+            <button type="button" onClick={() => window.print()}
+              className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white">
+              Export PDF
+            </button>
+          </div>
+        </header>
+        <section className="border-b border-white/10 bg-[#0F1825] px-6 py-8 print:bg-white print:text-black">
+          <div className="mx-auto max-w-4xl">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 print:text-gray-600">
+              Structured Assessment Report
+            </p>
+            <h1 className="mt-1 text-2xl font-bold text-white print:text-black">
+              {patient?.full_name ?? "Patient"}
+            </h1>
+            <p className="mt-1 text-sm text-white/50 print:text-gray-600">
+              {formatDate(reportDate)} {assessmentId && <>· ID {assessmentId.slice(0, 8)}…</>}
+            </p>
+          </div>
+        </section>
+        <StructuredAssessmentReport data={structuredData} notes={serverNotes} />
       </main>
     );
   }
@@ -494,9 +813,11 @@ export function AssessmentReportClient() {
           </div>
           <h1 className="text-xl font-bold text-white">No assessment draft found</h1>
           <p className="mt-2 text-sm text-white/45">
-            No saved assessment draft was found for this patient. Complete the assessment first.
+            {assessmentId
+              ? "This assessment has no general MSK report data."
+              : "No saved assessment draft was found for this patient. Complete the assessment first."}
           </p>
-          <Link href={`/clinician/assessment?patientId=${patientId}`}
+          <Link href={`/clinician/assessment?patientId=${patientId || patientIdParam}`}
             className="mt-7 inline-flex items-center rounded-[7px] bg-[#1D9E75] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]">
             Return to Assessment
           </Link>
@@ -507,8 +828,10 @@ export function AssessmentReportClient() {
 
   // ── Full report ─────────────────────────────────────────────────────────────
 
+  const displayDate = reportDate || draft.updatedAt;
+
   return (
-    <main className="min-h-screen bg-[#0B1220] text-white">
+    <main className="assessment-report-root min-h-screen bg-[#0B1220] text-white">
 
       {/* ── Sticky top bar ── */}
       <header className="sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220] print:hidden">
@@ -530,8 +853,13 @@ export function AssessmentReportClient() {
               onClick={() => window.print()}
               className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 transition hover:text-white"
             >
-              Print
+              Export PDF
             </button>
+            {serverBacked && (
+              <span className="rounded-[5px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-2 py-1 text-[10px] font-semibold text-[#5DCAA5]">
+                Saved on server
+              </span>
+            )}
             <Link
               href={`/clinician/patients/${patientId}`}
               className="rounded-xl bg-cyan-400 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300"
@@ -546,7 +874,7 @@ export function AssessmentReportClient() {
       <section className="border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.07),transparent_38%),linear-gradient(135deg,#071a2f_0%,#0d1f3c_55%,#0f1f45_100%)]">
         <div className="mx-auto max-w-4xl px-6 py-10">
           <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-white/15 bg-white/[0.06] px-3 py-0.5 text-[11px] font-semibold text-white/50">
+            <span className="rounded-full border border-white/15 bg-white/[0.06] px-3 py-0.5 text-[11px] font-semibold text-white/50 print:border-gray-300 print:bg-gray-100 print:text-gray-700">
               General Assessment Report
             </span>
             {hasFlags && (
@@ -559,8 +887,9 @@ export function AssessmentReportClient() {
           <h1 className="text-3xl font-bold text-white">
             {patient?.full_name ?? `Patient #${patientId}`}
           </h1>
-          <p className="mt-1.5 text-sm text-white/55">
-            {formatDate(draft.updatedAt)} &nbsp;·&nbsp; Patient ID {patientId}
+          <p className="mt-1.5 text-sm text-white/55 print:text-gray-600">
+            {formatDate(displayDate)} &nbsp;·&nbsp; Patient ID {patientId}
+            {assessmentId && <> &nbsp;·&nbsp; Assessment {assessmentId.slice(0, 8)}…</>}
             {therapistDecisionLabel && (
               <> &nbsp;·&nbsp; <span className={therapistDecisionLabel.cls}>{therapistDecisionLabel.label}</span></>
             )}
@@ -972,12 +1301,22 @@ export function AssessmentReportClient() {
             </svg>
           }
         >
-          <div className="mb-5 grid gap-3 sm:grid-cols-2">
-            <SoapCard label="S — Subjective" value={draft.soap.subjective} />
-            <SoapCard label="O — Objective" value={draft.soap.objective} />
-            <SoapCard label="A — Assessment" value={draft.soap.assessment} />
-            <SoapCard label="P — Plan" value={draft.soap.plan} />
-          </div>
+          {serverBacked && assessmentId ? (
+            <EditableSoapSection
+              draft={draft}
+              onChange={(soap) => setDraft({ ...draft, soap, updatedAt: new Date().toISOString() })}
+              onSave={() => void handleSaveSoap()}
+              saving={soapSaving}
+              saveMessage={soapSaveMessage}
+            />
+          ) : (
+            <div className="mb-5 grid gap-3 sm:grid-cols-2">
+              <SoapCard label="S — Subjective" value={draft.soap.subjective} />
+              <SoapCard label="O — Objective" value={draft.soap.objective} />
+              <SoapCard label="A — Assessment" value={draft.soap.assessment} />
+              <SoapCard label="P — Plan" value={draft.soap.plan} />
+            </div>
+          )}
 
           {(draft.therapist.finalDiagnosis || draft.therapist.treatmentPriorities) && (
             <div className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-5 py-1">
@@ -998,8 +1337,8 @@ export function AssessmentReportClient() {
         <AssignPlanSection patientId={patientId} existingPlan={existingPlan} />
 
         {/* Footer */}
-        <p className="pb-8 text-center text-xs text-white/20">
-          Generated from assessment draft · {formatDate(draft.updatedAt)} · Patient #{patientId}
+        <p className="pb-8 text-center text-xs text-white/20 print:text-gray-500">
+          {serverBacked ? "Server-backed assessment" : "Local draft (not yet finalized)"} · {formatDate(displayDate)} · Patient #{patientId}
           {" · "}All AI content is decision-support only and requires therapist verification.
         </p>
       </div>

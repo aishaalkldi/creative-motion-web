@@ -6,6 +6,7 @@ import Link from "next/link";
 import { REHAB_PROGRAMS, type PlanSession } from "@/app/lib/api/treatment-plans";
 import type { PatientRow } from "@/app/lib/validate-patient-ownership";
 import type { AssessmentRow } from "@/app/api/assessments/route";
+import { extractGeneralDraft, extractStructuredData } from "@/app/lib/assessment-payload";
 import type { PlanRow } from "@/app/api/plans/route";
 
 /* ─── Phase row ──────────────────────────────────────────────────────────── */
@@ -403,13 +404,22 @@ function NewPlanInner() {
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-white">
-                          {a.structured_data?.bodyRegion ?? a.type}
+                          {extractStructuredData(a.structured_data)?.bodyRegion
+                            ?? (extractGeneralDraft(a.structured_data, a.type) ? "General MSK" : null)
+                            ?? a.type}
                         </p>
                         <p
                           className="text-[10px] text-white/30"
                           style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
                         >
-                          {a.created_at.split("T")[0]} · Pain {a.structured_data?.painAtRest ?? 0}/10
+                          {a.created_at.split("T")[0]} · Pain{" "}
+                          {(extractStructuredData(a.structured_data)?.painAtRest
+                            ?? Number.parseInt(
+                              extractGeneralDraft(a.structured_data, a.type)?.subjective.nprs ?? "",
+                              10,
+                            ))
+                            || 0}
+                          /10
                         </p>
                       </div>
                       {baselineId === a.id && (

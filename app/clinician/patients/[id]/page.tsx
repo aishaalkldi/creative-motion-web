@@ -10,6 +10,10 @@ import {
 } from "../../../lib/api";
 import type { SavedAssessment } from "../../../lib/mock-clinical-data";
 import type { AssessmentRow } from "../../../api/assessments/route";
+import {
+  extractGeneralDraft,
+  extractStructuredData,
+} from "../../../lib/assessment-payload";
 import type { PatientRow } from "../../../lib/validate-patient-ownership";
 import { assessmentsRepository } from "../../../lib/repositories";
 import ConfirmModal from "../../../components/ConfirmModal";
@@ -249,22 +253,45 @@ export default function PatientProfilePage() {
         if (!res.ok) return;
         const rows = (await res.json()) as AssessmentRow[];
         // Map Supabase AssessmentRow → SavedAssessment for the existing display cards
-        const mapped: SavedAssessment[] = rows.map((r) => ({
-          id:                r.id,
-          patientId:         0,   // not used in display
-          patientName:       "",  // not used in display
-          type:              r.type,
-          typeLabel:         r.structured_data?.bodyRegion ?? r.type,
-          date:              r.created_at.split("T")[0] ?? "",
-          pain:              r.structured_data?.painAtRest ?? 0,
-          rom:               r.structured_data?.rom?.measurements?.[0]?.value ?? 0,
-          strength:          "See assessment data",
-          mobilityNotes:     r.notes ?? r.structured_data?.clinicalNotes ?? "",
-          savedAt:           r.created_at,
-          bodyRegion:        r.structured_data?.bodyRegion,
-          rehabilitationPhase: r.structured_data?.rehabilitationPhase,
-          assessmentData:    r.structured_data ?? undefined,
-        }));
+        const mapped: SavedAssessment[] = rows.map((r) => {
+          const general = extractGeneralDraft(r.structured_data, r.type);
+          if (general) {
+            const nprs = Number.parseInt(general.subjective.nprs, 10);
+            return {
+              id: r.id,
+              patientId: 0,
+              patientName: "",
+              type: r.type,
+              typeLabel: "General MSK Assessment",
+              date: r.created_at.split("T")[0] ?? "",
+              pain: Number.isFinite(nprs) ? nprs : 0,
+              rom: 0,
+              strength: "See report",
+              mobilityNotes: r.notes ?? general.subjective.chiefComplaint ?? "",
+              savedAt: r.created_at,
+              bodyRegion: general.subjective.painLocation || undefined,
+              rehabilitationPhase: undefined,
+              assessmentData: undefined,
+            };
+          }
+          const structured = extractStructuredData(r.structured_data);
+          return {
+            id: r.id,
+            patientId: 0,
+            patientName: "",
+            type: r.type,
+            typeLabel: structured?.bodyRegion ?? r.type,
+            date: r.created_at.split("T")[0] ?? "",
+            pain: structured?.painAtRest ?? 0,
+            rom: structured?.rom?.measurements?.[0]?.value ?? 0,
+            strength: "See assessment data",
+            mobilityNotes: r.notes ?? structured?.clinicalNotes ?? "",
+            savedAt: r.created_at,
+            bodyRegion: structured?.bodyRegion,
+            rehabilitationPhase: structured?.rehabilitationPhase,
+            assessmentData: structured ?? undefined,
+          };
+        });
         setRasqAssessments(mapped);
       })
       .catch(() => { /* silently ignore — empty state shown */ });
@@ -768,12 +795,12 @@ export default function PatientProfilePage() {
                 <div className="space-y-2">
                   {rasqAssessments.slice(0, 3).map((a) => (
                     <div key={a.id} className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3">
-                      <div className="flex items-center justify-between">
+                      <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-semibold text-white">
-                          {a.bodyRegion ?? a.typeLabel}
+                          {a.typeLabel || a.bodyRegion || a.type}
                         </p>
                         <p
-                          className="text-[10px] text-white/30"
+                          className="shrink-0 text-[10px] text-white/30"
                           style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
                         >
                           {a.date}
@@ -785,13 +812,19 @@ export default function PatientProfilePage() {
                       >
                         {a.assessmentData
                           ? `Rest ${a.assessmentData.painAtRest}/10 · Move ${a.assessmentData.painOnMovement}/10 · ${a.rehabilitationPhase ?? "—"} phase`
-                          : `Pain ${a.pain}/10 · ROM ${a.rom || "—"}° · Strength ${a.strength}`}
+                          : `Pain ${a.pain}/10 · ${a.type === "general_msk" ? "General MSK" : `ROM ${a.rom || "—"}°`}`}
                       </p>
                       {a.mobilityNotes && (
                         <p className="mt-1.5 text-xs leading-5 text-white/35 line-clamp-2">
                           {a.mobilityNotes}
                         </p>
                       )}
+                      <Link
+                        href={`/clinician/assessment/report?patientId=${patient.id}&assessmentId=${a.id}`}
+                        className="mt-2 inline-flex text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
+                      >
+                        View report →
+                      </Link>
                     </div>
                   ))}
                 </div>
@@ -913,7 +946,7 @@ export default function PatientProfilePage() {
                         ) : null}
                         <div className="mt-4 flex flex-wrap gap-2">
                           <Link
-                            href={`/results?patientId=${patient.id}&assessmentId=${row.id}`}
+                            href={`/clinician/assessment/report?patientId=${patient.id}&assessmentId=${row.id}`}
                             className="inline-flex items-center rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-4 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
                           >
                             Open Report

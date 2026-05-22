@@ -1426,17 +1426,22 @@ function ReviewView({
   patientId: string;
   onBack: () => void;
   onEdit: (id: SectionId) => void;
-  onSubmit: () => void;
+  onSubmit: () => void | Promise<void>;
 }) {
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState("");
   const completedCount = getCompletedCount(draft);
   const requiredComplete = getSectionStatus("pain", draft) === "completed";
 
-  function handleSubmit() {
+  async function handleSubmit() {
     setSubmitting(true);
-    // Draft is already persisted to localStorage by auto-save.
-    // TODO: POST to /api/v1/assessments when backend endpoint is ready.
-    onSubmit();
+    setSubmitError("");
+    try {
+      await onSubmit();
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : "Failed to save assessment.");
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -1539,6 +1544,11 @@ function ReviewView({
 
       {/* Submit */}
       <div className="mt-8 rounded-[24px] border border-white/10 bg-white/[0.04] p-6">
+        {submitError && (
+          <div className="mb-4 rounded-2xl border border-rose-400/20 bg-rose-400/8 px-4 py-3 text-sm text-rose-200">
+            {submitError}
+          </div>
+        )}
         {!requiredComplete && (
           <div className="mb-4 rounded-2xl border border-rose-400/20 bg-rose-400/8 px-4 py-3 text-sm text-rose-200">
             The <strong>Pain &amp; Subjective</strong> section is required before submitting.
@@ -1605,13 +1615,29 @@ export function GeneralAssessmentPageClient() {
   );
 
   useEffect(() => {
-    const n = Number.parseInt(patientId, 10);
-    if (!Number.isFinite(n) || n <= 0) { setPatient(null); return; }
+    if (!patientId) { setPatient(null); return; }
     let cancelled = false;
     setPatientErr("");
-    void getPatient(n)
-      .then((p) => { if (!cancelled) setPatient(p); })
-      .catch(() => { if (!cancelled) { setPatient(null); setPatientErr("Could not load patient (check auth)."); } });
+    void fetch(`/api/patients/${encodeURIComponent(patientId)}`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error("not found");
+        const p = (await res.json()) as { full_name: string; diagnosis?: string | null };
+        if (!cancelled) {
+          setPatient({ full_name: p.full_name, diagnosis: p.diagnosis ?? null } as BackendPatient);
+        }
+      })
+      .catch(() => {
+        const n = Number.parseInt(patientId, 10);
+        if (!Number.isFinite(n) || n <= 0) {
+          if (!cancelled) { setPatient(null); setPatientErr("Could not load patient."); }
+          return;
+        }
+        void getPatient(n)
+          .then((p) => { if (!cancelled) setPatient(p); })
+          .catch(() => {
+            if (!cancelled) { setPatient(null); setPatientErr("Could not load patient (check auth)."); }
+          });
+      });
     return () => { cancelled = true; };
   }, [patientId]);
 
@@ -1702,9 +1728,30 @@ export function GeneralAssessmentPageClient() {
             patientId={patientId}
             onBack={() => setView("overview")}
             onEdit={(id) => setView(id)}
-            onSubmit={() =>
-              router.push(`/clinician/assessment/report?patientId=${encodeURIComponent(patientId)}`)
-            }
+            onSubmit={async () => {
+              const res = await fetch("/api/assessments", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  patient_id: patientId,
+                  type: "general_msk",
+                  draft,
+                  notes:
+                    draft.soap.assessment?.trim() ||
+                    draft.subjective.chiefComplaint?.trim() ||
+                    null,
+                }),
+              });
+              if (!res.ok) {
+                const body = (await res.json().catch(() => ({}))) as { error?: string };
+                throw new Error(body.error ?? `Failed to save assessment (${res.status})`);
+              }
+              const row = (await res.json()) as { id: string };
+              saveGeneralAssessmentDraft(patientId, draft);
+              router.push(
+                `/clinician/assessment/report?patientId=${encodeURIComponent(patientId)}&assessmentId=${encodeURIComponent(row.id)}`,
+              );
+            }}
           />
         ) : (
           <SectionView

@@ -5,6 +5,11 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { validatePatientOwnership } from "../../lib/validate-patient-ownership";
 import type { AssessmentData } from "../../lib/assessment-types";
+import type { GeneralAssessmentDraft } from "../../lib/general-assessment/types";
+import {
+  buildGeneralMskPayload,
+  type StoredAssessmentPayload,
+} from "../../lib/assessment-payload";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -13,7 +18,7 @@ export type AssessmentRow = {
   patient_id: string;
   provider_id: string;
   type: string;
-  structured_data: AssessmentData | null;
+  structured_data: StoredAssessmentPayload | null;
   notes: string | null;
   status: string;
   created_at: string;
@@ -63,7 +68,8 @@ function migrationPending(col: string) {
  *
  * Body:
  *   patient_id     string (UUID)  required
- *   data           AssessmentData  required
+ *   data           AssessmentData  required when type is "structured" (default)
+ *   draft          GeneralAssessmentDraft  required when type is "general_msk"
  *   type           string          optional, defaults to "structured"
  *   notes          string          optional
  *
@@ -83,15 +89,33 @@ export async function POST(req: NextRequest) {
   if (authError ?? !user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   // ── Parse body ───────────────────────────────────────────────────────────────
-  let body: { patient_id?: string; data?: AssessmentData; type?: string; notes?: string };
+  let body: {
+    patient_id?: string;
+    data?: AssessmentData;
+    draft?: GeneralAssessmentDraft;
+    type?: string;
+    notes?: string;
+  };
   try { body = (await req.json()) as typeof body; }
   catch { return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 }); }
 
   const patientId = body.patient_id?.trim();
-  const assessmentData = body.data;
+  const assessmentType = body.type?.trim() || "structured";
 
   if (!patientId) return NextResponse.json({ error: "patient_id is required." }, { status: 400 });
-  if (!assessmentData) return NextResponse.json({ error: "data (AssessmentData) is required." }, { status: 400 });
+
+  let structuredData: StoredAssessmentPayload;
+  if (assessmentType === "general_msk") {
+    if (!body.draft) {
+      return NextResponse.json({ error: "draft (GeneralAssessmentDraft) is required for general_msk." }, { status: 400 });
+    }
+    structuredData = buildGeneralMskPayload(body.draft);
+  } else {
+    if (!body.data) {
+      return NextResponse.json({ error: "data (AssessmentData) is required." }, { status: 400 });
+    }
+    structuredData = body.data;
+  }
 
   // ── Verify patient ownership ──────────────────────────────────────────────────
   const ownership = await validatePatientOwnership(adminClient, patientId, user.id);
@@ -103,8 +127,8 @@ export async function POST(req: NextRequest) {
     .insert({
       provider_id:     user.id,
       patient_id:      patientId,
-      type:            body.type?.trim() || "structured",
-      structured_data: assessmentData,
+      type:            assessmentType,
+      structured_data: structuredData,
       notes:           body.notes?.trim() || null,
       status:          "completed",
       mode:            "in_clinic",   // existing NOT NULL column

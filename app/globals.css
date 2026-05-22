@@ -77,6 +77,60 @@ body {
   }
 }
 
+/* ── Clinical assessment report — print / Export PDF ── */
+@media print {
+  @page {
+    margin: 1.2cm 1.5cm;
+    size: A4;
+  }
+
+  body {
+    background: #fff !important;
+    color: #111 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .assessment-report-root {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  .assessment-report-root header {
+    display: none !important;
+  }
+
+  .assessment-report-root section,
+  .assessment-report-root article {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .assessment-report-root h1,
+  .assessment-report-root h2 {
+    color: #0a0f1a !important;
+  }
+
+  .assessment-report-root p,
+  .assessment-report-root span,
+  .assessment-report-root li,
+  .assessment-report-root textarea {
+    color: #1f2937 !important;
+  }
+
+  .assessment-report-root textarea {
+    border: 1px solid #d1d5db !important;
+    background: #fff !important;
+    resize: none;
+  }
+
+  .assessment-report-root button,
+  .assessment-report-root a[href^="/clinician/assessment"],
+  .assessment-report-root nav {
+    display: none !important;
+  }
+}
+
 /* ── Fade-in animation ── */
 .fade-in {
   opacity: 0;
