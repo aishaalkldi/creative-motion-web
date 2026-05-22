@@ -2,6 +2,9 @@
   "name": "creative-motion-web",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=20 <23"
+  },
   "scripts": {
     "dev": "next dev",
     "api": "cd backend/creative-motion-backend && py -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload",
