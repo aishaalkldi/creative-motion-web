@@ -1,5 +1,11 @@
 "use client";
 
+/**
+ * LEGACY / DEMO sessions list — not the MVP token-based patient portal.
+ * Uses in-memory mock data from app/lib/api/treatment-plans.ts.
+ * Real patients must use the secure link: /patient/[token]/session/[sessionId].
+ */
+
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -235,6 +241,16 @@ export default function PatientSessionsPage() {
 
   return (
     <main className="min-h-screen bg-[#F4F6F5]" style={{ fontFamily: "var(--font-inter, ui-sans-serif, sans-serif)" }}>
+
+      {/* Legacy route notice */}
+      <div className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-center">
+        <p className="text-sm font-medium text-amber-900">
+          Please use the secure patient link sent by your therapist.
+        </p>
+        <p className="mt-0.5 text-xs text-amber-800/80">
+          This page is a legacy demo preview — not connected to your live rehabilitation plan.
+        </p>
+      </div>
 
       {/* Page header */}
       <div className="border-b border-[#e4ece8] bg-white px-6 py-5">

@@ -83,9 +83,44 @@ export default function PatientDashboard() {
   const completed = plan.sessions.filter((s) => s.status === "completed").length;
   const total     = plan.sessions.length;
   const progress  = total > 0 ? Math.round((completed / total) * 100) : 0;
+  const hasSessions = total > 0;
+
+  if (!hasSessions) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1
+            className="text-[22px] font-bold text-[#0A0F1A]"
+            style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
+          >
+            {getGreeting()}, {patientName.split(" ")[0]}.
+          </h1>
+          <p className="mt-1 text-[13px] text-[#6B7280]">
+            {diagnosis} · {plan.phaseName}
+          </p>
+        </div>
+
+        <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-6 text-center">
+          <p className="text-[15px] font-semibold text-[#0A0F1A]">
+            Your therapist is finalizing your session schedule.
+          </p>
+          <p className="mt-2 text-[13px] leading-relaxed text-[#6B7280]">
+            Please check back later once your rehabilitation sessions are ready.
+          </p>
+          {plan.clinicianNotes && (
+            <blockquote className="mt-5 border-t border-[#E2E8E5] pt-5 text-left">
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#374151]">
+                Note from your therapist
+              </p>
+              <p className="mt-2 text-[13px] leading-relaxed text-[#6B7280]">{plan.clinicianNotes}</p>
+            </blockquote>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const sessionsCompleted = completed;
-  const dayStreak         = 7;
   const currentScore      = progress;
 
   return (
@@ -126,11 +161,10 @@ export default function PatientDashboard() {
       </div>
 
       {/* Metric cards */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         {[
           { label: "Sessions", value: String(sessionsCompleted), sub: "completed" },
-          { label: "Score",    value: String(currentScore),      sub: "current"   },
-          { label: "Streak",   value: String(dayStreak),         sub: "day streak" },
+          { label: "Progress", value: `${currentScore}%`,       sub: "completion" },
         ].map(({ label, value, sub }) => (
           <div
             key={label}
