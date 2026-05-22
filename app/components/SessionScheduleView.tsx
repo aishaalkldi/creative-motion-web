@@ -41,8 +41,8 @@ function StatusPill({
 
   if (variant === "patient") {
     if (isDone) return <span className="shrink-0 rounded-[6px] bg-[#E8F5F1] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#085041]">Done</span>;
-    if (isToday) return <span className="shrink-0 rounded-[6px] bg-[#1D9E75] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">Today</span>;
-    return <span className="shrink-0 rounded-[6px] border border-[#E2E8E5] bg-[#F9FAFB] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#6B7280]">Upcoming</span>;
+    if (isToday) return <span className="shrink-0 rounded-[6px] bg-[#1D9E75] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">Start today</span>;
+    return <span className="shrink-0 rounded-[6px] border border-[#E2E8E5] bg-[#F4F6F5] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#9CA3AF]">Upcoming</span>;
   }
 
   if (isDone) return <span className="text-[10px] font-semibold text-[#5DCAA5]">Done</span>;
@@ -94,6 +94,7 @@ export function SessionScheduleView({
                       ? session.title
                       : `Session ${session.sessionNumber} — ${session.title}`;
                     const exerciseCount = session.exercises?.length ?? 0;
+                    const estimatedMinutes = Math.max(10, (session.exercises?.length ?? 3) * 4);
                     const row = (
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
@@ -101,7 +102,7 @@ export function SessionScheduleView({
                           {exerciseCount > 0 && (
                             <p className={`mt-1 ${subCls}`}>
                               {variant === "patient"
-                                ? `${exerciseCount} exercise${exerciseCount === 1 ? "" : "s"}`
+                                ? `${exerciseCount} exercise${exerciseCount === 1 ? "" : "s"} · ~${estimatedMinutes} min`
                                 : `${session.exercises!.slice(0, 2).join(" · ")}${exerciseCount > 2 ? ` +${exerciseCount - 2}` : ""}`}
                             </p>
                           )}

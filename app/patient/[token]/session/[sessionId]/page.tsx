@@ -37,18 +37,6 @@ function getInstructions(exercise: string): string {
 
 import type { SessionCompleteResponse } from "@/app/api/patient/session-complete/route";
 
-/* ── RASQArc mark SVG ───────────────────────────────────────────────────────── */
-
-function RasqArc({ size = 48 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 20 20" fill="none">
-      <path d="M10 2C5.582 2 2 5.582 2 10s3.582 8 8 8" stroke="#1D9E75" strokeWidth="2.2" strokeLinecap="round" />
-      <path d="M10 5.5C7.515 5.5 5.5 7.515 5.5 10S7.515 14.5 10 14.5" stroke="#5DCAA5" strokeWidth="1.8" strokeLinecap="round" />
-      <circle cx="10" cy="10" r="1.5" fill="#1D9E75" />
-    </svg>
-  );
-}
-
 /* ── Page ───────────────────────────────────────────────────────────────────── */
 
 export default function SessionPlayerPage() {
@@ -153,31 +141,34 @@ export default function SessionPlayerPage() {
 
   /* Completion screen */
   if (completed) {
+    const firstName = patientName.trim().split(" ")[0];
+    const sessionNumberLine =
+      session.sessionNumber != null && session.sessionNumber > 0
+        ? `Session ${session.sessionNumber} complete.`
+        : "Session complete.";
+
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-5 px-4 text-center">
-        <RasqArc size={48} />
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
         <div>
           <h2
-            className="text-[22px] font-bold text-[#0A0F1A]"
+            className="text-[20px] font-medium text-[#0A0F1A]"
             style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
           >
-            Session completed
+            {firstName ? `Well done, ${firstName}.` : "Well done."}
           </h2>
-          <p className="mt-2 text-[14px] text-[#6B7280]">
-            Your progress has been updated.
+          <p className="mt-2 text-[14px] text-[#374151]">{sessionNumberLine}</p>
+          <p className="mt-2 text-[13px] text-[#1D9E75]">
+            Your therapist can see your progress.
           </p>
-          <p className="mt-1 text-[14px] text-[#6B7280]">
-            Well done{patientName ? `, ${patientName.split(" ")[0]}` : ""}.
-          </p>
-          <p className="mt-4 max-w-sm text-[13px] leading-relaxed text-[#6B7280]">
+          <p className="mt-3 max-w-sm text-[12px] italic leading-relaxed text-[#6B7280]">
             If you feel sharp or unusual pain during exercises, stop immediately and contact your therapist.
           </p>
         </div>
         <Link
           href={`/patient/${token}`}
-          className="mt-2 flex min-h-[44px] items-center rounded-[7px] bg-[#1D9E75] px-6 text-[14px] font-semibold text-white transition hover:bg-[#179165]"
+          className="mt-2 flex min-h-[44px] items-center rounded-[7px] border border-[#E2E8E5] bg-transparent px-6 text-[14px] font-semibold text-[#374151] transition hover:bg-[#F9FAFB]"
         >
-          Back to my plan
+          ← Back to my plan
         </Link>
       </div>
     );
@@ -187,7 +178,7 @@ export default function SessionPlayerPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
-        <div>
+        <div className="min-w-0 flex-1">
           <Link
             href={`/patient/${token}`}
             className="text-[12px] font-semibold text-[#9CA3AF] transition hover:text-[#374151]"
@@ -200,9 +191,6 @@ export default function SessionPlayerPage() {
           >
             {session.title}
           </h1>
-          <p className="mt-0.5 text-[13px] text-[#6B7280]">
-            Exercise {exerciseIndex + 1} of {total}
-          </p>
         </div>
         {/* Dot progress */}
         <div className="flex items-center gap-1.5 pt-6">
@@ -220,6 +208,10 @@ export default function SessionPlayerPage() {
           ))}
         </div>
       </div>
+
+      <p className="mb-2 text-center text-[11px] text-[#9CA3AF]">
+        Exercise {exerciseIndex + 1} of {total}
+      </p>
 
       {/* Safety note */}
       <div className="rounded-[10px] border border-[#D1E7DE] bg-[#F0FAF6] px-4 py-3">
@@ -245,7 +237,16 @@ export default function SessionPlayerPage() {
         <p className="mt-4 text-[14px] leading-[1.7] text-[#374151]">
           {getInstructions(current)}
         </p>
+        <p className="mt-2 text-[11px] italic text-[#9CA3AF]">
+          Stop if pain exceeds 4/10 or increases during movement.
+        </p>
       </div>
+
+      {isLast && (
+        <p className="mb-3 text-center text-[12px] text-[#1D9E75]">
+          This is your final exercise for this session.
+        </p>
+      )}
 
       {/* Effort input — shown on last exercise */}
       {isLast && (

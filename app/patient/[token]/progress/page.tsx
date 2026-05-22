@@ -106,8 +106,11 @@ export default function PatientProgressPage() {
           className="mt-2 text-[20px] font-bold text-[#0A0F1A]"
           style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
         >
-          Your recovery progress
+          Your Rehabilitation Progress
         </h1>
+        <p className="mb-4 mt-2 text-[12px] leading-relaxed text-[#6B7280]">
+          Progress is updated after each completed session. Your therapist reviews this regularly.
+        </p>
         <p className="mt-1 text-[13px] text-[#6B7280]">
           {plan.planTitle || plan.programName}
         </p>
@@ -118,7 +121,7 @@ export default function PatientProgressPage() {
         {[
           { label: "Sessions completed", value: `${completedSessions}/${totalSessions}`, sub: "in your plan" },
           { label: "Progress", value: `${adherence}%`, sub: "completion rate" },
-          { label: "Avg effort", value: avgEffort !== null ? `${avgEffort}/10` : "—", sub: avgEffort !== null ? "self-reported" : "not recorded yet" },
+          { label: "Your effort rating", value: avgEffort !== null ? `${avgEffort}/10` : "—", sub: avgEffort !== null ? "self-reported" : "not recorded yet" },
         ].map(({ label, value, sub }) => (
           <div
             key={label}
@@ -135,6 +138,12 @@ export default function PatientProgressPage() {
           </div>
         ))}
       </div>
+
+      {completedSessions < 2 && (
+        <p className="mt-4 text-center text-[12px] italic text-[#6B7280]">
+          Keep going — your progress builds as you complete more sessions.
+        </p>
+      )}
 
       {/* Progress bar */}
       <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
@@ -156,7 +165,11 @@ export default function PatientProgressPage() {
       </div>
 
       {/* Session timeline */}
-      {weeks.length > 0 && (
+      {weeks.length > 0 && completedSessions === 0 ? (
+        <p className="text-center text-[12px] italic text-[#9CA3AF]">
+          Complete your first session to see your timeline.
+        </p>
+      ) : weeks.length > 0 && completedSessions > 0 ? (
         <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
           <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.12em] text-[#374151]">
             Session timeline
@@ -174,7 +187,7 @@ export default function PatientProgressPage() {
             ))}
           </div>
         </div>
-      )}
+      ) : null}
 
       <div className="rounded-[10px] border border-[#E2E8E5] bg-[#F9FAFB] px-4 py-3.5">
         <p className="text-[13px] leading-relaxed text-[#6B7280]">

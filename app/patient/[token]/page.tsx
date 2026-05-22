@@ -84,6 +84,12 @@ export default function PatientDashboard() {
   const total     = plan.sessions.length;
   const progress  = total > 0 ? Math.round((completed / total) * 100) : 0;
   const hasSessions = total > 0;
+  const sessionsPerWeek = plan.sessionsPerWeek ?? 3;
+  const currentWeek = Math.min(
+    Math.ceil((completed + 1) / sessionsPerWeek),
+    plan.totalWeeks ?? 1,
+  );
+  const showWeekContext = plan.totalWeeks != null && plan.totalWeeks > 1;
 
   if (!hasSessions) {
     return (
@@ -139,6 +145,11 @@ export default function PatientDashboard() {
         <p className="mt-1 text-[13px] text-[#6B7280]">
           {diagnosis ? `${diagnosis} · ` : ""}{plan.phaseName}
         </p>
+        <p className="mt-1 text-[12px] text-[#9CA3AF]">
+          {showWeekContext
+            ? `Week ${currentWeek} of ${plan.totalWeeks}`
+            : `Your ${total}-session program`}
+        </p>
         <p className="mt-3 text-[12px] font-medium text-[#6B7280]">
           Assigned by your clinician
           {plan.assignedBy ? ` · ${plan.assignedBy}` : ""}
@@ -148,12 +159,9 @@ export default function PatientDashboard() {
       {/* Recovery progress bar */}
       <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[12px] font-semibold text-[#374151]">Your progress</p>
-          <p
-            className="text-[13px] font-bold text-[#1D9E75]"
-            style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
-          >
-            {progress}%
+          <p className="text-[11px] text-[#6B7280]">Your progress</p>
+          <p className="text-[11px] font-medium text-[#1D9E75]">
+            {completed} of {total} session{total === 1 ? "" : "s"}
           </p>
         </div>
         <div className="mt-3 h-[6px] w-full overflow-hidden rounded-full bg-[#E2E8E5]">
@@ -162,10 +170,25 @@ export default function PatientDashboard() {
             style={{ width: `${progress}%` }}
           />
         </div>
-        <p className="mt-2.5 text-[12px] text-[#6B7280]">
-          {completed} of {total} session{total === 1 ? "" : "s"} complete
-        </p>
       </div>
+
+      {plan.clinicianNotes?.trim() && (
+        <div
+          style={{
+            background: "#F9FAFB",
+            border: "0.5px solid #E2E8E5",
+            borderLeft: "3px solid #1D9E75",
+            borderRadius: "8px",
+            padding: "10px 14px",
+            fontSize: "12px",
+            color: "#6B7280",
+            fontStyle: "italic",
+            marginBottom: "16px",
+          }}
+        >
+          A note from your therapist: {plan.clinicianNotes}
+        </div>
+      )}
 
       {/* Metric cards */}
       <div className="grid grid-cols-3 gap-3">
