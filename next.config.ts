@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 if (process.env.VERCEL === "1") {
   process.env.VERCEL_PREVIEW_COMMENTS_ENABLED = "0";
@@ -48,4 +49,20 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  // Suppress Sentry CLI output during build
+  silent: true,
+
+  // Do not create Sentry releases automatically
+  // We will do this manually when ready
+  release: {
+    create: false,
+  },
+
+  // No source map upload for now
+  // Add SENTRY_AUTH_TOKEN later when source maps needed
+  sourcemaps: {
+    disable: true,
+  },
+  widenClientFileUpload: false,
+});
