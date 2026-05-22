@@ -176,7 +176,7 @@ function HeroSection() {
                 className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#5DCAA5]/80"
                 style={{ fontFamily: "var(--rasq-font-mono)" }}
               >
-                Clinic-led remote rehabilitation platform
+                CLINIC-LED REMOTE REHABILITATION PLATFORM
               </span>
             </div>
 
@@ -205,8 +205,9 @@ function HeroSection() {
               className="rasq-stagger-item mt-4 max-w-xl text-base leading-7 text-white/45"
               style={{ animationDelay: "120ms" }}
             >
-              A clinic-led remote rehabilitation platform — assess patients, assign plans,
-              track adherence, and export clinical reports from one clinician workspace.
+              RASQ by Creative Motion Lab — a clinic-led remote rehabilitation platform.
+              Assess patients, assign plans, track adherence, and export clinical reports
+              from one clinician workspace.
             </p>
 
             {/* CTAs */}
@@ -911,7 +912,7 @@ function Footer() {
               Rehabilitation, precisely.
             </p>
             <p className="mt-4 text-[11px] text-white/20">
-              Built by Creative Motion Lab
+              RASQ by Creative Motion Lab
             </p>
           </div>
 

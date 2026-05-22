@@ -281,7 +281,7 @@ export default function SignupPage() {
         </div>
 
         <p className="mt-6 text-center text-xs text-white/15">
-          Rehabilitation, precisely.
+          RASQ by Creative Motion Lab · Rehabilitation, precisely.
         </p>
       </div>
     </main>

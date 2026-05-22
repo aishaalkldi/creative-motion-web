@@ -33,7 +33,12 @@ const ibmPlexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "RASQ — Rehabilitation, precisely.",
   description:
-    "RASQ is the connected rehabilitation platform for modern healthcare teams. Assess, prescribe, monitor, and engage patients beyond the clinic.",
+    "RASQ by Creative Motion Lab — clinic-led remote rehabilitation platform. Assess patients, assign plans, track adherence, and export clinical reports.",
+  openGraph: {
+    title: "RASQ — Rehabilitation, precisely.",
+    description:
+      "RASQ by Creative Motion Lab — clinic-led remote rehabilitation platform. Assess patients, assign plans, track adherence, and export clinical reports.",
+  },
 };
 
 /* ── Root layout ──────────────────────────────────────────────────────────── */

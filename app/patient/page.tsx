@@ -162,7 +162,7 @@ export default function PatientDashboard() {
         <div className="mx-auto max-w-5xl">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#6b9080]">Patient portal</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#6b9080]">RASQ · Patient portal</p>
               <h1
                 className="mt-2 text-2xl font-bold text-[#0f2e22] sm:text-3xl"
                 style={{ fontFamily: "var(--font-geist, var(--font-inter), sans-serif)" }}

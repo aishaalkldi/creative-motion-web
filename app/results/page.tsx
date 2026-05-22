@@ -153,7 +153,7 @@ function ResultsPageContent() {
       : "Not available";
 
   const mode = useMemo(() => {
-    if (hasLinkedResult) return "Motion Result (Backend)";
+    if (hasLinkedResult) return "RASQ clinical result (backend linked)";
     if (latestTherapy) {
       return latestTherapy.backendRowId != null
         ? "Therapy session (camera CV · server)"
@@ -572,7 +572,7 @@ function ResultsPageContent() {
                 <div>
                   <h2 className="text-2xl font-bold text-white">Patient & Session Details</h2>
                   <p className="mt-2 text-sm leading-7 text-white/70">
-                    Core clinical identity and session metadata for this physiotherapy motion report.
+                    Core clinical identity and session metadata for this RASQ rehabilitation assessment report.
                   </p>
                 </div>
                 <StatusPill status={status} />

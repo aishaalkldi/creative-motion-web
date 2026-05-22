@@ -246,7 +246,7 @@ function LoginForm() {
         </div>
 
         <p className="mt-6 text-center text-xs text-white/15">
-          Secure · Privacy-conscious · Built for clinical workflows
+          RASQ by Creative Motion Lab · Secure · Built for clinical workflows
         </p>
       </div>
     </main>
