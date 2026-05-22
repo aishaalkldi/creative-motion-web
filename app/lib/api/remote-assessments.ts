@@ -1,11 +1,9 @@
 /**
- * Remote Assessment Service — mock localStorage implementation.
+ * Remote Assessment Service — Supabase-backed with localStorage fallback.
  *
  * Clinician creates a tokenized link → patient fills sections → submits →
- * patient answers are merged into the clinician's GeneralAssessmentDraft so
- * the report renders automatically.
- *
- * Replace the localStorage calls with real API fetch() when backend is ready.
+ * patient answers are persisted to Supabase and merged into the clinician's
+ * GeneralAssessmentDraft when submitted from the same browser.
  */
 
 import { loadGeneralAssessmentDraft, saveGeneralAssessmentDraft } from "../general-assessment/storage";
@@ -145,22 +143,41 @@ function persist(req: RemoteAssessmentRequest) {
   localStorage.setItem(reqKey(req.id), JSON.stringify(req));
 }
 
-// ── UUID helper ────────────────────────────────────────────────────────────────
+function getRemoteAssessmentLocal(id: string): RemoteAssessmentRequest | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem(reqKey(id));
+    if (!raw) return null;
+    return JSON.parse(raw) as RemoteAssessmentRequest;
+  } catch {
+    return null;
+  }
+}
 
 function uuid(): string {
   if (typeof crypto !== "undefined" && crypto.randomUUID) {
     return crypto.randomUUID();
   }
-  // Fallback for environments without crypto.randomUUID
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
   });
 }
 
-// ── CRUD ───────────────────────────────────────────────────────────────────────
+function parseAssessmentType(value: string): AssessmentType {
+  if (value === "general_msk" || value === "sports" || value === "gait" || value === "pain_function") {
+    return value;
+  }
+  return "general_msk";
+}
 
-export function createRemoteAssessment(input: {
+function parseIncludedSections(value: unknown): PatientSectionId[] {
+  if (!Array.isArray(value)) return [];
+  const allowed: PatientSectionId[] = ["pain", "rom", "strength", "balance", "gait", "functional"];
+  return value.filter((s): s is PatientSectionId => typeof s === "string" && allowed.includes(s as PatientSectionId));
+}
+
+function createRemoteAssessmentLocal(input: {
   patientId: string;
   patientName: string;
   assessmentType: AssessmentType;
@@ -190,63 +207,11 @@ export function createRemoteAssessment(input: {
   return req;
 }
 
-export function getRemoteAssessment(id: string): RemoteAssessmentRequest | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = localStorage.getItem(reqKey(id));
-    if (!raw) return null;
-    return JSON.parse(raw) as RemoteAssessmentRequest;
-  } catch { return null; }
-}
-
-export function listPatientAssessments(patientId: string): RemoteAssessmentRequest[] {
-  const ids = collectIndexIds(patientId);
-  return ids
-    .map((id) => getRemoteAssessment(id))
-    .filter((r): r is RemoteAssessmentRequest => {
-      if (!r) return false;
-      const pid = patientId.trim();
-      const rid = String(r.patientId).trim();
-      return rid === pid || (legacyNumericIndexKey(pid) !== null && rid === legacyNumericIndexKey(pid));
-    })
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-}
-
-export function updateRemoteAssessmentDraft(
-  id: string,
+function mergePatientDraftIntoClinicianDraft(
+  patientId: string,
   patientDraft: PatientAssessmentDraft,
-  assessmentLanguage?: AssessmentLanguage,
 ): void {
-  const req = getRemoteAssessment(id);
-  if (!req) return;
-  persist({
-    ...req,
-    status: "in_progress",
-    patientDraft,
-    ...(assessmentLanguage ? { assessmentLanguage } : {}),
-  });
-}
-
-export function submitRemoteAssessment(
-  id: string,
-  patientDraft: PatientAssessmentDraft,
-  assessmentLanguage: AssessmentLanguage = "en",
-): void {
-  const req = getRemoteAssessment(id);
-  if (!req) return;
-
-  const submitted: RemoteAssessmentRequest = {
-    ...req,
-    status: "submitted",
-    submittedAt: new Date().toISOString(),
-    patientDraft,
-    assessmentLanguage,
-  };
-  persist(submitted);
-
-  // Merge patient answers into the clinician's GeneralAssessmentDraft so the
-  // existing report page renders patient-submitted data automatically.
-  const clinicianDraft = loadGeneralAssessmentDraft(req.patientId.trim());
+  const clinicianDraft = loadGeneralAssessmentDraft(patientId.trim());
   const pd = patientDraft;
 
   if (pd.pain) {
@@ -290,7 +255,166 @@ export function submitRemoteAssessment(
     };
   }
 
-  saveGeneralAssessmentDraft(String(req.patientId), clinicianDraft);
+  saveGeneralAssessmentDraft(String(patientId), clinicianDraft);
+}
+
+// ── CRUD ───────────────────────────────────────────────────────────────────────
+
+export async function createRemoteAssessment(input: {
+  patientId: string;
+  patientName: string;
+  assessmentType: AssessmentType;
+  includedSections: PatientSectionId[];
+}): Promise<RemoteAssessmentRequest> {
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch("/api/remote-assessments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          patientId: input.patientId.trim(),
+          assessmentType: input.assessmentType,
+          includedSections: input.includedSections,
+        }),
+      });
+
+      if (res.ok) {
+        const data = (await res.json()) as {
+          token: string;
+          url: string;
+          expiresAt: string;
+        };
+        const patientId = input.patientId.trim();
+        const req: RemoteAssessmentRequest = {
+          id: data.token,
+          patientId,
+          patientName: input.patientName,
+          assessmentType: input.assessmentType,
+          includedSections: input.includedSections,
+          status: "pending",
+          createdAt: new Date().toISOString(),
+          expiresAt: data.expiresAt,
+        };
+        persist(req);
+        const ids = readIndex(patientId);
+        writeIndex(patientId, [req.id, ...ids]);
+        return req;
+      }
+    } catch {
+      /* fall through to localStorage */
+    }
+  }
+
+  return createRemoteAssessmentLocal(input);
+}
+
+export async function getRemoteAssessment(id: string): Promise<RemoteAssessmentRequest | null> {
+  if (typeof window !== "undefined") {
+    try {
+      const res = await fetch(`/api/remote-assessments/${encodeURIComponent(id)}`);
+      if (res.ok) {
+        const data = (await res.json()) as {
+          patientId: string;
+          assessmentType: string;
+          includedSections: unknown;
+          expiresAt?: string;
+        };
+        const local = getRemoteAssessmentLocal(id);
+        const req: RemoteAssessmentRequest = {
+          id,
+          patientId: data.patientId,
+          patientName: local?.patientName ?? "",
+          assessmentType: parseAssessmentType(data.assessmentType),
+          includedSections: parseIncludedSections(data.includedSections),
+          status: local?.status ?? "pending",
+          createdAt: local?.createdAt ?? new Date().toISOString(),
+          expiresAt: data.expiresAt ?? local?.expiresAt ?? new Date(Date.now() + EXPIRY_DAYS * 86400000).toISOString(),
+          patientDraft: local?.patientDraft,
+          assessmentLanguage: local?.assessmentLanguage,
+          submittedAt: local?.submittedAt,
+        };
+        persist(req);
+        return req;
+      }
+      if (res.status === 404) {
+        return getRemoteAssessmentLocal(id);
+      }
+    } catch {
+      /* fall through to localStorage */
+    }
+  }
+
+  return getRemoteAssessmentLocal(id);
+}
+
+export function listPatientAssessments(patientId: string): RemoteAssessmentRequest[] {
+  const ids = collectIndexIds(patientId);
+  return ids
+    .map((id) => getRemoteAssessmentLocal(id))
+    .filter((r): r is RemoteAssessmentRequest => {
+      if (!r) return false;
+      const pid = patientId.trim();
+      const rid = String(r.patientId).trim();
+      return rid === pid || (legacyNumericIndexKey(pid) !== null && rid === legacyNumericIndexKey(pid));
+    })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+export function updateRemoteAssessmentDraft(
+  id: string,
+  patientDraft: PatientAssessmentDraft,
+  assessmentLanguage?: AssessmentLanguage,
+): void {
+  const req = getRemoteAssessmentLocal(id);
+  if (!req) return;
+  persist({
+    ...req,
+    status: "in_progress",
+    patientDraft,
+    ...(assessmentLanguage ? { assessmentLanguage } : {}),
+  });
+}
+
+export async function submitRemoteAssessment(
+  id: string,
+  patientDraft: PatientAssessmentDraft,
+  assessmentLanguage: AssessmentLanguage = "en",
+): Promise<void> {
+  const res = await fetch(`/api/remote-assessments/${encodeURIComponent(id)}/submit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ structuredData: patientDraft }),
+  });
+
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(body.error ?? `Failed to submit assessment (${res.status})`);
+  }
+
+  const req = getRemoteAssessmentLocal(id);
+  const base: RemoteAssessmentRequest = req ?? {
+    id,
+    patientId: "",
+    patientName: "",
+    assessmentType: "general_msk",
+    includedSections: [],
+    status: "pending",
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date().toISOString(),
+  };
+
+  const submitted: RemoteAssessmentRequest = {
+    ...base,
+    status: "submitted",
+    submittedAt: new Date().toISOString(),
+    patientDraft,
+    assessmentLanguage,
+  };
+  persist(submitted);
+
+  if (base.patientId) {
+    mergePatientDraftIntoClinicianDraft(base.patientId, patientDraft);
+  }
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

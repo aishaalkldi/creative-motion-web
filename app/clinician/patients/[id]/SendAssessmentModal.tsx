@@ -46,8 +46,8 @@ export function SendAssessmentModal({ patientId, patientName, onClose, onCreated
     );
   }
 
-  function handleGenerate() {
-    const req = createRemoteAssessment({ patientId, patientName, assessmentType, includedSections: sections });
+  async function handleGenerate() {
+    const req = await createRemoteAssessment({ patientId, patientName, assessmentType, includedSections: sections });
     setGenerated(req);
   }
 

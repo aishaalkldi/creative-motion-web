@@ -251,19 +251,29 @@ export function PatientAssessmentClient() {
       setTokenState("invalid");
       return;
     }
-    const r = getRemoteAssessment(token);
-    if (!r || isExpired(r) || r.status === "submitted") {
-      setTokenState("invalid");
-      return;
-    }
-    setReq(r);
-    if (r.patientDraft) {
-      setDraft({ ...emptyDraft(), ...r.patientDraft });
-    }
-    if (r.assessmentLanguage === "ar" || r.assessmentLanguage === "en") {
-      setLang(r.assessmentLanguage);
-    }
-    setTokenState("valid");
+
+    let cancelled = false;
+
+    void (async () => {
+      const r = await getRemoteAssessment(token);
+      if (cancelled) return;
+      if (!r || isExpired(r) || r.status === "submitted") {
+        setTokenState("invalid");
+        return;
+      }
+      setReq(r);
+      if (r.patientDraft) {
+        setDraft({ ...emptyDraft(), ...r.patientDraft });
+      }
+      if (r.assessmentLanguage === "ar" || r.assessmentLanguage === "en") {
+        setLang(r.assessmentLanguage);
+      }
+      setTokenState("valid");
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   const autoSave = useCallback(
@@ -289,7 +299,7 @@ export function PatientAssessmentClient() {
     setSubmitting(true);
     setStage("submitting");
     try {
-      submitRemoteAssessment(token, draft, lang as AssessmentLanguage);
+      await submitRemoteAssessment(token, draft, lang as AssessmentLanguage);
       router.push(`/assessment/${token}/complete`);
     } catch {
       setSubmitting(false);

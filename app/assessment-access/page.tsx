@@ -25,7 +25,7 @@ export default function AssessmentAccessPage() {
     const resolved = match ? match[1] : t;
 
     try {
-      const assessment = getRemoteAssessment(resolved);
+      const assessment = await getRemoteAssessment(resolved);
       if (!assessment) {
         setError("This assessment link is not valid. Please check the link sent by your clinic.");
         return;
