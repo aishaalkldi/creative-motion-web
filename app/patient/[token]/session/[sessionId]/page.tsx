@@ -154,19 +154,22 @@ export default function SessionPlayerPage() {
   /* Completion screen */
   if (completed) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-5 text-center">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-5 px-4 text-center">
         <RasqArc size={48} />
         <div>
           <h2
             className="text-[22px] font-bold text-[#0A0F1A]"
             style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
           >
-            Session complete.
+            Session completed
           </h2>
+          <p className="mt-2 text-[14px] text-[#6B7280]">
+            Your progress has been updated.
+          </p>
           <p className="mt-1 text-[14px] text-[#6B7280]">
             Well done{patientName ? `, ${patientName.split(" ")[0]}` : ""}.
           </p>
-          <p className="mt-3 max-w-sm text-[13px] leading-relaxed text-[#6B7280]">
+          <p className="mt-4 max-w-sm text-[13px] leading-relaxed text-[#6B7280]">
             If you feel sharp or unusual pain during exercises, stop immediately and contact your therapist.
           </p>
         </div>
@@ -174,7 +177,7 @@ export default function SessionPlayerPage() {
           href={`/patient/${token}`}
           className="mt-2 flex min-h-[44px] items-center rounded-[7px] bg-[#1D9E75] px-6 text-[14px] font-semibold text-white transition hover:bg-[#179165]"
         >
-          ← Back to your plan
+          Back to my plan
         </Link>
       </div>
     );
@@ -216,6 +219,13 @@ export default function SessionPlayerPage() {
             />
           ))}
         </div>
+      </div>
+
+      {/* Safety note */}
+      <div className="rounded-[10px] border border-[#D1E7DE] bg-[#F0FAF6] px-4 py-3">
+        <p className="text-[13px] leading-relaxed text-[#374151]">
+          Move slowly and stop if you feel sharp pain, dizziness, or unusual symptoms.
+        </p>
       </div>
 
       {/* Exercise card */}

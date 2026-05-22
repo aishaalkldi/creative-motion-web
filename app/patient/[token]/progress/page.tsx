@@ -77,7 +77,7 @@ export default function PatientProgressPage() {
 
   const spw = plan.sessionsPerWeek || 3;
 
-  // Weekly view: group sessions by sessionsPerWeek
+  // Weekly view: group sessions by sessionsPerWeek; target = actual sessions in that week slice
   const weeks = Array.from(
     { length: Math.ceil(totalSessions / spw) },
     (_, wi) => {
@@ -86,22 +86,11 @@ export default function PatientProgressPage() {
       return {
         week:      `Week ${wi + 1}`,
         completed: done,
-        target:    spw,
+        target:    slice.length,
         isDone:    done === slice.length && slice.length > 0,
       };
     },
   );
-
-  // Phase status from assigned plan only
-  const phaseCompletions = plan.phaseName
-    ? [
-        {
-          label: plan.phaseName,
-          done:  completedSessions >= totalSessions && totalSessions > 0,
-          note:  `${completedSessions} / ${totalSessions} sessions`,
-        },
-      ]
-    : [];
 
   return (
     <div className="space-y-6">
@@ -119,14 +108,17 @@ export default function PatientProgressPage() {
         >
           Your recovery progress
         </h1>
+        <p className="mt-1 text-[13px] text-[#6B7280]">
+          {plan.planTitle || plan.programName}
+        </p>
       </div>
 
       {/* Key metrics */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {[
-          { label: "Sessions",  value: `${completedSessions}/${totalSessions}`,             sub: "completed"      },
-          { label: "Adherence", value: `${adherence}%`,                                     sub: "completion rate" },
-          { label: "Avg effort",value: avgEffort !== null ? String(avgEffort) : "—",        sub: "out of 10"       },
+          { label: "Sessions completed", value: `${completedSessions}/${totalSessions}`, sub: "in your plan" },
+          { label: "Progress", value: `${adherence}%`, sub: "completion rate" },
+          { label: "Avg effort", value: avgEffort !== null ? `${avgEffort}/10` : "—", sub: avgEffort !== null ? "self-reported" : "not recorded yet" },
         ].map(({ label, value, sub }) => (
           <div
             key={label}
@@ -144,58 +136,51 @@ export default function PatientProgressPage() {
         ))}
       </div>
 
-      {/* Phase status */}
-      {phaseCompletions.length > 0 && (
+      {/* Progress bar */}
       <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
-        <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.12em] text-[#374151]">
-          Current phase
-        </p>
-        <div className="space-y-3">
-          {phaseCompletions.map(({ label, done, note }) => (
-            <div key={label} className="flex items-center gap-3">
-              <span
-                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${
-                  done ? "bg-[#1D9E75]" : "border-2 border-[#E2E8E5] bg-white"
-                }`}
-              >
-                {done && (
-                  <svg className="h-3 w-3 text-white" viewBox="0 0 12 12" fill="none">
-                    <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
-                )}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className={`text-[13px] font-semibold ${done ? "text-[#0A0F1A]" : "text-[#374151]"}`}>
-                  {label}
-                </p>
-                <p className="text-[11px] text-[#9CA3AF]">{note}</p>
-              </div>
-            </div>
-          ))}
+        <div className="flex items-center justify-between">
+          <p className="text-[12px] font-semibold text-[#374151]">Overall progress</p>
+          <p
+            className="text-[13px] font-bold text-[#1D9E75]"
+            style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+          >
+            {adherence}%
+          </p>
+        </div>
+        <div className="mt-3 h-[6px] w-full overflow-hidden rounded-full bg-[#E2E8E5]">
+          <div
+            className="h-full rounded-full bg-[#1D9E75] transition-all"
+            style={{ width: `${adherence}%` }}
+          />
         </div>
       </div>
-      )}
 
-      {/* Recovery timeline */}
+      {/* Session timeline */}
       {weeks.length > 0 && (
         <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
           <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.12em] text-[#374151]">
-            Recovery timeline
+            Session timeline
           </p>
           <div className="space-y-3">
             {weeks.map(({ week, completed: c, target, isDone }) => (
               <div key={week} className="flex items-center gap-3">
                 <span
-                  className={`h-2 w-2 shrink-0 rounded-full ${isDone ? "bg-[#1D9E75]" : "bg-[#E2E8E5]"}`}
+                  className={`h-2.5 w-2.5 shrink-0 rounded-full ${isDone ? "bg-[#1D9E75]" : "bg-[#E2E8E5]"}`}
                 />
                 <p className="flex-1 text-[13px] text-[#374151]">
-                  {week} — {c}/{target} sessions
+                  {week} — {c}/{target} session{target === 1 ? "" : "s"}
                 </p>
               </div>
             ))}
           </div>
         </div>
       )}
+
+      <div className="rounded-[10px] border border-[#E2E8E5] bg-[#F9FAFB] px-4 py-3.5">
+        <p className="text-[13px] leading-relaxed text-[#6B7280]">
+          Detailed clinical progress will be reviewed by your therapist.
+        </p>
+      </div>
 
       {/* Latest pain score (if reported) */}
       {latestPain !== null && (

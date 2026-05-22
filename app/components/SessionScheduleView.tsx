@@ -40,9 +40,9 @@ function StatusPill({
   const isToday = status === "today" || status === "in-progress";
 
   if (variant === "patient") {
-    if (isDone) return <span className="rounded-[5px] bg-[#E8F5F1] px-2 py-0.5 text-[11px] font-semibold text-[#085041]">Done</span>;
-    if (isToday) return <span className="rounded-[5px] bg-[#1D9E75] px-2 py-0.5 text-[11px] font-semibold text-white">Today</span>;
-    return <span className="rounded-[5px] bg-[#F4F6F5] px-2 py-0.5 text-[11px] font-semibold text-[#9CA3AF]">Upcoming</span>;
+    if (isDone) return <span className="shrink-0 rounded-[6px] bg-[#E8F5F1] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#085041]">Done</span>;
+    if (isToday) return <span className="shrink-0 rounded-[6px] bg-[#1D9E75] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">Today</span>;
+    return <span className="shrink-0 rounded-[6px] border border-[#E2E8E5] bg-[#F9FAFB] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#6B7280]">Upcoming</span>;
   }
 
   if (isDone) return <span className="text-[10px] font-semibold text-[#5DCAA5]">Done</span>;
@@ -78,28 +78,31 @@ export function SessionScheduleView({
   return (
     <div className="space-y-4">
       {weeks.map((week) => (
-        <div key={week.weekLabel} className={`rounded-[8px] border ${borderCls} ${bgCls} overflow-hidden`}>
+        <div key={week.weekLabel} className={`rounded-[10px] border ${borderCls} ${bgCls} overflow-hidden`}>
           <div className={`border-b ${borderCls} px-4 py-2.5`}>
             <p className={weekTitleCls}>{week.weekLabel}</p>
           </div>
           <div className={`divide-y ${borderCls}`}>
             {week.days.map((day) => (
-              <div key={`${week.weekLabel}-${day.dayLabel}`} className="px-4 py-3">
-                <p className={`${dayTitleCls} mb-2`}>{day.dayLabel}</p>
-                <div className="space-y-2">
+              <div key={`${week.weekLabel}-${day.dayLabel}`} className="px-4 py-3.5">
+                <p className={`${dayTitleCls} mb-2.5`}>{day.dayLabel}</p>
+                <div className="space-y-3">
                   {day.sessions.map((session) => {
                     const st = resolveStatus(sessions, session);
                     const isToday = st === "today";
+                    const displayTitle = session.title.trim().toLowerCase().startsWith(`session ${session.sessionNumber}`)
+                      ? session.title
+                      : `Session ${session.sessionNumber} — ${session.title}`;
+                    const exerciseCount = session.exercises?.length ?? 0;
                     const row = (
-                      <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <p className={titleCls}>
-                            Session {session.sessionNumber} — {session.title}
-                          </p>
-                          {session.exercises && session.exercises.length > 0 && (
-                            <p className={`mt-0.5 truncate ${subCls}`}>
-                              {session.exercises.slice(0, 2).join(" · ")}
-                              {session.exercises.length > 2 && ` +${session.exercises.length - 2}`}
+                          <p className={`${titleCls} leading-snug`}>{displayTitle}</p>
+                          {exerciseCount > 0 && (
+                            <p className={`mt-1 ${subCls}`}>
+                              {variant === "patient"
+                                ? `${exerciseCount} exercise${exerciseCount === 1 ? "" : "s"}`
+                                : `${session.exercises!.slice(0, 2).join(" · ")}${exerciseCount > 2 ? ` +${exerciseCount - 2}` : ""}`}
                             </p>
                           )}
                         </div>
@@ -112,13 +115,24 @@ export function SessionScheduleView({
                         <Link
                           key={session.id}
                           href={`/patient/${patientToken}/session/${session.id}`}
-                          className="block rounded-[6px] transition hover:bg-[#F9FAFB] -mx-1 px-1 py-1"
+                          className={`block rounded-[8px] border transition -mx-1 px-3 py-2.5 ${
+                            variant === "patient"
+                              ? "border-[#1D9E75]/25 bg-[#1D9E75]/5 hover:border-[#1D9E75]/40 hover:bg-[#1D9E75]/8"
+                              : "hover:bg-[#F9FAFB]"
+                          }`}
                         >
                           {row}
                         </Link>
                       );
                     }
-                    return <div key={session.id}>{row}</div>;
+                    return (
+                      <div
+                        key={session.id}
+                        className={variant === "patient" ? "rounded-[8px] px-1 py-1" : undefined}
+                      >
+                        {row}
+                      </div>
+                    );
                   })}
                 </div>
               </div>

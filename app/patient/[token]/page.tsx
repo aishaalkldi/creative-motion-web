@@ -120,28 +120,35 @@ export default function PatientDashboard() {
     );
   }
 
-  const sessionsCompleted = completed;
-  const currentScore      = progress;
-
   return (
     <div className="space-y-6">
-      {/* Greeting */}
-      <div>
+      {/* Plan header */}
+      <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
+        <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]">
+          Your rehabilitation plan
+        </p>
         <h1
-          className="text-[22px] font-bold text-[#0A0F1A]"
+          className="mt-2 text-[22px] font-bold leading-tight text-[#0A0F1A]"
           style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
         >
           {getGreeting()}, {patientName.split(" ")[0]}.
         </h1>
+        <p className="mt-2 text-[15px] font-semibold text-[#0A0F1A]">
+          {plan.planTitle || plan.programName}
+        </p>
         <p className="mt-1 text-[13px] text-[#6B7280]">
-          {diagnosis} · {plan.phaseName} · Week {plan.totalWeeks ? `1 of ${plan.totalWeeks}` : "1"}
+          {diagnosis ? `${diagnosis} · ` : ""}{plan.phaseName}
+        </p>
+        <p className="mt-3 text-[12px] font-medium text-[#6B7280]">
+          Assigned by your clinician
+          {plan.assignedBy ? ` · ${plan.assignedBy}` : ""}
         </p>
       </div>
 
       {/* Recovery progress bar */}
       <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
-        <div className="flex items-center justify-between">
-          <p className="text-[12px] font-semibold text-[#374151]">Recovery progress</p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[12px] font-semibold text-[#374151]">Your progress</p>
           <p
             className="text-[13px] font-bold text-[#1D9E75]"
             style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
@@ -149,29 +156,30 @@ export default function PatientDashboard() {
             {progress}%
           </p>
         </div>
-        <div className="mt-3 h-[5px] w-full overflow-hidden rounded-full bg-[#E2E8E5]">
+        <div className="mt-3 h-[6px] w-full overflow-hidden rounded-full bg-[#E2E8E5]">
           <div
             className="h-full rounded-full bg-[#1D9E75] transition-all"
             style={{ width: `${progress}%` }}
           />
         </div>
-        <p className="mt-2 text-[11px] text-[#9CA3AF]">
-          {completed} of {total} sessions complete
+        <p className="mt-2.5 text-[12px] text-[#6B7280]">
+          {completed} of {total} session{total === 1 ? "" : "s"} complete
         </p>
       </div>
 
       {/* Metric cards */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "Sessions", value: String(sessionsCompleted), sub: "completed" },
-          { label: "Progress", value: `${currentScore}%`,       sub: "completion" },
+          { label: "Total sessions", value: String(total), sub: "in your plan" },
+          { label: "Completed", value: String(completed), sub: "sessions done" },
+          { label: "Progress", value: `${progress}%`, sub: "completion" },
         ].map(({ label, value, sub }) => (
           <div
             key={label}
             className="rounded-[10px] border border-[#E2E8E5] bg-white p-4 text-center"
           >
             <p
-              className="text-[22px] font-bold text-[#1D9E75]"
+              className="text-[20px] font-bold text-[#1D9E75]"
               style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
             >
               {value}
@@ -184,8 +192,11 @@ export default function PatientDashboard() {
 
       {/* Session schedule */}
       <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
-        <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.12em] text-[#374151]">
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#374151]">
           Your sessions
+        </p>
+        <p className="mb-4 text-[12px] text-[#6B7280]">
+          Tap today&apos;s session when you are ready to begin.
         </p>
         <SessionScheduleView
           sessions={plan.sessions.map((s) => ({
