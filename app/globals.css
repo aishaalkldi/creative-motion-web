@@ -77,56 +77,178 @@ body {
   }
 }
 
+/* ── Clinical assessment report — print helpers ── */
+.print-only {
+  display: none;
+}
+
 /* ── Clinical assessment report — print / Export PDF ── */
 @media print {
   @page {
-    margin: 1.2cm 1.5cm;
+    margin: 20mm;
     size: A4;
   }
 
+  html,
   body {
     background: #fff !important;
     color: #111 !important;
-    -webkit-print-color-adjust: exact;
-    print-color-adjust: exact;
+    height: auto !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: economy;
+    print-color-adjust: economy;
   }
 
-  .assessment-report-root {
+  /* Isolate printable report from clinician app shell (sidebar, nav, etc.) */
+  body * {
+    visibility: hidden;
+  }
+
+  .print-report,
+  .print-report * {
+    visibility: visible;
+  }
+
+  .print-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    min-height: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
     background: #fff !important;
     color: #111 !important;
   }
 
-  .assessment-report-root header {
+  .screen-only {
     display: none !important;
+    visibility: hidden !important;
   }
 
-  .assessment-report-root section,
-  .assessment-report-root article {
+  .print-only {
+    display: block !important;
+    visibility: visible !important;
+  }
+
+  .print-empty-section {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .print-report-header {
+    margin-bottom: 1rem;
+    padding-bottom: 0;
+  }
+
+  .print-report-body {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .print-section {
     break-inside: avoid;
     page-break-inside: avoid;
+    border: 1px solid #d1d5db !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    margin-bottom: 0.85rem;
+    overflow: visible !important;
   }
 
-  .assessment-report-root h1,
-  .assessment-report-root h2 {
+  .print-section-title {
+    font-size: 13pt !important;
+    font-weight: 700 !important;
+    color: #0a0f1a !important;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 0.45rem 0.75rem;
+    margin: 0;
+    background: #f9fafb !important;
+  }
+
+  .print-section-body {
+    padding: 0.65rem 0.75rem 0.85rem !important;
+  }
+
+  .assessment-report-root,
+  .assessment-report-root.print-report {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  .print-report h1,
+  .print-report h2,
+  .print-report h3 {
     color: #0a0f1a !important;
   }
 
-  .assessment-report-root p,
-  .assessment-report-root span,
-  .assessment-report-root li,
-  .assessment-report-root textarea {
+  .print-report p,
+  .print-report span,
+  .print-report li,
+  .print-report td,
+  .print-report th,
+  .print-report textarea {
     color: #1f2937 !important;
   }
 
-  .assessment-report-root textarea {
-    border: 1px solid #d1d5db !important;
-    background: #fff !important;
-    resize: none;
+  .print-report table {
+    border-collapse: collapse;
+    width: 100%;
   }
 
-  .assessment-report-root button,
-  .assessment-report-root a[href^="/clinician/assessment"],
-  .assessment-report-root nav {
+  .print-report th,
+  .print-report td {
+    border: 1px solid #e5e7eb !important;
+    padding: 0.35rem 0.5rem !important;
+  }
+
+  .print-report textarea {
+    border: 1px solid #d1d5db !important;
+    background: #fff !important;
+    resize: none !important;
+    overflow: visible !important;
+    min-height: 0 !important;
+    box-shadow: none !important;
+  }
+
+  /* Flatten nested cards and remove dark theme remnants */
+  .print-report [class*="rounded"],
+  .print-report [class*="bg-["],
+  .print-report [class*="bg-white/"],
+  .print-report [class*="border-["],
+  .print-report [class*="border-white"] {
+    background: #fff !important;
+    box-shadow: none !important;
+  }
+
+  .print-report [class*="border"] {
+    border-color: #e5e7eb !important;
+  }
+
+  .print-report [class*="text-white"],
+  .print-report [class*="text-cyan"],
+  .print-report [class*="text-amber"],
+  .print-report [class*="text-lime"],
+  .print-report [class*="text-rose"],
+  .print-report [class*="text-violet"],
+  .print-report [class*="text-[#5DCAA5]"] {
+    color: #1f2937 !important;
+  }
+
+  .print-report [class*="text-white/"],
+  .print-report [class*="text-gray"] {
+    color: #4b5563 !important;
+  }
+
+  .print-report button,
+  .print-report a[href^="/clinician/"],
+  .print-report nav {
+    display: none !important;
+  }
+
+  .print-report svg[class*="text-amber"] {
     display: none !important;
   }
 }

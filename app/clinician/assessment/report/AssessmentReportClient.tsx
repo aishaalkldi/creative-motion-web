@@ -82,6 +82,34 @@ const STATUS_LABEL: Record<CvRowStatus, string> = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
+function hasPatientSubmittedContent(d: GeneralAssessmentDraft): boolean {
+  const s = d.subjective;
+  return [
+    s.chiefComplaint,
+    s.painLocation,
+    s.nprs,
+    s.aggravating,
+    s.easing,
+    s.functionalLimitations,
+    s.goals,
+    s.redFlags,
+  ].some((v) => v.trim());
+}
+
+function hasSoapContent(d: GeneralAssessmentDraft): boolean {
+  return [d.soap.subjective, d.soap.objective, d.soap.assessment, d.soap.plan].some((v) => v.trim());
+}
+
+function hasClinicalInterpretation(d: GeneralAssessmentDraft): boolean {
+  return [
+    d.ai.clinicalImpression,
+    d.ai.supportingFindings,
+    d.ai.missingTests,
+    d.ai.confidenceLevel,
+    d.ai.safetyNotes,
+  ].some((v) => v.trim());
+}
+
 function isDraftMeaningful(d: GeneralAssessmentDraft): boolean {
   const s = d.subjective;
   if ([s.chiefComplaint, s.painLocation, s.nprs, s.aggravating, s.easing, s.goals, s.redFlags]
@@ -291,6 +319,9 @@ function ReportSection({
   children,
   defaultOpen = true,
   accent,
+  screenOnly = false,
+  hideWhenEmptyPrint = false,
+  hasPrintContent = true,
 }: {
   id: string;
   title: string;
@@ -298,18 +329,22 @@ function ReportSection({
   children: ReactNode;
   defaultOpen?: boolean;
   accent?: string;
+  screenOnly?: boolean;
+  hideWhenEmptyPrint?: boolean;
+  hasPrintContent?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  const emptyPrintClass = hideWhenEmptyPrint && !hasPrintContent ? "print-empty-section" : "";
 
   return (
     <section
       id={id}
-      className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825]"
+      className={`print-section overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] ${screenOnly ? "screen-only" : ""} ${emptyPrintClass}`}
     >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3 px-6 py-4 text-left transition hover:bg-[#0B1220]/50"
+        className="screen-only flex w-full items-center gap-3 px-6 py-4 text-left transition hover:bg-[#0B1220]/50"
       >
         <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] border ${accent ?? "border-[#1E2D42] bg-[#0B1220] text-white/40"}`}>
           {icon}
@@ -322,12 +357,76 @@ function ReportSection({
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
-      {open && (
-        <div className="border-t border-[#1E2D42] px-6 pb-6 pt-5">
-          {children}
-        </div>
-      )}
+      <h2 className="print-section-title hidden print:block">{title}</h2>
+      <div
+        className={`print-section-body border-t border-[#1E2D42] px-6 pb-6 pt-5 print:border-0 print:px-0 print:pb-0 print:pt-3 ${
+          open ? "" : "hidden print:!block"
+        }`}
+      >
+        {children}
+      </div>
     </section>
+  );
+}
+
+function RasqPrintHeader({
+  patientName,
+  patientId,
+  displayDate,
+  assessmentId,
+}: {
+  patientName: string;
+  patientId: string;
+  displayDate: string;
+  assessmentId?: string;
+}) {
+  return (
+    <header className="print-only print-report-header">
+      <div className="flex items-center gap-3 border-b border-gray-300 pb-3">
+        <svg width="28" height="28" viewBox="0 0 20 20" fill="none" aria-hidden className="shrink-0">
+          <path d="M10 2C5.582 2 2 5.582 2 10s3.582 8 8 8" stroke="#1D9E75" strokeWidth="2.2" strokeLinecap="round" />
+          <path d="M10 5.5C7.515 5.5 5.5 7.515 5.5 10S7.515 14.5 10 14.5" stroke="#179165" strokeWidth="1.8" strokeLinecap="round" />
+          <circle cx="10" cy="10" r="1.5" fill="#1D9E75" />
+        </svg>
+        <div>
+          <p className="text-base font-bold text-black">RASQ</p>
+          <p className="text-[11px] text-gray-600">Rehabilitation Assessment System</p>
+        </div>
+      </div>
+      <h1 className="mt-4 text-xl font-bold text-black">Clinical Assessment Report</h1>
+      <p className="mt-2 text-sm font-semibold text-black">{patientName}</p>
+      <p className="mt-1 text-xs text-gray-600">
+        {formatDate(displayDate)} · Patient ID {patientId}
+        {assessmentId ? ` · Ref ${assessmentId.slice(0, 8)}` : ""}
+      </p>
+      <p className="mt-3 rounded border border-gray-300 bg-gray-50 px-3 py-2 text-[11px] leading-relaxed text-gray-700">
+        {DISCLAIMER}
+      </p>
+    </header>
+  );
+}
+
+function PatientSubmittedPrintSection({ draft }: { draft: GeneralAssessmentDraft }) {
+  return (
+    <ReportSection
+      id="patient-submitted"
+      title="Patient-Submitted Assessment"
+      defaultOpen
+      hideWhenEmptyPrint
+      hasPrintContent={hasPatientSubmittedContent(draft)}
+      icon={DOC_ICON}
+    >
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-1">
+        <TextBlock label="Chief complaint" value={draft.subjective.chiefComplaint} />
+        <TextBlock label="Pain score (NPRS)" value={draft.subjective.nprs} />
+        <TextBlock label="Pain location" value={draft.subjective.painLocation} />
+        <TextBlock label="Aggravating factors" value={draft.subjective.aggravating} />
+        <TextBlock label="Easing factors" value={draft.subjective.easing} />
+        <TextBlock label="Functional limitations" value={draft.subjective.functionalLimitations} />
+        <TextBlock label="Patient goals" value={draft.subjective.goals} />
+        <TextBlock label="Red flags reported" value={draft.subjective.redFlags} />
+      </div>
+    </ReportSection>
   );
 }
 
@@ -473,6 +572,7 @@ function AssignPlanSection({
       id="assign"
       title="Assign Treatment Plan"
       defaultOpen
+      screenOnly
       accent="border-cyan-300/25 bg-cyan-400/10 text-cyan-300"
       icon={
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -775,8 +875,14 @@ export function AssessmentReportClient() {
 
   if (reportKind === "structured" && structuredData) {
     return (
-      <main className="assessment-report-root min-h-screen bg-[#0B1220] text-white">
-        <header className="sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220] print:hidden">
+      <main className="assessment-report-root print-report min-h-screen bg-[#0B1220] text-white">
+        <RasqPrintHeader
+          patientName={patient?.full_name ?? "Patient"}
+          patientId={patientId}
+          displayDate={reportDate}
+          assessmentId={assessmentId || undefined}
+        />
+        <header className="screen-only sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220]">
           <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
             <Link href={patientId ? `/clinician/patients/${patientId}` : "/clinician/patients"}
               className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white">
@@ -788,20 +894,22 @@ export function AssessmentReportClient() {
             </button>
           </div>
         </header>
-        <section className="border-b border-white/10 bg-[#0F1825] px-6 py-8 print:bg-white print:text-black">
+        <section className="screen-only border-b border-white/10 bg-[#0F1825] px-6 py-8">
           <div className="mx-auto max-w-4xl">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40 print:text-gray-600">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
               Clinical Assessment Report
             </p>
-            <h1 className="mt-1 text-2xl font-bold text-white print:text-black">
+            <h1 className="mt-1 text-2xl font-bold text-white">
               {patient?.full_name ?? "Patient"}
             </h1>
-            <p className="mt-1 text-sm text-white/50 print:text-gray-600">
+            <p className="mt-1 text-sm text-white/50">
               {formatDate(reportDate)} {assessmentId && <>· ID {assessmentId.slice(0, 8)}…</>}
             </p>
           </div>
         </section>
+        <div className="print-report-body mx-auto max-w-4xl px-6 py-8">
         <StructuredAssessmentReport data={structuredData} notes={serverNotes} />
+        </div>
       </main>
     );
   }
@@ -835,10 +943,17 @@ export function AssessmentReportClient() {
   const displayDate = reportDate || draft.updatedAt;
 
   return (
-    <main className="assessment-report-root min-h-screen bg-[#0B1220] text-white">
+    <main className="assessment-report-root print-report min-h-screen bg-[#0B1220] text-white">
+
+      <RasqPrintHeader
+        patientName={patient?.full_name ?? `Patient #${patientId}`}
+        patientId={patientId}
+        displayDate={displayDate}
+        assessmentId={assessmentId || undefined}
+      />
 
       {/* ── Sticky top bar ── */}
-      <header className="sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220] print:hidden">
+      <header className="screen-only sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220]">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
           <div className="flex items-center gap-2">
             <Link href={`/clinician/patients/${patientId}`}
@@ -874,8 +989,8 @@ export function AssessmentReportClient() {
         </div>
       </header>
 
-      {/* ── Report header ── */}
-      <section className="border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.07),transparent_38%),linear-gradient(135deg,#071a2f_0%,#0d1f3c_55%,#0f1f45_100%)]">
+      {/* ── Report header (screen) ── */}
+      <section className="screen-only border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.07),transparent_38%),linear-gradient(135deg,#071a2f_0%,#0d1f3c_55%,#0f1f45_100%)]">
         <div className="mx-auto max-w-4xl px-6 py-10">
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <span className="rounded-full border border-white/15 bg-white/[0.06] px-3 py-0.5 text-[11px] font-semibold text-white/50 print:border-gray-300 print:bg-gray-100 print:text-gray-700">
@@ -915,7 +1030,7 @@ export function AssessmentReportClient() {
       </section>
 
       {/* ── Section jump nav ── */}
-      <div className="sticky top-[53px] z-20 border-b border-white/[0.06] bg-[#071a2f]/90 backdrop-blur-md print:hidden">
+      <div className="screen-only sticky top-[53px] z-20 border-b border-white/[0.06] bg-[#071a2f]/90 backdrop-blur-md">
         <div className="mx-auto max-w-4xl overflow-x-auto px-6 py-2">
           <div className="flex min-w-max gap-1">
             {[
@@ -946,11 +1061,11 @@ export function AssessmentReportClient() {
       </div>
 
       {/* ── Report body ── */}
-      <div className="mx-auto max-w-4xl space-y-5 px-6 py-8">
+      <div className="print-report-body mx-auto max-w-4xl space-y-5 px-6 py-8">
 
-        {/* Risk flags — elevated when present */}
+        {/* Risk flags — screen review only */}
         {hasFlags && (
-          <div id="risk-flags">
+          <div id="risk-flags" className="screen-only">
             <RiskFlagsAlert draft={draft} />
           </div>
         )}
@@ -996,11 +1111,14 @@ export function AssessmentReportClient() {
           </div>
         </ReportSection>
 
-        {/* ── Section 2: Objective Findings ── */}
+        <PatientSubmittedPrintSection draft={draft} />
+
+        {/* ── Section 2: Objective Findings (screen only) ── */}
         <ReportSection
           id="objective"
           title="Objective Findings"
           defaultOpen
+          screenOnly
           accent="border-violet-300/25 bg-violet-400/10 text-violet-300"
           icon={
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -1056,6 +1174,7 @@ export function AssessmentReportClient() {
               id="special-tests"
               title="Special Tests"
               defaultOpen={hasAny}
+              screenOnly
               accent="border-[#1D9E75]/25 bg-[#1D9E75]/10 text-[#5DCAA5]"
               icon={
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -1136,11 +1255,12 @@ export function AssessmentReportClient() {
           );
         })()}
 
-        {/* ── Section 3: Functional Tests ── */}
+        {/* ── Section 3: Functional Tests (screen only) ── */}
         <ReportSection
           id="functional"
           title="Functional Tests"
           defaultOpen
+          screenOnly
           icon={
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
@@ -1197,6 +1317,7 @@ export function AssessmentReportClient() {
             id="outcomes-risk"
             title="Risk Flags"
             defaultOpen={false}
+            screenOnly
             accent="border-lime-300/25 bg-lime-400/10 text-lime-300"
             icon={
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -1213,11 +1334,12 @@ export function AssessmentReportClient() {
           </ReportSection>
         )}
 
-        {/* ── Section 3b: Outcome Measures ── */}
+        {/* ── Section 3b: Outcome Measures (screen only) ── */}
         <ReportSection
           id="outcomes"
           title="Outcome Measures"
           defaultOpen
+          screenOnly
           icon={
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-9v9m3-4.5v4.5m-10.5 0h9M3.75 3h16.5v18H3.75z" />
@@ -1263,11 +1385,13 @@ export function AssessmentReportClient() {
           </div>
         </ReportSection>
 
-        {/* ── Section 5: AI Clinical Interpretation ── */}
+        {/* ── Section 5: Clinical Interpretation ── */}
         <ReportSection
           id="ai"
           title="Clinical Interpretation"
           defaultOpen
+          hideWhenEmptyPrint
+          hasPrintContent={hasClinicalInterpretation(draft)}
           accent="border-amber-300/25 bg-amber-400/10 text-amber-300"
           icon={
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -1275,7 +1399,7 @@ export function AssessmentReportClient() {
             </svg>
           }
         >
-          <div className="mb-5 rounded-[7px] border border-amber-400/20 bg-amber-400/[0.07] px-4 py-3">
+          <div className="mb-5 rounded-[7px] border border-amber-400/20 bg-amber-400/[0.07] px-4 py-3 screen-only">
             <p className="text-xs leading-5 text-amber-200/90">{DISCLAIMER}</p>
           </div>
 
@@ -1298,11 +1422,13 @@ export function AssessmentReportClient() {
           </div>
         </ReportSection>
 
-        {/* ── Section 6: Therapist Notes (SOAP) ── */}
+        {/* ── Section 6: SOAP Documentation ── */}
         <ReportSection
           id="soap"
           title="SOAP Documentation"
           defaultOpen
+          hideWhenEmptyPrint
+          hasPrintContent={hasSoapContent(draft)}
           accent="border-white/20 bg-white/[0.08] text-white/70"
           icon={
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -1346,7 +1472,7 @@ export function AssessmentReportClient() {
         <AssignPlanSection patientId={patientId} existingPlan={existingPlan} />
 
         {/* Footer */}
-        <p className="pb-8 text-center text-xs text-white/20 print:text-gray-500">
+        <p className="screen-only pb-8 text-center text-xs text-white/20">
           {serverBacked ? "Server-backed assessment" : "Local draft (not yet finalized)"} · {formatDate(displayDate)} · Patient #{patientId}
           {" · "}All AI content is decision-support only and requires therapist verification.
         </p>
