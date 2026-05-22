@@ -230,9 +230,15 @@ function HeroSection() {
             </div>
 
             {/* Stats */}
+            <p
+              className="rasq-stagger-item mt-10 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-white/25"
+              style={{ animationDelay: "200ms" }}
+            >
+              Illustrative data
+            </p>
             <div
               ref={statsRef as React.RefObject<HTMLDivElement>}
-              className="rasq-stagger-item mt-10 grid grid-cols-3 divide-x divide-[#1E2D42] border border-[#1E2D42] rounded-[10px] overflow-hidden"
+              className="rasq-stagger-item mt-2 grid grid-cols-3 divide-x divide-[#1E2D42] border border-[#1E2D42] rounded-[10px] overflow-hidden"
               style={{ animationDelay: "200ms" }}
             >
               {[
@@ -741,18 +747,15 @@ function DualPathwaySection() {
               appointments through a secure clinic invitation.
             </p>
             <div className="mt-6 space-y-2">
-              <Link
-                href="/patient"
-                className="group flex items-center justify-between rounded-[7px] border border-transparent bg-[#1D9E75] px-4 py-3 text-white transition hover:bg-[#179165]"
+              <div
+                className="rounded-[7px] border border-[#d1dbd6] bg-white px-4 py-3 text-[#0f2e22]"
+                role="note"
               >
-                <div>
-                  <p className="text-sm font-semibold">Open patient access</p>
-                  <p className="text-xs opacity-70">Plan · Sessions · Progress · Results</p>
-                </div>
-                <svg className="h-4 w-4 opacity-50 transition group-hover:opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                </svg>
-              </Link>
+                <p className="text-sm font-semibold">Use the secure link from your therapist</p>
+                <p className="mt-0.5 text-xs text-[#4a7060]">
+                  Real patients receive a unique clinic link — not this website&apos;s demo pages.
+                </p>
+              </div>
               <Link
                 href="/assessment-access"
                 className="group flex items-center justify-between rounded-[7px] border border-[#d1dbd6] bg-white px-4 py-3 text-[#0f2e22] transition hover:border-[#1D9E75]/40"
@@ -920,7 +923,7 @@ function Footer() {
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/25">Platform</p>
             <ul className="mt-3 space-y-2.5">
-              {[["Clinician Workspace", "/login?role=clinician"], ["Patient Portal", "/patient"], ["Admin Workspace", "/login?role=admin"], ["Remote Assessment", "/assessment-access"]].map(([l, h]) => (
+              {[["Clinician Workspace", "/login?role=clinician"], ["Patient access", "#patients"], ["Admin Workspace", "/login?role=admin"], ["Remote Assessment", "/assessment-access"]].map(([l, h]) => (
                 <li key={h}>
                   <Link href={h} className="text-xs text-white/35 transition hover:text-white">{l}</Link>
                 </li>

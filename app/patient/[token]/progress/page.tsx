@@ -92,16 +92,16 @@ export default function PatientProgressPage() {
     },
   );
 
-  // Phase status derived from plan data
-  const phaseCompletions = [
-    {
-      label: plan.phaseName,
-      done:  false,
-      note:  `${completedSessions} / ${totalSessions} sessions`,
-    },
-    { label: "Phase 2 — Strength & Balance", done: false, note: "Upcoming" },
-    { label: "Phase 3 — Dynamic Control",    done: false, note: "Upcoming" },
-  ];
+  // Phase status from assigned plan only
+  const phaseCompletions = plan.phaseName
+    ? [
+        {
+          label: plan.phaseName,
+          done:  completedSessions >= totalSessions && totalSessions > 0,
+          note:  `${completedSessions} / ${totalSessions} sessions`,
+        },
+      ]
+    : [];
 
   return (
     <div className="space-y-6">
@@ -145,9 +145,10 @@ export default function PatientProgressPage() {
       </div>
 
       {/* Phase status */}
+      {phaseCompletions.length > 0 && (
       <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
         <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.12em] text-[#374151]">
-          Phase status
+          Current phase
         </p>
         <div className="space-y-3">
           {phaseCompletions.map(({ label, done, note }) => (
@@ -173,6 +174,7 @@ export default function PatientProgressPage() {
           ))}
         </div>
       </div>
+      )}
 
       {/* Recovery timeline */}
       {weeks.length > 0 && (

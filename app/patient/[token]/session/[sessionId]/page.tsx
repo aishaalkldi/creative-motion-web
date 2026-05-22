@@ -166,6 +166,9 @@ export default function SessionPlayerPage() {
           <p className="mt-1 text-[14px] text-[#6B7280]">
             Well done{patientName ? `, ${patientName.split(" ")[0]}` : ""}.
           </p>
+          <p className="mt-3 max-w-sm text-[13px] leading-relaxed text-[#6B7280]">
+            If you feel sharp or unusual pain during exercises, stop immediately and contact your therapist.
+          </p>
         </div>
         <Link
           href={`/patient/${token}`}
@@ -227,7 +230,7 @@ export default function SessionPlayerPage() {
           className="mt-1 text-[13px] font-semibold text-[#1D9E75]"
           style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
         >
-          3 sets × 12 reps
+          As prescribed by your therapist
         </p>
         <p className="mt-4 text-[14px] leading-[1.7] text-[#374151]">
           {getInstructions(current)}

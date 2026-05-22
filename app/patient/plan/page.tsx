@@ -138,6 +138,11 @@ export default function PatientPlanPage() {
   if (!plan) {
     return (
       <main className="min-h-screen bg-[#F4F6F5]" style={{ fontFamily: "var(--font-inter, ui-sans-serif, sans-serif)" }}>
+        <div className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-center">
+          <p className="text-sm font-medium text-amber-900">
+            ⚠️ This is a demo page for illustration only. If you are a patient, please use the secure link provided by your clinic.
+          </p>
+        </div>
         <div className="border-b border-[#e4ece8] bg-white px-6 py-5">
           <Link href="/patient" className="text-xs font-semibold text-[#6b9080] transition hover:text-[#1D9E75]">← Dashboard</Link>
           <h1 className="mt-1.5 text-xl font-bold text-[#0f2e22]">My Plan</h1>
@@ -170,6 +175,12 @@ export default function PatientPlanPage() {
 
   return (
     <main className="min-h-screen bg-[#F4F6F5]" style={{ fontFamily: "var(--font-inter, ui-sans-serif, sans-serif)" }}>
+
+      <div className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-center">
+        <p className="text-sm font-medium text-amber-900">
+          ⚠️ This is a demo page for illustration only. If you are a patient, please use the secure link provided by your clinic.
+        </p>
+      </div>
 
       {/* Page header */}
       <div className="border-b border-[#e4ece8] bg-white px-6 py-5">

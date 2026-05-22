@@ -107,6 +107,9 @@ export default function ClinicalDashboard() {
         </div>
 
         {/* ── Metrics ── */}
+        <p className="text-xs leading-relaxed text-white/30">
+          Sample data — your live pilot workflow appears in Patients and Results.
+        </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 xl:grid-cols-4">
           <Metric label="Active Patients"       value={String(activeCount)}  sub="Currently in programme"        />
           <Metric label="Pending Assessments"   value={String(pendingCount)} sub="Awaiting clinical review"  warn />

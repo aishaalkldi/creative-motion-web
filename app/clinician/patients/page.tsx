@@ -237,10 +237,10 @@ export default function PatientsPage() {
                             Open
                           </Link>
                           <Link
-                            href={`/clinician/progress/${patient.id}`}
+                            href={`/clinician/patients/${patient.id}`}
                             className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-1.5 text-xs font-semibold text-white/60 transition hover:border-[#1D9E75]/25 hover:text-white"
                           >
-                            Progress
+                            View Profile
                           </Link>
                           <button
                             type="button"
