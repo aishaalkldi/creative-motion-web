@@ -24,6 +24,8 @@ export type PatientSession = {
   exercises: string[];
   /** DB status values — portal pages map these to display states */
   status: "upcoming" | "today" | "completed" | "skipped";
+  scheduledAt?: string | null;
+  completedAt?: string | null;
 };
 
 export type PatientPlanData = {
@@ -141,11 +143,12 @@ export async function GET(req: NextRequest) {
     title: string;
     exercises: string[];
     status: string;
+    scheduled_at: string | null;
     completed_at: string | null;
   };
   const { data: sessions } = await admin
     .from("plan_sessions")
-    .select("id, session_number, title, exercises, status, completed_at")
+    .select("id, session_number, title, exercises, status, scheduled_at, completed_at")
     .eq("plan_id", tokenRow.plan_id)
     .order("session_number", { ascending: true })
     .returns<SessionRow[]>();
@@ -179,6 +182,8 @@ export async function GET(req: NextRequest) {
       title:         s.title,
       exercises:     s.exercises ?? [],
       status:        s.status as PatientSession["status"],
+      scheduledAt:   s.scheduled_at,
+      completedAt:   s.completed_at,
     })),
   };
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import type { PatientPlanData } from "@/app/api/patient/plan/route";
+import { SessionScheduleView } from "@/app/components/SessionScheduleView";
 
 /* ── Helpers ────────────────────────────────────────────────────────────────── */
 
@@ -26,26 +27,6 @@ function sessionDisplayStatus(
   const firstPending = sessions.find((s) => s.status !== "completed");
   if (firstPending?.id === session.id) return "today";
   return "upcoming";
-}
-
-function StatusBadge({ status }: { status: "done" | "today" | "upcoming" }) {
-  if (status === "done")
-    return (
-      <span className="rounded-[5px] bg-[#E8F5F1] px-2 py-0.5 text-[11px] font-semibold text-[#085041]">
-        Done
-      </span>
-    );
-  if (status === "today")
-    return (
-      <span className="rounded-[5px] bg-[#1D9E75] px-2 py-0.5 text-[11px] font-semibold text-white">
-        Today
-      </span>
-    );
-  return (
-    <span className="rounded-[5px] bg-[#F4F6F5] px-2 py-0.5 text-[11px] font-semibold text-[#9CA3AF]">
-      Upcoming
-    </span>
-  );
 }
 
 /* ── Page ───────────────────────────────────────────────────────────────────── */
@@ -167,51 +148,39 @@ export default function PatientDashboard() {
         ))}
       </div>
 
-      {/* Session list */}
-      <div className="rounded-[10px] border border-[#E2E8E5] bg-white">
-        <div className="border-b border-[#E2E8E5] px-5 py-4">
-          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#374151]">
-            Your sessions
-          </p>
-        </div>
-        <div className="divide-y divide-[#F4F6F5]">
-          {plan.sessions.length === 0 ? (
-            <div className="px-5 py-6 text-center">
-              <p className="text-[13px] text-[#9CA3AF]">No sessions assigned yet.</p>
-            </div>
-          ) : (
-            plan.sessions.map((session) => {
-              const st     = sessionDisplayStatus(plan.sessions, session);
-              const isToday = st === "today";
-              const row = (
-                <div className="flex min-h-[56px] items-center justify-between gap-4 px-5 py-3.5">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px] font-semibold text-[#0A0F1A]">
-                      {session.title}
-                    </p>
-                    <p className="mt-0.5 text-[12px] text-[#6B7280]">
-                      {session.exercises.slice(0, 2).join(" · ")}
-                      {session.exercises.length > 2 && ` +${session.exercises.length - 2}`}
-                    </p>
-                  </div>
-                  <StatusBadge status={st} />
-                </div>
-              );
-
-              return isToday ? (
-                <Link
-                  key={session.id}
-                  href={`/patient/${token}/session/${session.id}`}
-                  className="block transition hover:bg-[#F9FAFB]"
-                >
-                  {row}
-                </Link>
-              ) : (
-                <div key={session.id}>{row}</div>
-              );
-            })
-          )}
-        </div>
+      {/* Session schedule */}
+      <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
+        <p className="mb-4 text-[10px] font-bold uppercase tracking-[0.12em] text-[#374151]">
+          Your sessions
+        </p>
+        <SessionScheduleView
+          sessions={plan.sessions.map((s) => ({
+            id: s.id,
+            sessionNumber: s.sessionNumber,
+            title: s.title,
+            exercises: s.exercises,
+            status: s.status,
+            scheduledAt: s.scheduledAt,
+            completedAt: s.completedAt,
+          }))}
+          sessionsPerWeek={plan.sessionsPerWeek}
+          patientToken={token}
+          variant="patient"
+          getDisplayStatus={(sessions, session) =>
+            sessionDisplayStatus(
+              sessions.map((s) => ({
+                ...s,
+                exercises: s.exercises ?? [],
+                status: s.status as PatientPlanData["sessions"][number]["status"],
+              })),
+              {
+                ...session,
+                exercises: session.exercises ?? [],
+                status: session.status as PatientPlanData["sessions"][number]["status"],
+              },
+            )
+          }
+        />
       </div>
 
       {/* Progress link */}

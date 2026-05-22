@@ -36,6 +36,9 @@ import {
   type RemoteAssessmentRequest,
 } from "../../../lib/api/remote-assessments";
 import { SendAssessmentModal } from "./SendAssessmentModal";
+import { PatientSubmittedAnswersReview } from "../../../components/PatientSubmittedAnswersReview";
+import { SessionScheduleView } from "../../../components/SessionScheduleView";
+import type { PatientProgressSummary } from "../../../api/clinician/patient-progress/route";
 
 export default function PatientProfilePage() {
   const params = useParams();
@@ -67,6 +70,7 @@ export default function PatientProfilePage() {
   // Treatment plan state
   const [treatmentPlan, setTreatmentPlan] = useState<TreatmentPlan | null>(null);
   const [adherence, setAdherence] = useState<Adherence | null>(null);
+  const [planProgress, setPlanProgress] = useState<PatientProgressSummary | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
 
   // Remote assessment state
@@ -179,31 +183,66 @@ export default function PatientProfilePage() {
                 : s.status === "today" ? "in-progress"
                 : "ready") as PlanSession["status"],
               completedAt:     s.completed_at ?? undefined,
+              scheduledAt:     s.scheduled_at ?? undefined,
             } satisfies PlanSession)),
           };
-          const adh: Adherence = {
-            patientId:        0,
-            sessionsCompleted: mapped.sessions.filter((s) => s.status === "completed").length,
-            totalSessions:    mapped.sessions.length,
-            adherenceRatePct: mapped.sessions.length > 0
-              ? Math.round((mapped.sessions.filter((s) => s.status === "completed").length / mapped.sessions.length) * 100)
-              : 0,
-            lastActiveAt:     null,
-            weeklyCompletions: [
-              { week: "W1", completed: 0, target: mapped.sessionsPerWeek },
-              { week: "W2", completed: 0, target: mapped.sessionsPerWeek },
-              { week: "W3", completed: 0, target: mapped.sessionsPerWeek },
-              { week: "W4", completed: 0, target: mapped.sessionsPerWeek },
-            ],
-          };
           setTreatmentPlan(mapped);
-          setAdherence(adh);
+
+          const progressRes = await fetch(
+            `/api/clinician/patient-progress?patientId=${encodeURIComponent(patient.id)}&planId=${encodeURIComponent(p.id)}`,
+          );
+          if (progressRes.ok) {
+            const progress = (await progressRes.json()) as PatientProgressSummary;
+            setPlanProgress(progress);
+            setAdherence({
+              patientId:         0,
+              sessionsCompleted: progress.sessionsCompleted,
+              totalSessions:     progress.totalSessions,
+              adherenceRatePct:  progress.progressPct,
+              lastActiveAt:      progress.lastCompletedAt,
+              weeklyCompletions: [
+                { week: "W1", completed: 0, target: mapped.sessionsPerWeek },
+                { week: "W2", completed: 0, target: mapped.sessionsPerWeek },
+                { week: "W3", completed: 0, target: mapped.sessionsPerWeek },
+                { week: "W4", completed: 0, target: mapped.sessionsPerWeek },
+              ],
+            });
+          } else {
+            setPlanProgress(null);
+            setAdherence({
+              patientId:        0,
+              sessionsCompleted: mapped.sessions.filter((s) => s.status === "completed").length,
+              totalSessions:    mapped.sessions.length,
+              adherenceRatePct: mapped.sessions.length > 0
+                ? Math.round((mapped.sessions.filter((s) => s.status === "completed").length / mapped.sessions.length) * 100)
+                : 0,
+              lastActiveAt:     null,
+              weeklyCompletions: [
+                { week: "W1", completed: 0, target: mapped.sessionsPerWeek },
+                { week: "W2", completed: 0, target: mapped.sessionsPerWeek },
+                { week: "W3", completed: 0, target: mapped.sessionsPerWeek },
+                { week: "W4", completed: 0, target: mapped.sessionsPerWeek },
+              ],
+            });
+          }
+        } else {
+          setPlanProgress(null);
         }
       })
       .catch(() => { /* silent — empty state shown */ })
       .finally(() => setPlanLoading(false));
-    // Load remote assessment requests for this patient (numeric-ID-based localStorage)
-    setRemoteAssessments(listPatientAssessments(numericId || 0));
+  }, [patient]);
+
+  useEffect(() => {
+    if (!patient) return;
+    const refreshRemote = () => setRemoteAssessments(listPatientAssessments(patient.id));
+    refreshRemote();
+    window.addEventListener("focus", refreshRemote);
+    return () => window.removeEventListener("focus", refreshRemote);
+  }, [patient?.id]);
+
+  useEffect(() => {
+    if (!patient) return;
     // Load structured RASQ assessments from Supabase
     void fetch(`/api/assessments?patientId=${patient.id}`)
       .then(async (res) => {
@@ -401,10 +440,10 @@ export default function PatientProfilePage() {
     {/* Send Assessment Modal */}
     {sendModalOpen && (
       <SendAssessmentModal
-        patientId={numericId || 0}
+        patientId={patient.id}
         patientName={patient.full_name}
         onClose={() => setSendModalOpen(false)}
-        onCreated={(req) => setRemoteAssessments((prev) => [req, ...prev])}
+        onCreated={() => setRemoteAssessments(listPatientAssessments(patient.id))}
       />
     )}
 
@@ -456,29 +495,39 @@ export default function PatientProfilePage() {
         </div>
 
         {/* ── Remote assessment submitted notification ── */}
-        {submittedRemote.length > 0 && (
-          <div className="mb-6 flex items-start gap-4 rounded-[10px] border border-lime-300/25 bg-lime-400/[0.07] px-5 py-4">
-            <svg className="mt-0.5 h-5 w-5 shrink-0 text-lime-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <div className="flex-1">
-              <p className="text-sm font-bold text-lime-300">
-                {submittedRemote.length === 1
-                  ? "Assessment submitted by patient"
-                  : `${submittedRemote.length} assessments submitted by patient`}
-              </p>
-              <p className="mt-0.5 text-xs text-white/50">
-                {submittedRemote[0]
-                  ? `Latest: ${ASSESSMENT_TYPE_LABELS[submittedRemote[0].assessmentType]} — submitted ${new Date(submittedRemote[0].submittedAt!).toLocaleString()}`
-                  : ""}
-              </p>
+        {submittedRemote.length > 0 && submittedRemote[0] && (
+          <div className="mb-6 rounded-[10px] border border-lime-300/25 bg-lime-400/[0.07] px-5 py-4">
+            <div className="flex items-start gap-4">
+              <svg className="mt-0.5 h-5 w-5 shrink-0 text-lime-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-lime-300">
+                  {submittedRemote.length === 1
+                    ? "Assessment submitted by patient"
+                    : `${submittedRemote.length} assessments submitted by patient`}
+                </p>
+                <p className="mt-0.5 text-xs text-white/50">
+                  Latest: {ASSESSMENT_TYPE_LABELS[submittedRemote[0].assessmentType]} — submitted{" "}
+                  {new Date(submittedRemote[0].submittedAt!).toLocaleString()}
+                </p>
+              </div>
+              <Link
+                href={`/clinician/assessment/report?patientId=${patient.id}`}
+                className="shrink-0 rounded-[7px] bg-lime-400/15 px-3 py-1.5 text-xs font-semibold text-lime-300 transition hover:bg-lime-400/25"
+              >
+                Full Report →
+              </Link>
             </div>
-            <Link
-              href={`/clinician/assessment/report?patientId=${patient.id}`}
-              className="shrink-0 rounded-[7px] bg-lime-400/15 px-3 py-1.5 text-xs font-semibold text-lime-300 transition hover:bg-lime-400/25"
-            >
-              Review Report →
-            </Link>
+            <div className="mt-4 border-t border-lime-300/15 pt-4">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-white/40">
+                Patient responses (review)
+              </p>
+              <PatientSubmittedAnswersReview
+                patientDraft={submittedRemote[0].patientDraft}
+                includedSections={submittedRemote[0].includedSections}
+              />
+            </div>
           </div>
         )}
 
@@ -754,8 +803,20 @@ export default function PatientProfilePage() {
               patientId={patient.id}
               plan={treatmentPlan}
               adherence={adherence}
+              planProgress={planProgress}
               loading={planLoading}
-              onPlanUpdated={(p, a) => { setTreatmentPlan(p); setAdherence(a); }}
+              onPlanUpdated={(p, a) => {
+                setTreatmentPlan(p);
+                setAdherence(a);
+                setPlanProgress(null);
+                if (p?.id) {
+                  void fetch(
+                    `/api/clinician/patient-progress?patientId=${encodeURIComponent(patient.id)}&planId=${encodeURIComponent(p.id)}`,
+                  )
+                    .then(async (res) => (res.ok ? (res.json() as Promise<PatientProgressSummary>) : null))
+                    .then((prog) => setPlanProgress(prog));
+                }
+              }}
             />
 
             {/* Patient access link */}
@@ -1108,6 +1169,18 @@ export default function PatientProfilePage() {
                               Expires in {daysUntilExpiry(ra)} days
                             </p>
                           )}
+                          {isSubmitted && (
+                            <div className="mt-3 border-t border-[#1E2D42] pt-3">
+                              <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-white/35">
+                                Patient responses
+                              </p>
+                              <PatientSubmittedAnswersReview
+                                patientDraft={ra.patientDraft}
+                                includedSections={ra.includedSections}
+                                compact
+                              />
+                            </div>
+                          )}
                         </div>
 
                         {/* Actions */}
@@ -1117,7 +1190,7 @@ export default function PatientProfilePage() {
                               href={`/clinician/assessment/report?patientId=${patient.id}`}
                               className="flex-1 px-3 py-2.5 text-center text-[11px] font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/5"
                             >
-                              Review Report →
+                              Full Report →
                             </Link>
                           ) : (
                             <button
@@ -1372,14 +1445,26 @@ interface TreatmentPlanSectionProps {
   patientId: string;
   plan: TreatmentPlan | null;
   adherence: Adherence | null;
+  planProgress: PatientProgressSummary | null;
   loading: boolean;
   onPlanUpdated: (plan: TreatmentPlan, adherence: Adherence | null) => void;
+}
+
+function clinicianSessionDisplayStatus(
+  sessions: Array<{ id: string; status: string }>,
+  session: { id: string; status: string },
+): "completed" | "in-progress" | "upcoming" {
+  if (session.status === "completed") return "completed";
+  const first = sessions.find((s) => s.status !== "completed");
+  if (first?.id === session.id) return "in-progress";
+  return "upcoming";
 }
 
 function TreatmentPlanSection({
   patientId,
   plan,
   adherence,
+  planProgress,
   loading,
   onPlanUpdated,
 }: TreatmentPlanSectionProps) {
@@ -1524,22 +1609,62 @@ function TreatmentPlanSection({
             <p className="text-sm text-white/70">{plan.phaseGoal}</p>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
-            {[
-              { label: "Total Sessions", value: String(plan.totalSessions) },
-              { label: "Per Week",        value: `${plan.sessionsPerWeek}×` },
-              { label: "Adherence",       value: adherence ? `${adherence.adherenceRatePct}%` : "—" },
-            ].map(({ label, value }) => (
-              <div key={label} className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-3 text-center">
-                <p
-                  className="text-lg font-bold text-[#5DCAA5]"
-                  style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
-                >
-                  {value}
-                </p>
-                <p className="mt-0.5 text-[10px] text-white/35">{label}</p>
-              </div>
-            ))}
+          <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
+              Patient progress (Supabase)
+            </p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {[
+                {
+                  label: "Sessions",
+                  value: planProgress
+                    ? `${planProgress.sessionsCompleted} / ${planProgress.totalSessions}`
+                    : adherence
+                      ? `${adherence.sessionsCompleted} / ${adherence.totalSessions}`
+                      : "—",
+                },
+                {
+                  label: "Progress",
+                  value: planProgress
+                    ? `${planProgress.progressPct}%`
+                    : adherence
+                      ? `${adherence.adherenceRatePct}%`
+                      : "—",
+                },
+                {
+                  label: "Latest effort",
+                  value: planProgress?.latestEffortScore != null
+                    ? `${planProgress.latestEffortScore}/10`
+                    : "—",
+                },
+                {
+                  label: "Latest pain",
+                  value: planProgress?.latestPainScore != null
+                    ? `${planProgress.latestPainScore}/10`
+                    : "—",
+                },
+                {
+                  label: "Per week",
+                  value: `${plan.sessionsPerWeek}×`,
+                },
+                {
+                  label: "Last completed",
+                  value: planProgress?.lastCompletedAt
+                    ? new Date(planProgress.lastCompletedAt).toLocaleDateString()
+                    : "—",
+                },
+              ].map(({ label, value }) => (
+                <div key={label} className="rounded-[8px] border border-[#1E2D42] bg-[#0F1825] p-3">
+                  <p className="text-[10px] text-white/35">{label}</p>
+                  <p
+                    className="mt-0.5 text-sm font-bold text-[#5DCAA5]"
+                    style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+                  >
+                    {value}
+                  </p>
+                </div>
+              ))}
+            </div>
           </div>
 
           {adherence && (
@@ -1582,33 +1707,23 @@ function TreatmentPlanSection({
           )}
 
           <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/25">
-              Session Queue ({plan.sessions.filter((s) => s.status !== "completed").length} remaining)
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
+              Session schedule ({plan.sessions.filter((s) => s.status !== "completed").length} remaining)
             </p>
-            <div className="space-y-2">
-              {plan.sessions.slice(0, 4).map((s) => (
-                <div key={s.id} className="flex items-center gap-3">
-                  <span
-                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                      s.status === "completed"
-                        ? "bg-[#1D9E75]"
-                        : s.status === "in-progress"
-                          ? "bg-amber-400"
-                          : "bg-white/20"
-                    }`}
-                  />
-                  <span className="flex-1 text-sm text-white/60">
-                    Session {s.sessionNumber} — {s.title}
-                  </span>
-                  <span className="text-xs text-white/30" style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}>{s.estimatedMinutes} min</span>
-                </div>
-              ))}
-              {plan.sessions.length > 4 && (
-                <p className="pl-4 text-xs text-white/30">
-                  +{plan.sessions.length - 4} more sessions
-                </p>
-              )}
-            </div>
+            <SessionScheduleView
+              sessions={plan.sessions.map((s) => ({
+                id: s.id,
+                sessionNumber: s.sessionNumber,
+                title: s.title,
+                exercises: s.exercises,
+                status: s.status === "completed" ? "completed" : s.status,
+                scheduledAt: s.scheduledAt ?? null,
+                completedAt: s.completedAt ?? null,
+              }))}
+              sessionsPerWeek={plan.sessionsPerWeek}
+              variant="clinician"
+              getDisplayStatus={clinicianSessionDisplayStatus}
+            />
           </div>
         </div>
       )}

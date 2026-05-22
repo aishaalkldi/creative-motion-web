@@ -25,6 +25,7 @@ export interface PlanSession {
   estimatedMinutes: number;
   status: SessionStatus;
   completedAt?: string;
+  scheduledAt?: string;
 }
 
 export interface TreatmentPlan {

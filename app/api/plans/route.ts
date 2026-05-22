@@ -31,6 +31,7 @@ export type PlanSessionRow = {
   title: string;
   exercises: string[];
   status: string;
+  scheduled_at: string | null;
   completed_at: string | null;
   created_at: string;
 };

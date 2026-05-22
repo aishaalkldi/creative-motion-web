@@ -9,6 +9,7 @@
  */
 
 import { loadGeneralAssessmentDraft, saveGeneralAssessmentDraft } from "../general-assessment/storage";
+import { PATIENT_SECTION_LABELS_EN } from "../patient-assessment-questions";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -31,18 +32,13 @@ export const DEFAULT_SECTIONS: Record<AssessmentType, PatientSectionId[]> = {
   pain_function: ["pain", "functional"],
 };
 
-export const PATIENT_SECTION_LABELS: Record<PatientSectionId, string> = {
-  pain:       "Pain & Symptoms",
-  rom:        "Movement Range",
-  strength:   "Strength & Activity",
-  balance:    "Balance",
-  gait:       "Walking & Gait",
-  functional: "Daily Activities",
-};
+/** English labels for patient forms (Arabic via patient-assessment-questions when enabled). */
+export const PATIENT_SECTION_LABELS: Record<PatientSectionId, string> =
+  PATIENT_SECTION_LABELS_EN;
 
 export interface RemoteAssessmentRequest {
   id: string;                          // UUID — also serves as the URL token
-  patientId: number;
+  patientId: string;
   patientName: string;
   assessmentType: AssessmentType;
   includedSections: PatientSectionId[];
@@ -96,18 +92,48 @@ const INDEX_PREFIX = "cm_remote_req_idx:";
 const EXPIRY_DAYS  = 7;
 
 function reqKey(id: string)       { return `${REQ_PREFIX}${id}`; }
-function indexKey(patientId: number) { return `${INDEX_PREFIX}${patientId}`; }
+function indexKey(patientId: string) {
+  return `${INDEX_PREFIX}${patientId.trim()}`;
+}
 
-function readIndex(patientId: number): string[] {
+function readIndex(patientId: string): string[] {
   if (typeof window === "undefined") return [];
   try {
     return JSON.parse(localStorage.getItem(indexKey(patientId)) ?? "[]") as string[];
-  } catch { return []; }
+  } catch {
+    return [];
+  }
 }
 
-function writeIndex(patientId: number, ids: string[]) {
+function writeIndex(patientId: string, ids: string[]) {
   if (typeof window === "undefined") return;
   localStorage.setItem(indexKey(patientId), JSON.stringify(ids));
+}
+
+/** Legacy assessments indexed under numeric patient id (pre-UUID). */
+function legacyNumericIndexKey(patientId: string): string | null {
+  const trimmed = patientId.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  return trimmed;
+}
+
+function collectIndexIds(patientId: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (key: string) => {
+    for (const id of readIndex(key)) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        out.push(id);
+      }
+    }
+  };
+  const trimmed = patientId.trim();
+  if (!trimmed) return out;
+  add(trimmed);
+  const legacy = legacyNumericIndexKey(trimmed);
+  if (legacy && legacy !== trimmed) add(legacy);
+  return out;
 }
 
 function persist(req: RemoteAssessmentRequest) {
@@ -131,7 +157,7 @@ function uuid(): string {
 // ── CRUD ───────────────────────────────────────────────────────────────────────
 
 export function createRemoteAssessment(input: {
-  patientId: number;
+  patientId: string;
   patientName: string;
   assessmentType: AssessmentType;
   includedSections: PatientSectionId[];
@@ -140,9 +166,10 @@ export function createRemoteAssessment(input: {
   const expires = new Date(now);
   expires.setDate(expires.getDate() + EXPIRY_DAYS);
 
+  const patientId = input.patientId.trim();
   const req: RemoteAssessmentRequest = {
     id: uuid(),
-    patientId: input.patientId,
+    patientId,
     patientName: input.patientName,
     assessmentType: input.assessmentType,
     includedSections: input.includedSections,
@@ -153,8 +180,8 @@ export function createRemoteAssessment(input: {
 
   persist(req);
 
-  const ids = readIndex(input.patientId);
-  writeIndex(input.patientId, [req.id, ...ids]);
+  const ids = readIndex(patientId);
+  writeIndex(patientId, [req.id, ...ids]);
 
   return req;
 }
@@ -168,11 +195,16 @@ export function getRemoteAssessment(id: string): RemoteAssessmentRequest | null 
   } catch { return null; }
 }
 
-export function listPatientAssessments(patientId: number): RemoteAssessmentRequest[] {
-  const ids = readIndex(patientId);
+export function listPatientAssessments(patientId: string): RemoteAssessmentRequest[] {
+  const ids = collectIndexIds(patientId);
   return ids
     .map((id) => getRemoteAssessment(id))
-    .filter((r): r is RemoteAssessmentRequest => r !== null)
+    .filter((r): r is RemoteAssessmentRequest => {
+      if (!r) return false;
+      const pid = patientId.trim();
+      const rid = String(r.patientId).trim();
+      return rid === pid || (legacyNumericIndexKey(pid) !== null && rid === legacyNumericIndexKey(pid));
+    })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
@@ -202,7 +234,7 @@ export function submitRemoteAssessment(
 
   // Merge patient answers into the clinician's GeneralAssessmentDraft so the
   // existing report page renders patient-submitted data automatically.
-  const clinicianDraft = loadGeneralAssessmentDraft(String(req.patientId));
+  const clinicianDraft = loadGeneralAssessmentDraft(req.patientId.trim());
   const pd = patientDraft;
 
   if (pd.pain) {

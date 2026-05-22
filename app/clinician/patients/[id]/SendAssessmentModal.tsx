@@ -22,7 +22,7 @@ const ASSESSMENT_TYPES: { value: AssessmentType; label: string; description: str
 const ALL_SECTIONS: PatientSectionId[] = ["pain", "rom", "strength", "balance", "gait", "functional"];
 
 interface Props {
-  patientId: number;
+  patientId: string;
   patientName: string;
   onClose: () => void;
   onCreated: (req: RemoteAssessmentRequest) => void;
