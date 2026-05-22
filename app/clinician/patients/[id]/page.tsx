@@ -451,6 +451,23 @@ export default function PatientProfilePage() {
 
   const submittedRemote = remoteAssessments.filter((r) => r.status === "submitted");
   const pendingRemote   = remoteAssessments.filter((r) => r.status === "pending" || r.status === "in_progress");
+  const latestRasqAssessment = rasqAssessments[0] ?? null;
+  const primaryReportHref = latestRasqAssessment?.id
+    ? `/clinician/assessment/report?patientId=${patient.id}&assessmentId=${latestRasqAssessment.id}`
+    : `/clinician/assessment/report?patientId=${patient.id}`;
+  const overviewLatestAssessment = latestRasqAssessment
+    ? `${latestRasqAssessment.typeLabel || latestRasqAssessment.type} · ${new Date(latestRasqAssessment.savedAt || latestRasqAssessment.date).toLocaleDateString()}`
+    : submittedRemote[0]
+      ? `${ASSESSMENT_TYPE_LABELS[submittedRemote[0].assessmentType]} · ${new Date(submittedRemote[0].submittedAt!).toLocaleDateString()}`
+      : "—";
+  const overviewCurrentPlan = treatmentPlan?.programName ?? "—";
+  const overviewProgressSnapshot = planProgress
+    ? `${planProgress.sessionsCompleted}/${planProgress.totalSessions} sessions · ${planProgress.progressPct}%`
+    : adherence
+      ? `${adherence.sessionsCompleted}/${adherence.totalSessions} sessions · ${adherence.adherenceRatePct}%`
+      : "—";
+  const hasAnyAssessment =
+    rasqAssessments.length > 0 || submittedRemote.length > 0 || backendAssessmentHistory.length > 0;
 
   return (
     <>
@@ -485,9 +502,8 @@ export default function PatientProfilePage() {
               </svg>
               Patients
             </Link>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">Patient Record</p>
             <h1 className="mt-1.5 text-2xl font-bold text-white">{patient.full_name}</h1>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               <span
                 className="text-xs text-white/35"
                 style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
@@ -503,6 +519,12 @@ export default function PatientProfilePage() {
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={`/clinician/assessment/new?patientId=${patient.id}`}
+              className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]"
+            >
+              + New Assessment
+            </Link>
             <button
               type="button"
               onClick={() => { setEditForm(patient); setEditOpen((o) => !o); setSaveError(""); }}
@@ -520,45 +542,6 @@ export default function PatientProfilePage() {
             </button>
           </div>
         </div>
-
-        {/* ── Remote assessment submitted notification ── */}
-        {submittedRemote.length > 0 && submittedRemote[0] && (
-          <div className="mb-6 rounded-[10px] border border-lime-300/25 bg-lime-400/[0.07] px-5 py-4">
-            <div className="flex items-start gap-4">
-              <svg className="mt-0.5 h-5 w-5 shrink-0 text-lime-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-lime-300">
-                  {submittedRemote.length === 1
-                    ? "Assessment submitted by patient"
-                    : `${submittedRemote.length} assessments submitted by patient`}
-                </p>
-                <p className="mt-0.5 text-xs text-white/50">
-                  Latest: {ASSESSMENT_TYPE_LABELS[submittedRemote[0].assessmentType]} — submitted{" "}
-                  {new Date(submittedRemote[0].submittedAt!).toLocaleString()}
-                </p>
-              </div>
-              <Link
-                href={`/clinician/assessment/report?patientId=${patient.id}`}
-                className="shrink-0 rounded-[7px] bg-lime-400/15 px-3 py-1.5 text-xs font-semibold text-lime-300 transition hover:bg-lime-400/25"
-              >
-                Open Clinical Report
-              </Link>
-            </div>
-            <div className="mt-5 border-t border-lime-300/15 pt-5">
-              <p className="mb-4 text-[10px] font-bold uppercase tracking-wider text-white/40">
-                Patient-Submitted Assessment
-              </p>
-              <div className="space-y-4">
-              <PatientSubmittedAnswersReview
-                patientDraft={submittedRemote[0].patientDraft}
-                includedSections={submittedRemote[0].includedSections}
-              />
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* ── Pending remote assessment reminder ── */}
         {pendingRemote.length > 0 && submittedRemote.length === 0 && (
@@ -664,47 +647,24 @@ export default function PatientProfilePage() {
 
         <section className="grid gap-6 xl:grid-cols-[1.35fr_0.85fr]">
           <div className="space-y-6">
-            {/* Clinical Status */}
+            {/* Clinical Overview */}
             <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-bold text-white">Clinical Status</h2>
-                  <p className="mt-1 text-xs text-white/35">Core identity, case context, and current clinical phase.</p>
-                </div>
-                <span className={`rounded-[5px] border px-2 py-0.5 text-[10px] font-semibold ${
-                  patient.status?.toLowerCase() === "active"
-                    ? "border-[#1D9E75]/25 bg-[#1D9E75]/10 text-[#5DCAA5]"
-                    : "border-amber-400/25 bg-amber-400/10 text-amber-300"
-                }`}>
-                  {patient.status}
-                </span>
-              </div>
-              <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                <InfoCard label="Patient ID" value={String(patient.id)} />
-                <InfoCard label="Age / Sex" value={`${patient.age ?? "—"} / ${patient.gender ?? "—"}`} />
-                <InfoCard label="Primary Complaint" value={patient.diagnosis || "—"} />
-                <InfoCard
-                  label="Last Assessment"
-                  value={latestAssessment?.createdAt ? new Date(latestAssessment.createdAt).toLocaleDateString() : "—"}
-                />
-                <InfoCard label="Current Phase" value={latestAssessment ? "Assessment Recorded" : "Initial Setup"} />
-                <InfoCard label="Case Status" value={patient.status} />
+              <h2 className="text-lg font-bold text-white">Clinical Overview</h2>
+              <p className="mt-1 mb-5 text-xs text-white/35">Quick read on where this patient is in rehab.</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <InfoCard label="Clinical Status" value={patient.status} />
+                <InfoCard label="Latest Assessment" value={overviewLatestAssessment} />
+                <InfoCard label="Current Plan" value={overviewCurrentPlan} />
+                <InfoCard label="Progress Snapshot" value={overviewProgressSnapshot} />
               </div>
             </section>
 
-            {/* Clinical actions — demo path */}
+            {/* Quick actions */}
             <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
               <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
-                Clinical actions
+                Quick actions
               </p>
-              {/* Primary actions — demo path */}
-              <div className="mb-3 flex flex-wrap gap-2">
-                <Link
-                  href={`/clinician/assessment/new?patientId=${patient.id}`}
-                  className="rounded-[7px] bg-[#1D9E75] px-3.5 py-2 text-xs font-bold text-white transition hover:bg-[#179165]"
-                >
-                  + New Assessment
-                </Link>
+              <div className="flex flex-wrap gap-2">
                 <Link
                   href={`/clinician/plans/new?patientId=${patient.id}`}
                   className="rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3.5 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/14"
@@ -715,25 +675,13 @@ export default function PatientProfilePage() {
                   href={`/clinician/progress/${patient.id}`}
                   className="rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3.5 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/14"
                 >
-                  Rehabilitation Progress
+                  View Progress
                 </Link>
-                <Link
-                  href={`/clinician/assessment/report?patientId=${patient.id}`}
-                  className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-2 text-xs font-semibold text-white/55 transition hover:border-[#1D9E75]/20 hover:text-white"
-                >
-                  Open Clinical Report
-                </Link>
-              </div>
-              {/* Secondary actions */}
-              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => setSendModalOpen(true)}
                   className="flex items-center gap-1.5 rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-2 text-xs font-semibold text-white/50 transition hover:border-[#1D9E75]/20 hover:text-white"
                 >
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
-                  </svg>
                   Send Remote Assessment
                 </button>
                 <button
@@ -778,26 +726,44 @@ export default function PatientProfilePage() {
               </div>
             )}
 
-            {/* Clinical Report */}
+            {/* Step 1 — Understand the Patient */}
             <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <div className="mb-4 flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-lg font-bold text-white">Clinical Report</h2>
-                  <p className="mt-1 text-xs text-white/35">Saved assessments and linked clinical reports.</p>
+              <h2 className="text-lg font-bold text-white">Step 1 — Understand the Patient</h2>
+              <p className="mt-1 mb-5 text-xs text-white/35">Review patient-submitted answers and open the clinical report.</p>
+
+              {submittedRemote.length > 0 && submittedRemote[0] && (
+                <div className="mb-5 rounded-[8px] border border-lime-300/20 bg-lime-400/[0.06] px-4 py-3">
+                  <p className="text-sm font-semibold text-lime-300">
+                    {submittedRemote.length === 1
+                      ? "Patient assessment submitted"
+                      : `${submittedRemote.length} patient assessments submitted`}
+                  </p>
+                  <p className="mt-0.5 text-xs text-white/50">
+                    {ASSESSMENT_TYPE_LABELS[submittedRemote[0].assessmentType]} ·{" "}
+                    {new Date(submittedRemote[0].submittedAt!).toLocaleString()}
+                  </p>
                 </div>
-                <Link
-                  href={`/clinician/assessment/new?patientId=${patient.id}`}
-                  className="text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
-                >
-                  + New
-                </Link>
+              )}
+
+              <div className="mb-5">
+                <h3 className="text-sm font-bold text-white">Patient-Submitted Assessment</h3>
+                {submittedRemote.length > 0 && submittedRemote[0] ? (
+                  <div className="mt-3 space-y-4">
+                    <PatientSubmittedAnswersReview
+                      patientDraft={submittedRemote[0].patientDraft}
+                      includedSections={submittedRemote[0].includedSections}
+                    />
+                  </div>
+                ) : (
+                  <p className="mt-3 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
+                    No assessment yet. Send a remote assessment link to begin.
+                  </p>
+                )}
               </div>
-              {rasqAssessments.length === 0 ? (
-                <p className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
-                  No assessment on record. Send a remote assessment link to begin.
-                </p>
-              ) : (
-                <div className="space-y-2">
+
+              {rasqAssessments.length > 0 && (
+                <div className="mb-5 space-y-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">Saved assessments</p>
                   {rasqAssessments.slice(0, 3).map((a) => (
                     <div key={a.id} className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3">
                       <div className="flex items-center justify-between gap-2">
@@ -811,37 +777,31 @@ export default function PatientProfilePage() {
                           {a.date}
                         </p>
                       </div>
-                      <p
-                        className="mt-1 text-xs text-white/40"
-                        style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
-                      >
+                      <p className="mt-1 text-xs text-white/40">
                         {a.assessmentData
-                          ? `Rest ${a.assessmentData.painAtRest}/10 · Move ${a.assessmentData.painOnMovement}/10 · ${a.rehabilitationPhase ?? "—"} phase`
+                          ? `Rest ${a.assessmentData.painAtRest}/10 · Move ${a.assessmentData.painOnMovement}/10`
                           : `Pain ${a.pain}/10 · ${a.type === "general_msk" ? "General MSK" : `ROM ${a.rom || "—"}°`}`}
                       </p>
-                      {a.mobilityNotes && (
-                        <p className="mt-1.5 text-xs leading-5 text-white/35 line-clamp-2">
-                          {a.mobilityNotes}
-                        </p>
-                      )}
-                      <Link
-                        href={`/clinician/assessment/report?patientId=${patient.id}&assessmentId=${a.id}`}
-                        className="mt-2 inline-flex text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
-                      >
-                        Open Clinical Report
-                      </Link>
                     </div>
                   ))}
                 </div>
               )}
+
+              {hasAnyAssessment ? (
+                <Link
+                  href={primaryReportHref}
+                  className="inline-flex rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-4 py-2.5 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
+                >
+                  Open Clinical Report
+                </Link>
+              ) : null}
             </section>
 
-            {/* Treatment Plan Assignment */}
+            {/* Step 2 — Assign the Plan */}
             <TreatmentPlanSection
               patientId={patient.id}
               plan={treatmentPlan}
               adherence={adherence}
-              planProgress={planProgress}
               loading={planLoading}
               onPlanUpdated={(p, a) => {
                 setTreatmentPlan(p);
@@ -855,6 +815,14 @@ export default function PatientProfilePage() {
                     .then((prog) => setPlanProgress(prog));
                 }
               }}
+            />
+
+            {/* Step 3 — Track Progress */}
+            <ProgressSnapshotSection
+              patientId={patient.id}
+              plan={treatmentPlan}
+              planProgress={planProgress}
+              adherence={adherence}
             />
 
             {/* Patient access link */}
@@ -890,183 +858,95 @@ export default function PatientProfilePage() {
               </section>
             )}
 
-            {/* Assessment History (backend) */}
-            <section
-              id="assessment-timeline"
-              className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6"
-            >
-              <h2 className="text-lg font-bold text-white">Assessment History</h2>
-              <p className="mt-2 text-sm text-white/70">
-                Server assessments for this patient (aligned with future SOAP documentation). Score shown when a matching
-                local session records a numeric result.
-              </p>
-              <div className="mt-5 space-y-3">
-                {backendAssessmentHistory.length > 0 ? (
-                  backendAssessmentHistory.map((row) => {
-                    const matchedLocal = assessments.find((a) => a.id === String(row.id));
-                    const scoreDisplay =
-                      typeof matchedLocal?.score === "number" && Number.isFinite(matchedLocal.score)
-                        ? `${matchedLocal.score}%`
-                        : "—";
-                    const testsLabel =
-                      row.selected_tests.length > 0
-                        ? row.selected_tests.map(formatTestLabel).join(", ")
-                        : "Not recorded";
-                    return (
-                      <div
-                        key={`backend-${row.id}`}
-                        className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4"
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <h3 className="text-base font-semibold text-white">{row.type || "Assessment"}</h3>
-                            <p className="mt-1 text-sm text-white/60">
-                              {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
-                            </p>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <ResultPill
-                              label={`Functional Score: ${scoreDisplay}`}
-                              tone="score"
-                            />
-                            <ResultPill
-                              label={row.status || "—"}
-                              tone={
-                                row.status === "completed"
-                                  ? "good"
-                                  : row.status === "in_progress"
-                                    ? "score"
-                                    : "neutral"
-                              }
-                            />
-                            {row.mode ? <ResultPill label={row.mode} tone="neutral" /> : null}
-                          </div>
-                        </div>
-                        <p className="mt-3 text-sm text-white/70">
-                          <span className="font-medium text-white/80">Tests included: </span>
-                          {testsLabel}
-                        </p>
-                        {row.notes ? (
-                          <p className="mt-2 text-sm leading-6 text-white/60">{row.notes}</p>
-                        ) : null}
-                        <div className="mt-4 flex flex-wrap gap-2">
-                          <Link
-                            href={`/clinician/assessment/report?patientId=${patient.id}&assessmentId=${row.id}`}
-                            className="inline-flex items-center rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-4 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
-                          >
-                            Open Clinical Report
-                          </Link>
-                        </div>
-                        <div className="mt-3 rounded-[7px] border border-dashed border-[#1E2D42] bg-[#0B1220] px-3 py-3">
-                          <p className="text-[10px] font-semibold uppercase tracking-wider text-white/45">
-                            SOAP Documentation
-                          </p>
-                          <p className="mt-1 text-[11px] leading-relaxed text-white/50">
-                            Placeholder — subjective, objective, assessment, and plan will appear here per encounter.
-                          </p>
-                        </div>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-5">
-                    <p className="text-sm leading-relaxed text-[#6B7280]">
-                      No assessment on record. Send a remote assessment link to begin.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </section>
-
-            {/* Full Assessment History (local) */}
+            {/* Clinical Documentation */}
             <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <h2 className="text-lg font-bold text-white">Full Assessment History</h2>
-              <p className="mt-2 text-sm text-white/70">
-                In-browser session archive on this workstation (longitudinal tracking).
-              </p>
-              <div className="mt-5 space-y-4">
-                {assessments.length > 0 ? (
-                  assessments.map((item) => (
-                    <div key={item.id} className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-3">
-                        <div>
-                          <h3 className="text-base font-semibold text-white">
-                            {item.sessionLabel?.trim() ||
-                              (item.mode === "remote" ? "Remote Assessment" : "In-Clinic Assessment")}
-                          </h3>
-                          <p className="mt-1 text-sm text-white/60">
-                            {new Date(item.createdAt).toLocaleString()}
-                          </p>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <ResultPill
-                            label={
-                              typeof item.score === "number"
-                                ? `Functional Score: ${item.score}%`
-                                : "Functional Score: —"
-                            }
-                            tone="score"
-                          />
-                          <ResultPill
-                            label={formatStatusLabel(item.status)}
-                            tone={item.status === "completed" ? "good" : "neutral"}
-                          />
-                        </div>
-                      </div>
-                      <p className="mt-3 text-sm leading-6 text-white/70">
-                        <span className="font-medium text-white/80">Tests included: </span>
-                        {item.selectedTests.length > 0
-                          ? item.selectedTests.map(formatTestLabel).join(", ")
-                          : "Not recorded"}
-                      </p>
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <Link
-                          href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
-                          className="inline-flex items-center rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-4 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
-                        >
-                          Open Clinical Report
-                        </Link>
-                      </div>
-                      <div className="mt-3 rounded-[7px] border border-dashed border-[#1E2D42] bg-[#0B1220] px-3 py-3">
-                        <p className="text-[10px] font-semibold uppercase tracking-wider text-white/30">
-                          SOAP Documentation
-                        </p>
-                        <p className="mt-1 text-[11px] leading-relaxed text-white/35">
-                          Placeholder — encounter narrative will sync here when documentation is enabled.
-                        </p>
+              <h2 className="text-lg font-bold text-white">Clinical Documentation</h2>
+              <p className="mt-1 mb-6 text-xs text-white/35">SOAP notes and assessment archive.</p>
+
+              <div className="mb-6">
+                <h3 className="text-sm font-bold text-white">SOAP Documentation</h3>
+                <p className="mt-1 text-sm text-white/50">
+                  Structured encounter documentation (coming soon).
+                </p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <SoapPlaceholderCard title="Subjective" />
+                  <SoapPlaceholderCard title="Objective" />
+                  <SoapPlaceholderCard title="Assessment" />
+                  <SoapPlaceholderCard title="Plan" />
+                </div>
+              </div>
+
+              {(backendAssessmentHistory.length > 0 || assessments.length > 0) && (
+                <div className="space-y-5 border-t border-[#1E2D42] pt-6">
+                  {backendAssessmentHistory.length > 0 && (
+                    <div id="assessment-timeline">
+                      <h3 className="text-sm font-bold text-white">Assessment archive</h3>
+                      <div className="mt-3 space-y-3">
+                        {backendAssessmentHistory.map((row) => {
+                          const matchedLocal = assessments.find((a) => a.id === String(row.id));
+                          const scoreDisplay =
+                            typeof matchedLocal?.score === "number" && Number.isFinite(matchedLocal.score)
+                              ? `${matchedLocal.score}%`
+                              : "—";
+                          return (
+                            <div
+                              key={`backend-${row.id}`}
+                              className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4"
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-semibold text-white">{row.type || "Assessment"}</p>
+                                  <p className="mt-0.5 text-xs text-white/50">
+                                    {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
+                                  </p>
+                                </div>
+                                <ResultPill label={`Score: ${scoreDisplay}`} tone="score" />
+                              </div>
+                              <Link
+                                href={`/clinician/assessment/report?patientId=${patient.id}&assessmentId=${row.id}`}
+                                className="mt-3 inline-flex text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
+                              >
+                                View report →
+                              </Link>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
-                  ))
-                ) : (
-                  <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-5">
-                    <p className="text-sm leading-relaxed text-[#6B7280]">
-                      No assessment on record. Send a remote assessment link to begin.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </section>
+                  )}
 
-            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <h2 className="text-lg font-bold text-white">SOAP Documentation</h2>
-              <p className="mt-2 text-sm text-white/70">
-                Structured encounter documentation (coming soon). This section will hold subjective, objective,
-                assessment, and plan per visit.
-              </p>
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                <SoapPlaceholderCard title="Subjective" />
-                <SoapPlaceholderCard title="Objective" />
-                <SoapPlaceholderCard title="Assessment" />
-                <SoapPlaceholderCard title="Plan" />
-              </div>
+                  {assessments.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-bold text-white">Local session archive</h3>
+                      <div className="mt-3 space-y-3">
+                        {assessments.map((item) => (
+                          <div key={item.id} className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
+                            <p className="text-sm font-semibold text-white">
+                              {item.sessionLabel?.trim() ||
+                                (item.mode === "remote" ? "Remote Assessment" : "In-Clinic Assessment")}
+                            </p>
+                            <p className="mt-0.5 text-xs text-white/50">
+                              {new Date(item.createdAt).toLocaleString()}
+                            </p>
+                            <Link
+                              href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
+                              className="mt-3 inline-flex text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
+                            >
+                              View results →
+                            </Link>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </section>
 
             <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
               <h2 className="text-lg font-bold text-white">Therapy Session Results</h2>
-              <p className="mt-2 text-sm text-white/70">
-                Camera CV stepping / gait sessions saved for chart ID{" "}
-                <span className="font-medium text-[#5DCAA5]">{patient.id}</span>. Data is loaded from the therapy API
-                when available, with local-only rows if the device was offline.
+              <p className="mt-2 text-sm text-white/50">
+                Camera CV sessions for chart #{patient.id}.
               </p>
 
               <div className="mt-6">
@@ -1145,8 +1025,8 @@ export default function PatientProfilePage() {
             <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
               <div className="mb-4 flex items-center justify-between gap-2">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">Remote</p>
-                  <h2 className="text-base font-bold text-white">Sent Assessments</h2>
+                  <h2 className="text-base font-bold text-white">Remote assessments</h2>
+                  <p className="mt-0.5 text-xs text-white/35">Links sent to this patient.</p>
                 </div>
                 <button
                   type="button"
@@ -1212,31 +1092,13 @@ export default function PatientProfilePage() {
                             </p>
                           )}
                           {isSubmitted && (
-                            <div className="mt-3 border-t border-[#1E2D42] pt-3">
-                              <p className="mb-3 text-[10px] font-bold uppercase tracking-wider text-white/35">
-                                Patient-Submitted Assessment
-                              </p>
-                              <div className="space-y-3">
-                              <PatientSubmittedAnswersReview
-                                patientDraft={ra.patientDraft}
-                                includedSections={ra.includedSections}
-                                compact
-                              />
-                              </div>
-                            </div>
+                            <p className="mt-2 text-[11px] text-[#5DCAA5]/80">Ready for clinician review in Step 1.</p>
                           )}
                         </div>
 
                         {/* Actions */}
                         <div className="flex gap-px border-t border-[#1E2D42]">
-                          {isSubmitted ? (
-                            <Link
-                              href={`/clinician/assessment/report?patientId=${patient.id}`}
-                              className="flex-1 px-3 py-2.5 text-center text-[11px] font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/5"
-                            >
-                              Open Clinical Report
-                            </Link>
-                          ) : (
+                          {!isSubmitted && (
                             <button
                               type="button"
                               onClick={async () => {
@@ -1258,28 +1120,20 @@ export default function PatientProfilePage() {
             {/* Recent Results (local) */}
             {recentAssessments.length > 0 && (
               <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
-                <h2 className="text-base font-bold text-white">Recent Sessions</h2>
-                <p className="mt-2 text-sm text-white/70">Last 3 assessments.</p>
+                <h2 className="text-base font-bold text-white">Recent sessions</h2>
                 <div className="mt-4 space-y-3">
                   {recentAssessments.map((item) => (
                     <div key={`${item.id}-recent`} className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div>
-                          <p className="text-xs text-white/60">{new Date(item.createdAt).toLocaleDateString()}</p>
-                          <h3 className="mt-1 text-sm font-semibold text-white">
-                            {item.mode === "remote" ? "Remote" : "In-clinic"} Session
-                          </h3>
-                        </div>
-                        <ResultPill label={formatStatusLabel(item.status)} tone={item.status === "completed" ? "good" : "neutral"} />
-                      </div>
-                      <div className="mt-3">
-                        <Link
-                          href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
-                          className="inline-flex items-center rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-3 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
-                        >
-                          Open Clinical Report
-                        </Link>
-                      </div>
+                      <p className="text-xs text-white/50">{new Date(item.createdAt).toLocaleDateString()}</p>
+                      <p className="mt-1 text-sm font-semibold text-white">
+                        {item.mode === "remote" ? "Remote" : "In-clinic"} session
+                      </p>
+                      <Link
+                        href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
+                        className="mt-3 inline-flex text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
+                      >
+                        View results →
+                      </Link>
                     </div>
                   ))}
                 </div>
@@ -1483,13 +1337,122 @@ function TherapySessionHistoryEntry({
   );
 }
 
+// ── ProgressSnapshotSection ───────────────────────────────────────────────────
+
+interface ProgressSnapshotSectionProps {
+  patientId: string;
+  plan: TreatmentPlan | null;
+  planProgress: PatientProgressSummary | null;
+  adherence: Adherence | null;
+}
+
+function ProgressSnapshotSection({
+  patientId,
+  plan,
+  planProgress,
+  adherence,
+}: ProgressSnapshotSectionProps) {
+  const sessionsDone = planProgress?.sessionsCompleted ?? adherence?.sessionsCompleted ?? 0;
+
+  return (
+    <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+      <h2 className="text-lg font-bold text-white">Step 3 — Track Progress</h2>
+      <div className="mt-4">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">Progress Snapshot</p>
+        {!plan ? (
+          <p className="mt-3 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
+            No progress recorded yet. Progress appears after the patient completes a session.
+          </p>
+        ) : sessionsDone === 0 ? (
+          <p className="mt-3 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
+            No progress recorded yet. Progress appears after the patient completes a session.
+          </p>
+        ) : (
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {[
+              {
+                label: "Sessions",
+                value: planProgress
+                  ? `${planProgress.sessionsCompleted} / ${planProgress.totalSessions}`
+                  : adherence
+                    ? `${adherence.sessionsCompleted} / ${adherence.totalSessions}`
+                    : "—",
+              },
+              {
+                label: "Progress",
+                value: planProgress
+                  ? `${planProgress.progressPct}%`
+                  : adherence
+                    ? `${adherence.adherenceRatePct}%`
+                    : "—",
+              },
+              {
+                label: "Effort",
+                value: planProgress?.latestEffortScore != null
+                  ? `${planProgress.latestEffortScore}/10`
+                  : "—",
+              },
+              {
+                label: "Pain",
+                value: planProgress?.latestPainScore != null
+                  ? `${planProgress.latestPainScore}/10`
+                  : "—",
+              },
+            ].map(({ label, value }) => (
+              <div key={label} className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-3">
+                <p className="text-[10px] text-white/35">{label}</p>
+                <p
+                  className="mt-0.5 text-sm font-bold text-[#5DCAA5]"
+                  style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+                >
+                  {value}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {adherence && plan && sessionsDone > 0 && (
+          <div className="mt-4 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
+              Session adherence
+            </p>
+            <div className="flex items-end gap-1.5">
+              {adherence.weeklyCompletions.map((w) => {
+                const fillPct = w.target > 0 ? Math.round((w.completed / w.target) * 100) : 0;
+                return (
+                  <div key={w.week} className="flex flex-1 flex-col items-center gap-1">
+                    <div className="relative h-12 w-full overflow-hidden rounded-[3px] bg-[#1E2D42]">
+                      <div
+                        className="absolute bottom-0 left-0 right-0 rounded-[3px] bg-[#1D9E75]/70 transition-all"
+                        style={{ height: `${fillPct}%` }}
+                      />
+                    </div>
+                    <span className="text-[9px] text-white/30">{w.week}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <Link
+          href={`/clinician/progress/${patientId}`}
+          className="mt-4 inline-flex rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3.5 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/14"
+        >
+          View full progress
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 // ── TreatmentPlanSection ──────────────────────────────────────────────────────
 
 interface TreatmentPlanSectionProps {
   patientId: string;
   plan: TreatmentPlan | null;
   adherence: Adherence | null;
-  planProgress: PatientProgressSummary | null;
   loading: boolean;
   onPlanUpdated: (plan: TreatmentPlan, adherence: Adherence | null) => void;
 }
@@ -1508,7 +1471,6 @@ function TreatmentPlanSection({
   patientId,
   plan,
   adherence,
-  planProgress,
   loading,
   onPlanUpdated,
 }: TreatmentPlanSectionProps) {
@@ -1613,23 +1575,27 @@ function TreatmentPlanSection({
   if (loading) {
     return (
       <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-        <p className="text-sm text-white/40">Loading assigned rehabilitation plan…</p>
+        <p className="text-sm text-white/40">Loading rehabilitation plan…</p>
       </section>
     );
   }
 
   return (
     <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-      <div className="mb-5 flex items-start justify-between gap-4">
+      <h2 className="text-lg font-bold text-white">Step 2 — Assign the Plan</h2>
+      <div className="mt-4 mb-5 flex items-start justify-between gap-4">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">
-            Assigned Rehabilitation Plan
+            Rehabilitation Plan
           </p>
-          <h2 className="mt-1 text-lg font-bold text-white">
-            {plan ? plan.programName : "No rehabilitation plan assigned"}
-          </h2>
+          <h3 className="mt-1 text-base font-bold text-white">
+            {plan ? plan.programName : "No plan assigned"}
+          </h3>
           {plan && (
-            <p className="mt-0.5 text-sm text-white/40">{plan.phaseName}</p>
+            <>
+              <p className="mt-0.5 text-sm text-white/40">{plan.phaseName}</p>
+              <p className="mt-1 text-xs text-white/35 capitalize">Status: {plan.status}</p>
+            </>
           )}
         </div>
         <button
@@ -1643,7 +1609,7 @@ function TreatmentPlanSection({
 
       {!plan && !assignOpen && (
         <p className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
-          No rehabilitation plan assigned. Complete an assessment first, then assign a plan.
+          No rehabilitation plan assigned yet.
         </p>
       )}
 
@@ -1654,106 +1620,6 @@ function TreatmentPlanSection({
             <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/25">Goal</p>
             <p className="text-sm text-white/70">{plan.phaseGoal}</p>
           </div>
-
-          <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/25">
-              Rehabilitation Progress Snapshot
-            </p>
-            <p className="mb-4 text-xs text-white/35">Session completions and patient-reported outcomes from the portal.</p>
-            {(() => {
-              const sessionsDone = planProgress?.sessionsCompleted ?? adherence?.sessionsCompleted ?? 0;
-              if (sessionsDone === 0) {
-                return (
-                  <p className="mb-4 rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-3 text-sm leading-relaxed text-[#6B7280]">
-                    No rehabilitation progress recorded yet. Progress appears after the patient completes their first session.
-                  </p>
-                );
-              }
-              return null;
-            })()}
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {[
-                {
-                  label: "Rehabilitation Sessions",
-                  value: planProgress
-                    ? `${planProgress.sessionsCompleted} / ${planProgress.totalSessions}`
-                    : adherence
-                      ? `${adherence.sessionsCompleted} / ${adherence.totalSessions}`
-                      : "—",
-                },
-                {
-                  label: "Rehabilitation Progress",
-                  value: planProgress
-                    ? `${planProgress.progressPct}%`
-                    : adherence
-                      ? `${adherence.adherenceRatePct}%`
-                      : "—",
-                },
-                {
-                  label: "Patient-Reported Effort",
-                  value: planProgress?.latestEffortScore != null
-                    ? `${planProgress.latestEffortScore}/10`
-                    : "—",
-                },
-                {
-                  label: "Latest pain",
-                  value: planProgress?.latestPainScore != null
-                    ? `${planProgress.latestPainScore}/10`
-                    : "—",
-                },
-                {
-                  label: "Per week",
-                  value: `${plan.sessionsPerWeek}×`,
-                },
-                {
-                  label: "Last completed",
-                  value: planProgress?.lastCompletedAt
-                    ? new Date(planProgress.lastCompletedAt).toLocaleDateString()
-                    : "—",
-                },
-              ].map(({ label, value }) => (
-                <div key={label} className="rounded-[8px] border border-[#1E2D42] bg-[#0F1825] p-3">
-                  <p className="text-[10px] text-white/35">{label}</p>
-                  <p
-                    className="mt-0.5 text-sm font-bold text-[#5DCAA5]"
-                    style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
-                  >
-                    {value}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {adherence && (
-            <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
-              <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
-                Session Adherence (weekly)
-              </p>
-              <div className="flex items-end gap-1.5">
-                {adherence.weeklyCompletions.map((w) => {
-                  const fillPct = w.target > 0 ? Math.round((w.completed / w.target) * 100) : 0;
-                  return (
-                    <div key={w.week} className="flex flex-1 flex-col items-center gap-1">
-                      <div className="relative h-12 w-full overflow-hidden rounded-[3px] bg-[#1E2D42]">
-                        <div
-                          className="absolute bottom-0 left-0 right-0 rounded-[3px] bg-[#1D9E75]/70 transition-all"
-                          style={{ height: `${fillPct}%` }}
-                        />
-                      </div>
-                      <span className="text-[9px] text-white/30">{w.week}</span>
-                    </div>
-                  );
-                })}
-              </div>
-              <p className="mt-2 text-[11px] text-white/35">
-                {adherence.sessionsCompleted} / {adherence.totalSessions} sessions completed
-                {adherence.lastActiveAt && (
-                  <> · Last active {new Date(adherence.lastActiveAt).toLocaleDateString()}</>
-                )}
-              </p>
-            </div>
-          )}
 
           {plan.clinicianNotes && (
             <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3">
