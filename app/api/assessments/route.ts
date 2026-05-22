@@ -95,6 +95,7 @@ export async function POST(req: NextRequest) {
     draft?: GeneralAssessmentDraft;
     type?: string;
     notes?: string;
+    assessmentLanguage?: "en" | "ar";
   };
   try { body = (await req.json()) as typeof body; }
   catch { return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 }); }
@@ -109,7 +110,8 @@ export async function POST(req: NextRequest) {
     if (!body.draft) {
       return NextResponse.json({ error: "draft (GeneralAssessmentDraft) is required for general_msk." }, { status: 400 });
     }
-    structuredData = buildGeneralMskPayload(body.draft);
+    const lang = body.assessmentLanguage === "ar" ? "ar" : body.assessmentLanguage === "en" ? "en" : undefined;
+    structuredData = buildGeneralMskPayload(body.draft, lang);
   } else {
     if (!body.data) {
       return NextResponse.json({ error: "data (AssessmentData) is required." }, { status: 400 });

@@ -9,6 +9,7 @@ import type { AssessmentDetailResponse } from "@/app/api/assessments/[id]/route"
 import {
   extractGeneralDraft,
   extractStructuredData,
+  getAssessmentLanguage,
 } from "@/app/lib/assessment-payload";
 import { loadGeneralAssessmentDraft, saveGeneralAssessmentDraft } from "@/app/lib/general-assessment/storage";
 import type {
@@ -545,6 +546,7 @@ export function AssessmentReportClient() {
   const [loading, setLoading] = useState(true);
   const [soapSaving, setSoapSaving] = useState(false);
   const [soapSaveMessage, setSoapSaveMessage] = useState("");
+  const [patientAnsweredInArabic, setPatientAnsweredInArabic] = useState(false);
 
   const patientId = resolvedPatientId || patientIdParam;
 
@@ -557,6 +559,7 @@ export function AssessmentReportClient() {
       setStructuredData(null);
       setReportKind(null);
       setServerBacked(false);
+      setPatientAnsweredInArabic(false);
 
       if (assessmentId) {
         try {
@@ -576,6 +579,7 @@ export function AssessmentReportClient() {
             diagnosis: detail.patient.diagnosis,
           } as BackendPatient);
           setServerBacked(true);
+          setPatientAnsweredInArabic(getAssessmentLanguage(detail.structured_data) === "ar");
 
           const general = extractGeneralDraft(detail.structured_data, detail.type);
           if (general) {
@@ -880,6 +884,11 @@ export function AssessmentReportClient() {
             {hasFlags && (
               <span className="rounded-full border border-rose-400/30 bg-rose-400/15 px-3 py-0.5 text-[11px] font-semibold text-rose-300">
                 ⚠ Risk Flags Present
+              </span>
+            )}
+            {patientAnsweredInArabic && (
+              <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-0.5 text-[11px] font-semibold text-amber-200">
+                Patient answered in Arabic
               </span>
             )}
           </div>

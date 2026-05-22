@@ -6,10 +6,14 @@ import type { GeneralAssessmentDraft } from "./general-assessment/types";
 
 export const GENERAL_MSK_SCHEMA_VERSION = 2 as const;
 
+export type AssessmentLanguage = "en" | "ar";
+
 export type GeneralMskPayload = {
   schemaVersion: typeof GENERAL_MSK_SCHEMA_VERSION;
   kind: "general_msk";
   draft: GeneralAssessmentDraft;
+  /** Language the patient used when completing a remote assessment, if applicable */
+  assessmentLanguage?: AssessmentLanguage;
 };
 
 export type StoredAssessmentPayload = AssessmentData | GeneralMskPayload;
@@ -31,7 +35,10 @@ export function isStructuredAssessmentData(data: unknown): data is AssessmentDat
   return typeof o.bodyRegion === "string" && o.kind !== "general_msk";
 }
 
-export function buildGeneralMskPayload(draft: GeneralAssessmentDraft): GeneralMskPayload {
+export function buildGeneralMskPayload(
+  draft: GeneralAssessmentDraft,
+  assessmentLanguage?: AssessmentLanguage,
+): GeneralMskPayload {
   return {
     schemaVersion: GENERAL_MSK_SCHEMA_VERSION,
     kind: "general_msk",
@@ -39,7 +46,14 @@ export function buildGeneralMskPayload(draft: GeneralAssessmentDraft): GeneralMs
       ...draft,
       updatedAt: draft.updatedAt?.trim() || new Date().toISOString(),
     },
+    ...(assessmentLanguage ? { assessmentLanguage } : {}),
   };
+}
+
+export function getAssessmentLanguage(structuredData: unknown): AssessmentLanguage | null {
+  if (typeof structuredData !== "object" || structuredData === null) return null;
+  const lang = (structuredData as Record<string, unknown>).assessmentLanguage;
+  return lang === "ar" || lang === "en" ? lang : null;
 }
 
 /** Resolve GeneralAssessmentDraft from a stored row. */

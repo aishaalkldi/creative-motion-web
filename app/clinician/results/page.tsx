@@ -116,7 +116,27 @@ export default function UnifiedResultsPage() {
   );
 }
 
+function assessmentTypeLabel(type: string | null): string {
+  if (!type) return "";
+  if (type === "general_msk") return "General MSK";
+  if (type === "structured") return "Structured";
+  if (type === "questionnaire") return "Questionnaire";
+  return type;
+}
+
+function reportHref(result: ClinicianResultCard): string | null {
+  if (!result.latestAssessmentId) return null;
+  const params = new URLSearchParams({
+    patientId: result.patientId,
+    assessmentId: result.latestAssessmentId,
+  });
+  return `/clinician/assessment/report?${params.toString()}`;
+}
+
 function ResultCard({ result }: { result: ClinicianResultCard }) {
+  const reportUrl = reportHref(result);
+  const hasReport = Boolean(reportUrl);
+
   return (
     <article className="rounded-[10px] border border-[#1E2D42] bg-[#0B1220] p-5">
       <div className="flex items-start justify-between gap-3">
@@ -144,13 +164,56 @@ function ResultCard({ result }: { result: ClinicianResultCard }) {
           : "No sessions completed yet"}
       </p>
 
-      <div className="mt-4">
+      <p className="mt-2 text-[11px] text-white/35">
+        {hasReport ? (
+          <>
+            Assessment report:{" "}
+            <span className="text-white/55">{assessmentTypeLabel(result.latestAssessmentType)}</span>
+          </>
+        ) : (
+          <span className="italic text-white/30">No assessment report yet</span>
+        )}
+      </p>
+
+      <div className="mt-4 flex flex-wrap gap-2">
         <Link
           href={`/clinician/patients/${result.patientId}`}
-          className="inline-flex rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-3 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
+          className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
         >
-          View patient →
+          View Patient
         </Link>
+        {hasReport && reportUrl ? (
+          <>
+            <Link
+              href={reportUrl}
+              className="inline-flex rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-3 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
+            >
+              View Assessment Report
+            </Link>
+            <Link
+              href={reportUrl}
+              className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 transition hover:text-white/80"
+              title="Opens the clinical report; use Export PDF on that page to print or save as PDF"
+            >
+              Open report to export PDF
+            </Link>
+          </>
+        ) : (
+          <>
+            <span
+              className="inline-flex cursor-not-allowed rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/25"
+              aria-disabled="true"
+            >
+              View Assessment Report
+            </span>
+            <span
+              className="inline-flex cursor-not-allowed rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/25"
+              aria-disabled="true"
+            >
+              Open report to export PDF
+            </span>
+          </>
+        )}
       </div>
     </article>
   );

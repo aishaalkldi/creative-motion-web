@@ -1729,6 +1729,10 @@ export function GeneralAssessmentPageClient() {
             onBack={() => setView("overview")}
             onEdit={(id) => setView(id)}
             onSubmit={async () => {
+              const { listPatientAssessments } = await import("@/app/lib/api/remote-assessments");
+              const remoteLang = listPatientAssessments(patientId).find(
+                (r) => r.status === "submitted" && r.assessmentLanguage,
+              )?.assessmentLanguage;
               const res = await fetch("/api/assessments", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -1736,6 +1740,7 @@ export function GeneralAssessmentPageClient() {
                   patient_id: patientId,
                   type: "general_msk",
                   draft,
+                  assessmentLanguage: remoteLang ?? "en",
                   notes:
                     draft.soap.assessment?.trim() ||
                     draft.subjective.chiefComplaint?.trim() ||

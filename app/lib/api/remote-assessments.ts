@@ -36,6 +36,8 @@ export const DEFAULT_SECTIONS: Record<AssessmentType, PatientSectionId[]> = {
 export const PATIENT_SECTION_LABELS: Record<PatientSectionId, string> =
   PATIENT_SECTION_LABELS_EN;
 
+export type AssessmentLanguage = "en" | "ar";
+
 export interface RemoteAssessmentRequest {
   id: string;                          // UUID — also serves as the URL token
   patientId: string;
@@ -48,6 +50,8 @@ export interface RemoteAssessmentRequest {
   submittedAt?: string;
   /** Patient-filled answers, keyed by section */
   patientDraft?: PatientAssessmentDraft;
+  /** Language used when patient completed the form */
+  assessmentLanguage?: AssessmentLanguage;
 }
 
 /** Simplified, patient-friendly answers (no clinical jargon). */
@@ -211,15 +215,22 @@ export function listPatientAssessments(patientId: string): RemoteAssessmentReque
 export function updateRemoteAssessmentDraft(
   id: string,
   patientDraft: PatientAssessmentDraft,
+  assessmentLanguage?: AssessmentLanguage,
 ): void {
   const req = getRemoteAssessment(id);
   if (!req) return;
-  persist({ ...req, status: "in_progress", patientDraft });
+  persist({
+    ...req,
+    status: "in_progress",
+    patientDraft,
+    ...(assessmentLanguage ? { assessmentLanguage } : {}),
+  });
 }
 
 export function submitRemoteAssessment(
   id: string,
   patientDraft: PatientAssessmentDraft,
+  assessmentLanguage: AssessmentLanguage = "en",
 ): void {
   const req = getRemoteAssessment(id);
   if (!req) return;
@@ -229,6 +240,7 @@ export function submitRemoteAssessment(
     status: "submitted",
     submittedAt: new Date().toISOString(),
     patientDraft,
+    assessmentLanguage,
   };
   persist(submitted);
 

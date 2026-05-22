@@ -12,6 +12,9 @@ import type { NextRequest } from "next/server";
 
 export type ClinicianResultStatus = "pending_review" | "active" | "completed";
 
+/** Prefer general MSK report, then structured wizard, then questionnaire. */
+const ASSESSMENT_TYPE_PRIORITY = ["general_msk", "structured", "questionnaire"] as const;
+
 export type ClinicianResultCard = {
   planId: string;
   patientId: string;
@@ -25,7 +28,27 @@ export type ClinicianResultCard = {
   latestPainScore: number | null;
   lastCompletedAt: string | null;
   status: ClinicianResultStatus;
+  /** Latest preferred assessment for clinical report links (per patient). */
+  latestAssessmentId: string | null;
+  latestAssessmentType: string | null;
 };
+
+type AssessmentPickRow = { id: string; patient_id: string; type: string; created_at: string };
+
+function pickPreferredAssessment(rows: AssessmentPickRow[]): AssessmentPickRow | null {
+  if (rows.length === 0) return null;
+  const newestByType = new Map<string, AssessmentPickRow>();
+  for (const row of rows) {
+    if (!newestByType.has(row.type)) {
+      newestByType.set(row.type, row);
+    }
+  }
+  for (const preferred of ASSESSMENT_TYPE_PRIORITY) {
+    const match = newestByType.get(preferred);
+    if (match) return match;
+  }
+  return rows[0] ?? null;
+}
 
 async function buildClients() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -151,11 +174,43 @@ export async function GET(_req: NextRequest) {
     }
   });
 
+  const patientIds = [...new Set(plans.map((p) => p.patient_id))];
+  const assessmentsByPatient = new Map<string, AssessmentPickRow[]>();
+
+  if (patientIds.length > 0) {
+    const { data: assessmentRows, error: assessErr } = await adminClient
+      .from("assessments")
+      .select("id, patient_id, type, created_at")
+      .eq("provider_id", user.id)
+      .in("patient_id", patientIds)
+      .order("created_at", { ascending: false })
+      .returns<AssessmentPickRow[]>();
+
+    if (assessErr) {
+      console.error("[GET /api/clinician/results] assessments query failed");
+    } else {
+      (assessmentRows ?? []).forEach((a) => {
+        const arr = assessmentsByPatient.get(a.patient_id) ?? [];
+        arr.push(a);
+        assessmentsByPatient.set(a.patient_id, arr);
+      });
+    }
+  }
+
+  const latestAssessmentByPatient = new Map<string, AssessmentPickRow | null>();
+  patientIds.forEach((pid) => {
+    latestAssessmentByPatient.set(
+      pid,
+      pickPreferredAssessment(assessmentsByPatient.get(pid) ?? []),
+    );
+  });
+
   const cards: ClinicianResultCard[] = plans.map((plan) => {
     const planSessions = sessionsByPlan.get(plan.id) ?? [];
     const total = planSessions.length;
     const completed = planSessions.filter((s) => s.status === "completed").length;
     const latest = latestLogByPlan.get(plan.id);
+    const preferredAssessment = latestAssessmentByPatient.get(plan.patient_id) ?? null;
 
     return {
       planId: plan.id,
@@ -170,6 +225,8 @@ export async function GET(_req: NextRequest) {
       latestPainScore: latest?.pain_score ?? null,
       lastCompletedAt: latest?.completed_at ?? null,
       status: deriveStatus(completed, total),
+      latestAssessmentId: preferredAssessment?.id ?? null,
+      latestAssessmentType: preferredAssessment?.type ?? null,
     };
   });
 

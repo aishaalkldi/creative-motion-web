@@ -7,6 +7,8 @@ import { validatePatientOwnership, type PatientRow } from "../../../lib/validate
 import {
   buildGeneralMskPayload,
   extractGeneralDraft,
+  getAssessmentLanguage,
+  type AssessmentLanguage,
 } from "../../../lib/assessment-payload";
 import type { GeneralAssessmentDraft } from "../../../lib/general-assessment/types";
 import type { StoredAssessmentPayload } from "../../../lib/assessment-payload";
@@ -200,10 +202,11 @@ export async function PATCH(
     updatedAt: new Date().toISOString(),
   };
 
+  const existingLang = getAssessmentLanguage(row.structured_data);
   const { data: updated, error: updateErr } = await adminClient
     .from("assessments")
     .update({
-      structured_data: buildGeneralMskPayload(merged),
+      structured_data: buildGeneralMskPayload(merged, existingLang ?? undefined),
       notes: body.notes?.trim() ?? row.notes,
       updated_at: new Date().toISOString(),
     })
