@@ -888,10 +888,15 @@ export function AssessmentReportClient() {
               className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white">
               ← Patient
             </Link>
-            <button type="button" onClick={() => window.print()}
-              className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white">
-              Export Clinical Report (PDF)
-            </button>
+            <div className="flex flex-col items-end gap-1">
+              <button type="button" onClick={() => window.print()}
+                className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white">
+                Export Clinical Report (PDF)
+              </button>
+              <p className="max-w-[220px] text-right text-[10px] leading-snug text-white/35">
+                To save as PDF, choose &ldquo;Microsoft Print to PDF&rdquo; or &ldquo;Save as PDF&rdquo; in the print dialog.
+              </p>
+            </div>
           </div>
         </header>
         <section className="screen-only border-b border-white/10 bg-[#0F1825] px-6 py-8">
@@ -967,13 +972,18 @@ export function AssessmentReportClient() {
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 transition hover:text-white"
-            >
-              Export Clinical Report (PDF)
-            </button>
+            <div className="flex flex-col items-end gap-1">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 transition hover:text-white"
+              >
+                Export Clinical Report (PDF)
+              </button>
+              <p className="max-w-[220px] text-right text-[10px] leading-snug text-white/35">
+                To save as PDF, choose &ldquo;Microsoft Print to PDF&rdquo; or &ldquo;Save as PDF&rdquo; in the print dialog.
+              </p>
+            </div>
             {serverBacked && (
               <span className="rounded-[5px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-2 py-1 text-[10px] font-semibold text-[#5DCAA5]">
                 Saved on server

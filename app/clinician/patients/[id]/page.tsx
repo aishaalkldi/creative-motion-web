@@ -721,10 +721,12 @@ export default function PatientProfilePage() {
               </div>
             )}
 
-            {/* Patient-Submitted Assessment */}
+            {/* Latest submitted assessment */}
             <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <h2 className="text-lg font-bold text-white">Patient-Submitted Assessment</h2>
-              <p className="mt-1 mb-5 text-xs text-white/35">Review remote answers, then open the clinical report.</p>
+              <h2 className="text-lg font-bold text-white">Latest submitted assessment</h2>
+              <p className="mt-1 mb-5 text-xs text-white/35">
+                Submitted assessments appear here. Session progress and adherence are on Results.
+              </p>
 
               {submittedRemote.length > 0 && submittedRemote[0] && (
                 <div className="mb-5 rounded-[8px] border border-lime-300/20 bg-lime-400/[0.06] px-4 py-3">
@@ -748,9 +750,18 @@ export default function PatientProfilePage() {
                       includedSections={submittedRemote[0].includedSections}
                     />
                   </div>
+                ) : latestRasqAssessment ? (
+                  <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4">
+                    <p className="text-sm font-semibold text-white">
+                      {latestRasqAssessment.typeLabel || latestRasqAssessment.bodyRegion || latestRasqAssessment.type}
+                    </p>
+                    <p className="mt-1 text-xs text-white/45">
+                      Submitted {new Date(latestRasqAssessment.savedAt || latestRasqAssessment.date).toLocaleString()}
+                    </p>
+                  </div>
                 ) : (
                   <p className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
-                    No assessment yet. Send a remote assessment link to begin.
+                    No submitted assessment yet.
                   </p>
                 )}
               </div>
@@ -786,7 +797,7 @@ export default function PatientProfilePage() {
                   href={primaryReportHref}
                   className="inline-flex rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-4 py-2.5 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
                 >
-                  Open Clinical Report
+                  View Assessment Report
                 </Link>
               ) : null}
             </section>

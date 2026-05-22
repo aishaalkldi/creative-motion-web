@@ -69,6 +69,10 @@ export default function UnifiedResultsPage() {
             <p className="mt-2 max-w-2xl text-sm text-white/45">
               Session outcomes and adherence by treatment plan — linked to patient profiles and clinical reports.
             </p>
+            <p className="mt-3 max-w-2xl rounded-[7px] border border-[#1E2D42] bg-[#0F1825]/80 px-4 py-3 text-xs leading-relaxed text-white/50">
+              Results show assigned rehabilitation plans, completed sessions, adherence, and effort. To view submitted
+              assessments, open the patient profile or assessment report.
+            </p>
           </div>
           <Link
             href="/clinician"
