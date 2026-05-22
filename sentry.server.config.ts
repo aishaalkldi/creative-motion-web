@@ -9,10 +9,15 @@ Sentry.init({
   beforeSend(event) {
     // Strip patient tokens from server-side error URLs
     if (event.request?.url) {
-      event.request.url = event.request.url.replace(
-        /\/patient\/[^/?#]+/g,
-        "/patient/[token-redacted]",
-      );
+      event.request.url = event.request.url
+        .replace(
+          /\/patient\/[^/?#]+/g,
+          "/patient/[token-redacted]",
+        )
+        .replace(
+          /\/assessment\/[^/?#]+/g,
+          "/assessment/[token-redacted]",
+        );
     }
 
     // Strip cookies and auth headers
