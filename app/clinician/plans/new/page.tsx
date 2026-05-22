@@ -8,6 +8,12 @@ import type { PatientRow } from "@/app/lib/validate-patient-ownership";
 import type { AssessmentRow } from "@/app/api/assessments/route";
 import { extractGeneralDraft, extractStructuredData } from "@/app/lib/assessment-payload";
 import type { PlanRow } from "@/app/api/plans/route";
+import {
+  PILOT_PROGRAM_TEMPLATES,
+  clonePilotTemplate,
+  type PilotProgramSession,
+  type PilotProgramTemplate,
+} from "@/app/lib/program-templates";
 
 /* ─── Phase row ──────────────────────────────────────────────────────────── */
 
@@ -131,6 +137,85 @@ function PlanField({ label, hint, children }: { label: string; hint?: string; ch
   );
 }
 
+function PilotTemplateCard({
+  template,
+  selected,
+  onUse,
+}: {
+  template: PilotProgramTemplate;
+  selected: boolean;
+  onUse: () => void;
+}) {
+  return (
+    <div
+      className={`rounded-[7px] border p-4 transition ${
+        selected
+          ? "border-[#1D9E75]/40 bg-[#1D9E75]/8"
+          : "border-[#1E2D42] bg-[#0B1220]"
+      }`}
+    >
+      <p className="text-sm font-semibold text-white">{template.title}</p>
+      <p className="mt-1 text-xs text-white/40">{template.conditionArea} · {template.level}</p>
+      <p className="mt-2 text-xs leading-relaxed text-white/55">{template.goal}</p>
+      <p className="mt-2 text-[11px] text-white/30">
+        {template.sessions.length} sessions · {template.sessions.map((s) => s.exercises.length).reduce((a, b) => a + b, 0)} exercises
+      </p>
+      <button
+        type="button"
+        onClick={onUse}
+        className="mt-3 w-full rounded-[6px] border border-[#1D9E75]/30 bg-[#1D9E75]/10 px-3 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/20"
+      >
+        Use template
+      </button>
+    </div>
+  );
+}
+
+function EditableSessionCard({
+  session,
+  onChange,
+}: {
+  session: PilotProgramSession;
+  onChange: (updated: PilotProgramSession) => void;
+}) {
+  return (
+    <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <span
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[4px] bg-[#1D9E75]/10 text-[10px] font-bold text-[#5DCAA5]"
+          style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+        >
+          {session.sessionNumber}
+        </span>
+        <input
+          type="text"
+          value={session.title}
+          onChange={(e) => onChange({ ...session, title: e.target.value })}
+          className="flex-1 rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-sm font-semibold text-white outline-none focus:border-[#1D9E75]/40"
+        />
+      </div>
+      <div>
+        <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-white/25">
+          Exercises
+        </label>
+        <textarea
+          rows={Math.max(3, session.exercises.length)}
+          value={session.exercises.join("\n")}
+          onChange={(e) =>
+            onChange({
+              ...session,
+              exercises: e.target.value.split("\n").map((line) => line.trim()).filter(Boolean),
+            })
+          }
+          placeholder="One exercise per line"
+          className="w-full resize-y rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5 text-sm text-white outline-none placeholder:text-white/20 focus:border-[#1D9E75]/40"
+        />
+        <p className="mt-1 text-[11px] text-white/20">One exercise per line. Edit before assigning.</p>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Page ───────────────────────────────────────────────────────────────── */
 
 function NewPlanInner() {
@@ -143,6 +228,10 @@ function NewPlanInner() {
   const [baselineId, setBaselineId] = useState("");
   const [notes,      setNotes]      = useState("");
   const [phases,     setPhases]     = useState<PhaseConfig[]>(DEFAULT_PHASES);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [planTitle,  setPlanTitle]  = useState("");
+  const [planGoal,   setPlanGoal]   = useState("");
+  const [planSessions, setPlanSessions] = useState<PilotProgramSession[]>([]);
   const [saving,     setSaving]     = useState(false);
   const [saved,      setSaved]      = useState(false);
   const [saveError,  setSaveError]  = useState("");
@@ -189,6 +278,37 @@ function NewPlanInner() {
     setPhases((prev) => prev.map((p, idx) => idx === i ? { ...p, [key]: val } : p));
   }
 
+  function applyPilotTemplate(template: PilotProgramTemplate) {
+    const cloned = clonePilotTemplate(template);
+    setSelectedTemplateId(template.id);
+    setProgramId("");
+    setPlanTitle(cloned.title);
+    setPlanGoal(cloned.goal);
+    setPlanSessions(cloned.sessions);
+    setNotes((prev) => {
+      if (prev.trim()) return prev;
+      return cloned.safetyNote;
+    });
+    setPhases((prev) =>
+      prev.map((p, i) =>
+        i === 0
+          ? { ...p, exercises: cloned.sessions.map((s) => s.exercises.join(" · ")).join("\n") }
+          : p,
+      ),
+    );
+  }
+
+  function clearPilotTemplate() {
+    setSelectedTemplateId(null);
+    setPlanTitle("");
+    setPlanGoal("");
+    setPlanSessions([]);
+  }
+
+  function updatePlanSession(index: number, updated: PilotProgramSession) {
+    setPlanSessions((prev) => prev.map((s, i) => (i === index ? updated : s)));
+  }
+
   async function handleAssign() {
     if (!selectedPatient) return;
     setSaving(true);
@@ -199,7 +319,27 @@ function NewPlanInner() {
 
       let payload: Record<string, unknown>;
 
-      if (matchedProg) {
+      if (selectedTemplateId && planSessions.length > 0) {
+        payload = {
+          patientId:      selectedPatient.id,
+          assessmentId:   baselineId || null,
+          title:          planTitle.trim() || "Pilot Rehabilitation Plan",
+          programId:      selectedTemplateId,
+          programName:    planTitle.trim() || "Pilot Rehabilitation Plan",
+          phase:          "phase-1",
+          phaseName:      "Phase 1",
+          phaseGoal:      planGoal.trim() || "Complete assigned sessions as prescribed.",
+          sessionsPerWeek: 3,
+          totalWeeks:     Math.max(1, Math.ceil(planSessions.length / 3)),
+          clinicianNote:  notes,
+          assignedBy:     "Dr. Provider",
+          sessions:       planSessions.map((s) => ({
+            sessionNumber: s.sessionNumber,
+            title:         s.title.trim() || `Session ${s.sessionNumber}`,
+            exercises:     s.exercises.length > 0 ? s.exercises : ["As prescribed by your therapist"],
+          })),
+        };
+      } else if (matchedProg) {
         const firstPhase = matchedProg.phases[0];
         const sessions: PlanSession[] = Array.from({ length: firstPhase.defaultSessions }, (_, i) => ({
           id:             `s-${i + 1}`,
@@ -433,50 +573,131 @@ function NewPlanInner() {
               )}
             </div>
 
-            {/* Rehab protocol */}
+            {/* Pilot program templates */}
             <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 space-y-4">
               <div>
-                <h2 className="text-sm font-bold text-white">Rehabilitation protocol</h2>
-                <p className="mt-1 text-xs text-white/35">Select a base protocol or leave unset for a custom plan.</p>
-              </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {REHAB_PROGRAMS.map((prog) => (
-                  <button
-                    key={prog.id}
-                    type="button"
-                    onClick={() => setProgramId(prog.id)}
-                    className={`rounded-[7px] border px-4 py-3 text-left transition ${
-                      programId === prog.id
-                        ? "border-[#1D9E75]/40 bg-[#1D9E75]/8"
-                        : "border-[#1E2D42] bg-[#0B1220] hover:border-[#1D9E75]/20"
-                    }`}
-                  >
-                    <p className="text-sm font-semibold text-white">{prog.name}</p>
-                    <p className="mt-0.5 text-xs text-white/30">{prog.category}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Phase builder */}
-            <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] overflow-hidden">
-              <div className="border-b border-[#1E2D42] px-5 py-4">
-                <h2 className="text-sm font-bold text-white">Phase structure</h2>
-                <p className="mt-0.5 text-xs text-white/35">
-                  Configure each phase — click to expand and edit.
+                <h2 className="text-sm font-bold text-white">Start from a pilot template</h2>
+                <p className="mt-1 text-xs text-white/35">
+                  Templates are starting points. Clinician must review and adapt before assigning.
                 </p>
               </div>
-              <div className="divide-y divide-[#1E2D42] p-4 space-y-2">
-                {phases.map((ph, i) => (
-                  <PhaseCard
-                    key={ph.label}
-                    phase={ph.label}
-                    config={ph}
-                    onChange={(key, val) => updatePhase(i, key, val)}
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {PILOT_PROGRAM_TEMPLATES.map((template) => (
+                  <PilotTemplateCard
+                    key={template.id}
+                    template={template}
+                    selected={selectedTemplateId === template.id}
+                    onUse={() => applyPilotTemplate(template)}
                   />
                 ))}
               </div>
             </div>
+
+            {/* Editable plan from template */}
+            {selectedTemplateId && planSessions.length > 0 && (
+              <div className="rounded-[10px] border border-[#1D9E75]/25 bg-[#0F1825] p-6 space-y-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <h2 className="text-sm font-bold text-white">Review &amp; edit plan</h2>
+                    <p className="mt-1 text-xs text-white/35">
+                      Adjust titles and exercises before assigning to the patient.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={clearPilotTemplate}
+                    className="text-xs font-semibold text-white/40 transition hover:text-white/70"
+                  >
+                    Clear template
+                  </button>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-white/30">
+                      Plan title
+                    </label>
+                    <input
+                      type="text"
+                      value={planTitle}
+                      onChange={(e) => setPlanTitle(e.target.value)}
+                      className="w-full rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-2.5 text-sm text-white outline-none focus:border-[#1D9E75]/40"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-white/30">
+                      Program goal
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={planGoal}
+                      onChange={(e) => setPlanGoal(e.target.value)}
+                      className="w-full resize-none rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-2.5 text-sm text-white outline-none focus:border-[#1D9E75]/40"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-white/30">Sessions</p>
+                  {planSessions.map((session, i) => (
+                    <EditableSessionCard
+                      key={`${session.sessionNumber}-${i}`}
+                      session={session}
+                      onChange={(updated) => updatePlanSession(i, updated)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Rehab protocol (legacy programs) */}
+            {!selectedTemplateId && (
+              <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 space-y-4">
+                <div>
+                  <h2 className="text-sm font-bold text-white">Rehabilitation protocol</h2>
+                  <p className="mt-1 text-xs text-white/35">Select a base protocol or leave unset for a custom plan.</p>
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  {REHAB_PROGRAMS.map((prog) => (
+                    <button
+                      key={prog.id}
+                      type="button"
+                      onClick={() => setProgramId(prog.id)}
+                      className={`rounded-[7px] border px-4 py-3 text-left transition ${
+                        programId === prog.id
+                          ? "border-[#1D9E75]/40 bg-[#1D9E75]/8"
+                          : "border-[#1E2D42] bg-[#0B1220] hover:border-[#1D9E75]/20"
+                      }`}
+                    >
+                      <p className="text-sm font-semibold text-white">{prog.name}</p>
+                      <p className="mt-0.5 text-xs text-white/30">{prog.category}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Phase builder (manual custom plan) */}
+            {!selectedTemplateId && (
+              <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] overflow-hidden">
+                <div className="border-b border-[#1E2D42] px-5 py-4">
+                  <h2 className="text-sm font-bold text-white">Phase structure</h2>
+                  <p className="mt-0.5 text-xs text-white/35">
+                    Configure each phase — click to expand and edit.
+                  </p>
+                </div>
+                <div className="divide-y divide-[#1E2D42] p-4 space-y-2">
+                  {phases.map((ph, i) => (
+                    <PhaseCard
+                      key={ph.label}
+                      phase={ph.label}
+                      config={ph}
+                      onChange={(key, val) => updatePhase(i, key, val)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Therapist notes */}
             <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
