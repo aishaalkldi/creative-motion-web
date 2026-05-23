@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useMemo, type ReactNode } from "react";
+import { useEffect, useState, useMemo, useCallback, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import type { BackendPatient } from "@/app/lib/api";
 import type { AssessmentData } from "@/app/lib/assessment-types";
@@ -45,6 +45,7 @@ import {
 } from "@/app/lib/remote-questionnaire-summary";
 import { ReportExportToolbar } from "@/app/components/reports/ReportExportToolbar";
 import { RemoteQuestionnairePrintReport } from "@/app/components/reports/RemoteQuestionnairePrintReport";
+import { PdfTranslationWarningModal } from "@/app/components/clinician/PdfTranslationWarningModal";
 
 // ── Constants & labels ─────────────────────────────────────────────────────────
 
@@ -660,6 +661,65 @@ export function AssessmentReportClient() {
   const [soapSaving, setSoapSaving] = useState(false);
   const [soapSaveMessage, setSoapSaveMessage] = useState("");
   const [patientAnsweredInArabic, setPatientAnsweredInArabic] = useState(false);
+  const [showPdfWarning, setShowPdfWarning] = useState(false);
+  const [translateThenExportLoading, setTranslateThenExportLoading] = useState(false);
+  const [translationExport, setTranslationExport] = useState({
+    doneCount: 0,
+    totalCount: 0,
+    allTranslated: true,
+    anyLoading: false,
+    translateAll: async () => {},
+  });
+
+  const handleTranslationProgress = useCallback(
+    (progress: {
+      doneCount: number;
+      totalCount: number;
+      allTranslated: boolean;
+      anyLoading: boolean;
+      translateAll: () => Promise<void>;
+    }) => {
+      setTranslationExport((prev) => {
+        if (
+          prev.doneCount === progress.doneCount &&
+          prev.totalCount === progress.totalCount &&
+          prev.allTranslated === progress.allTranslated &&
+          prev.anyLoading === progress.anyLoading &&
+          prev.translateAll === progress.translateAll
+        ) {
+          return prev;
+        }
+        return progress;
+      });
+    },
+    [],
+  );
+
+  const handleRemoteQuestionnaireExport = useCallback(() => {
+    const assessmentLanguage = patientAnsweredInArabic ? "ar" : "en";
+    const untranslatedCount = translationExport.totalCount - translationExport.doneCount;
+    if (untranslatedCount > 0 && assessmentLanguage === "ar") {
+      setShowPdfWarning(true);
+    } else {
+      window.print();
+    }
+  }, [patientAnsweredInArabic, translationExport.doneCount, translationExport.totalCount]);
+
+  const handleTranslateThenExport = useCallback(async () => {
+    setTranslateThenExportLoading(true);
+    try {
+      await translationExport.translateAll();
+      window.print();
+      setShowPdfWarning(false);
+    } finally {
+      setTranslateThenExportLoading(false);
+    }
+  }, [translationExport.translateAll]);
+
+  const handleExportAnyway = useCallback(() => {
+    window.print();
+    setShowPdfWarning(false);
+  }, []);
 
   const patientId = resolvedPatientId || patientIdParam;
 
@@ -925,7 +985,17 @@ export function AssessmentReportClient() {
           </div>
         ) : null}
 
-        <ReportExportToolbar backHref={backHref} />
+        <ReportExportToolbar backHref={backHref} onExportClick={handleRemoteQuestionnaireExport} />
+        {showPdfWarning ? (
+          <PdfTranslationWarningModal
+            untranslatedCount={translationExport.totalCount - translationExport.doneCount}
+            onTranslateThenExport={() => void handleTranslateThenExport()}
+            onExportAnyway={handleExportAnyway}
+            translating={translationExport.anyLoading || translateThenExportLoading}
+            doneCount={translationExport.doneCount}
+            totalCount={translationExport.totalCount}
+          />
+        ) : null}
         <section className="screen-only border-b border-white/10 bg-[#0F1825] px-6 py-8">
           <div className="mx-auto max-w-4xl">
             <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
@@ -941,21 +1011,21 @@ export function AssessmentReportClient() {
         </section>
         <div className="screen-only print-report-body mx-auto max-w-4xl px-6 py-8 space-y-6">
           <section className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-            <h2 className="text-base font-bold text-white">Patient submitted answers</h2>
             {hasRedFlag && (
-              <div className="mt-4 rounded-[7px] border border-amber-300/25 bg-amber-400/10 px-4 py-3">
+              <div className="rounded-[7px] border border-amber-300/25 bg-amber-400/10 px-4 py-3">
                 <p className="text-sm font-semibold text-amber-200">
                   Patient reported a possible red flag — review before proceeding.
                 </p>
               </div>
             )}
-            <div className="mt-4">
+            <div className={hasRedFlag ? "mt-4" : undefined}>
               <PatientSubmittedAnswersReview
                 patientDraft={remoteQuestionnaireDraft}
                 includedSections={remoteIncludedSections}
                 assessmentLanguage={patientAnsweredInArabic ? "ar" : "en"}
                 submissionMeta={remoteSubmissionMeta}
                 assessmentId={assessmentId || undefined}
+                onTranslationProgress={handleTranslationProgress}
               />
             </div>
           </section>

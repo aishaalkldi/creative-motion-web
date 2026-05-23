@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useMemo } from "react";
 import type { PatientSectionId } from "@/app/lib/api/remote-assessments";
 import type { PatientAssessmentDraft } from "@/app/lib/api/remote-assessments";
 import type { AssessmentLanguage } from "@/app/lib/assessment-payload";
@@ -8,8 +9,15 @@ import {
   isArabicAssessmentContent,
   valueTextDirection,
 } from "@/app/lib/arabic-readability";
-import { buildFullClinicianReview } from "@/app/lib/patient-assessment-questions";
+import {
+  buildFullClinicianReview,
+  type PatientReviewEntry,
+} from "@/app/lib/patient-assessment-questions";
 import { TranslatableField } from "@/app/components/clinician/TranslatableField";
+import {
+  useTranslationProgress,
+  type FieldTranslationState,
+} from "@/hooks/useTranslationProgress";
 
 type Props = {
   patientDraft?: PatientAssessmentDraft;
@@ -18,14 +26,16 @@ type Props = {
   submissionMeta?: Record<string, unknown> | null;
   assessmentId?: string;
   compact?: boolean;
+  onTranslationProgress?: (progress: {
+    doneCount: number;
+    totalCount: number;
+    allTranslated: boolean;
+    anyLoading: boolean;
+    translateAll: () => Promise<void>;
+  }) => void;
 };
 
 const NON_TRANSLATABLE_FIELD_KEYS = new Set(["painScore"]);
-
-function readMetaString(meta: Record<string, unknown> | null | undefined, key: string): string | undefined {
-  const value = meta?.[key];
-  return typeof value === "string" && value.trim() ? value : undefined;
-}
 
 function readMetaBoolean(meta: Record<string, unknown> | null | undefined, key: string): boolean {
   return meta?.[key] === true;
@@ -39,6 +49,43 @@ function isVoiceAnswered(
   return submissionMeta[`${fieldKey}_method`] === "voice";
 }
 
+function collectArabicFields(
+  blocks: { entries: PatientReviewEntry[] }[],
+): { fieldKey: string; text: string }[] {
+  return blocks
+    .flatMap((block) => block.entries)
+    .filter(
+      (entry) =>
+        entry.fieldKey &&
+        !NON_TRANSLATABLE_FIELD_KEYS.has(entry.fieldKey) &&
+        entry.value.trim(),
+    )
+    .map((entry) => ({ fieldKey: entry.fieldKey!, text: entry.value }));
+}
+
+function extractTranslationMeta(meta: Record<string, unknown> | null | undefined): {
+  translations: Record<string, string>;
+  generatedAt: Record<string, string>;
+} {
+  const translations: Record<string, string> = {};
+  const generatedAt: Record<string, string> = {};
+  if (!meta) return { translations, generatedAt };
+
+  for (const [key, value] of Object.entries(meta)) {
+    if (!key.endsWith("_en") || key.endsWith("_en_generated_at") || key.endsWith("_en_reviewed")) {
+      continue;
+    }
+    if (typeof value !== "string" || !value.trim()) continue;
+    translations[key] = value.trim();
+    const baseKey = key.replace(/_en$/, "");
+    const atValue = meta[`${baseKey}_en_generated_at`];
+    if (typeof atValue === "string" && atValue.trim()) {
+      generatedAt[baseKey] = atValue.trim();
+    }
+  }
+  return { translations, generatedAt };
+}
+
 /**
  * English-only clinician view of patient-submitted assessment answers.
  */
@@ -49,8 +96,58 @@ export function PatientSubmittedAnswersReview({
   submissionMeta = null,
   assessmentId,
   compact = false,
+  onTranslationProgress,
 }: Props) {
   const blocks = buildFullClinicianReview(patientDraft, includedSections);
+
+  const arabicFields = useMemo(
+    () => (assessmentLanguage === "ar" ? collectArabicFields(blocks) : []),
+    [assessmentLanguage, blocks],
+  );
+
+  const { translations: existingTranslations, generatedAt: existingGeneratedAt } = useMemo(
+    () => extractTranslationMeta(submissionMeta),
+    [submissionMeta],
+  );
+
+  const translationProgress = useTranslationProgress(
+    assessmentId ?? "",
+    arabicFields,
+    existingTranslations,
+    existingGeneratedAt,
+  );
+
+  const {
+    states,
+    translations,
+    generatedAtMap,
+    translateField,
+    translateAll,
+    doneCount,
+    totalCount,
+    allTranslated,
+    anyLoading,
+  } = translationProgress;
+
+  useEffect(() => {
+    if (!onTranslationProgress || assessmentLanguage !== "ar" || !assessmentId) return;
+    onTranslationProgress({
+      doneCount,
+      totalCount,
+      allTranslated,
+      anyLoading,
+      translateAll,
+    });
+  }, [
+    onTranslationProgress,
+    assessmentLanguage,
+    assessmentId,
+    doneCount,
+    totalCount,
+    allTranslated,
+    anyLoading,
+    translateAll,
+  ]);
 
   if (blocks.length === 0) {
     return (
@@ -62,9 +159,40 @@ export function PatientSubmittedAnswersReview({
 
   const allValues = blocks.flatMap((block) => block.entries.map((entry) => entry.value));
   const showArabicNotice = isArabicAssessmentContent(assessmentLanguage, allValues);
+  const showTranslateHeader =
+    !compact && assessmentLanguage === "ar" && !!assessmentId && totalCount > 0;
 
   return (
     <div className={compact ? "space-y-3" : "space-y-4"}>
+      {showTranslateHeader ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#1E2D42] pb-3">
+          <p className="text-sm font-bold text-white">Patient-Submitted Assessment</p>
+          <div className="flex flex-wrap items-center gap-3">
+            {!allTranslated && totalCount > 0 ? (
+              <p className="text-[10px] text-[#6B7280]">
+                Translation progress: {doneCount} of {totalCount} fields translated
+              </p>
+            ) : null}
+            {allTranslated ? (
+              <p className="text-[10px] text-[#1D9E75]">All fields translated</p>
+            ) : (
+              <button
+                type="button"
+                disabled={anyLoading}
+                onClick={() => void translateAll()}
+                className="rounded-[6px] bg-[#1D9E75] px-3.5 py-[5px] text-[11px] font-medium text-white transition hover:bg-[#179165] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {anyLoading
+                  ? `Translating ${doneCount} of ${totalCount} fields...`
+                  : "Translate all answers to English"}
+              </button>
+            )}
+          </div>
+        </div>
+      ) : !compact ? (
+        <p className="text-sm font-bold text-white">Patient-Submitted Assessment</p>
+      ) : null}
+
       {showArabicNotice && (
         <div className="rounded-[7px] border border-amber-300/25 bg-amber-400/10 px-3 py-2.5">
           <p className="text-xs leading-relaxed text-amber-100/90">{ARABIC_READABILITY_NOTICE}</p>
@@ -103,10 +231,12 @@ export function PatientSubmittedAnswersReview({
                         assessmentId={assessmentId}
                         fieldKey={fieldKey}
                         arabicText={entry.value}
-                        existingTranslation={readMetaString(submissionMeta, `${fieldKey}_en`)}
-                        existingGeneratedAt={readMetaString(submissionMeta, `${fieldKey}_en_generated_at`)}
+                        fieldState={(states[fieldKey] ?? "idle") as FieldTranslationState}
+                        translation={translations[fieldKey]}
+                        generatedAt={generatedAtMap[fieldKey]}
                         existingReviewed={readMetaBoolean(submissionMeta, `${fieldKey}_en_reviewed`)}
                         isVoiceAnswer={voiceAnswered}
+                        onTranslate={() => void translateField(fieldKey, entry.value)}
                       />
                     ) : (
                       <>

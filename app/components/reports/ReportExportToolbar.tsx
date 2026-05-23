@@ -3,9 +3,14 @@ import Link from "next/link";
 type Props = {
   backHref: string;
   backLabel?: string;
+  onExportClick?: () => void;
 };
 
-export function ReportExportToolbar({ backHref, backLabel = "← Patient" }: Props) {
+export function ReportExportToolbar({
+  backHref,
+  backLabel = "← Patient",
+  onExportClick,
+}: Props) {
   return (
     <header className="screen-only sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220]">
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
@@ -18,7 +23,7 @@ export function ReportExportToolbar({ backHref, backLabel = "← Patient" }: Pro
         <div className="flex flex-col items-end gap-1">
           <button
             type="button"
-            onClick={() => window.print()}
+            onClick={() => (onExportClick ? onExportClick() : window.print())}
             className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white"
           >
             Export Clinical Report (PDF)
