@@ -106,6 +106,20 @@ export default function SessionPlayerPage() {
   const [completed,           setCompleted]           = useState(false);
 
   useEffect(() => {
+    setPhase("precheck");
+    setPainBefore(null);
+    setSafetyConcern(null);
+    setSafetyAcknowledged(false);
+    setExerciseIndex(0);
+    setEffortScore(null);
+    setPainAfter(null);
+    setPatientNote("");
+    setCompleted(false);
+    setCompleteError("");
+    setCompleting(false);
+  }, [token, sessionId]);
+
+  useEffect(() => {
     if (!token) { router.replace("/patient/invalid"); return; }
 
     fetch(`/api/patient/plan?token=${encodeURIComponent(token)}`)
