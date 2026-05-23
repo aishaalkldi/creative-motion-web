@@ -15,8 +15,8 @@ import {
 } from "@/app/lib/api/remote-assessments";
 import { LanguageToggle, type PatientLang } from "@/app/components/patient/LanguageToggle";
 import { VoiceConsentBanner } from "@/app/components/patient/VoiceConsentBanner";
-import { VoiceInputButton } from "@/app/components/patient/VoiceInputButton";
-import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
+import { VoiceFieldControls } from "@/app/components/patient/VoiceFieldControls";
+import { voiceLabel } from "@/app/components/patient/voice-ui-labels";
 import {
   PATIENT_SECTION_QUESTIONS,
   PATIENT_SECTION_TITLES,
@@ -116,34 +116,8 @@ function PainScale({
   );
 }
 
-function QuestionLabel({
-  children,
-  speakText,
-  lang,
-}: {
-  children: React.ReactNode;
-  speakText?: string;
-  lang: PatientLang;
-}) {
-  const { mounted, isSupported, speak } = useSpeechSynthesis();
-
-  return (
-    <div className="mb-2 flex items-start gap-2">
-      <p className="flex-1 text-sm font-semibold text-white/90">{children}</p>
-      {mounted && isSupported && speakText ? (
-        <button
-          type="button"
-          onClick={() => speak(speakText, lang)}
-          aria-label="Listen to question"
-          title="Listen to question"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] border border-white/20 bg-white/[0.06] text-sm text-white/80 transition hover:border-[#1D9E75] hover:text-[#1D9E75]"
-          style={{ borderWidth: "0.5px" }}
-        >
-          🔊
-        </button>
-      ) : null}
-    </div>
-  );
+function QuestionLabel({ children }: { children: React.ReactNode }) {
+  return <p className="mb-2 text-sm font-semibold text-white/90">{children}</p>;
 }
 
 function ConfigSectionForm({
@@ -154,6 +128,7 @@ function ConfigSectionForm({
   voiceConsentGiven,
   onConsentNeeded,
   onVoiceTranscript,
+  voiceTranscribedKeys,
 }: {
   section: PatientSectionId;
   data: Record<string, string>;
@@ -162,6 +137,7 @@ function ConfigSectionForm({
   voiceConsentGiven: boolean;
   onConsentNeeded: () => void;
   onVoiceTranscript: (fieldKey: string, text: string) => void;
+  voiceTranscribedKeys: Record<string, "voice">;
 }) {
   const fields = PATIENT_SECTION_QUESTIONS[section];
 
@@ -177,45 +153,63 @@ function ConfigSectionForm({
 
         return (
           <div key={field.key}>
-            <QuestionLabel speakText={questionText} lang={lang}>
-              {questionText}
-            </QuestionLabel>
-            {field.hint && <Hint>{patientText(field.hint, lang)}</Hint>}
+            <QuestionLabel>{questionText}</QuestionLabel>
             {field.kind === "painScale" ? (
-              <PainScale value={value} onChange={(v) => onChange({ ...data, [field.key]: v })} lang={lang} />
+              <>
+                <VoiceFieldControls
+                  lang={lang}
+                  questionText={questionText}
+                  consentGiven={voiceConsentGiven}
+                  onConsentNeeded={onConsentNeeded}
+                  onTranscript={() => {}}
+                  showRecord={false}
+                />
+                {field.hint && <Hint>{patientText(field.hint, lang)}</Hint>}
+                <PainScale value={value} onChange={(v) => onChange({ ...data, [field.key]: v })} lang={lang} />
+              </>
             ) : field.kind === "textarea" ? (
-              <div className="flex items-start gap-2">
-                <div className="flex-1">
-                  <TextArea
-                    value={value}
-                    onChange={(v) => onChange({ ...data, [field.key]: v })}
-                    placeholder={placeholder}
-                    rows={field.rows ?? 3}
-                  />
-                </div>
-                <VoiceInputButton
+              <>
+                <VoiceFieldControls
                   lang={lang}
+                  questionText={questionText}
                   consentGiven={voiceConsentGiven}
                   onConsentNeeded={onConsentNeeded}
                   onTranscript={(text) => onVoiceTranscript(field.key, text)}
                 />
-              </div>
+                {field.hint && <Hint>{patientText(field.hint, lang)}</Hint>}
+                <TextArea
+                  value={value}
+                  onChange={(v) => onChange({ ...data, [field.key]: v })}
+                  placeholder={placeholder}
+                  rows={field.rows ?? 3}
+                />
+                {voiceTranscribedKeys[field.key] === "voice" ? (
+                  <p className="mt-1.5 text-[11px] italic text-white/50">
+                    {voiceLabel("transcribed", lang)}
+                  </p>
+                ) : null}
+              </>
             ) : field.kind === "text" ? (
-              <div className="flex items-start gap-2">
-                <div className="flex-1">
-                  <TextInput
-                    value={value}
-                    onChange={(v) => onChange({ ...data, [field.key]: v })}
-                    placeholder={placeholder}
-                  />
-                </div>
-                <VoiceInputButton
+              <>
+                <VoiceFieldControls
                   lang={lang}
+                  questionText={questionText}
                   consentGiven={voiceConsentGiven}
                   onConsentNeeded={onConsentNeeded}
                   onTranscript={(text) => onVoiceTranscript(field.key, text)}
                 />
-              </div>
+                {field.hint && <Hint>{patientText(field.hint, lang)}</Hint>}
+                <TextInput
+                  value={value}
+                  onChange={(v) => onChange({ ...data, [field.key]: v })}
+                  placeholder={placeholder}
+                />
+                {voiceTranscribedKeys[field.key] === "voice" ? (
+                  <p className="mt-1.5 text-[11px] italic text-white/50">
+                    {voiceLabel("transcribed", lang)}
+                  </p>
+                ) : null}
+              </>
             ) : null}
           </div>
         );
@@ -539,6 +533,7 @@ export function PatientAssessmentClient() {
                 onVoiceTranscript={(fieldKey, text) =>
                   handleVoiceTranscript(currentSection, fieldKey, text)
                 }
+                voiceTranscribedKeys={voiceMethods}
               />
             </div>
 

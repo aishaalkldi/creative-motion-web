@@ -2,15 +2,15 @@
 
 import { useEffect } from "react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { voiceLabel } from "@/app/components/patient/voice-ui-labels";
+import type { PatientLang } from "@/app/components/patient/LanguageToggle";
 
 type Props = {
-  lang: "ar" | "en";
+  lang: PatientLang;
   onTranscript: (text: string, method: "voice") => void;
   consentGiven: boolean;
   onConsentNeeded: () => void;
 };
-
-const showUnsupportedMic = process.env.NODE_ENV === "development";
 
 export function VoiceInputButton({
   lang,
@@ -30,18 +30,23 @@ export function VoiceInputButton({
   if (!mounted) {
     return (
       <span
-        className="mt-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] border border-white/10 bg-white/[0.03] text-base opacity-40"
+        className="inline-flex min-h-9 items-center rounded-[7px] border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white/30 opacity-60"
         aria-hidden
       >
-        🎤
+        🎤 {voiceLabel("recordAnswer", lang)}
       </span>
     );
   }
 
-  if (!isSupported && !showUnsupportedMic) return null;
+  if (!isSupported) {
+    return (
+      <p className="w-full basis-full text-[11px] italic text-white/40">
+        {voiceLabel("unsupported", lang)}
+      </p>
+    );
+  }
 
-  function handleClick() {
-    if (!isSupported) return
+  function handleRecordClick() {
     if (!consentGiven) {
       onConsentNeeded();
       return;
@@ -53,31 +58,37 @@ export function VoiceInputButton({
     }
   }
 
-  const disabled = !isSupported;
-
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={disabled}
-      title={
-        disabled
-          ? "Voice input is not supported in this browser."
-          : isListening
-            ? "Stop voice input"
-            : "Start voice input"
-      }
-      aria-label={isListening ? "Stop voice input" : "Start voice input"}
-      className={`mt-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] border text-base leading-none transition ${
-        disabled
-          ? "cursor-not-allowed border-white/10 bg-white/[0.03] text-white/30"
-          : isListening
-            ? "rasq-voice-listening border-[#1D9E75] bg-[#1D9E75]/10 text-[#1D9E75]"
-            : "border-white/30 bg-white/[0.08] text-white/90 hover:border-[#1D9E75] hover:text-[#1D9E75]"
-      }`}
-      style={{ borderWidth: "0.5px" }}
-    >
-      🎤
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={handleRecordClick}
+        aria-label={isListening ? "Stop voice input" : "Start voice input"}
+        className={`inline-flex min-h-9 items-center gap-1.5 rounded-[7px] border px-3 py-2 text-xs font-semibold transition ${
+          isListening
+            ? "rasq-voice-listening border-[#1D9E75] bg-[#1D9E75]/15 text-[#5DCAA5]"
+            : "border-[#1D9E75] bg-[#1D9E75]/10 text-[#5DCAA5] hover:bg-[#1D9E75]/20"
+        }`}
+        style={{ borderWidth: "0.5px" }}
+      >
+        🎤 {isListening ? voiceLabel("listening", lang) : voiceLabel("recordAnswer", lang)}
+      </button>
+      {isListening ? (
+        <button
+          type="button"
+          onClick={stopListening}
+          aria-label="Stop recording"
+          className="inline-flex min-h-9 items-center rounded-[7px] border border-white/20 bg-white/[0.04] px-3 py-2 text-xs font-medium text-white/70 transition hover:border-white/30 hover:text-white"
+          style={{ borderWidth: "0.5px" }}
+        >
+          {voiceLabel("stopRecording", lang)}
+        </button>
+      ) : null}
+      {isListening ? (
+        <p className="w-full basis-full text-[11px] text-[#5DCAA5]/90">
+          {voiceLabel("speakNow", lang)}
+        </p>
+      ) : null}
+    </>
   );
 }

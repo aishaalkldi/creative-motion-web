@@ -17,8 +17,8 @@ export function VoiceConsentBanner({ onAccept }: Props) {
     >
       <h3 className="text-sm font-semibold text-[#0A0F1A]">Voice input</h3>
       <p className="mt-2 text-xs leading-relaxed text-[#0A0F1A]">
-        Your voice is processed by your browser only. No audio is recorded or sent to any server.
-        Your answer will appear as text for you to review before submitting.
+        No audio is stored. Your speech is converted to text in your browser only — nothing is
+        sent to any server. Your answer will appear as text for you to review before submitting.
       </p>
       <button
         type="button"
