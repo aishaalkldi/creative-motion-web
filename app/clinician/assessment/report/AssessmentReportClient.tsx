@@ -919,6 +919,8 @@ export function AssessmentReportClient() {
               patientId={patientId}
               assessmentId={assessmentId || undefined}
               clinicianNotes={serverNotes}
+              submissionMeta={remoteSubmissionMeta}
+              assessmentLanguage={patientAnsweredInArabic ? "ar" : "en"}
             />
           </div>
         ) : null}
@@ -953,6 +955,7 @@ export function AssessmentReportClient() {
                 includedSections={remoteIncludedSections}
                 assessmentLanguage={patientAnsweredInArabic ? "ar" : "en"}
                 submissionMeta={remoteSubmissionMeta}
+                assessmentId={assessmentId || undefined}
               />
             </div>
           </section>

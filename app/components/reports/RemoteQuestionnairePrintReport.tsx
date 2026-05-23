@@ -34,9 +34,13 @@ function PrintMetricGrid({ metrics }: { metrics: { label: string; value: string 
 function PrintSubmittedAnswers({
   patientDraft,
   includedSections,
+  submissionMeta,
+  assessmentLanguage,
 }: {
   patientDraft: PatientAssessmentDraft;
   includedSections: PatientSectionId[];
+  submissionMeta?: Record<string, unknown> | null;
+  assessmentLanguage?: "en" | "ar" | null;
 }) {
   const blocks = buildFullClinicianReview(patientDraft, includedSections);
   if (blocks.length === 0) return null;
@@ -49,16 +53,37 @@ function PrintSubmittedAnswers({
             {block.sectionTitle}
           </h3>
           <dl className="divide-y divide-gray-200">
-            {block.entries.map((entry) => (
-              <div key={`${block.section}-${entry.label}`} className="px-3 py-2.5">
-                <dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-                  {entry.label}
-                </dt>
-                <dd className="mt-0.5 text-sm leading-relaxed text-gray-900 whitespace-pre-wrap">
-                  {entry.value}
-                </dd>
-              </div>
-            ))}
+            {block.entries.map((entry) => {
+              const fieldKey = entry.fieldKey;
+              const translation =
+                assessmentLanguage === "ar" &&
+                fieldKey &&
+                fieldKey !== "painScore" &&
+                typeof submissionMeta?.[`${fieldKey}_en`] === "string"
+                  ? (submissionMeta[`${fieldKey}_en`] as string).trim()
+                  : "";
+
+              return (
+                <div key={`${block.section}-${entry.label}`} className="px-3 py-2.5">
+                  <dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+                    {entry.label}
+                  </dt>
+                  <dd className="mt-0.5 text-sm leading-relaxed text-gray-900 whitespace-pre-wrap" dir="rtl">
+                    {entry.value}
+                  </dd>
+                  {translation ? (
+                    <div className="mt-2 rounded border-l-2 border-[#1D9E75] bg-[#F0FAF6] px-3 py-2">
+                      <p className="text-[10px] italic text-gray-500">
+                        AI-assisted translation — clinician review required
+                      </p>
+                      <p className="mt-1 text-sm leading-relaxed text-[#0D6B4F] whitespace-pre-wrap">
+                        {translation}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
           </dl>
         </div>
       ))}
@@ -72,6 +97,8 @@ type Props = {
   patientId: string;
   assessmentId?: string;
   clinicianNotes?: string | null;
+  submissionMeta?: Record<string, unknown> | null;
+  assessmentLanguage?: "en" | "ar" | null;
 };
 
 export function RemoteQuestionnairePrintReport({
@@ -80,6 +107,8 @@ export function RemoteQuestionnairePrintReport({
   patientId,
   assessmentId,
   clinicianNotes,
+  submissionMeta = null,
+  assessmentLanguage = null,
 }: Props) {
   const notes = clinicianNotes?.trim() ?? "";
   const hasSummaryContent =
@@ -121,6 +150,8 @@ export function RemoteQuestionnairePrintReport({
           <PrintSubmittedAnswers
             patientDraft={summary.patientDraft}
             includedSections={summary.includedSections}
+            submissionMeta={submissionMeta}
+            assessmentLanguage={assessmentLanguage}
           />
         </ReportPrintSection>
       ) : null}

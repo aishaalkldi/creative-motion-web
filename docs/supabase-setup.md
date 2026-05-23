@@ -21,5 +21,6 @@ Add to **Vercel → Project → Settings → Environment Variables**:
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `NEXT_PUBLIC_SUPPORT_CONTACT` | Yes (pilot) | Shown on the remote assessment consent panel (`/assessment/[token]`). Example: `contact@yourdomain.com` or a WhatsApp number. If unset, patients see **contact your clinic**. |
+| `OPENAI_API_KEY` | Yes (Arabic translation) | Required for clinician AI-assisted English translation on Arabic assessment reports. Add to `.env.local` for local testing and to Vercel Production. If unset, the report shows **Translation is not configured yet**. Never commit the key. |
 
-Do not commit real contact values to the repo.
+Do not commit real contact values or API keys to the repo.
