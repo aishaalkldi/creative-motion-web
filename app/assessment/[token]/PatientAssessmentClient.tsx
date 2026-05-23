@@ -16,7 +16,7 @@ import {
 import { LanguageToggle, type PatientLang } from "@/app/components/patient/LanguageToggle";
 import { VoiceConsentBanner } from "@/app/components/patient/VoiceConsentBanner";
 import { VoiceFieldControls } from "@/app/components/patient/VoiceFieldControls";
-import { voiceLabel } from "@/app/components/patient/voice-ui-labels";
+import { VOICE_SUBMIT_BLOCK_MESSAGE } from "@/app/components/patient/voice-ui-labels";
 import {
   PATIENT_SECTION_QUESTIONS,
   PATIENT_SECTION_TITLES,
@@ -128,7 +128,10 @@ function ConfigSectionForm({
   voiceConsentGiven,
   onConsentNeeded,
   onVoiceTranscript,
+  onVoiceTranscriptionFailed,
   voiceTranscribedKeys,
+  voiceReviewDismissed,
+  onFieldManualEdit,
 }: {
   section: PatientSectionId;
   data: Record<string, string>;
@@ -137,7 +140,10 @@ function ConfigSectionForm({
   voiceConsentGiven: boolean;
   onConsentNeeded: () => void;
   onVoiceTranscript: (fieldKey: string, text: string) => void;
+  onVoiceTranscriptionFailed: (fieldKey: string) => void;
   voiceTranscribedKeys: Record<string, "voice">;
+  voiceReviewDismissed: Record<string, boolean>;
+  onFieldManualEdit: (fieldKey: string, value: string) => void;
 }) {
   const fields = PATIENT_SECTION_QUESTIONS[section];
 
@@ -172,20 +178,27 @@ function ConfigSectionForm({
                 <VoiceFieldControls
                   lang={lang}
                   questionText={questionText}
+                  fieldValue={value}
                   consentGiven={voiceConsentGiven}
                   onConsentNeeded={onConsentNeeded}
                   onTranscript={(text) => onVoiceTranscript(field.key, text)}
+                  onTranscriptionFailed={() => onVoiceTranscriptionFailed(field.key)}
                 />
                 {field.hint && <Hint>{patientText(field.hint, lang)}</Hint>}
                 <TextArea
                   value={value}
-                  onChange={(v) => onChange({ ...data, [field.key]: v })}
+                  onChange={(v) => {
+                    onFieldManualEdit(field.key, v);
+                    onChange({ ...data, [field.key]: v });
+                  }}
                   placeholder={placeholder}
                   rows={field.rows ?? 3}
                 />
-                {voiceTranscribedKeys[field.key] === "voice" ? (
-                  <p className="mt-1.5 text-[11px] italic text-white/50">
-                    {voiceLabel("transcribed", lang)}
+                {voiceTranscribedKeys[field.key] === "voice" &&
+                value.trim() &&
+                !voiceReviewDismissed[field.key] ? (
+                  <p className="mt-1 text-[11px] italic text-[#9CA3AF]">
+                    Please review your answer above before continuing. Voice transcription may not be perfectly accurate.
                   </p>
                 ) : null}
               </>
@@ -194,19 +207,26 @@ function ConfigSectionForm({
                 <VoiceFieldControls
                   lang={lang}
                   questionText={questionText}
+                  fieldValue={value}
                   consentGiven={voiceConsentGiven}
                   onConsentNeeded={onConsentNeeded}
                   onTranscript={(text) => onVoiceTranscript(field.key, text)}
+                  onTranscriptionFailed={() => onVoiceTranscriptionFailed(field.key)}
                 />
                 {field.hint && <Hint>{patientText(field.hint, lang)}</Hint>}
                 <TextInput
                   value={value}
-                  onChange={(v) => onChange({ ...data, [field.key]: v })}
+                  onChange={(v) => {
+                    onFieldManualEdit(field.key, v);
+                    onChange({ ...data, [field.key]: v });
+                  }}
                   placeholder={placeholder}
                 />
-                {voiceTranscribedKeys[field.key] === "voice" ? (
-                  <p className="mt-1.5 text-[11px] italic text-white/50">
-                    {voiceLabel("transcribed", lang)}
+                {voiceTranscribedKeys[field.key] === "voice" &&
+                value.trim() &&
+                !voiceReviewDismissed[field.key] ? (
+                  <p className="mt-1 text-[11px] italic text-[#9CA3AF]">
+                    Please review your answer above before continuing. Voice transcription may not be perfectly accurate.
                   </p>
                 ) : null}
               </>
@@ -269,6 +289,67 @@ function emptyDraft(): PatientAssessmentDraft {
     gait: { walkingDescription: "", aids: "" },
     functional: { standingDuration: "", walkingDistance: "", stairsAbility: "", otherNotes: "" },
   };
+}
+
+const ALL_PATIENT_SECTIONS: PatientSectionId[] = [
+  "pain",
+  "rom",
+  "strength",
+  "balance",
+  "gait",
+  "functional",
+];
+
+function getFieldValueFromDraft(draft: PatientAssessmentDraft, fieldKey: string): string {
+  for (const section of ALL_PATIENT_SECTIONS) {
+    const block = draft[section];
+    if (block && typeof block === "object" && fieldKey in block) {
+      return String((block as Record<string, string>)[fieldKey] ?? "");
+    }
+  }
+  return "";
+}
+
+function setFieldValueInDraft(
+  draft: PatientAssessmentDraft,
+  fieldKey: string,
+  value: string,
+): PatientAssessmentDraft {
+  const next: PatientAssessmentDraft = { ...draft };
+  for (const section of ALL_PATIENT_SECTIONS) {
+    const block = next[section];
+    if (block && typeof block === "object" && fieldKey in block) {
+      (next as Record<string, Record<string, string>>)[section] = {
+        ...(block as Record<string, string>),
+        [fieldKey]: value,
+      };
+      return next;
+    }
+  }
+  return next;
+}
+
+function hasCorruptedVoiceText(text: string): boolean {
+  const nonSpace = text.replace(/\s/g, "");
+  if (nonSpace.length === 0) return false;
+  const badChars = [...nonSpace].filter(
+    (c) => c === "?" || c === "\uFFFD",
+  ).length;
+  return badChars / nonSpace.length > 0.5;
+}
+
+function sanitizeDraftForSubmit(draft: PatientAssessmentDraft): PatientAssessmentDraft {
+  let next = draft;
+  for (const section of ALL_PATIENT_SECTIONS) {
+    const block = next[section];
+    if (!block || typeof block !== "object") continue;
+    for (const [fieldKey, value] of Object.entries(block as Record<string, string>)) {
+      if (hasCorruptedVoiceText(String(value ?? ""))) {
+        next = setFieldValueInDraft(next, fieldKey, "");
+      }
+    }
+  }
+  return next;
 }
 
 function getSectionData(
@@ -336,6 +417,9 @@ export function PatientAssessmentClient() {
   const [voiceConsentGiven, setVoiceConsentGiven] = useState(false);
   const [showConsentBanner, setShowConsentBanner] = useState(false);
   const [voiceMethods, setVoiceMethods] = useState<Record<string, "voice">>({});
+  const [voiceReviewDismissed, setVoiceReviewDismissed] = useState<Record<string, boolean>>({});
+  const [voiceTranscriptionFailed, setVoiceTranscriptionFailed] = useState<Record<string, boolean>>({});
+  const [submitVoiceError, setSubmitVoiceError] = useState<string | null>(null);
 
   useEffect(() => {
     if (sessionStorage.getItem("rasq_voice_consent") === "1") {
@@ -391,10 +475,139 @@ export function PatientAssessmentClient() {
     autoSave(next, lang);
   }
 
+  function handleFieldManualEdit(fieldKey: string, value: string) {
+    setVoiceReviewDismissed((prev) => ({ ...prev, [fieldKey]: true }));
+    setVoiceTranscriptionFailed((prev) => {
+      if (!prev[fieldKey]) return prev;
+      const next = { ...prev };
+      delete next[fieldKey];
+      return next;
+    });
+    if (!hasCorruptedVoiceText(value)) {
+      setSubmitVoiceError(null);
+    }
+  }
+
+  function findBlockedVoiceFieldKeys(
+    currentDraft: PatientAssessmentDraft,
+    methods: Record<string, "voice">,
+    failed: Record<string, boolean>,
+  ): string[] {
+    const blocked = new Set<string>();
+
+    for (const [fieldKey, method] of Object.entries(methods)) {
+      if (method !== "voice") continue;
+      if (hasCorruptedVoiceText(getFieldValueFromDraft(currentDraft, fieldKey))) {
+        blocked.add(fieldKey);
+      }
+    }
+
+    for (const [fieldKey, isFailed] of Object.entries(failed)) {
+      if (!isFailed) continue;
+      const value = getFieldValueFromDraft(currentDraft, fieldKey);
+      if (!value.trim() || hasCorruptedVoiceText(value)) {
+        blocked.add(fieldKey);
+      }
+    }
+
+    return [...blocked];
+  }
+
+  function unblockCorruptedVoiceFields(blockedKeys: string[]) {
+    if (blockedKeys.length === 0) return;
+
+    let nextDraft = draft;
+    let draftChanged = false;
+    for (const fieldKey of blockedKeys) {
+      const value = getFieldValueFromDraft(nextDraft, fieldKey);
+      if (hasCorruptedVoiceText(value)) {
+        nextDraft = setFieldValueInDraft(nextDraft, fieldKey, "");
+        draftChanged = true;
+      }
+    }
+    if (draftChanged) {
+      setDraft(nextDraft);
+      autoSave(nextDraft, lang);
+    }
+
+    setVoiceMethods((prev) => {
+      const next = { ...prev };
+      for (const fieldKey of blockedKeys) {
+        delete next[fieldKey];
+      }
+      return next;
+    });
+
+    setVoiceTranscriptionFailed((prev) => {
+      const next = { ...prev };
+      for (const fieldKey of blockedKeys) {
+        next[fieldKey] = true;
+      }
+      return next;
+    });
+
+    for (const fieldKey of blockedKeys) {
+      setVoiceReviewDismissed((prev) => ({ ...prev, [fieldKey]: true }));
+    }
+  }
+
+  function blockIfCorruptedVoiceFields(): boolean {
+    const blockedKeys = findBlockedVoiceFieldKeys(
+      draft,
+      voiceMethods,
+      voiceTranscriptionFailed,
+    );
+    if (blockedKeys.length === 0) return false;
+    unblockCorruptedVoiceFields(blockedKeys);
+    setSubmitVoiceError(VOICE_SUBMIT_BLOCK_MESSAGE);
+    return true;
+  }
+
+  function dismissSectionReviewNotices(section: PatientSectionId) {
+    const fields = PATIENT_SECTION_QUESTIONS[section];
+    setVoiceReviewDismissed((prev) => {
+      const next = { ...prev };
+      for (const field of fields) {
+        next[field.key] = true;
+      }
+      return next;
+    });
+  }
+
+  function handleVoiceTranscriptionFailed(fieldKey: string) {
+    setVoiceTranscriptionFailed((prev) => ({ ...prev, [fieldKey]: true }));
+    setVoiceMethods((prev) => {
+      if (!(fieldKey in prev)) return prev;
+      const next = { ...prev };
+      delete next[fieldKey];
+      return next;
+    });
+    setVoiceReviewDismissed((prev) => ({ ...prev, [fieldKey]: true }));
+
+    const value = getFieldValueFromDraft(draft, fieldKey);
+    if (hasCorruptedVoiceText(value)) {
+      const nextDraft = setFieldValueInDraft(draft, fieldKey, "");
+      setDraft(nextDraft);
+      autoSave(nextDraft, lang);
+    }
+  }
+
   function handleVoiceTranscript(section: PatientSectionId, fieldKey: string, text: string) {
+    if (hasCorruptedVoiceText(text)) {
+      handleVoiceTranscriptionFailed(fieldKey);
+      return;
+    }
     const sectionData = { ...getSectionData(section, draft), [fieldKey]: text };
     updateSection(section, sectionData);
     setVoiceMethods((prev) => ({ ...prev, [fieldKey]: "voice" }));
+    setVoiceReviewDismissed((prev) => ({ ...prev, [fieldKey]: false }));
+    setVoiceTranscriptionFailed((prev) => {
+      if (!prev[fieldKey]) return prev;
+      const next = { ...prev };
+      delete next[fieldKey];
+      return next;
+    });
+    setSubmitVoiceError(null);
   }
 
   function handleVoiceConsentAccept() {
@@ -403,20 +616,36 @@ export function PatientAssessmentClient() {
   }
 
   function buildSubmissionPayload(): Record<string, unknown> {
-    const methodFields = Object.fromEntries(
-      Object.entries(voiceMethods).map(([fieldKey, method]) => [`${fieldKey}_method`, method]),
-    );
+    const sanitizedDraft = sanitizeDraftForSubmit(draft);
+    const methodFields: Record<string, string> = {};
+
+    for (const [fieldKey, method] of Object.entries(voiceMethods)) {
+      if (method !== "voice") continue;
+      if (voiceTranscriptionFailed[fieldKey]) continue;
+      const value = getFieldValueFromDraft(sanitizedDraft, fieldKey);
+      if (!value.trim() || hasCorruptedVoiceText(value)) continue;
+      methodFields[`${fieldKey}_method`] = method;
+    }
 
     return {
-      ...draft,
+      ...sanitizedDraft,
       assessmentLanguage: lang,
       patientAudioConsent: voiceConsentGiven,
       ...methodFields,
     };
   }
 
+  function handleGoToReview() {
+    if (currentSection) dismissSectionReviewNotices(currentSection);
+    blockIfCorruptedVoiceFields();
+    setStage("review");
+  }
+
   async function handleSubmit() {
     if (!req) return;
+    if (blockIfCorruptedVoiceFields()) return;
+
+    setSubmitVoiceError(null);
     setSubmitting(true);
     setStage("submitting");
     try {
@@ -533,7 +762,10 @@ export function PatientAssessmentClient() {
                 onVoiceTranscript={(fieldKey, text) =>
                   handleVoiceTranscript(currentSection, fieldKey, text)
                 }
+                onVoiceTranscriptionFailed={handleVoiceTranscriptionFailed}
                 voiceTranscribedKeys={voiceMethods}
+                voiceReviewDismissed={voiceReviewDismissed}
+                onFieldManualEdit={handleFieldManualEdit}
               />
             </div>
 
@@ -541,7 +773,10 @@ export function PatientAssessmentClient() {
               {sectionIdx > 0 && (
                 <button
                   type="button"
-                  onClick={() => setSectionIdx((i) => i - 1)}
+                  onClick={() => {
+                    if (currentSection) dismissSectionReviewNotices(currentSection);
+                    setSectionIdx((i) => i - 1);
+                  }}
                   className="flex-1 rounded-2xl border border-white/12 bg-white/5 py-3.5 text-sm font-semibold text-white transition hover:bg-white/10"
                 >
                   {patientText(PATIENT_UI.previous, lang)}
@@ -550,7 +785,10 @@ export function PatientAssessmentClient() {
               {sectionIdx < totalSections - 1 ? (
                 <button
                   type="button"
-                  onClick={() => setSectionIdx((i) => i + 1)}
+                  onClick={() => {
+                    if (currentSection) dismissSectionReviewNotices(currentSection);
+                    setSectionIdx((i) => i + 1);
+                  }}
                   className="flex-1 rounded-2xl bg-cyan-400 py-3.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-300"
                 >
                   {patientText(PATIENT_UI.nextSection, lang)}
@@ -558,7 +796,7 @@ export function PatientAssessmentClient() {
               ) : (
                 <button
                   type="button"
-                  onClick={() => setStage("review")}
+                  onClick={handleGoToReview}
                   className="flex-1 rounded-2xl bg-cyan-400 py-3.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-300"
                 >
                   {patientText(PATIENT_UI.reviewAnswers, lang)}
@@ -599,6 +837,9 @@ export function PatientAssessmentClient() {
             ))}
 
             <div className="pt-2">
+              {submitVoiceError ? (
+                <p className="mb-3 text-[11px] italic text-[#D97706]">{submitVoiceError}</p>
+              ) : null}
               <button
                 type="button"
                 disabled={submitting}

@@ -2,30 +2,54 @@
 
 import { useEffect } from "react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
-import { voiceLabel } from "@/app/components/patient/voice-ui-labels";
+import { voiceLabel, VOICE_SUBMIT_BLOCK_MESSAGE } from "@/app/components/patient/voice-ui-labels";
 import type { PatientLang } from "@/app/components/patient/LanguageToggle";
 
 type Props = {
   lang: PatientLang;
+  fieldValue?: string;
   onTranscript: (text: string, method: "voice") => void;
+  onTranscriptionFailed?: () => void;
   consentGiven: boolean;
   onConsentNeeded: () => void;
 };
 
 export function VoiceInputButton({
   lang,
+  fieldValue,
   onTranscript,
+  onTranscriptionFailed,
   consentGiven,
   onConsentNeeded,
 }: Props) {
-  const { mounted, isSupported, isListening, transcript, startListening, stopListening } =
-    useSpeechRecognition(lang);
+  const {
+    mounted,
+    isSupported,
+    isListening,
+    transcript,
+    transcriptError,
+    startListening,
+    stopListening,
+    clearTranscript,
+  } = useSpeechRecognition(lang);
 
   useEffect(() => {
     if (transcript.trim()) {
       onTranscript(transcript, "voice");
     }
   }, [transcript, onTranscript]);
+
+  useEffect(() => {
+    if (transcriptError !== "voice_corrupted") return;
+    onTranscriptionFailed?.();
+  }, [transcriptError, onTranscriptionFailed]);
+
+  useEffect(() => {
+    if (fieldValue === undefined) return;
+    if (fieldValue === transcript) return;
+    if (transcript.trim() && !fieldValue.trim()) return;
+    clearTranscript();
+  }, [fieldValue, transcript, clearTranscript]);
 
   if (!mounted) {
     return (
@@ -87,6 +111,21 @@ export function VoiceInputButton({
       {isListening ? (
         <p className="w-full basis-full text-[11px] text-[#5DCAA5]/90">
           {voiceLabel("speakNow", lang)}
+        </p>
+      ) : null}
+      {transcriptError === "voice_corrupted" ? (
+        <p className="w-full basis-full text-[11px] italic text-[#D97706]">
+          {VOICE_SUBMIT_BLOCK_MESSAGE}
+        </p>
+      ) : null}
+      {transcriptError === "permission_denied" ? (
+        <p className="w-full basis-full text-[11px] italic text-[#D97706]">
+          Microphone access was denied. Please allow microphone access in your browser settings and try again.
+        </p>
+      ) : null}
+      {transcriptError === "no_speech" ? (
+        <p className="w-full basis-full text-[11px] italic text-[#9CA3AF]">
+          No speech detected. Please try again.
         </p>
       ) : null}
     </>

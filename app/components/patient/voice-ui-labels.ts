@@ -1,5 +1,8 @@
 import type { PatientLang } from "@/app/components/patient/LanguageToggle";
 
+export const VOICE_SUBMIT_BLOCK_MESSAGE =
+  "Voice transcription failed. Please type your answer manually before submitting.";
+
 export const VOICE_UI_LABELS = {
   listen: { en: "Listen", ar: "استمع" },
   recordAnswer: { en: "Record answer", ar: "سجّل الإجابة" },

@@ -8,18 +8,22 @@ import type { PatientLang } from "@/app/components/patient/LanguageToggle";
 type Props = {
   lang: PatientLang;
   questionText: string;
+  fieldValue?: string;
   consentGiven: boolean;
   onConsentNeeded: () => void;
   onTranscript: (text: string) => void;
+  onTranscriptionFailed?: () => void;
   showRecord?: boolean;
 };
 
 export function VoiceFieldControls({
   lang,
   questionText,
+  fieldValue,
   consentGiven,
   onConsentNeeded,
   onTranscript,
+  onTranscriptionFailed,
   showRecord = true,
 }: Props) {
   const { mounted, isSupported, speak } = useSpeechSynthesis();
@@ -41,9 +45,11 @@ export function VoiceFieldControls({
       {showRecord ? (
         <VoiceInputButton
           lang={lang}
+          fieldValue={fieldValue}
           consentGiven={consentGiven}
           onConsentNeeded={onConsentNeeded}
           onTranscript={onTranscript}
+          onTranscriptionFailed={onTranscriptionFailed}
         />
       ) : null}
     </div>
