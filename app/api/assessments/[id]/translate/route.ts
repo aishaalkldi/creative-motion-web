@@ -5,6 +5,8 @@ import { createServerClient } from "@supabase/ssr";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { validatePatientOwnership } from "../../../../lib/validate-patient-ownership";
+import { classifyOpenAiError } from "@/app/lib/openai/classify-openai-error";
+import { getOpenAiKeyConfig } from "@/app/lib/openai/server-env";
 
 async function buildClients() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -49,9 +51,16 @@ export async function POST(
     return NextResponse.json({ error: "Assessment ID is required." }, { status: 400 });
   }
 
-  if (!process.env.OPENAI_API_KEY) {
+  const keyConfig = getOpenAiKeyConfig();
+  if (!keyConfig.ok) {
     return NextResponse.json(
-      { error: "Translation is not configured yet", code: "not_configured" },
+      {
+        error:
+          keyConfig.code === "invalid_key"
+            ? "Translation service authentication failed."
+            : "Translation is not configured yet",
+        code: keyConfig.code,
+      },
       { status: 503 },
     );
   }
@@ -130,7 +139,7 @@ export async function POST(
     });
   }
 
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  const openai = new OpenAI({ apiKey: keyConfig.apiKey });
 
   let translation: string;
   try {
@@ -165,13 +174,11 @@ Output format: translated text only, one paragraph.`,
     });
     translation = response.choices[0]?.message?.content?.trim() ?? "";
   } catch (error) {
-    console.error(
-      "Translation error:",
-      typeof error === "object" ? "OpenAI API error" : "Unknown error",
-    );
+    const classified = classifyOpenAiError(error);
+    console.error("[POST /api/assessments/[id]/translate] OpenAI error:", classified.code);
     return NextResponse.json(
-      { error: "Translation service unavailable" },
-      { status: 503 },
+      { error: classified.message, code: classified.code },
+      { status: classified.httpStatus },
     );
   }
 
