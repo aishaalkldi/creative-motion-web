@@ -9,6 +9,8 @@ import type { NextRequest } from "next/server";
 const PUBLIC_PREFIXES = [
   "/login",
   "/signup",
+  "/reset-password",
+  "/update-password",
   // All FastAPI routes — FastAPI handles its own JWT auth (Bearer token).
   // Proxy must not intercept these or it returns HTML instead of JSON.
   "/api/v1/",

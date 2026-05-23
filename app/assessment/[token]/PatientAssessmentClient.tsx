@@ -8,8 +8,6 @@ import {
   updateRemoteAssessmentDraft,
   submitRemoteAssessment,
   isExpired,
-  daysUntilExpiry,
-  ASSESSMENT_TYPE_LABELS,
   type RemoteAssessmentRequest,
   type PatientAssessmentDraft,
   type PatientSectionId,
@@ -31,7 +29,45 @@ const arabicFont = IBM_Plex_Sans_Arabic({
   display: "swap",
 });
 
-type Stage = "consent" | "section" | "review" | "submitting";
+type Stage = "section" | "review" | "submitting";
+
+const SUPPORT_CONTACT =
+  process.env.NEXT_PUBLIC_SUPPORT_CONTACT?.trim() || "contact your clinic";
+
+function PilotConsentPanel({ onAccept }: { onAccept: () => void }) {
+  return (
+    <div
+      className="mx-auto my-10 max-w-[480px] rounded-[10px] border border-[#E2E8E5] bg-white p-6"
+      style={{ borderWidth: "0.5px" }}
+    >
+      <h2
+        className="text-base font-medium text-[#0A0F1A]"
+        style={{ fontFamily: "var(--rasq-font-display, sans-serif)" }}
+      >
+        Before you begin
+      </h2>
+      <div className="mt-4 space-y-4 text-xs leading-6 text-[#0A0F1A]">
+        <p>
+          This assessment is part of a rehabilitation pilot program by RASQ. Your answers will be shared with your assigned clinician only.
+        </p>
+        <p>
+          This platform is a clinical decision support tool. It does not replace your therapist&apos;s judgment. Your therapist will review all information before making any clinical decisions.
+        </p>
+        <p>
+          If you feel unwell or experience sharp pain at any time, stop and contact your therapist directly.
+        </p>
+        <p>For questions or support: {SUPPORT_CONTACT}</p>
+      </div>
+      <button
+        type="button"
+        onClick={onAccept}
+        className="mt-5 w-full rounded-[7px] bg-[#1D9E75] py-3.5 text-sm font-bold text-white transition hover:bg-[#179165]"
+      >
+        I understand — begin assessment
+      </button>
+    </div>
+  );
+}
 
 function PainScale({
   value,
@@ -239,9 +275,9 @@ export function PatientAssessmentClient() {
 
   const [req, setReq] = useState<RemoteAssessmentRequest | null>(null);
   const [tokenState, setTokenState] = useState<"loading" | "valid" | "invalid">("loading");
-  const [stage, setStage] = useState<Stage>("consent");
+  const [stage, setStage] = useState<Stage>("section");
   const [sectionIdx, setSectionIdx] = useState(0);
-  const [consented, setConsented] = useState(false);
+  const [consentGiven, setConsentGiven] = useState(false);
   const [draft, setDraft] = useState<PatientAssessmentDraft>(emptyDraft());
   const [lang, setLang] = useState<PatientLang>("en");
   const [submitting, setSubmitting] = useState(false);
@@ -335,6 +371,17 @@ export function PatientAssessmentClient() {
     );
   }
 
+  if (!consentGiven) {
+    return (
+      <div className="min-h-screen bg-[#071a2f] text-white">
+        <header className="flex h-14 items-center justify-center border-b border-white/8 bg-[#071a2f]/90 px-5 backdrop-blur-md">
+          <span className="text-sm font-bold tracking-[-0.03em] text-cyan-300">RASQ</span>
+        </header>
+        <PilotConsentPanel onAccept={() => setConsentGiven(true)} />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#071a2f] text-white">
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-white/8 bg-[#071a2f]/90 px-5 backdrop-blur-md">
@@ -367,84 +414,6 @@ export function PatientAssessmentClient() {
           </p>
           <LanguageToggle current={lang} onChange={handleLangChange} />
         </div>
-
-        {stage === "consent" && (
-          <div className={`space-y-7 ${fontClass}`} dir={formDir} lang={formLang}>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-widest text-cyan-300/70">
-                {ASSESSMENT_TYPE_LABELS[req.assessmentType]}
-              </p>
-              <h1 className="mt-2 text-2xl font-bold text-white">{patientText(PATIENT_UI.yourRemoteAssessment, lang)}</h1>
-              <p className="mt-2 text-sm leading-6 text-white/55">{patientText(PATIENT_UI.welcomeBody, lang)}</p>
-            </div>
-
-            <div className="flex items-center gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
-              <p className="text-xs text-white/50">
-                {patientText(PATIENT_UI.linkExpires, lang)}{" "}
-                <span className="font-semibold text-white/80">
-                  {daysUntilExpiry(req)} {patientText(PATIENT_UI.days, lang)}
-                </span>
-                . {patientText(PATIENT_UI.autoSaveProgress, lang)}
-              </p>
-            </div>
-
-            <div>
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-white/50">
-                {patientText(PATIENT_UI.assessmentCovers, lang)}
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                {req.includedSections.map((s, i) => (
-                  <div
-                    key={s}
-                    className="flex items-center gap-2.5 rounded-2xl border border-white/8 bg-white/[0.03] px-3.5 py-2.5"
-                  >
-                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-cyan-400/15 text-[10px] font-bold text-cyan-300">
-                      {i + 1}
-                    </span>
-                    <span className="text-xs font-medium text-white/80">
-                      {patientText(PATIENT_SECTION_TITLES[s], lang)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div
-              className={`rounded-2xl border p-4 transition ${
-                consented ? "border-cyan-300/25 bg-cyan-400/[0.06]" : "border-white/10 bg-white/[0.03]"
-              }`}
-            >
-              <label className="flex cursor-pointer items-start gap-3">
-                <span
-                  onClick={() => setConsented((v) => !v)}
-                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition ${
-                    consented ? "border-cyan-400 bg-cyan-400" : "border-white/25 bg-transparent"
-                  }`}
-                >
-                  {consented && (
-                    <svg className="h-3 w-3 text-slate-950" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                    </svg>
-                  )}
-                </span>
-                <span className="cursor-pointer text-sm leading-5 text-white/75" onClick={() => setConsented((v) => !v)}>
-                  {patientText(PATIENT_UI.consentLabel, lang)}
-                </span>
-              </label>
-            </div>
-
-            <p className="text-xs leading-5 text-white/35">{patientText(PATIENT_UI.disclaimer, lang)}</p>
-
-            <button
-              type="button"
-              disabled={!consented}
-              onClick={() => setStage("section")}
-              className="w-full rounded-2xl bg-cyan-400 py-4 text-sm font-bold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {patientText(PATIENT_UI.beginAssessment, lang)}
-            </button>
-          </div>
-        )}
 
         {stage === "section" && currentSection && (
           <div className="space-y-7">

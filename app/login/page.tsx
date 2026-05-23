@@ -200,6 +200,16 @@ function LoginForm() {
                 autoComplete="current-password"
                 className="w-full rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-[#1D9E75]/40 focus:bg-[#0d1c14]"
               />
+              {SUPABASE_CONFIGURED && (
+                <div className="mt-1.5 text-right">
+                  <Link
+                    href="/reset-password"
+                    className="text-[11px] text-[#6B7280] transition hover:text-[#9CA3AF]"
+                  >
+                    Forgot your password?
+                  </Link>
+                </div>
+              )}
             </div>
 
             {error && (
