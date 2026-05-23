@@ -14,6 +14,9 @@ import {
   type AssessmentLanguage,
 } from "@/app/lib/api/remote-assessments";
 import { LanguageToggle, type PatientLang } from "@/app/components/patient/LanguageToggle";
+import { VoiceConsentBanner } from "@/app/components/patient/VoiceConsentBanner";
+import { VoiceInputButton } from "@/app/components/patient/VoiceInputButton";
+import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import {
   PATIENT_SECTION_QUESTIONS,
   PATIENT_SECTION_TITLES,
@@ -113,12 +116,110 @@ function PainScale({
   );
 }
 
-function Label({ children }: { children: React.ReactNode }) {
-  return <p className="mb-2 text-sm font-semibold text-white/90">{children}</p>;
+function QuestionLabel({
+  children,
+  speakText,
+  lang,
+}: {
+  children: React.ReactNode;
+  speakText?: string;
+  lang: PatientLang;
+}) {
+  const { isSupported, speak } = useSpeechSynthesis();
+
+  return (
+    <div className="mb-2 flex items-start gap-2">
+      <p className="flex-1 text-sm font-semibold text-white/90">{children}</p>
+      {isSupported && speakText ? (
+        <button
+          type="button"
+          onClick={() => speak(speakText, lang)}
+          aria-label="Listen to question"
+          className="flex h-6 w-6 shrink-0 items-center justify-center border-none bg-transparent text-sm text-[#9CA3AF] transition hover:text-[#1D9E75]"
+        >
+          🔊
+        </button>
+      ) : null}
+    </div>
+  );
 }
 
-function Hint({ children }: { children: React.ReactNode }) {
-  return <p className="mb-2 text-xs text-white/45">{children}</p>;
+function ConfigSectionForm({
+  section,
+  data,
+  onChange,
+  lang,
+  voiceConsentGiven,
+  onConsentNeeded,
+  onVoiceTranscript,
+}: {
+  section: PatientSectionId;
+  data: Record<string, string>;
+  onChange: (next: Record<string, string>) => void;
+  lang: PatientLang;
+  voiceConsentGiven: boolean;
+  onConsentNeeded: () => void;
+  onVoiceTranscript: (fieldKey: string, text: string) => void;
+}) {
+  const fields = PATIENT_SECTION_QUESTIONS[section];
+
+  return (
+    <div className="space-y-5">
+      {fields.map((field: PatientQuestionField) => {
+        const placeholder =
+          field.placeholder
+            ? patientText(field.placeholder, lang)
+            : undefined;
+        const value = data[field.key] ?? "";
+        const questionText = patientText(field.text, lang);
+
+        return (
+          <div key={field.key}>
+            <QuestionLabel speakText={questionText} lang={lang}>
+              {questionText}
+            </QuestionLabel>
+            {field.hint && <Hint>{patientText(field.hint, lang)}</Hint>}
+            {field.kind === "painScale" ? (
+              <PainScale value={value} onChange={(v) => onChange({ ...data, [field.key]: v })} lang={lang} />
+            ) : field.kind === "textarea" ? (
+              <div className="flex items-start gap-2">
+                <div className="flex-1">
+                  <TextArea
+                    value={value}
+                    onChange={(v) => onChange({ ...data, [field.key]: v })}
+                    placeholder={placeholder}
+                    rows={field.rows ?? 3}
+                  />
+                </div>
+                <VoiceInputButton
+                  lang={lang}
+                  consentGiven={voiceConsentGiven}
+                  onConsentNeeded={onConsentNeeded}
+                  onTranscript={(text) => onVoiceTranscript(field.key, text)}
+                />
+              </div>
+            ) : field.kind === "text" ? (
+              <div className="flex items-start gap-2">
+                <div className="flex-1">
+                  <TextInput
+                    value={value}
+                    onChange={(v) => onChange({ ...data, [field.key]: v })}
+                    placeholder={placeholder}
+                  />
+                </div>
+                <VoiceInputButton
+                  lang={lang}
+                  consentGiven={voiceConsentGiven}
+                  onConsentNeeded={onConsentNeeded}
+                  onTranscript={(text) => onVoiceTranscript(field.key, text)}
+                />
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function TextArea({
@@ -182,53 +283,8 @@ function getSectionData(
   return (block ?? {}) as Record<string, string>;
 }
 
-function ConfigSectionForm({
-  section,
-  data,
-  onChange,
-  lang,
-}: {
-  section: PatientSectionId;
-  data: Record<string, string>;
-  onChange: (next: Record<string, string>) => void;
-  lang: PatientLang;
-}) {
-  const fields = PATIENT_SECTION_QUESTIONS[section];
-
-  return (
-    <div className="space-y-5">
-      {fields.map((field: PatientQuestionField) => {
-        const placeholder =
-          field.placeholder
-            ? patientText(field.placeholder, lang)
-            : undefined;
-        const value = data[field.key] ?? "";
-
-        return (
-          <div key={field.key}>
-            <Label>{patientText(field.text, lang)}</Label>
-            {field.hint && <Hint>{patientText(field.hint, lang)}</Hint>}
-            {field.kind === "painScale" ? (
-              <PainScale value={value} onChange={(v) => onChange({ ...data, [field.key]: v })} lang={lang} />
-            ) : field.kind === "textarea" ? (
-              <TextArea
-                value={value}
-                onChange={(v) => onChange({ ...data, [field.key]: v })}
-                placeholder={placeholder}
-                rows={field.rows ?? 3}
-              />
-            ) : (
-              <TextInput
-                value={value}
-                onChange={(v) => onChange({ ...data, [field.key]: v })}
-                placeholder={placeholder}
-              />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
+function Hint({ children }: { children: React.ReactNode }) {
+  return <p className="mb-2 text-xs text-white/45">{children}</p>;
 }
 
 function ReviewSection({
@@ -281,6 +337,13 @@ export function PatientAssessmentClient() {
   const [draft, setDraft] = useState<PatientAssessmentDraft>(emptyDraft());
   const [lang, setLang] = useState<PatientLang>("en");
   const [submitting, setSubmitting] = useState(false);
+  const [voiceConsentGiven, setVoiceConsentGiven] = useState(
+    () =>
+      typeof window !== "undefined" &&
+      sessionStorage.getItem("rasq_voice_consent") === "1",
+  );
+  const [showConsentBanner, setShowConsentBanner] = useState(false);
+  const [voiceMethods, setVoiceMethods] = useState<Record<string, "voice">>({});
 
   useEffect(() => {
     if (!token) {
@@ -330,12 +393,36 @@ export function PatientAssessmentClient() {
     autoSave(next, lang);
   }
 
+  function handleVoiceTranscript(section: PatientSectionId, fieldKey: string, text: string) {
+    const sectionData = { ...getSectionData(section, draft), [fieldKey]: text };
+    updateSection(section, sectionData);
+    setVoiceMethods((prev) => ({ ...prev, [fieldKey]: "voice" }));
+  }
+
+  function handleVoiceConsentAccept() {
+    setVoiceConsentGiven(true);
+    setShowConsentBanner(false);
+  }
+
+  function buildSubmissionPayload(): Record<string, unknown> {
+    const methodFields = Object.fromEntries(
+      Object.entries(voiceMethods).map(([fieldKey, method]) => [`${fieldKey}_method`, method]),
+    );
+
+    return {
+      ...draft,
+      assessmentLanguage: lang,
+      patientAudioConsent: voiceConsentGiven,
+      ...methodFields,
+    };
+  }
+
   async function handleSubmit() {
     if (!req) return;
     setSubmitting(true);
     setStage("submitting");
     try {
-      await submitRemoteAssessment(token, draft, lang as AssessmentLanguage);
+      await submitRemoteAssessment(token, buildSubmissionPayload(), lang as AssessmentLanguage);
       router.push(`/assessment/${token}/complete`);
     } catch {
       setSubmitting(false);
@@ -433,11 +520,21 @@ export function PatientAssessmentClient() {
               dir={formDir}
               lang={formLang}
             >
+              {showConsentBanner && (
+                <div className="mb-5">
+                  <VoiceConsentBanner onAccept={handleVoiceConsentAccept} />
+                </div>
+              )}
               <ConfigSectionForm
                 section={currentSection}
                 data={getSectionData(currentSection, draft)}
                 onChange={(d) => updateSection(currentSection, d)}
                 lang={lang}
+                voiceConsentGiven={voiceConsentGiven}
+                onConsentNeeded={() => setShowConsentBanner(true)}
+                onVoiceTranscript={(fieldKey, text) =>
+                  handleVoiceTranscript(currentSection, fieldKey, text)
+                }
               />
             </div>
 

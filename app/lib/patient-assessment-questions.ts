@@ -399,7 +399,7 @@ const FIELD_LABELS: Record<FieldKey, LocalizedText> = {
   otherNotes:            { en: "Additional notes",       ar: "ملاحظات إضافية" },
 };
 
-export type PatientReviewEntry = { label: string; value: string };
+export type PatientReviewEntry = { label: string; value: string; fieldKey?: FieldKey };
 
 function push(
   entries: PatientReviewEntry[],
@@ -412,6 +412,7 @@ function push(
   entries.push({
     label: clinicianText(FIELD_LABELS[key]),
     value: format ? format(trimmed) : trimmed,
+    fieldKey: key,
   });
 }
 

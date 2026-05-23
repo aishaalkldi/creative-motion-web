@@ -645,6 +645,7 @@ export function AssessmentReportClient() {
   const [draft, setDraft] = useState<GeneralAssessmentDraft | null>(null);
   const [structuredData, setStructuredData] = useState<AssessmentData | null>(null);
   const [remoteQuestionnaireDraft, setRemoteQuestionnaireDraft] = useState<PatientAssessmentDraft | null>(null);
+  const [remoteSubmissionMeta, setRemoteSubmissionMeta] = useState<Record<string, unknown> | null>(null);
   const [remoteIncludedSections, setRemoteIncludedSections] = useState<PatientSectionId[]>([]);
   const [reportKind, setReportKind] = useState<"general_msk" | "structured" | "remote_questionnaire" | null>(null);
   const [serverBacked, setServerBacked] = useState(false);
@@ -670,6 +671,7 @@ export function AssessmentReportClient() {
       setLoadError("");
       setStructuredData(null);
       setRemoteQuestionnaireDraft(null);
+      setRemoteSubmissionMeta(null);
       setRemoteIncludedSections([]);
       setReportKind(null);
       setServerBacked(false);
@@ -703,6 +705,11 @@ export function AssessmentReportClient() {
             const remoteDraft = extractRemoteQuestionnaireDraft(detail.structured_data, detail.type);
             if (remoteDraft) {
               setRemoteQuestionnaireDraft(remoteDraft);
+              setRemoteSubmissionMeta(
+                typeof detail.structured_data === "object" && detail.structured_data !== null
+                  ? (detail.structured_data as Record<string, unknown>)
+                  : null,
+              );
               setRemoteIncludedSections(inferIncludedSections(remoteDraft));
               setReportKind("remote_questionnaire");
             } else {
@@ -945,6 +952,7 @@ export function AssessmentReportClient() {
                 patientDraft={remoteQuestionnaireDraft}
                 includedSections={remoteIncludedSections}
                 assessmentLanguage={patientAnsweredInArabic ? "ar" : "en"}
+                submissionMeta={remoteSubmissionMeta}
               />
             </div>
           </section>

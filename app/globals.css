@@ -308,3 +308,13 @@ body {
   background-color: #F4F6F5;
   color: #0f1c2e;
 }
+
+/* ── Voice input: listening pulse ── */
+.rasq-voice-listening {
+  animation: rasq-voice-pulse 1s ease-in-out infinite;
+}
+
+@keyframes rasq-voice-pulse {
+  0%, 100% { border-color: #1D9E75; }
+  50% { border-color: #9CA3AF; }
+}

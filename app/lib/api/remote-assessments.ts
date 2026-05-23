@@ -377,13 +377,13 @@ export function updateRemoteAssessmentDraft(
 
 export async function submitRemoteAssessment(
   id: string,
-  patientDraft: PatientAssessmentDraft,
+  structuredData: Record<string, unknown>,
   assessmentLanguage: AssessmentLanguage = "en",
 ): Promise<void> {
   const res = await fetch(`/api/remote-assessments/${encodeURIComponent(id)}/submit`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ structuredData: patientDraft }),
+    body: JSON.stringify({ structuredData }),
   });
 
   if (!res.ok) {
@@ -403,6 +403,7 @@ export async function submitRemoteAssessment(
     expiresAt: new Date().toISOString(),
   };
 
+  const patientDraft = structuredData as PatientAssessmentDraft;
   const submitted: RemoteAssessmentRequest = {
     ...base,
     status: "submitted",

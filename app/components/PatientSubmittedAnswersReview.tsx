@@ -14,8 +14,17 @@ type Props = {
   patientDraft?: PatientAssessmentDraft;
   includedSections: PatientSectionId[];
   assessmentLanguage?: AssessmentLanguage | null;
+  submissionMeta?: Record<string, unknown> | null;
   compact?: boolean;
 };
+
+function isVoiceAnswered(
+  submissionMeta: Record<string, unknown> | null | undefined,
+  fieldKey: string | undefined,
+): boolean {
+  if (!fieldKey || !submissionMeta) return false;
+  return submissionMeta[`${fieldKey}_method`] === "voice";
+}
 
 /**
  * English-only clinician view of patient-submitted assessment answers.
@@ -24,6 +33,7 @@ export function PatientSubmittedAnswersReview({
   patientDraft,
   includedSections,
   assessmentLanguage = null,
+  submissionMeta = null,
   compact = false,
 }: Props) {
   const blocks = buildFullClinicianReview(patientDraft, includedSections);
@@ -58,19 +68,36 @@ export function PatientSubmittedAnswersReview({
             </p>
           </div>
           <dl className="divide-y divide-[#1E2D42]">
-            {block.entries.map((entry) => (
-              <div key={`${block.section}-${entry.label}`} className="px-3 py-2.5">
-                <dt className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
-                  {entry.label}
-                </dt>
-                <dd
-                  dir={valueTextDirection(entry.value)}
-                  className="mt-0.5 text-sm leading-relaxed text-white/80 whitespace-pre-wrap"
-                >
-                  {entry.value}
-                </dd>
-              </div>
-            ))}
+            {block.entries.map((entry) => {
+              const voiceAnswered = isVoiceAnswered(submissionMeta, entry.fieldKey);
+
+              return (
+                <div key={`${block.section}-${entry.label}`} className="px-3 py-2.5">
+                  <dt className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                    {entry.label}
+                  </dt>
+                  <dd
+                    dir={valueTextDirection(entry.value)}
+                    className="mt-0.5 text-sm leading-relaxed text-white/80 whitespace-pre-wrap"
+                  >
+                    {voiceAnswered ? (
+                      <span
+                        className="mr-1 inline-block text-[10px] text-[#9CA3AF]"
+                        aria-hidden
+                      >
+                        🎤
+                      </span>
+                    ) : null}
+                    {entry.value}
+                  </dd>
+                  {voiceAnswered ? (
+                    <p className="mt-1 text-[10px] italic text-[#6B7280]">
+                      Patient answered by voice — text as transcribed. Review before clinical use.
+                    </p>
+                  ) : null}
+                </div>
+              );
+            })}
           </dl>
         </div>
       ))}
