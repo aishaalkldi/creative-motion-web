@@ -31,6 +31,8 @@ type RehabSnapshot = {
   totalSessions: number;
   progressPct: number;
   latestEffortScore: number | null;
+  latestPainResponse: string | null;
+  needsReview: boolean;
   lastCompletedAt: string | null;
 };
 
@@ -265,6 +267,8 @@ export default function UnifiedResultsPage() {
             totalSessions: primary.totalSessions,
             progressPct: primary.progressPct,
             latestEffortScore: primary.latestEffortScore,
+            latestPainResponse: primary.latestPainResponse,
+            needsReview: primary.needsReview,
             lastCompletedAt: primary.lastCompletedAt,
           });
         }
@@ -392,9 +396,16 @@ function PatientPipelineCardView({ card }: { card: PatientPipelineCard }) {
             </p>
           )}
         </div>
-        <span className={`shrink-0 rounded-[5px] border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${badge.className}`}>
-          {badge.label}
-        </span>
+        <div className="flex shrink-0 flex-col items-end gap-1.5">
+          {card.rehab?.needsReview && (
+            <span className="rounded-[5px] border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300">
+              Needs review
+            </span>
+          )}
+          <span className={`rounded-[5px] border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${badge.className}`}>
+            {badge.label}
+          </span>
+        </div>
       </div>
 
       {showRehabMetrics && card.rehab ? (
@@ -405,16 +416,12 @@ function PatientPipelineCardView({ card }: { card: PatientPipelineCard }) {
             value={card.rehab.latestEffortScore != null ? `${card.rehab.latestEffortScore}/10` : "—"}
           />
           <Metric
-            label="Sessions"
-            value={`${card.rehab.sessionsCompleted} / ${card.rehab.totalSessions}`}
+            label="Pain response"
+            value={card.rehab.latestPainResponse ?? "—"}
           />
           <Metric
-            label="Last session"
-            value={
-              card.rehab.lastCompletedAt
-                ? new Date(card.rehab.lastCompletedAt).toLocaleDateString()
-                : "—"
-            }
+            label="Sessions"
+            value={`${card.rehab.sessionsCompleted} / ${card.rehab.totalSessions}`}
           />
         </div>
       ) : card.assessment ? (

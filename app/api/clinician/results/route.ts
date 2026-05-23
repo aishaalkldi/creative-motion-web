@@ -9,6 +9,11 @@ import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import {
+  deriveSessionNeedsReview,
+  formatPainResponse,
+  parseSessionCoachNotes,
+} from "../../../lib/session-coach-metadata";
 
 export type ClinicianResultStatus = "pending_review" | "active" | "completed";
 
@@ -26,6 +31,10 @@ export type ClinicianResultCard = {
   progressPct: number;
   latestEffortScore: number | null;
   latestPainScore: number | null;
+  latestPainBeforeScore: number | null;
+  latestPainResponse: string | null;
+  safetyConcernReported: boolean;
+  needsReview: boolean;
   lastCompletedAt: string | null;
   status: ClinicianResultStatus;
   /** Latest preferred assessment for clinical report links (per patient). */
@@ -151,11 +160,12 @@ export async function GET(_req: NextRequest) {
     plan_id: string;
     effort_score: number | null;
     pain_score: number | null;
+    notes: string | null;
     completed_at: string;
   };
   const { data: logs } = await adminClient
     .from("session_logs")
-    .select("plan_id, effort_score, pain_score, completed_at")
+    .select("plan_id, effort_score, pain_score, notes, completed_at")
     .in("plan_id", planIds)
     .order("completed_at", { ascending: false })
     .returns<LogRow[]>();
@@ -211,6 +221,8 @@ export async function GET(_req: NextRequest) {
     const completed = planSessions.filter((s) => s.status === "completed").length;
     const latest = latestLogByPlan.get(plan.id);
     const preferredAssessment = latestAssessmentByPatient.get(plan.patient_id) ?? null;
+    const coachMeta = parseSessionCoachNotes(latest?.notes);
+    const painAfter = latest?.pain_score ?? null;
 
     return {
       planId: plan.id,
@@ -222,7 +234,15 @@ export async function GET(_req: NextRequest) {
       totalSessions: total,
       progressPct: total > 0 ? Math.round((completed / total) * 100) : 0,
       latestEffortScore: latest?.effort_score ?? null,
-      latestPainScore: latest?.pain_score ?? null,
+      latestPainScore: painAfter,
+      latestPainBeforeScore: coachMeta.painBefore,
+      latestPainResponse: formatPainResponse(coachMeta.painBefore, painAfter),
+      safetyConcernReported: coachMeta.safetyConcern,
+      needsReview: deriveSessionNeedsReview({
+        painBefore: coachMeta.painBefore,
+        painAfter,
+        safetyConcern: coachMeta.safetyConcern,
+      }),
       lastCompletedAt: latest?.completed_at ?? null,
       status: deriveStatus(completed, total),
       latestAssessmentId: preferredAssessment?.id ?? null,

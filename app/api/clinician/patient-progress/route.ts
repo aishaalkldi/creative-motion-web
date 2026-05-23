@@ -9,6 +9,11 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { validatePatientOwnership } from "../../../lib/validate-patient-ownership";
+import {
+  deriveSessionNeedsReview,
+  formatPainResponse,
+  parseSessionCoachNotes,
+} from "../../../lib/session-coach-metadata";
 
 export type PatientProgressSummary = {
   planId: string;
@@ -17,6 +22,11 @@ export type PatientProgressSummary = {
   progressPct: number;
   latestEffortScore: number | null;
   latestPainScore: number | null;
+  latestPainBeforeScore: number | null;
+  latestPainResponse: string | null;
+  safetyConcernReported: boolean;
+  needsReview: boolean;
+  latestPatientNote: string | null;
   lastCompletedAt: string | null;
 };
 
@@ -99,15 +109,19 @@ export async function GET(req: NextRequest) {
 
   const { data: latestLog } = await adminClient
     .from("session_logs")
-    .select("effort_score, pain_score, completed_at")
+    .select("effort_score, pain_score, notes, completed_at")
     .eq("plan_id", planId)
     .order("completed_at", { ascending: false })
     .limit(1)
     .maybeSingle<{
       effort_score: number | null;
       pain_score: number | null;
+      notes: string | null;
       completed_at: string;
     }>();
+
+  const coachMeta = parseSessionCoachNotes(latestLog?.notes);
+  const painAfter = latestLog?.pain_score ?? null;
 
   const summary: PatientProgressSummary = {
     planId,
@@ -115,7 +129,16 @@ export async function GET(req: NextRequest) {
     totalSessions: total,
     progressPct: total > 0 ? Math.round((completed / total) * 100) : 0,
     latestEffortScore: latestLog?.effort_score ?? null,
-    latestPainScore: latestLog?.pain_score ?? null,
+    latestPainScore: painAfter,
+    latestPainBeforeScore: coachMeta.painBefore,
+    latestPainResponse: formatPainResponse(coachMeta.painBefore, painAfter),
+    safetyConcernReported: coachMeta.safetyConcern,
+    needsReview: deriveSessionNeedsReview({
+      painBefore: coachMeta.painBefore,
+      painAfter,
+      safetyConcern: coachMeta.safetyConcern,
+    }),
+    latestPatientNote: coachMeta.patientNote,
     lastCompletedAt: latestLog?.completed_at ?? null,
   };
 

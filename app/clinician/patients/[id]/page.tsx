@@ -1494,7 +1494,14 @@ function ProgressSnapshotSection({
 
   return (
     <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-      <h2 className="text-lg font-bold text-white">Progress Snapshot</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-lg font-bold text-white">Progress Snapshot</h2>
+        {planProgress?.needsReview && (
+          <span className="rounded-[5px] border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-300">
+            Needs review
+          </span>
+        )}
+      </div>
       <div className="mt-4">
         {!plan ? (
           <p className="mt-3 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
@@ -1530,10 +1537,8 @@ function ProgressSnapshotSection({
                   : "—",
               },
               {
-                label: "Pain",
-                value: planProgress?.latestPainScore != null
-                  ? `${planProgress.latestPainScore}/10`
-                  : "—",
+                label: "Pain response",
+                value: planProgress?.latestPainResponse ?? "—",
               },
             ].map(({ label, value }) => (
               <div key={label} className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-3">
@@ -1546,6 +1551,26 @@ function ProgressSnapshotSection({
                 </p>
               </div>
             ))}
+          </div>
+        )}
+
+        {planProgress?.safetyConcernReported && (
+          <div className="mt-3 rounded-[8px] border border-amber-400/25 bg-amber-400/10 px-4 py-3">
+            <p className="text-xs leading-relaxed text-amber-200">
+              Patient reported sharp pain, dizziness, or unusual symptoms before their latest session.
+              Review before next session guidance.
+            </p>
+          </div>
+        )}
+
+        {planProgress?.latestPatientNote && (
+          <div className="mt-3 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">
+              Patient note from last session
+            </p>
+            <p className="mt-1.5 text-sm leading-relaxed text-white/75 whitespace-pre-wrap">
+              {planProgress.latestPatientNote}
+            </p>
           </div>
         )}
 
