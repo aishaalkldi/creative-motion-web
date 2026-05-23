@@ -2,11 +2,18 @@
 
 import type { PatientSectionId } from "@/app/lib/api/remote-assessments";
 import type { PatientAssessmentDraft } from "@/app/lib/api/remote-assessments";
+import type { AssessmentLanguage } from "@/app/lib/assessment-payload";
+import {
+  ARABIC_READABILITY_NOTICE,
+  isArabicAssessmentContent,
+  valueTextDirection,
+} from "@/app/lib/arabic-readability";
 import { buildFullClinicianReview } from "@/app/lib/patient-assessment-questions";
 
 type Props = {
   patientDraft?: PatientAssessmentDraft;
   includedSections: PatientSectionId[];
+  assessmentLanguage?: AssessmentLanguage | null;
   compact?: boolean;
 };
 
@@ -16,6 +23,7 @@ type Props = {
 export function PatientSubmittedAnswersReview({
   patientDraft,
   includedSections,
+  assessmentLanguage = null,
   compact = false,
 }: Props) {
   const blocks = buildFullClinicianReview(patientDraft, includedSections);
@@ -28,8 +36,17 @@ export function PatientSubmittedAnswersReview({
     );
   }
 
+  const allValues = blocks.flatMap((block) => block.entries.map((entry) => entry.value));
+  const showArabicNotice = isArabicAssessmentContent(assessmentLanguage, allValues);
+
   return (
     <div className={compact ? "space-y-3" : "space-y-4"}>
+      {showArabicNotice && (
+        <div className="rounded-[7px] border border-amber-300/25 bg-amber-400/10 px-3 py-2.5">
+          <p className="text-xs leading-relaxed text-amber-100/90">{ARABIC_READABILITY_NOTICE}</p>
+        </div>
+      )}
+
       {blocks.map((block) => (
         <div
           key={block.section}
@@ -46,7 +63,10 @@ export function PatientSubmittedAnswersReview({
                 <dt className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
                   {entry.label}
                 </dt>
-                <dd className="mt-0.5 text-sm leading-relaxed text-white/80 whitespace-pre-wrap">
+                <dd
+                  dir={valueTextDirection(entry.value)}
+                  className="mt-0.5 text-sm leading-relaxed text-white/80 whitespace-pre-wrap"
+                >
                   {entry.value}
                 </dd>
               </div>

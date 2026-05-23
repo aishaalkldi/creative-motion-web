@@ -13,7 +13,13 @@ import type { AssessmentRow } from "../../../api/assessments/route";
 import {
   extractGeneralDraft,
   extractStructuredData,
+  getAssessmentLanguage,
 } from "../../../lib/assessment-payload";
+import {
+  ARABIC_READABILITY_NOTICE,
+  isArabicAssessmentContent,
+  valueTextDirection,
+} from "../../../lib/arabic-readability";
 import type { PatientRow } from "../../../lib/validate-patient-ownership";
 import { assessmentsRepository } from "../../../lib/repositories";
 import ConfirmModal from "../../../components/ConfirmModal";
@@ -430,6 +436,18 @@ export default function PatientProfilePage() {
     return null;
   }, [clinicalSummaryRow]);
 
+  const clinicalSummaryArabicNotice = useMemo(() => {
+    if (!clinicalSummary || !clinicalSummaryRow) return false;
+    const values = [
+      ...clinicalSummary.metrics.map((metric) => metric.value),
+      ...clinicalSummary.rows.map((row) => row.value),
+    ];
+    return isArabicAssessmentContent(
+      getAssessmentLanguage(clinicalSummaryRow.structured_data),
+      values,
+    );
+  }, [clinicalSummary, clinicalSummaryRow]);
+
   function handleCreateRemoteRequest() {
     if (!patient) return;
     const assessmentId = assessmentsRepository.newAssessmentId();
@@ -759,10 +777,10 @@ export default function PatientProfilePage() {
                   Build Plan
                 </Link>
                 <Link
-                  href={`/clinician/progress/${patient.id}`}
+                  href={`/clinician/patients/${patient.id}`}
                   className="rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3.5 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/14"
                 >
-                  View Progress
+                  View Rehabilitation Progress
                 </Link>
                 <button
                   type="button"
@@ -845,6 +863,14 @@ export default function PatientProfilePage() {
                       </div>
                     )}
 
+                    {clinicalSummaryArabicNotice && (
+                      <div className="mt-4 rounded-[7px] border border-amber-300/25 bg-amber-400/10 px-3 py-2.5">
+                        <p className="text-xs leading-relaxed text-amber-100/90">
+                          {ARABIC_READABILITY_NOTICE}
+                        </p>
+                      </div>
+                    )}
+
                     {clinicalSummary.metrics.length > 0 && (
                       <div className="mt-4 grid gap-3 sm:grid-cols-3">
                         {clinicalSummary.metrics.map((metric) => (
@@ -855,7 +881,12 @@ export default function PatientProfilePage() {
                             <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
                               {metric.label}
                             </p>
-                            <p className="mt-1 text-sm font-semibold text-white">{metric.value}</p>
+                            <p
+                              dir={valueTextDirection(metric.value)}
+                              className="mt-1 text-sm font-semibold text-white"
+                            >
+                              {metric.value}
+                            </p>
                           </div>
                         ))}
                       </div>
@@ -868,7 +899,10 @@ export default function PatientProfilePage() {
                             <dt className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
                               {row.label}
                             </dt>
-                            <dd className="mt-0.5 text-sm leading-relaxed text-white/80 whitespace-pre-wrap">
+                            <dd
+                              dir={valueTextDirection(row.value)}
+                              className="mt-0.5 text-sm leading-relaxed text-white/80 whitespace-pre-wrap"
+                            >
                               {row.value}
                             </dd>
                           </div>
@@ -1540,10 +1574,10 @@ function ProgressSnapshotSection({
         )}
 
         <Link
-          href={`/clinician/progress/${patientId}`}
+          href={`/clinician/patients/${patientId}`}
           className="mt-4 inline-flex rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3.5 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/14"
         >
-          View full progress
+          View Rehabilitation Progress
         </Link>
       </div>
     </section>

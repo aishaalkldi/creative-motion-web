@@ -2,217 +2,47 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import type { ClinicianResultCard, ClinicianResultStatus } from "@/app/api/clinician/results/route";
+import type { ClinicianResultCard } from "@/app/api/clinician/results/route";
 import type { AssessmentRow } from "@/app/api/assessments/route";
 import type { PatientRow } from "@/app/lib/validate-patient-ownership";
+import { buildRemoteQuestionnaireSummary } from "@/app/lib/remote-questionnaire-summary";
+import { extractGeneralDraft, extractStructuredData } from "@/app/lib/assessment-payload";
 
-type TabType = "all" | "pending" | "active" | "completed";
+type PipelineFilter = "all" | "assessment" | "in_rehab" | "completed";
 
-type ClinicalAssessmentResult = {
-  patientId: string;
-  patientName: string;
+type PipelineState =
+  | { kind: "in_rehab"; completed: number; total: number }
+  | { kind: "plan_assigned" }
+  | { kind: "assessment_submitted" };
+
+type AssessmentSnapshot = {
   assessmentId: string;
   assessmentType: string;
   submittedAt: string;
+  painAtRest?: string;
+  painOnMovement?: string;
+  bodyRegion?: string;
 };
 
-const STATUS_LABELS: Record<ClinicianResultStatus, string> = {
-  pending_review: "Pending review",
-  active: "Active",
-  completed: "Completed",
+type RehabSnapshot = {
+  planId: string;
+  planTitle: string;
+  sessionsCompleted: number;
+  totalSessions: number;
+  progressPct: number;
+  latestEffortScore: number | null;
+  lastCompletedAt: string | null;
 };
 
-const STATUS_STYLES: Record<ClinicianResultStatus, string> = {
-  pending_review: "border-amber-400/25 bg-amber-400/10 text-amber-300",
-  active: "border-[#1D9E75]/30 bg-[#1D9E75]/10 text-[#5DCAA5]",
-  completed: "border-[#1E2D42] bg-[#0B1220] text-white/50",
+type PatientPipelineCard = {
+  patientId: string;
+  patientName: string;
+  condition: string | null;
+  lastActivityAt: string | null;
+  state: PipelineState;
+  assessment: AssessmentSnapshot | null;
+  rehab: RehabSnapshot | null;
 };
-
-export default function UnifiedResultsPage() {
-  const [activeTab, setActiveTab] = useState<TabType>("all");
-  const [results, setResults] = useState<ClinicianResultCard[]>([]);
-  const [clinicalAssessments, setClinicalAssessments] = useState<ClinicalAssessmentResult[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [clinicalLoading, setClinicalLoading] = useState(true);
-  const [error, setError] = useState("");
-  const [clinicalError, setClinicalError] = useState("");
-
-  useEffect(() => {
-    async function loadRehab() {
-      try {
-        setLoading(true);
-        setError("");
-        const res = await fetch("/api/clinician/results");
-        if (!res.ok) {
-          const body = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(body.error ?? `Failed to load (${res.status})`);
-        }
-        setResults((await res.json()) as ClinicianResultCard[]);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Could not load rehabilitation progress.");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    void loadRehab();
-  }, []);
-
-  useEffect(() => {
-    async function loadClinical() {
-      try {
-        setClinicalLoading(true);
-        setClinicalError("");
-        const patientsRes = await fetch("/api/patients");
-        if (!patientsRes.ok) {
-          const body = (await patientsRes.json().catch(() => ({}))) as { error?: string };
-          throw new Error(body.error ?? `Failed to load patients (${patientsRes.status})`);
-        }
-        const patients = (await patientsRes.json()) as PatientRow[];
-        const assessmentCards = await Promise.all(
-          patients.map(async (patient): Promise<ClinicalAssessmentResult | null> => {
-            const res = await fetch(`/api/assessments?patientId=${encodeURIComponent(patient.id)}`);
-            if (!res.ok) return null;
-            const rows = (await res.json()) as AssessmentRow[];
-            if (rows.length === 0) return null;
-            const preferred =
-              rows.find((row) => row.type === "remote_questionnaire") ??
-              rows.find((row) => row.type === "general_msk") ??
-              rows[0];
-            if (!preferred) return null;
-            return {
-              patientId: patient.id,
-              patientName: patient.full_name,
-              assessmentId: preferred.id,
-              assessmentType: preferred.type,
-              submittedAt: preferred.created_at,
-            };
-          }),
-        );
-        const filtered = assessmentCards
-          .filter((card): card is ClinicalAssessmentResult => card !== null)
-          .sort(
-            (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime(),
-          );
-        setClinicalAssessments(filtered);
-      } catch (err) {
-        setClinicalError(err instanceof Error ? err.message : "Could not load clinical assessments.");
-        console.error(err);
-      } finally {
-        setClinicalLoading(false);
-      }
-    }
-    void loadClinical();
-  }, []);
-
-  const filtered = useMemo(() => {
-    if (activeTab === "all") return results;
-    if (activeTab === "pending") return results.filter((r) => r.status === "pending_review");
-    if (activeTab === "active") return results.filter((r) => r.status === "active");
-    return results.filter((r) => r.status === "completed");
-  }, [results, activeTab]);
-
-  const pendingCount = results.filter((r) => r.status === "pending_review").length;
-  const activeCount = results.filter((r) => r.status === "active").length;
-  const completedCount = results.filter((r) => r.status === "completed").length;
-  const uniquePatients = new Set(results.map((r) => r.patientId)).size;
-
-  return (
-    <main className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
-      <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">
-              Clinician workspace
-            </p>
-            <h1 className="mt-2 text-2xl font-bold text-white">Results</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/45">
-              Results are organized into clinical assessment results and rehabilitation progress.
-              Assessment results summarize submitted tests. Rehabilitation progress tracks assigned
-              plans, completed sessions, adherence, and effort.
-            </p>
-          </div>
-          <Link
-            href="/clinician"
-            className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-4 py-2.5 text-sm font-semibold text-white/70 transition hover:text-white"
-          >
-            ← Dashboard
-          </Link>
-        </div>
-
-        {/* Section A — Clinical Assessment Results */}
-        <section className="mb-8 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-          <div className="mb-5">
-            <h2 className="text-lg font-bold text-white">Clinical Assessment Results</h2>
-            <p className="mt-1 text-sm text-white/45">
-              Submitted patient assessments and clinical summaries.
-            </p>
-          </div>
-
-          {clinicalLoading ? (
-            <p className="py-8 text-center text-sm text-white/40">Loading clinical assessments…</p>
-          ) : clinicalError ? (
-            <div className="rounded-[7px] border border-rose-400/20 bg-rose-400/8 px-4 py-3 text-sm text-rose-300">
-              {clinicalError}
-            </div>
-          ) : clinicalAssessments.length === 0 ? (
-            <p className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-8 text-center text-sm text-white/40">
-              No submitted assessments yet.
-            </p>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {clinicalAssessments.map((assessment) => (
-                <ClinicalAssessmentCard key={assessment.assessmentId} assessment={assessment} />
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Section B — Rehabilitation Progress Results */}
-        <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-          <div className="mb-5">
-            <h2 className="text-lg font-bold text-white">Rehabilitation Progress Results</h2>
-            <p className="mt-1 text-sm text-white/45">
-              Assigned plans, completed sessions, adherence, and effort.
-            </p>
-          </div>
-
-          <div className="mb-6 grid gap-3 sm:grid-cols-4">
-            <MiniStat label="Treatment plans" value={String(results.length)} />
-            <MiniStat label="Pending review" value={String(pendingCount)} />
-            <MiniStat label="Active" value={String(activeCount)} />
-            <MiniStat label="Patients" value={String(uniquePatients)} />
-          </div>
-
-          <div className="mb-6 flex flex-wrap items-center gap-2">
-            <TabButton active={activeTab === "all"} onClick={() => setActiveTab("all")} label="All" count={results.length} />
-            <TabButton active={activeTab === "pending"} onClick={() => setActiveTab("pending")} label="Pending review" count={pendingCount} />
-            <TabButton active={activeTab === "active"} onClick={() => setActiveTab("active")} label="Active" count={activeCount} />
-            <TabButton active={activeTab === "completed"} onClick={() => setActiveTab("completed")} label="Completed" count={completedCount} />
-          </div>
-
-          {loading ? (
-            <p className="py-12 text-center text-sm text-white/40">Loading rehabilitation progress…</p>
-          ) : error ? (
-            <div className="rounded-[7px] border border-rose-400/20 bg-rose-400/8 px-4 py-3 text-sm text-rose-300">
-              {error}
-            </div>
-          ) : filtered.length === 0 ? (
-            <p className="py-12 text-center text-sm text-white/40">
-              No rehabilitation progress yet. Assign a treatment plan and share the patient portal link to start collecting session data.
-            </p>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2">
-              {filtered.map((r) => (
-                <RehabProgressCard key={r.planId} result={r} />
-              ))}
-            </div>
-          )}
-        </section>
-      </div>
-    </main>
-  );
-}
 
 function assessmentTypeLabel(type: string): string {
   if (type === "general_msk") return "General MSK Assessment";
@@ -227,97 +57,416 @@ function reportHref(patientId: string, assessmentId: string): string {
   return `/clinician/assessment/report?${params.toString()}`;
 }
 
-function ClinicalAssessmentCard({ assessment }: { assessment: ClinicalAssessmentResult }) {
-  const reportUrl = reportHref(assessment.patientId, assessment.assessmentId);
+function pickPreferredAssessment(rows: AssessmentRow[]): AssessmentRow | null {
+  if (rows.length === 0) return null;
+  return (
+    rows.find((row) => row.type === "remote_questionnaire") ??
+    rows.find((row) => row.type === "general_msk") ??
+    rows[0] ??
+    null
+  );
+}
+
+function extractAssessmentSnapshot(row: AssessmentRow): AssessmentSnapshot {
+  const base: AssessmentSnapshot = {
+    assessmentId: row.id,
+    assessmentType: row.type,
+    submittedAt: row.created_at,
+  };
+
+  if (row.type === "remote_questionnaire") {
+    const summary = buildRemoteQuestionnaireSummary(row.structured_data, row.created_at);
+    if (summary) {
+      for (const metric of summary.metrics) {
+        if (metric.label === "Pain at rest") base.painAtRest = metric.value;
+        if (metric.label === "Pain on movement") base.painOnMovement = metric.value;
+        if (metric.label === "Body region") base.bodyRegion = metric.value;
+      }
+    }
+    return base;
+  }
+
+  const general = extractGeneralDraft(row.structured_data, row.type);
+  if (general) {
+    if (general.subjective.nprs.trim()) base.painAtRest = `${general.subjective.nprs}/10`;
+    if (general.subjective.painLocation.trim()) base.bodyRegion = general.subjective.painLocation;
+    return base;
+  }
+
+  const structured = extractStructuredData(row.structured_data);
+  if (structured) {
+    base.painAtRest = `${structured.painAtRest}/10`;
+    base.painOnMovement = `${structured.painOnMovement}/10`;
+    base.bodyRegion = structured.bodyRegion;
+  }
+
+  return base;
+}
+
+function pickPrimaryRehabPlan(plans: ClinicianResultCard[]): ClinicianResultCard | null {
+  if (plans.length === 0) return null;
+  const active = plans.filter((plan) => plan.sessionsCompleted > 0);
+  if (active.length > 0) {
+    return [...active].sort((a, b) => {
+      const aTime = a.lastCompletedAt ? new Date(a.lastCompletedAt).getTime() : 0;
+      const bTime = b.lastCompletedAt ? new Date(b.lastCompletedAt).getTime() : 0;
+      return bTime - aTime;
+    })[0]!;
+  }
+  return plans[0]!;
+}
+
+function derivePipelineState(
+  assessment: AssessmentSnapshot | null,
+  rehab: RehabSnapshot | null,
+): PipelineState {
+  if (rehab) {
+    if (rehab.sessionsCompleted > 0) {
+      return {
+        kind: "in_rehab",
+        completed: rehab.sessionsCompleted,
+        total: rehab.totalSessions,
+      };
+    }
+    return { kind: "plan_assigned" };
+  }
+  if (assessment) return { kind: "assessment_submitted" };
+  return { kind: "assessment_submitted" };
+}
+
+function stateBadge(state: PipelineState): { label: string; className: string } {
+  if (state.kind === "in_rehab") {
+    return {
+      label: `In rehab · ${state.completed} of ${state.total} sessions`,
+      className: "border-[#1D9E75]/30 bg-[#1D9E75]/10 text-[#5DCAA5]",
+    };
+  }
+  if (state.kind === "plan_assigned") {
+    return {
+      label: "Plan assigned",
+      className: "border-cyan-300/25 bg-cyan-400/10 text-cyan-200",
+    };
+  }
+  return {
+    label: "Assessment submitted",
+    className: "border-lime-300/20 bg-lime-400/10 text-lime-300",
+  };
+}
+
+function buildPipelineCards(
+  patients: PatientRow[],
+  assessmentsByPatient: Map<string, AssessmentSnapshot>,
+  rehabByPatient: Map<string, RehabSnapshot>,
+): PatientPipelineCard[] {
+  const patientIds = new Set<string>([
+    ...patients.map((patient) => patient.id),
+    ...assessmentsByPatient.keys(),
+    ...rehabByPatient.keys(),
+  ]);
+
+  const cards: PatientPipelineCard[] = [];
+
+  for (const patientId of patientIds) {
+    const assessment = assessmentsByPatient.get(patientId) ?? null;
+    const rehab = rehabByPatient.get(patientId) ?? null;
+    if (!assessment && !rehab) continue;
+
+    const patient = patients.find((row) => row.id === patientId);
+    const state = derivePipelineState(assessment, rehab);
+    const lastActivityAt =
+      rehab?.lastCompletedAt ??
+      assessment?.submittedAt ??
+      null;
+
+    const condition =
+      patient?.diagnosis?.trim() ||
+      assessment?.bodyRegion?.trim() ||
+      rehab?.planTitle?.trim() ||
+      null;
+
+    cards.push({
+      patientId,
+      patientName: patient?.full_name ?? "Patient",
+      condition,
+      lastActivityAt,
+      state,
+      assessment,
+      rehab,
+    });
+  }
+
+  return cards.sort((a, b) => {
+    const aTime = a.lastActivityAt ? new Date(a.lastActivityAt).getTime() : 0;
+    const bTime = b.lastActivityAt ? new Date(b.lastActivityAt).getTime() : 0;
+    return bTime - aTime;
+  });
+}
+
+export default function UnifiedResultsPage() {
+  const [filter, setFilter] = useState<PipelineFilter>("all");
+  const [pipeline, setPipeline] = useState<PatientPipelineCard[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    async function load() {
+      try {
+        setLoading(true);
+        setError("");
+
+        const [patientsRes, rehabRes] = await Promise.all([
+          fetch("/api/patients"),
+          fetch("/api/clinician/results"),
+        ]);
+
+        if (!patientsRes.ok) {
+          const body = (await patientsRes.json().catch(() => ({}))) as { error?: string };
+          throw new Error(body.error ?? `Failed to load patients (${patientsRes.status})`);
+        }
+        if (!rehabRes.ok) {
+          const body = (await rehabRes.json().catch(() => ({}))) as { error?: string };
+          throw new Error(body.error ?? `Failed to load results (${rehabRes.status})`);
+        }
+
+        const patients = (await patientsRes.json()) as PatientRow[];
+        const rehabResults = (await rehabRes.json()) as ClinicianResultCard[];
+
+        const assessmentEntries = await Promise.all(
+          patients.map(async (patient) => {
+            const res = await fetch(`/api/assessments?patientId=${encodeURIComponent(patient.id)}`);
+            if (!res.ok) return null;
+            const rows = (await res.json()) as AssessmentRow[];
+            const preferred = pickPreferredAssessment(rows);
+            if (!preferred) return null;
+            return [patient.id, extractAssessmentSnapshot(preferred)] as const;
+          }),
+        );
+
+        const assessmentsByPatient = new Map<string, AssessmentSnapshot>();
+        for (const entry of assessmentEntries) {
+          if (entry) assessmentsByPatient.set(entry[0], entry[1]);
+        }
+
+        const rehabGrouped = new Map<string, ClinicianResultCard[]>();
+        for (const result of rehabResults) {
+          const group = rehabGrouped.get(result.patientId) ?? [];
+          group.push(result);
+          rehabGrouped.set(result.patientId, group);
+        }
+
+        const rehabByPatient = new Map<string, RehabSnapshot>();
+        for (const [patientId, plans] of rehabGrouped) {
+          const primary = pickPrimaryRehabPlan(plans);
+          if (!primary) continue;
+          rehabByPatient.set(patientId, {
+            planId: primary.planId,
+            planTitle: primary.planTitle,
+            sessionsCompleted: primary.sessionsCompleted,
+            totalSessions: primary.totalSessions,
+            progressPct: primary.progressPct,
+            latestEffortScore: primary.latestEffortScore,
+            lastCompletedAt: primary.lastCompletedAt,
+          });
+        }
+
+        setPipeline(buildPipelineCards(patients, assessmentsByPatient, rehabByPatient));
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Could not load patient pipeline.");
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void load();
+  }, []);
+
+  const filtered = useMemo(() => {
+    if (filter === "all") return pipeline;
+    if (filter === "assessment") {
+      return pipeline.filter((card) => card.state.kind === "assessment_submitted");
+    }
+    if (filter === "in_rehab") {
+      return pipeline.filter((card) => card.state.kind === "in_rehab" || card.state.kind === "plan_assigned");
+    }
+    return pipeline.filter(
+      (card) =>
+        card.state.kind === "in_rehab" &&
+        card.rehab != null &&
+        card.rehab.totalSessions > 0 &&
+        card.rehab.sessionsCompleted >= card.rehab.totalSessions,
+    );
+  }, [pipeline, filter]);
+
+  const assessmentCount = pipeline.filter((card) => card.state.kind === "assessment_submitted").length;
+  const inRehabCount = pipeline.filter((card) => card.state.kind === "in_rehab").length;
+  const planAssignedCount = pipeline.filter((card) => card.state.kind === "plan_assigned").length;
+  const completedCount = pipeline.filter(
+    (card) =>
+      card.rehab != null &&
+      card.rehab.totalSessions > 0 &&
+      card.rehab.sessionsCompleted >= card.rehab.totalSessions,
+  ).length;
+
+  return (
+    <main className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
+      <div className="mx-auto max-w-7xl">
+        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">
+              Clinician workspace
+            </p>
+            <h1 className="mt-2 text-2xl font-bold text-white">Results</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/45">
+              Which patients need your attention today? One card per patient — assessment status,
+              rehab progress, and the next clinical action.
+            </p>
+          </div>
+          <Link
+            href="/clinician"
+            className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-4 py-2.5 text-sm font-semibold text-white/70 transition hover:text-white"
+          >
+            ← Dashboard
+          </Link>
+        </div>
+
+        <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+          <div className="mb-6 grid gap-3 sm:grid-cols-4">
+            <MiniStat label="Patients in pipeline" value={String(pipeline.length)} />
+            <MiniStat label="Assessments to review" value={String(assessmentCount)} />
+            <MiniStat label="In rehab" value={String(inRehabCount)} />
+            <MiniStat label="Plans awaiting sessions" value={String(planAssignedCount)} />
+          </div>
+
+          <div className="mb-6 flex flex-wrap items-center gap-2">
+            <FilterButton active={filter === "all"} onClick={() => setFilter("all")} label="All" count={pipeline.length} />
+            <FilterButton active={filter === "assessment"} onClick={() => setFilter("assessment")} label="Assessment submitted" count={assessmentCount} />
+            <FilterButton active={filter === "in_rehab"} onClick={() => setFilter("in_rehab")} label="In rehab / plan assigned" count={inRehabCount + planAssignedCount} />
+            <FilterButton active={filter === "completed"} onClick={() => setFilter("completed")} label="Completed" count={completedCount} />
+          </div>
+
+          {loading ? (
+            <p className="py-12 text-center text-sm text-white/40">Loading patient pipeline…</p>
+          ) : error ? (
+            <div className="rounded-[7px] border border-rose-400/20 bg-rose-400/8 px-4 py-3 text-sm text-rose-300">
+              {error}
+            </div>
+          ) : filtered.length === 0 ? (
+            <p className="py-12 text-center text-sm text-white/40">
+              No patient results yet. Send a remote assessment or assign a treatment plan to start the pipeline.
+            </p>
+          ) : (
+            <div className="grid gap-4 md:grid-cols-2">
+              {filtered.map((card) => (
+                <PatientPipelineCardView key={card.patientId} card={card} />
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function PatientPipelineCardView({ card }: { card: PatientPipelineCard }) {
+  const badge = stateBadge(card.state);
+  const showRehabMetrics = card.rehab != null && card.state.kind !== "assessment_submitted";
+  const profileHref = `/clinician/patients/${card.patientId}`;
 
   return (
     <article className="rounded-[10px] border border-[#1E2D42] bg-[#0B1220] p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-base font-bold text-white">{assessment.patientName}</p>
-          <p className="mt-0.5 text-sm text-white/55">
-            {assessmentTypeLabel(assessment.assessmentType)}
-          </p>
-          <p className="mt-1 text-xs text-white/35">
-            Submitted {new Date(assessment.submittedAt).toLocaleString()}
-          </p>
+          <p className="truncate text-base font-bold text-white">{card.patientName}</p>
+          {card.condition && (
+            <p className="mt-0.5 truncate text-sm text-white/55">{card.condition}</p>
+          )}
+          {card.lastActivityAt && (
+            <p className="mt-1 text-xs text-white/35">
+              Last activity {new Date(card.lastActivityAt).toLocaleString()}
+            </p>
+          )}
+          {card.assessment && (
+            <p className="mt-1 text-xs text-white/35">
+              {assessmentTypeLabel(card.assessment.assessmentType)}
+            </p>
+          )}
         </div>
-        <span className="shrink-0 rounded-[5px] border border-lime-300/20 bg-lime-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-lime-300">
-          Submitted
+        <span className={`shrink-0 rounded-[5px] border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${badge.className}`}>
+          {badge.label}
         </span>
       </div>
+
+      {showRehabMetrics && card.rehab ? (
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <Metric label="Adherence" value={`${card.rehab.progressPct}%`} />
+          <Metric
+            label="Effort"
+            value={card.rehab.latestEffortScore != null ? `${card.rehab.latestEffortScore}/10` : "—"}
+          />
+          <Metric
+            label="Sessions"
+            value={`${card.rehab.sessionsCompleted} / ${card.rehab.totalSessions}`}
+          />
+          <Metric
+            label="Last session"
+            value={
+              card.rehab.lastCompletedAt
+                ? new Date(card.rehab.lastCompletedAt).toLocaleDateString()
+                : "—"
+            }
+          />
+        </div>
+      ) : card.assessment ? (
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <Metric label="Pain at rest" value={card.assessment.painAtRest ?? "—"} />
+          <Metric label="Pain on movement" value={card.assessment.painOnMovement ?? "—"} />
+          <Metric label="Body region" value={card.assessment.bodyRegion ?? "—"} className="col-span-2" />
+        </div>
+      ) : null}
 
       <div className="mt-4 flex flex-wrap gap-2">
+        {card.assessment && (
+          <Link
+            href={reportHref(card.patientId, card.assessment.assessmentId)}
+            className="inline-flex rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-3 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
+          >
+            Open Clinical Report
+          </Link>
+        )}
+        {card.rehab && (
+          <Link
+            href={profileHref}
+            className="inline-flex rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-3 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
+          >
+            View Rehabilitation Progress
+          </Link>
+        )}
         <Link
-          href={`/clinician/patients/${assessment.patientId}`}
+          href={profileHref}
           className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
         >
-          View Patient
-        </Link>
-        <Link
-          href={reportUrl}
-          className="inline-flex rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-3 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
-        >
-          View Assessment Report
-        </Link>
-        <Link
-          href={reportUrl}
-          className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 transition hover:text-white/80"
-          title="Opens the clinical report; use Export PDF on that page to print or save as PDF"
-        >
-          Open report to export PDF
+          View Profile
         </Link>
       </div>
     </article>
   );
 }
 
-function RehabProgressCard({ result }: { result: ClinicianResultCard }) {
+function Metric({
+  label,
+  value,
+  className = "",
+}: {
+  label: string;
+  value: string;
+  className?: string;
+}) {
   return (
-    <article className="rounded-[10px] border border-[#1E2D42] bg-[#0B1220] p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-base font-bold text-white">{result.patientName}</p>
-          <p className="mt-0.5 truncate text-sm text-white/50">{result.planTitle}</p>
-          <p className="mt-0.5 text-xs text-white/35">{result.programName}</p>
-        </div>
-        <span className={`shrink-0 rounded-[5px] border px-2 py-0.5 text-[10px] font-bold ${STATUS_STYLES[result.status]}`}>
-          {STATUS_LABELS[result.status]}
-        </span>
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <Metric label="Sessions" value={`${result.sessionsCompleted} / ${result.totalSessions}`} />
-        <Metric label="Progress" value={`${result.progressPct}%`} />
-        <Metric label="Effort" value={result.latestEffortScore != null ? `${result.latestEffortScore}/10` : "—"} />
-        <Metric label="Pain" value={result.latestPainScore != null ? `${result.latestPainScore}/10` : "—"} />
-      </div>
-
-      <p className="mt-3 text-[11px] text-white/35">
-        Last completed:{" "}
-        {result.lastCompletedAt
-          ? new Date(result.lastCompletedAt).toLocaleString()
-          : "No sessions completed yet"}
-      </p>
-
-      <div className="mt-4">
-        <Link
-          href={`/clinician/patients/${result.patientId}`}
-          className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
-        >
-          View Patient
-        </Link>
-      </div>
-    </article>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2">
+    <div className={`rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 ${className}`}>
       <p className="text-[10px] text-white/35">{label}</p>
       <p
-        className="mt-0.5 text-sm font-semibold text-[#5DCAA5]"
+        className="mt-0.5 truncate text-sm font-semibold text-[#5DCAA5]"
         style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
       >
         {value}
@@ -326,7 +475,7 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function TabButton({
+function FilterButton({
   active,
   onClick,
   label,

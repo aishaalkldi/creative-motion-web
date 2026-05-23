@@ -944,6 +944,7 @@ export function AssessmentReportClient() {
               <PatientSubmittedAnswersReview
                 patientDraft={remoteQuestionnaireDraft}
                 includedSections={remoteIncludedSections}
+                assessmentLanguage={patientAnsweredInArabic ? "ar" : "en"}
               />
             </div>
           </section>
