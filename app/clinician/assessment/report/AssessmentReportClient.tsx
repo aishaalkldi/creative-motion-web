@@ -41,7 +41,10 @@ import {
   detectRedFlag,
   extractRemoteQuestionnaireDraft,
   inferIncludedSections,
+  buildRemoteQuestionnaireSummary,
 } from "@/app/lib/remote-questionnaire-summary";
+import { ReportExportToolbar } from "@/app/components/reports/ReportExportToolbar";
+import { RemoteQuestionnairePrintReport } from "@/app/components/reports/RemoteQuestionnairePrintReport";
 
 // ── Constants & labels ─────────────────────────────────────────────────────────
 
@@ -893,26 +896,27 @@ export function AssessmentReportClient() {
 
   if (reportKind === "remote_questionnaire" && remoteQuestionnaireDraft) {
     const hasRedFlag = detectRedFlag(remoteQuestionnaireDraft);
+    const printSummary = buildRemoteQuestionnaireSummary(
+      remoteQuestionnaireDraft,
+      reportDate || new Date().toISOString(),
+    );
+    const backHref = patientId ? `/clinician/patients/${patientId}` : "/clinician/patients";
+
     return (
       <main className="assessment-report-root print-report min-h-screen bg-[#0B1220] text-white">
-        <RasqPrintHeader
-          patientName={patient?.full_name ?? "Patient"}
-          patientId={patientId}
-          displayDate={reportDate}
-          assessmentId={assessmentId || undefined}
-        />
-        <header className="screen-only sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220]">
-          <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
-            <Link href={patientId ? `/clinician/patients/${patientId}` : "/clinician/patients"}
-              className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white">
-              ← Patient
-            </Link>
-            <button type="button" onClick={() => window.print()}
-              className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white">
-              Export Clinical Report (PDF)
-            </button>
+        {printSummary ? (
+          <div className="print-only">
+            <RemoteQuestionnairePrintReport
+              summary={printSummary}
+              patientName={patient?.full_name ?? "Patient"}
+              patientId={patientId}
+              assessmentId={assessmentId || undefined}
+              clinicianNotes={serverNotes}
+            />
           </div>
-        </header>
+        ) : null}
+
+        <ReportExportToolbar backHref={backHref} />
         <section className="screen-only border-b border-white/10 bg-[#0F1825] px-6 py-8">
           <div className="mx-auto max-w-4xl">
             <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
@@ -926,7 +930,7 @@ export function AssessmentReportClient() {
             </p>
           </div>
         </section>
-        <div className="print-report-body mx-auto max-w-4xl px-6 py-8 space-y-6">
+        <div className="screen-only print-report-body mx-auto max-w-4xl px-6 py-8 space-y-6">
           <section className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
             <h2 className="text-base font-bold text-white">Patient submitted answers</h2>
             {hasRedFlag && (
@@ -943,6 +947,14 @@ export function AssessmentReportClient() {
               />
             </div>
           </section>
+          {serverNotes?.trim() ? (
+            <section className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+              <h2 className="text-base font-bold text-white">Clinician notes</h2>
+              <p className="mt-3 text-sm leading-relaxed text-white/80 whitespace-pre-wrap">
+                {serverNotes.trim()}
+              </p>
+            </section>
+          ) : null}
           <p className="text-xs text-white/30">{DISCLAIMER}</p>
         </div>
       </main>

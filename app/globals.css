@@ -136,6 +136,24 @@ body {
     visibility: hidden !important;
   }
 
+  .print-report-footer {
+    margin-top: 1.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid #e5e7eb;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-document {
+    color: #111 !important;
+    background: #fff !important;
+  }
+
+  .print-document-section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
   .print-report-header {
     margin-bottom: 1rem;
     padding-bottom: 0;
@@ -156,6 +174,22 @@ body {
     border-radius: 0 !important;
     margin-bottom: 0.85rem;
     overflow: visible !important;
+  }
+
+  .print-document .print-section-body h3 {
+    color: #374151 !important;
+  }
+
+  .print-document .bg-gray-50 {
+    background: #f9fafb !important;
+  }
+
+  .print-document .bg-amber-50 {
+    background: #fffbeb !important;
+  }
+
+  .print-document .text-amber-900 {
+    color: #78350f !important;
   }
 
   .print-section-title {
