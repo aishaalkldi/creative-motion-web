@@ -35,6 +35,13 @@ import {
   type TreatmentPlan,
   type RehabProgram,
 } from "@/app/lib/api/treatment-plans";
+import { PatientSubmittedAnswersReview } from "@/app/components/PatientSubmittedAnswersReview";
+import type { PatientAssessmentDraft, PatientSectionId } from "@/app/lib/api/remote-assessments";
+import {
+  detectRedFlag,
+  extractRemoteQuestionnaireDraft,
+  inferIncludedSections,
+} from "@/app/lib/remote-questionnaire-summary";
 
 // ── Constants & labels ─────────────────────────────────────────────────────────
 
@@ -634,7 +641,9 @@ export function AssessmentReportClient() {
 
   const [draft, setDraft] = useState<GeneralAssessmentDraft | null>(null);
   const [structuredData, setStructuredData] = useState<AssessmentData | null>(null);
-  const [reportKind, setReportKind] = useState<"general_msk" | "structured" | null>(null);
+  const [remoteQuestionnaireDraft, setRemoteQuestionnaireDraft] = useState<PatientAssessmentDraft | null>(null);
+  const [remoteIncludedSections, setRemoteIncludedSections] = useState<PatientSectionId[]>([]);
+  const [reportKind, setReportKind] = useState<"general_msk" | "structured" | "remote_questionnaire" | null>(null);
   const [serverBacked, setServerBacked] = useState(false);
   const [resolvedPatientId, setResolvedPatientId] = useState(patientIdParam);
   const [serverNotes, setServerNotes] = useState<string | null>(null);
@@ -657,6 +666,8 @@ export function AssessmentReportClient() {
       setLoading(true);
       setLoadError("");
       setStructuredData(null);
+      setRemoteQuestionnaireDraft(null);
+      setRemoteIncludedSections([]);
       setReportKind(null);
       setServerBacked(false);
       setPatientAnsweredInArabic(false);
@@ -686,12 +697,19 @@ export function AssessmentReportClient() {
             setDraft(general);
             setReportKind("general_msk");
           } else {
-            const structured = extractStructuredData(detail.structured_data);
-            if (structured) {
-              setStructuredData(structured);
-              setReportKind("structured");
+            const remoteDraft = extractRemoteQuestionnaireDraft(detail.structured_data, detail.type);
+            if (remoteDraft) {
+              setRemoteQuestionnaireDraft(remoteDraft);
+              setRemoteIncludedSections(inferIncludedSections(remoteDraft));
+              setReportKind("remote_questionnaire");
             } else {
-              setLoadError("Assessment data format is not supported for this report.");
+              const structured = extractStructuredData(detail.structured_data);
+              if (structured) {
+                setStructuredData(structured);
+                setReportKind("structured");
+              } else {
+                setLoadError("Assessment data format is not supported for this report.");
+              }
             }
           }
         } catch (err) {
@@ -868,6 +886,64 @@ export function AssessmentReportClient() {
               ← Patient profile
             </Link>
           )}
+        </div>
+      </main>
+    );
+  }
+
+  if (reportKind === "remote_questionnaire" && remoteQuestionnaireDraft) {
+    const hasRedFlag = detectRedFlag(remoteQuestionnaireDraft);
+    return (
+      <main className="assessment-report-root print-report min-h-screen bg-[#0B1220] text-white">
+        <RasqPrintHeader
+          patientName={patient?.full_name ?? "Patient"}
+          patientId={patientId}
+          displayDate={reportDate}
+          assessmentId={assessmentId || undefined}
+        />
+        <header className="screen-only sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220]">
+          <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
+            <Link href={patientId ? `/clinician/patients/${patientId}` : "/clinician/patients"}
+              className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white">
+              ← Patient
+            </Link>
+            <button type="button" onClick={() => window.print()}
+              className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white">
+              Export Clinical Report (PDF)
+            </button>
+          </div>
+        </header>
+        <section className="screen-only border-b border-white/10 bg-[#0F1825] px-6 py-8">
+          <div className="mx-auto max-w-4xl">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
+              Remote Questionnaire Assessment
+            </p>
+            <h1 className="mt-1 text-2xl font-bold text-white">
+              {patient?.full_name ?? "Patient"}
+            </h1>
+            <p className="mt-1 text-sm text-white/50">
+              {formatDate(reportDate)} {assessmentId && <>· ID {assessmentId.slice(0, 8)}…</>}
+            </p>
+          </div>
+        </section>
+        <div className="print-report-body mx-auto max-w-4xl px-6 py-8 space-y-6">
+          <section className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+            <h2 className="text-base font-bold text-white">Patient submitted answers</h2>
+            {hasRedFlag && (
+              <div className="mt-4 rounded-[7px] border border-amber-300/25 bg-amber-400/10 px-4 py-3">
+                <p className="text-sm font-semibold text-amber-200">
+                  Patient reported a possible red flag — review before proceeding.
+                </p>
+              </div>
+            )}
+            <div className="mt-4">
+              <PatientSubmittedAnswersReview
+                patientDraft={remoteQuestionnaireDraft}
+                includedSections={remoteIncludedSections}
+              />
+            </div>
+          </section>
+          <p className="text-xs text-white/30">{DISCLAIMER}</p>
         </div>
       </main>
     );

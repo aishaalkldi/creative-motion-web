@@ -40,9 +40,12 @@ import {
   type RemoteAssessmentRequest,
 } from "../../../lib/api/remote-assessments";
 import { SendAssessmentModal } from "./SendAssessmentModal";
-import { PatientSubmittedAnswersReview } from "../../../components/PatientSubmittedAnswersReview";
 import { SessionScheduleView } from "../../../components/SessionScheduleView";
 import type { PatientProgressSummary } from "../../../api/clinician/patient-progress/route";
+import {
+  buildRemoteQuestionnaireSummary,
+  extractRemoteQuestionnaireDraft,
+} from "../../../lib/remote-questionnaire-summary";
 
 export default function PatientProfilePage() {
   const params = useParams();
@@ -83,6 +86,7 @@ export default function PatientProfilePage() {
 
   // RASQ new-style assessments (from rasq_assessments localStorage)
   const [rasqAssessments, setRasqAssessments] = useState<SavedAssessment[]>([]);
+  const [supabaseAssessmentRows, setSupabaseAssessmentRows] = useState<AssessmentRow[]>([]);
 
   // Assessment-saved banner (shown when redirected from /clinician/assessment/new)
   const [showAssessmentBanner, setShowAssessmentBanner] = useState(
@@ -252,8 +256,29 @@ export default function PatientProfilePage() {
       .then(async (res) => {
         if (!res.ok) return;
         const rows = (await res.json()) as AssessmentRow[];
-        // Map Supabase AssessmentRow → SavedAssessment for the existing display cards
+        setSupabaseAssessmentRows(rows);
+        // Map Supabase AssessmentRow → SavedAssessment for legacy display cards
         const mapped: SavedAssessment[] = rows.map((r) => {
+          const remoteDraft = extractRemoteQuestionnaireDraft(r.structured_data, r.type);
+          if (remoteDraft) {
+            const painScore = remoteDraft.pain?.painScore?.trim();
+            return {
+              id: r.id,
+              patientId: 0,
+              patientName: "",
+              type: r.type,
+              typeLabel: "Remote Questionnaire Assessment",
+              date: r.created_at.split("T")[0] ?? "",
+              pain: painScore ? Number.parseInt(painScore, 10) || 0 : 0,
+              rom: 0,
+              strength: "See report",
+              mobilityNotes: remoteDraft.pain?.chiefComplaint ?? r.notes ?? "",
+              savedAt: r.created_at,
+              bodyRegion: remoteDraft.pain?.painLocation || undefined,
+              rehabilitationPhase: undefined,
+              assessmentData: undefined,
+            };
+          }
           const general = extractGeneralDraft(r.structured_data, r.type);
           if (general) {
             const nprs = Number.parseInt(general.subjective.nprs, 10);
@@ -340,6 +365,70 @@ export default function PatientProfilePage() {
     if (next) return next;
     return "Not recorded";
   }, [therapySessions]);
+
+  const clinicalSummaryRow = useMemo(() => {
+    const remote = supabaseAssessmentRows.find((row) => row.type === "remote_questionnaire");
+    return remote ?? supabaseAssessmentRows[0] ?? null;
+  }, [supabaseAssessmentRows]);
+
+  const clinicalSummary = useMemo(() => {
+    if (!clinicalSummaryRow) return null;
+    if (clinicalSummaryRow.type === "remote_questionnaire") {
+      return buildRemoteQuestionnaireSummary(
+        clinicalSummaryRow.structured_data,
+        clinicalSummaryRow.created_at,
+      );
+    }
+    const general = extractGeneralDraft(clinicalSummaryRow.structured_data, clinicalSummaryRow.type);
+    if (general) {
+      return {
+        title: "General MSK Assessment",
+        submittedAt: clinicalSummaryRow.created_at,
+        metrics: [
+          ...(general.subjective.nprs.trim()
+            ? [{ label: "Pain score", value: `${general.subjective.nprs}/10` }]
+            : []),
+          ...(general.subjective.painLocation.trim()
+            ? [{ label: "Body region", value: general.subjective.painLocation }]
+            : []),
+        ],
+        rows: [
+          ...(general.subjective.chiefComplaint.trim()
+            ? [{ label: "Main complaint", value: general.subjective.chiefComplaint }]
+            : []),
+          ...(general.subjective.aggravating.trim()
+            ? [{ label: "Aggravating factors", value: general.subjective.aggravating }]
+            : []),
+          ...(general.subjective.goals.trim()
+            ? [{ label: "Functional goal", value: general.subjective.goals }]
+            : []),
+        ],
+        hasRedFlag: Boolean(general.subjective.redFlags.trim()),
+      };
+    }
+    const structured = extractStructuredData(clinicalSummaryRow.structured_data);
+    if (structured) {
+      return {
+        title: structured.bodyRegion || "Structured Assessment",
+        submittedAt: clinicalSummaryRow.created_at,
+        metrics: [
+          { label: "Pain at rest", value: `${structured.painAtRest}/10` },
+          { label: "Pain on movement", value: `${structured.painOnMovement}/10` },
+          { label: "Body region", value: structured.bodyRegion },
+        ],
+        rows: [
+          ...(structured.clinicalNotes.trim()
+            ? [{ label: "Clinical notes", value: structured.clinicalNotes }]
+            : []),
+          ...(structured.rehabilitationPhase
+            ? [{ label: "Rehab phase", value: structured.rehabilitationPhase }]
+            : []),
+        ],
+        hasRedFlag: false,
+      };
+    }
+    return null;
+  }, [clinicalSummaryRow]);
 
   function handleCreateRemoteRequest() {
     if (!patient) return;
@@ -451,15 +540,13 @@ export default function PatientProfilePage() {
 
   const submittedRemote = remoteAssessments.filter((r) => r.status === "submitted");
   const pendingRemote   = remoteAssessments.filter((r) => r.status === "pending" || r.status === "in_progress");
-  const latestRasqAssessment = rasqAssessments[0] ?? null;
-  const primaryReportHref = latestRasqAssessment?.id
-    ? `/clinician/assessment/report?patientId=${patient.id}&assessmentId=${latestRasqAssessment.id}`
+  const clinicalSummaryAssessmentId = clinicalSummaryRow?.id ?? null;
+  const primaryReportHref = clinicalSummaryAssessmentId
+    ? `/clinician/assessment/report?patientId=${patient.id}&assessmentId=${clinicalSummaryAssessmentId}`
     : `/clinician/assessment/report?patientId=${patient.id}`;
-  const overviewLatestAssessment = latestRasqAssessment
-    ? `${latestRasqAssessment.typeLabel || latestRasqAssessment.type} · ${new Date(latestRasqAssessment.savedAt || latestRasqAssessment.date).toLocaleDateString()}`
-    : submittedRemote[0]
-      ? `${ASSESSMENT_TYPE_LABELS[submittedRemote[0].assessmentType]} · ${new Date(submittedRemote[0].submittedAt!).toLocaleDateString()}`
-      : "—";
+  const overviewLatestAssessment = clinicalSummary
+    ? `${clinicalSummary.title} · ${new Date(clinicalSummary.submittedAt).toLocaleDateString()}`
+    : "—";
   const overviewCurrentPlan = treatmentPlan?.programName ?? "—";
   const overviewProgressSnapshot = planProgress
     ? `${planProgress.sessionsCompleted}/${planProgress.totalSessions} sessions · ${planProgress.progressPct}%`
@@ -467,7 +554,7 @@ export default function PatientProfilePage() {
       ? `${adherence.sessionsCompleted}/${adherence.totalSessions} sessions · ${adherence.adherenceRatePct}%`
       : "—";
   const hasAnyAssessment =
-    rasqAssessments.length > 0 || submittedRemote.length > 0 || backendAssessmentHistory.length > 0;
+    supabaseAssessmentRows.length > 0 || submittedRemote.length > 0 || backendAssessmentHistory.length > 0;
 
   return (
     <>
@@ -721,85 +808,99 @@ export default function PatientProfilePage() {
               </div>
             )}
 
-            {/* Latest submitted assessment */}
+            {/* Clinical Assessment Summary */}
             <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <h2 className="text-lg font-bold text-white">Latest submitted assessment</h2>
+              <h2 className="text-lg font-bold text-white">Clinical Assessment Summary</h2>
               <p className="mt-1 mb-5 text-xs text-white/35">
-                Submitted assessments appear here. Session progress and adherence are on Results.
+                Submitted patient assessments appear here. Session progress and adherence are on Results.
               </p>
 
-              {submittedRemote.length > 0 && submittedRemote[0] && (
-                <div className="mb-5 rounded-[8px] border border-lime-300/20 bg-lime-400/[0.06] px-4 py-3">
-                  <p className="text-sm font-semibold text-lime-300">
-                    {submittedRemote.length === 1
-                      ? "Patient assessment submitted"
-                      : `${submittedRemote.length} patient assessments submitted`}
-                  </p>
-                  <p className="mt-0.5 text-xs text-white/50">
-                    {ASSESSMENT_TYPE_LABELS[submittedRemote[0].assessmentType]} ·{" "}
-                    {new Date(submittedRemote[0].submittedAt!).toLocaleString()}
-                  </p>
-                </div>
-              )}
-
-              <div className="mb-5">
-                {submittedRemote.length > 0 && submittedRemote[0] ? (
-                  <div className="space-y-4">
-                    <PatientSubmittedAnswersReview
-                      patientDraft={submittedRemote[0].patientDraft}
-                      includedSections={submittedRemote[0].includedSections}
-                    />
-                  </div>
-                ) : latestRasqAssessment ? (
+              {clinicalSummary ? (
+                <div className="space-y-5">
                   <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4">
-                    <p className="text-sm font-semibold text-white">
-                      {latestRasqAssessment.typeLabel || latestRasqAssessment.bodyRegion || latestRasqAssessment.type}
-                    </p>
-                    <p className="mt-1 text-xs text-white/45">
-                      Submitted {new Date(latestRasqAssessment.savedAt || latestRasqAssessment.date).toLocaleString()}
-                    </p>
-                  </div>
-                ) : (
-                  <p className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
-                    No submitted assessment yet.
-                  </p>
-                )}
-              </div>
-
-              {rasqAssessments.length > 0 && (
-                <div className="mb-5 space-y-2">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">Saved assessments</p>
-                  {rasqAssessments.slice(0, 3).map((a) => (
-                    <div key={a.id} className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-white">
-                          {a.typeLabel || a.bodyRegion || a.type}
-                        </p>
-                        <p
-                          className="shrink-0 text-[10px] text-white/30"
-                          style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
-                        >
-                          {a.date}
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-white">{clinicalSummary.title}</p>
+                        <p className="mt-1 text-xs text-white/45">
+                          Submitted {new Date(clinicalSummary.submittedAt).toLocaleString()}
                         </p>
                       </div>
-                      <p className="mt-1 text-xs text-white/40">
-                        {a.assessmentData
-                          ? `Rest ${a.assessmentData.painAtRest}/10 · Move ${a.assessmentData.painOnMovement}/10`
-                          : `Pain ${a.pain}/10 · ${a.type === "general_msk" ? "General MSK" : `ROM ${a.rom || "—"}°`}`}
-                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {clinicalSummaryRow?.type === "remote_questionnaire" && (
+                          <span className="rounded-[5px] border border-[#1E2D42] bg-[#0F1825] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white/45">
+                            Remote
+                          </span>
+                        )}
+                        <span className="rounded-[5px] border border-lime-300/20 bg-lime-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-lime-300">
+                          Submitted
+                        </span>
+                      </div>
                     </div>
-                  ))}
-                </div>
-              )}
 
-              {hasAnyAssessment ? (
-                <Link
-                  href={primaryReportHref}
-                  className="inline-flex rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-4 py-2.5 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
-                >
-                  View Assessment Report
-                </Link>
-              ) : null}
+                    {clinicalSummary.hasRedFlag && (
+                      <div className="mt-4 rounded-[7px] border border-amber-300/25 bg-amber-400/10 px-3 py-2.5">
+                        <p className="text-xs font-semibold text-amber-200">
+                          Patient reported a possible red flag — review before proceeding.
+                        </p>
+                      </div>
+                    )}
+
+                    {clinicalSummary.metrics.length > 0 && (
+                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                        {clinicalSummary.metrics.map((metric) => (
+                          <div
+                            key={metric.label}
+                            className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5"
+                          >
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+                              {metric.label}
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-white">{metric.value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {clinicalSummary.rows.length > 0 && (
+                      <dl className="mt-4 divide-y divide-[#1E2D42] rounded-[7px] border border-[#1E2D42]">
+                        {clinicalSummary.rows.map((row) => (
+                          <div key={row.label} className="px-3 py-2.5">
+                            <dt className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                              {row.label}
+                            </dt>
+                            <dd className="mt-0.5 text-sm leading-relaxed text-white/80 whitespace-pre-wrap">
+                              {row.value}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    )}
+
+                  </div>
+
+                  {clinicalSummaryAssessmentId && (
+                    <Link
+                      href={primaryReportHref}
+                      className="inline-flex rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-4 py-2.5 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
+                    >
+                      View Full Assessment Report →
+                    </Link>
+                  )}
+
+                  <div className="rounded-[8px] border border-dashed border-[#1E2D42] bg-[#0B1220]/60 px-4 py-3 opacity-60">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">
+                      AI-assisted Clinical Draft
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-white/35">
+                      Available after clinician reviews and approves the assessment summary. Coming in a future update.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
+                  No submitted assessment yet.
+                </p>
+              )}
             </section>
 
             {/* Rehabilitation Plan */}
