@@ -125,17 +125,19 @@ function QuestionLabel({
   speakText?: string;
   lang: PatientLang;
 }) {
-  const { isSupported, speak } = useSpeechSynthesis();
+  const { mounted, isSupported, speak } = useSpeechSynthesis();
 
   return (
     <div className="mb-2 flex items-start gap-2">
       <p className="flex-1 text-sm font-semibold text-white/90">{children}</p>
-      {isSupported && speakText ? (
+      {mounted && isSupported && speakText ? (
         <button
           type="button"
           onClick={() => speak(speakText, lang)}
           aria-label="Listen to question"
-          className="flex h-6 w-6 shrink-0 items-center justify-center border-none bg-transparent text-sm text-[#9CA3AF] transition hover:text-[#1D9E75]"
+          title="Listen to question"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] border border-white/20 bg-white/[0.06] text-sm text-white/80 transition hover:border-[#1D9E75] hover:text-[#1D9E75]"
+          style={{ borderWidth: "0.5px" }}
         >
           🔊
         </button>
@@ -337,13 +339,15 @@ export function PatientAssessmentClient() {
   const [draft, setDraft] = useState<PatientAssessmentDraft>(emptyDraft());
   const [lang, setLang] = useState<PatientLang>("en");
   const [submitting, setSubmitting] = useState(false);
-  const [voiceConsentGiven, setVoiceConsentGiven] = useState(
-    () =>
-      typeof window !== "undefined" &&
-      sessionStorage.getItem("rasq_voice_consent") === "1",
-  );
+  const [voiceConsentGiven, setVoiceConsentGiven] = useState(false);
   const [showConsentBanner, setShowConsentBanner] = useState(false);
   const [voiceMethods, setVoiceMethods] = useState<Record<string, "voice">>({});
+
+  useEffect(() => {
+    if (sessionStorage.getItem("rasq_voice_consent") === "1") {
+      setVoiceConsentGiven(true);
+    }
+  }, []);
 
   useEffect(() => {
     if (!token) {

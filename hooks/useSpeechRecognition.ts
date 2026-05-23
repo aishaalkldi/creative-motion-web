@@ -1,15 +1,27 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+
+function detectSpeechRecognitionSupport(): boolean {
+  if (typeof window === 'undefined') return false
+  const w = window as Window & typeof globalThis & {
+    SpeechRecognition?: unknown
+    webkitSpeechRecognition?: unknown
+  }
+  return !!(w.SpeechRecognition || w.webkitSpeechRecognition)
+}
 
 export function useSpeechRecognition(lang: 'ar' | 'en') {
-  const isSupported = typeof window !== 'undefined' &&
-    ('SpeechRecognition' in window ||
-     'webkitSpeechRecognition' in window)
-
+  const [mounted, setMounted] = useState(false)
+  const [isSupported, setIsSupported] = useState(false)
   const [isListening, setIsListening] = useState(false)
   const [transcript, setTranscript] = useState('')
   const recognitionRef = useRef<any>(null)
+
+  useEffect(() => {
+    setIsSupported(detectSpeechRecognitionSupport())
+    setMounted(true)
+  }, [])
 
   const startListening = useCallback(() => {
     if (!isSupported) return
@@ -42,6 +54,6 @@ export function useSpeechRecognition(lang: 'ar' | 'en') {
     setIsListening(false)
   }, [])
 
-  return { isSupported, isListening, transcript,
+  return { mounted, isSupported, isListening, transcript,
            startListening, stopListening }
 }

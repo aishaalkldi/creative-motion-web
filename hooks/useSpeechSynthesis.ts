@@ -1,10 +1,20 @@
 'use client'
 
-import { useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+
+function detectSpeechSynthesisSupport(): boolean {
+  if (typeof window === 'undefined') return false
+  return 'speechSynthesis' in window
+}
 
 export function useSpeechSynthesis() {
-  const isSupported = typeof window !== 'undefined' &&
-    'speechSynthesis' in window
+  const [mounted, setMounted] = useState(false)
+  const [isSupported, setIsSupported] = useState(false)
+
+  useEffect(() => {
+    setIsSupported(detectSpeechSynthesisSupport())
+    setMounted(true)
+  }, [])
 
   const speak = useCallback((text: string, lang: 'ar' | 'en') => {
     if (!isSupported) return
@@ -19,5 +29,5 @@ export function useSpeechSynthesis() {
     if (isSupported) window.speechSynthesis.cancel()
   }, [isSupported])
 
-  return { isSupported, speak, stop }
+  return { mounted, isSupported, speak, stop }
 }
