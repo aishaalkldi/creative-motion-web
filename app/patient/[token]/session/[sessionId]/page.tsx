@@ -238,7 +238,7 @@ export default function SessionPlayerPage() {
   /* Already completed — avoid confusing re-run */
   if (session.status === "completed" && !completed) {
     const completedLabel = session.completedAt
-      ? new Date(session.completedAt).toLocaleDateString(undefined, {
+      ? new Date(session.completedAt).toLocaleString(undefined, {
           dateStyle: "medium",
           timeStyle: "short",
         })
