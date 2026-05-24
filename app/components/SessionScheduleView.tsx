@@ -6,7 +6,12 @@ import {
   type SchedulableSession,
 } from "@/app/lib/session-schedule";
 import { formatDoseLabel } from "@/app/lib/exercise-prescription";
-import { parseStoredExercise } from "@/app/lib/exercise-resolve";
+import { parseStoredExercise, type PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
+import {
+  formatSessionDisplayTitle,
+  localizeScheduleLabel,
+  planHomeUi,
+} from "@/app/lib/patient-portal-ui";
 
 type Props = {
   sessions: SchedulableSession[];
@@ -15,6 +20,8 @@ type Props = {
   patientToken?: string;
   /** Clinician dark theme vs patient light */
   variant?: "clinician" | "patient";
+  /** Patient portal language for schedule labels */
+  language?: PatientExerciseLanguage;
   getDisplayStatus?: (
     sessions: SchedulableSession[],
     session: SchedulableSession,
@@ -45,17 +52,20 @@ function defaultPatientStatus(
 function StatusPill({
   status,
   variant,
+  language = "en",
 }: {
   status: string;
   variant: "clinician" | "patient";
+  language?: PatientExerciseLanguage;
 }) {
   const isDone = status === "done" || status === "completed";
   const isToday = status === "today" || status === "in-progress";
+  const homeUi = planHomeUi(language);
 
   if (variant === "patient") {
-    if (isDone) return <span className="shrink-0 rounded-[6px] bg-[#E8F5F1] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#085041]">Done</span>;
-    if (isToday) return <span className="shrink-0 rounded-[6px] bg-[#1D9E75] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">Start today</span>;
-    return <span className="shrink-0 rounded-[6px] border border-[#E2E8E5] bg-[#F4F6F5] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#9CA3AF]">Upcoming</span>;
+    if (isDone) return <span className="shrink-0 rounded-[6px] bg-[#E8F5F1] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#085041]">{homeUi.done}</span>;
+    if (isToday) return <span className="shrink-0 rounded-[6px] bg-[#1D9E75] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-white">{homeUi.startToday}</span>;
+    return <span className="shrink-0 rounded-[6px] border border-[#E2E8E5] bg-[#F4F6F5] px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#9CA3AF]">{homeUi.upcoming}</span>;
   }
 
   if (isDone) return <span className="text-[10px] font-semibold text-[#5DCAA5]">Done</span>;
@@ -68,15 +78,18 @@ export function SessionScheduleView({
   sessionsPerWeek,
   patientToken,
   variant = "patient",
+  language = "en",
   getDisplayStatus,
 }: Props) {
   const weeks = groupSessionsBySchedule(sessions, sessionsPerWeek);
   const resolveStatus = getDisplayStatus ?? defaultPatientStatus;
+  const homeUi = planHomeUi(language);
+  const patientLang = variant === "patient" ? language : "en";
 
   if (weeks.length === 0) {
     return (
       <p className={variant === "clinician" ? "text-xs text-white/35" : "text-[13px] text-[#9CA3AF]"}>
-        No sessions scheduled yet.
+        {variant === "patient" ? homeUi.noSessionsScheduled : "No sessions scheduled yet."}
       </p>
     );
   }
@@ -93,19 +106,34 @@ export function SessionScheduleView({
       {weeks.map((week) => (
         <div key={week.weekLabel} className={`rounded-[10px] border ${borderCls} ${bgCls} overflow-hidden`}>
           <div className={`border-b ${borderCls} px-4 py-2.5`}>
-            <p className={weekTitleCls}>{week.weekLabel}</p>
+            <p className={weekTitleCls}>
+              {variant === "patient"
+                ? localizeScheduleLabel(week.weekLabel, patientLang)
+                : week.weekLabel}
+            </p>
           </div>
           <div className={`divide-y ${borderCls}`}>
             {week.days.map((day) => (
               <div key={`${week.weekLabel}-${day.dayLabel}`} className="px-4 py-3.5">
-                <p className={`${dayTitleCls} mb-2.5`}>{day.dayLabel}</p>
+                <p className={`${dayTitleCls} mb-2.5`}>
+                  {variant === "patient"
+                    ? localizeScheduleLabel(day.dayLabel, patientLang)
+                    : day.dayLabel}
+                </p>
                 <div className="space-y-3">
                   {day.sessions.map((session) => {
                     const st = resolveStatus(sessions, session);
                     const isToday = st === "today";
-                    const displayTitle = session.title.trim().toLowerCase().startsWith(`session ${session.sessionNumber}`)
-                      ? session.title
-                      : `Session ${session.sessionNumber} — ${session.title}`;
+                    const displayTitle =
+                      variant === "patient"
+                        ? formatSessionDisplayTitle(
+                            session.sessionNumber,
+                            session.title,
+                            patientLang,
+                          )
+                        : session.title.trim().toLowerCase().startsWith(`session ${session.sessionNumber}`)
+                          ? session.title
+                          : `Session ${session.sessionNumber} — ${session.title}`;
                     const exerciseCount = session.exercises?.length ?? 0;
                     const estimatedMinutes = Math.max(10, (session.exercises?.length ?? 3) * 4);
                     const row = (
@@ -115,12 +143,12 @@ export function SessionScheduleView({
                           {exerciseCount > 0 && (
                             <p className={`mt-1 ${subCls}`}>
                               {variant === "patient"
-                                ? `${exerciseCount} exercise${exerciseCount === 1 ? "" : "s"} · ~${estimatedMinutes} min`
+                                ? homeUi.exercisesMinutes(exerciseCount, estimatedMinutes)
                                 : formatClinicianExerciseSummary(session.exercises)}
                             </p>
                           )}
                         </div>
-                        <StatusPill status={st} variant={variant} />
+                        <StatusPill status={st} variant={variant} language={patientLang} />
                       </div>
                     );
 

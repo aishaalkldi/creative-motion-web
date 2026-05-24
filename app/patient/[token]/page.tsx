@@ -3,22 +3,22 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { IBM_Plex_Sans_Arabic } from "next/font/google";
 import type { PatientPlanData } from "@/app/api/patient/plan/route";
 import { SessionScheduleView } from "@/app/components/SessionScheduleView";
+import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
+import {
+  getPortalGreeting,
+  planHomeUi,
+  portalTextDir,
+} from "@/app/lib/patient-portal-ui";
 
-/* ── Helpers ────────────────────────────────────────────────────────────────── */
+const arabicFont = IBM_Plex_Sans_Arabic({
+  subsets: ["arabic"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+});
 
-function getGreeting(): string {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
-  return "Good evening";
-}
-
-/**
- * Maps DB session statuses (upcoming/today/completed/skipped) to display state.
- * The first non-completed session is treated as today's session.
- */
 function sessionDisplayStatus(
   sessions: { id: string; status: string }[],
   session: { id: string; status: string },
@@ -28,8 +28,6 @@ function sessionDisplayStatus(
   if (firstPending?.id === session.id) return "today";
   return "upcoming";
 }
-
-/* ── Page ───────────────────────────────────────────────────────────────────── */
 
 export default function PatientDashboard() {
   const params = useParams();
@@ -49,22 +47,29 @@ export default function PatientDashboard() {
           return;
         }
         if (!res.ok) {
-          setLoadErr("Unable to load your plan. Please try again.");
+          setLoadErr("load");
           setPlan(null);
           return;
         }
         setPlan((await res.json()) as PatientPlanData);
       })
       .catch(() => {
-        setLoadErr("Connection error. Please check your connection and try again.");
+        setLoadErr("connection");
         setPlan(null);
       });
   }, [token, router]);
 
+  const lang: PatientExerciseLanguage =
+    plan && plan.patientLanguage === "ar" ? "ar" : "en";
+  const ui = planHomeUi(lang);
+  const isArabic = lang === "ar";
+  const textDir = portalTextDir(lang);
+  const arClass = isArabic ? arabicFont.className : "";
+
   if (plan === undefined) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <p className="text-[13px] text-[#9CA3AF]">Loading…</p>
+        <p className={`text-[13px] text-[#9CA3AF] ${arClass}`}>{ui.loading}</p>
       </div>
     );
   }
@@ -72,7 +77,9 @@ export default function PatientDashboard() {
   if (!plan) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <p className="text-[13px] text-rose-400">{loadErr || "Plan not found."}</p>
+        <p className={`text-[13px] text-rose-400 ${arClass}`}>
+          {loadErr === "connection" ? ui.connectionError : ui.loadError}
+        </p>
       </div>
     );
   }
@@ -94,13 +101,13 @@ export default function PatientDashboard() {
 
   if (!hasSessions) {
     return (
-      <div className="space-y-6">
+      <div className={`space-y-6 ${arClass}`} dir={textDir} lang={lang}>
         <div>
           <h1
             className="text-[22px] font-bold text-[#0A0F1A]"
             style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
           >
-            {getGreeting()}, {patientName.split(" ")[0]}.
+            {getPortalGreeting(lang)}, {patientName.split(" ")[0]}.
           </h1>
           <p className="mt-1 text-[13px] text-[#6B7280]">
             {diagnosis} · {plan.phaseName}
@@ -108,18 +115,16 @@ export default function PatientDashboard() {
         </div>
 
         <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-6 text-center">
-          <p className="text-[15px] font-semibold text-[#0A0F1A]">
-            Your therapist is finalizing your session schedule.
-          </p>
-          <p className="mt-2 text-[13px] leading-relaxed text-[#6B7280]">
-            Please check back later once your rehabilitation sessions are ready.
-          </p>
+          <p className="text-[15px] font-semibold text-[#0A0F1A]">{ui.finalizingSchedule}</p>
+          <p className="mt-2 text-[13px] leading-relaxed text-[#6B7280]">{ui.checkBackLater}</p>
           {plan.clinicianNotes && (
             <blockquote className="mt-5 border-t border-[#E2E8E5] pt-5 text-left">
               <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#374151]">
-                Note from your therapist
+                {ui.noteFromTherapist}
               </p>
-              <p className="mt-2 text-[13px] leading-relaxed text-[#6B7280]">{plan.clinicianNotes}</p>
+              <p className="mt-2 text-[13px] leading-relaxed text-[#6B7280]" dir="ltr">
+                {plan.clinicianNotes}
+              </p>
             </blockquote>
           )}
         </div>
@@ -128,17 +133,16 @@ export default function PatientDashboard() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Plan header */}
+    <div className={`space-y-6 ${arClass}`} dir={textDir} lang={lang}>
       <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
         <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]">
-          Your rehabilitation plan
+          {ui.yourRehabPlan}
         </p>
         <h1
           className="mt-2 text-[22px] font-bold leading-tight text-[#0A0F1A]"
           style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
         >
-          {getGreeting()}, {patientName.split(" ")[0]}.
+          {getPortalGreeting(lang)}, {patientName.split(" ")[0]}.
         </h1>
         <p className="mt-2 text-[15px] font-semibold text-[#0A0F1A]">
           {plan.planTitle || plan.programName}
@@ -148,21 +152,20 @@ export default function PatientDashboard() {
         </p>
         <p className="mt-1 text-[12px] text-[#9CA3AF]">
           {showWeekContext
-            ? `Week ${currentWeek} of ${plan.totalWeeks}`
-            : `Your ${total}-session program`}
+            ? ui.weekOfProgram(currentWeek, plan.totalWeeks ?? 1)
+            : ui.sessionProgram(total)}
         </p>
         <p className="mt-3 text-[12px] font-medium text-[#6B7280]">
-          Assigned by your clinician
+          {ui.assignedByClinician}
           {plan.assignedBy ? ` · ${plan.assignedBy}` : ""}
         </p>
       </div>
 
-      {/* Recovery progress bar */}
       <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[11px] text-[#6B7280]">Your progress</p>
+          <p className="text-[11px] text-[#6B7280]">{ui.yourProgress}</p>
           <p className="text-[11px] font-medium text-[#1D9E75]">
-            {completed} of {total} session{total === 1 ? "" : "s"}
+            {ui.sessionsProgress(completed, total)}
           </p>
         </div>
         <div className="mt-3 h-[6px] w-full overflow-hidden rounded-full bg-[#E2E8E5]">
@@ -175,16 +178,13 @@ export default function PatientDashboard() {
 
       {allSessionsComplete && (
         <div className="rounded-[10px] border border-[#D1E7DE] bg-[#F0FAF6] p-5 text-center">
-          <p className="text-[16px] font-semibold text-[#085041]">All sessions complete</p>
-          <p className="mt-2 text-[13px] leading-relaxed text-[#374151]">
-            You have finished every session in your current plan. Your therapist will review your progress
-            and may update your program.
-          </p>
+          <p className="text-[16px] font-semibold text-[#085041]">{ui.allSessionsComplete}</p>
+          <p className="mt-2 text-[13px] leading-relaxed text-[#374151]">{ui.allSessionsCompleteBody}</p>
           <Link
             href={`/patient/${token}/progress`}
             className="mt-4 inline-flex min-h-[44px] items-center justify-center rounded-[7px] bg-[#1D9E75] px-5 text-[14px] font-semibold text-white transition hover:bg-[#179165]"
           >
-            View my progress
+            {ui.viewMyProgress}
           </Link>
         </div>
       )}
@@ -194,7 +194,8 @@ export default function PatientDashboard() {
           style={{
             background: "#F9FAFB",
             border: "0.5px solid #E2E8E5",
-            borderLeft: "3px solid #1D9E75",
+            borderLeft: isArabic ? undefined : "3px solid #1D9E75",
+            borderRight: isArabic ? "3px solid #1D9E75" : undefined,
             borderRadius: "8px",
             padding: "10px 14px",
             fontSize: "12px",
@@ -203,16 +204,16 @@ export default function PatientDashboard() {
             marginBottom: "16px",
           }}
         >
-          A note from your therapist: {plan.clinicianNotes}
+          {ui.noteFromTherapistInline}{" "}
+          <span dir="ltr">{plan.clinicianNotes}</span>
         </div>
       )}
 
-      {/* Metric cards */}
       <div className="grid grid-cols-3 gap-3">
         {[
-          { label: "Total sessions", value: String(total), sub: "in your plan" },
-          { label: "Completed", value: String(completed), sub: "sessions done" },
-          { label: "Progress", value: `${progress}%`, sub: "completion" },
+          { label: ui.totalSessions, value: String(total), sub: ui.inYourPlan },
+          { label: ui.completed, value: String(completed), sub: ui.sessionsDone },
+          { label: ui.progress, value: `${progress}%`, sub: ui.completion },
         ].map(({ label, value, sub }) => (
           <div
             key={label}
@@ -230,15 +231,12 @@ export default function PatientDashboard() {
         ))}
       </div>
 
-      {/* Session schedule */}
       <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
         <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[#374151]">
-          Your sessions
+          {ui.yourSessions}
         </p>
         <p className="mb-4 text-[12px] text-[#6B7280]">
-          {allSessionsComplete
-            ? "Your completed sessions are listed below."
-            : "Tap today's session when you are ready to begin."}
+          {allSessionsComplete ? ui.completedSessionsListed : ui.tapTodaySession}
         </p>
         <SessionScheduleView
           sessions={plan.sessions.map((s) => ({
@@ -253,19 +251,19 @@ export default function PatientDashboard() {
           sessionsPerWeek={plan.sessionsPerWeek}
           patientToken={token}
           variant="patient"
+          language={lang}
           getDisplayStatus={(sessions, session) =>
             sessionDisplayStatus(sessions, session)
           }
         />
       </div>
 
-      {/* Progress link */}
-      <div className="pb-2 text-right">
+      <div className={`pb-2 ${isArabic ? "text-left" : "text-right"}`}>
         <Link
           href={`/patient/${token}/progress`}
           className="text-[13px] font-semibold text-[#1D9E75] transition hover:text-[#179165]"
         >
-          View my progress →
+          {ui.viewMyProgressArrow}
         </Link>
       </div>
     </div>
