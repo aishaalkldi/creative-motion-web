@@ -389,3 +389,149 @@ export function localizeClinicalActionMessage(
 export function portalTextDir(lang: PatientPortalLanguage): "rtl" | "ltr" {
   return lang === "ar" ? "rtl" : "ltr";
 }
+
+/* ── Progress page ─────────────────────────────────────────────────────────── */
+
+export type ProgressPageUi = {
+  loading: string;
+  loadError: string;
+  connectionError: string;
+  planNotFound: string;
+  backToPlan: string;
+  pageTitle: string;
+  pageSubtitle: string;
+  sessionsCompleted: string;
+  progress: string;
+  adherence: string;
+  averageEffort: string;
+  latestPain: string;
+  inYourPlan: string;
+  completionRate: string;
+  selfReported: string;
+  notRecordedYet: string;
+  keepGoing: string;
+  overallProgress: string;
+  sessionHistory: string;
+  completeFirstSession: string;
+  clinicalReviewNote: string;
+  latestPainScore: string;
+  noteFromTherapist: string;
+  sessionLabel: (n: number) => string;
+  completedStatus: string;
+  notCompletedStatus: string;
+  painAfterSession: string;
+  effort: string;
+  noteToTherapist: string;
+  noSessionDataYet: string;
+  exercisesCompleted: (count: number) => string;
+};
+
+const PROGRESS_PAGE: Record<PatientPortalLanguage, ProgressPageUi> = {
+  en: {
+    loading: "Loading…",
+    loadError: "Unable to load progress data. Please try again.",
+    connectionError: "Connection error. Please check your connection and try again.",
+    planNotFound: "Plan not found.",
+    backToPlan: "← Back to my plan",
+    pageTitle: "Your Rehabilitation Progress",
+    pageSubtitle:
+      "Progress is updated after each completed session. Your therapist reviews this regularly.",
+    sessionsCompleted: "Sessions completed",
+    progress: "Progress",
+    adherence: "Adherence",
+    averageEffort: "Average effort",
+    latestPain: "Latest pain",
+    inYourPlan: "in your plan",
+    completionRate: "completion rate",
+    selfReported: "self-reported",
+    notRecordedYet: "not recorded yet",
+    keepGoing: "Keep going — your progress builds as you complete more sessions.",
+    overallProgress: "Overall progress",
+    sessionHistory: "Session history",
+    completeFirstSession: "Complete your first session to see your timeline.",
+    clinicalReviewNote: "Detailed clinical progress will be reviewed by your therapist.",
+    latestPainScore: "Latest pain score",
+    noteFromTherapist: "Note from your therapist",
+    sessionLabel: (n) => `Session ${n}`,
+    completedStatus: "Completed",
+    notCompletedStatus: "Not completed",
+    painAfterSession: "Pain after session",
+    effort: "Effort",
+    noteToTherapist: "Note to your therapist",
+    noSessionDataYet: "No session data recorded yet.",
+    exercisesCompleted: (count) =>
+      `${count} exercise${count === 1 ? "" : "s"} completed`,
+  },
+  ar: {
+    loading: "جاري التحميل…",
+    loadError: "تعذّر تحميل بيانات التقدّم. يرجى المحاولة مرة أخرى.",
+    connectionError: "خطأ في الاتصال. تحقّق من الشبكة وحاول مرة أخرى.",
+    planNotFound: "الخطة غير موجودة.",
+    backToPlan: "← العودة إلى خطتي",
+    pageTitle: "تقدّمك في التأهيل",
+    pageSubtitle:
+      "يُحدَّث التقدّم بعد كل جلسة مكتملة. يراجع معالجك هذا بانتظام.",
+    sessionsCompleted: "الجلسات المكتملة",
+    progress: "التقدّم",
+    adherence: "الالتزام",
+    averageEffort: "متوسط الجهد",
+    latestPain: "آخر مستوى ألم",
+    inYourPlan: "في خطتك",
+    completionRate: "نسبة الإكمال",
+    selfReported: "حسب تقريرك",
+    notRecordedYet: "لم يُسجَّل بعد",
+    keepGoing: "واصل — يتكوّن تقدّمك مع كل جلسة تكملها.",
+    overallProgress: "التقدّم الإجمالي",
+    sessionHistory: "سجل الجلسات",
+    completeFirstSession: "أكمل جلستك الأولى لعرض الجدول الزمني.",
+    clinicalReviewNote: "سيراجع معالجك التقدّم السريري التفصيلي.",
+    latestPainScore: "آخر درجة ألم",
+    noteFromTherapist: "ملاحظة من معالجك",
+    sessionLabel: (n) => `الجلسة ${n}`,
+    completedStatus: "مكتملة",
+    notCompletedStatus: "غير مكتملة",
+    painAfterSession: "الألم بعد الجلسة",
+    effort: "الجهد",
+    noteToTherapist: "ملاحظة للمُعالج",
+    noSessionDataYet: "لا توجد بيانات مسجّلة لهذه الجلسة بعد.",
+    exercisesCompleted: (count) =>
+      count === 1 ? "تمرين واحد مكتمل" : `${count} تمارين مكتملة`,
+  },
+};
+
+/* ── Token layout ──────────────────────────────────────────────────────────── */
+
+export type TokenLayoutUi = {
+  assignedBy: (name: string) => string;
+};
+
+const TOKEN_LAYOUT: Record<PatientPortalLanguage, TokenLayoutUi> = {
+  en: {
+    assignedBy: (name) => `Assigned by ${name}`,
+  },
+  ar: {
+    assignedBy: (name) => `موصى بها من ${name}`,
+  },
+};
+
+export function progressPageUi(lang: PatientPortalLanguage): ProgressPageUi {
+  return PROGRESS_PAGE[lang];
+}
+
+export function tokenLayoutUi(lang: PatientPortalLanguage): TokenLayoutUi {
+  return TOKEN_LAYOUT[lang];
+}
+
+export function formatPortalDate(
+  iso: string,
+  lang: PatientPortalLanguage,
+): string {
+  try {
+    return new Date(iso).toLocaleString(lang === "ar" ? "ar-SA" : undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+  } catch {
+    return iso;
+  }
+}
