@@ -470,6 +470,9 @@ function NewPlanInner() {
       let payload: Record<string, unknown>;
 
       if (selectedTemplateId && planSessions.length > 0) {
+        const activeTemplate = PILOT_PROGRAM_TEMPLATES.find(
+          (t) => t.id === selectedTemplateId,
+        );
         payload = {
           patientId:      selectedPatient.id,
           assessmentId:   baselineId || null,
@@ -478,11 +481,17 @@ function NewPlanInner() {
           programName:    planTitle.trim() || "Pilot Rehabilitation Plan",
           phase:          "phase-1",
           phaseName:      "Phase 1",
-          phaseGoal:      planGoal.trim() || "Complete assigned sessions as prescribed.",
+          phaseGoal:      planGoal.trim() || activeTemplate?.phaseGoal || "Complete assigned sessions as prescribed.",
           sessionsPerWeek: 3,
           totalWeeks:     Math.max(1, Math.ceil(planSessions.length / 3)),
           clinicianNote:  notes,
           assignedBy:     "Dr. Provider",
+          programTemplateId: selectedTemplateId,
+          programGoal: activeTemplate?.programGoal ?? planGoal.trim(),
+          patientFriendlyGoal: activeTemplate?.patientFriendlyGoal,
+          expectedResponse: activeTemplate?.expectedResponse,
+          reviewCriteria: activeTemplate?.reviewCriteria,
+          safetyNotes: activeTemplate?.safetyNotes ?? (notes.trim() || undefined),
           sessions:       planSessions.map((s) => ({
             sessionNumber: s.sessionNumber,
             title:         s.title.trim() || `Session ${s.sessionNumber}`,

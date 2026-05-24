@@ -114,6 +114,17 @@ export default function PatientDashboard() {
           </p>
         </div>
 
+        {plan.patientRehabFocus?.trim() && (
+          <div className="rounded-[10px] border border-[#D1E7DE] bg-[#F0FAF6] p-4">
+            <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#085041]">
+              {ui.yourRehabFocus}
+            </p>
+            <p className="mt-2 text-[14px] leading-relaxed text-[#374151]">
+              {plan.patientRehabFocus}
+            </p>
+          </div>
+        )}
+
         <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-6 text-center">
           <p className="text-[15px] font-semibold text-[#0A0F1A]">{ui.finalizingSchedule}</p>
           <p className="mt-2 text-[13px] leading-relaxed text-[#6B7280]">{ui.checkBackLater}</p>
@@ -160,6 +171,17 @@ export default function PatientDashboard() {
           {plan.assignedBy ? ` · ${plan.assignedBy}` : ""}
         </p>
       </div>
+
+      {plan.patientRehabFocus?.trim() && (
+        <div className="rounded-[10px] border border-[#D1E7DE] bg-[#F0FAF6] p-4">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#085041]">
+            {ui.yourRehabFocus}
+          </p>
+          <p className="mt-2 text-[14px] leading-relaxed text-[#374151]">
+            {plan.patientRehabFocus}
+          </p>
+        </div>
+      )}
 
       <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
         <div className="flex items-center justify-between gap-3">

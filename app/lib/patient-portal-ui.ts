@@ -14,6 +14,7 @@ export type PlanHomeUi = {
   goodAfternoon: string;
   goodEvening: string;
   yourRehabPlan: string;
+  yourRehabFocus: string;
   weekOfProgram: (week: number, totalWeeks: number) => string;
   sessionProgram: (total: number) => string;
   assignedByClinician: string;
@@ -53,6 +54,7 @@ const PLAN_HOME: Record<PatientPortalLanguage, PlanHomeUi> = {
     goodAfternoon: "Good afternoon",
     goodEvening: "Good evening",
     yourRehabPlan: "Your rehabilitation plan",
+    yourRehabFocus: "Your rehab focus",
     weekOfProgram: (week, totalWeeks) => `Week ${week} of ${totalWeeks}`,
     sessionProgram: (total) => `Your ${total}-session program`,
     assignedByClinician: "Assigned by your clinician",
@@ -93,6 +95,7 @@ const PLAN_HOME: Record<PatientPortalLanguage, PlanHomeUi> = {
     goodAfternoon: "مساء الخير",
     goodEvening: "مساء الخير",
     yourRehabPlan: "خطتك للتأهيل",
+    yourRehabFocus: "تركيز خطتك التأهيلية",
     weekOfProgram: (week, totalWeeks) => `الأسبوع ${week} من ${totalWeeks}`,
     sessionProgram: (total) => `برنامجك (${total} جلسات)`,
     assignedByClinician: "موصى بها من معالجك",

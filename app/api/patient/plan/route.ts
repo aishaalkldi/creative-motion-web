@@ -16,6 +16,7 @@ import {
 } from "../../../lib/rate-limit";
 import { parseStoredExercises, type PrescribedExerciseV1 } from "../../../lib/exercise-resolve";
 import { getAssessmentLanguage, type AssessmentLanguage } from "../../../lib/assessment-payload";
+import { resolvePatientRehabFocus } from "../../../lib/plan-program-metadata";
 
 // ── Public types (imported by patient portal pages) ────────────────────────────
 
@@ -41,6 +42,8 @@ export type PatientPlanData = {
   programName: string;
   phaseName: string;
   phaseGoal: string;
+  /** Patient-facing rehab focus (from program metadata or safe fallback) */
+  patientRehabFocus: string;
   sessionsPerWeek: number;
   totalWeeks: number | null;
   /** Clinician note visible to the patient */
@@ -189,6 +192,7 @@ export async function GET(req: NextRequest) {
     programName:     sd?.programName ?? plan.title ?? "Rehabilitation Plan",
     phaseName:       sd?.phaseName ?? "Phase 1",
     phaseGoal:       sd?.phaseGoal ?? "",
+    patientRehabFocus: resolvePatientRehabFocus(sd, sd?.phaseGoal, patientLanguage),
     sessionsPerWeek: sd?.sessionsPerWeek ?? 3,
     totalWeeks:      plan.total_weeks ?? null,
     clinicianNotes:  plan.clinician_note ?? "",

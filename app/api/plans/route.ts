@@ -11,6 +11,10 @@ import {
   type PrescribedExerciseV1,
 } from "../../lib/exercise-resolve";
 import type { StoredExercise } from "../../lib/exercise-prescription";
+import {
+  buildPlanProgramMetadata,
+  type PlanProgramMetadata,
+} from "../../lib/plan-program-metadata";
 
 const PLAN_CREATE_ERROR = "Failed to create plan.";
 
@@ -26,7 +30,7 @@ export type PlanStructuredData = {
   sessionsPerWeek: number;
   assignedBy: string;
   phases?: unknown[]; // phase config used in the custom plan builder
-};
+} & PlanProgramMetadata;
 
 export type PlanSessionRow = {
   id: string;
@@ -114,6 +118,12 @@ type PostBody = {
     exercises: (string | PrescribedExerciseV1)[];
   }[];
   assignedBy?: string;
+  programTemplateId?: string;
+  programGoal?: string;
+  patientFriendlyGoal?: string;
+  expectedResponse?: string;
+  reviewCriteria?: string;
+  safetyNotes?: string;
 };
 
 /**
@@ -144,6 +154,17 @@ export async function POST(req: NextRequest) {
   const ownership = await validatePatientOwnership(adminClient, patientId, user.id);
   if (!ownership.ok) return NextResponse.json({ error: ownership.message }, { status: ownership.httpStatus });
 
+  const programMetadata = buildPlanProgramMetadata({
+    programTemplateId:
+      body.programTemplateId ??
+      (body.programId && body.programId !== "custom" ? body.programId : undefined),
+    programGoal: body.programGoal ?? body.phaseGoal,
+    patientFriendlyGoal: body.patientFriendlyGoal,
+    expectedResponse: body.expectedResponse,
+    reviewCriteria: body.reviewCriteria,
+    safetyNotes: body.safetyNotes,
+  });
+
   const structuredData: PlanStructuredData = {
     programId:       body.programId ?? "custom",
     programName:     body.programName ?? body.title ?? "Custom Plan",
@@ -153,6 +174,7 @@ export async function POST(req: NextRequest) {
     sessionsPerWeek: body.sessionsPerWeek ?? 3,
     assignedBy:      body.assignedBy ?? "Clinician",
     phases:          body.phases,
+    ...programMetadata,
   };
 
   // Insert treatment plan
