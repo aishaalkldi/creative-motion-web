@@ -73,7 +73,7 @@ export default function PatientDashboard() {
   }
 
   const patientName = plan.patientName || "Patient";
-  const diagnosis   = plan.diagnosis ?? plan.programName;
+  const planSubtitle = plan.programName || plan.planTitle;
 
   const completed = plan.sessions.filter((s) => s.status === "completed").length;
   const total     = plan.sessions.length;
@@ -98,7 +98,7 @@ export default function PatientDashboard() {
             {getPortalGreeting(lang)}, {patientName.split(" ")[0]}.
           </h1>
           <p className="mt-1 text-[13px] text-[#6B7280]">
-            {diagnosis} · {plan.phaseName}
+            {planSubtitle} · {plan.phaseName}
           </p>
         </div>
 
@@ -147,7 +147,7 @@ export default function PatientDashboard() {
           {plan.planTitle || plan.programName}
         </p>
         <p className="mt-1 text-[13px] text-[#6B7280]">
-          {diagnosis ? `${diagnosis} · ` : ""}{plan.phaseName}
+          {planSubtitle ? `${planSubtitle} · ` : ""}{plan.phaseName}
         </p>
         <p className="mt-1 text-[12px] text-[#9CA3AF]">
           {showWeekContext

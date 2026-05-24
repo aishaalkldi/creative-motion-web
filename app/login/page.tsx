@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { TrustFooter } from "../components/trust/TrustFooter";
 import { loginClinician } from "../lib/api";
 import { ensureProviderProfile } from "../lib/auth/ensure-provider-client";
 import { setupDevAuthSession } from "../lib/dev-auth";
@@ -255,9 +256,10 @@ function LoginForm() {
           </div>
         </div>
 
-        <p className="mt-6 text-center text-xs text-white/15">
+        <p className="mt-4 text-center text-xs text-white/15">
           RASQ by Creative Motion Lab · Secure · Built for clinical workflows
         </p>
+        <TrustFooter variant="dark" className="mt-2 border-none" />
       </div>
     </main>
   );

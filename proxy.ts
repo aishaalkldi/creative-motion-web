@@ -30,8 +30,16 @@ const PUBLIC_PREFIXES = [
   "/fonts",
 ];
 
+const PUBLIC_PATHS = new Set([
+  "/privacy",
+  "/terms",
+  "/intended-use",
+  "/clinical-safety",
+]);
+
 function isPublic(pathname: string): boolean {
   if (pathname === "/") return true;
+  if (PUBLIC_PATHS.has(pathname)) return true;
   return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 

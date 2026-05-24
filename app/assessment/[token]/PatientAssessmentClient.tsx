@@ -25,6 +25,8 @@ import {
   patientText,
   type PatientQuestionField,
 } from "@/app/lib/patient-assessment-questions";
+import { TrustFooter } from "@/app/components/trust/TrustFooter";
+import { trustFooterUi } from "@/app/lib/patient-portal-ui";
 
 const arabicFont = IBM_Plex_Sans_Arabic({
   subsets: ["arabic"],
@@ -667,12 +669,15 @@ export function PatientAssessmentClient() {
 
   if (tokenState === "invalid") {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-[#071a2f] px-6 text-center">
-        <div className="mx-auto max-w-sm">
-          <h1 className="text-xl font-bold text-white">{patientText(PATIENT_UI.linkUnavailable, lang)}</h1>
-          <p className="mt-3 text-sm leading-6 text-white/50">{patientText(PATIENT_UI.linkUnavailableBody, lang)}</p>
-          <p className="mt-6 text-xs font-semibold text-cyan-400/70 tracking-wide">RASQ</p>
+      <div className="flex min-h-screen flex-col bg-[#071a2f] px-6 text-center text-white">
+        <div className="flex flex-1 flex-col items-center justify-center">
+          <div className="mx-auto max-w-sm">
+            <h1 className="text-xl font-bold text-white">{patientText(PATIENT_UI.linkUnavailable, lang)}</h1>
+            <p className="mt-3 text-sm leading-6 text-white/50">{patientText(PATIENT_UI.linkUnavailableBody, lang)}</p>
+            <p className="mt-6 text-xs font-semibold tracking-wide text-cyan-400/70">RASQ</p>
+          </div>
         </div>
+        <TrustFooter variant="dark" labels={trustFooterUi(lang)} className="pb-8" />
       </div>
     );
   }
@@ -687,17 +692,24 @@ export function PatientAssessmentClient() {
 
   if (!consentGiven) {
     return (
-      <div className="min-h-screen bg-[#071a2f] text-white">
+      <div className="flex min-h-screen flex-col bg-[#071a2f] text-white">
         <header className="flex h-14 items-center justify-center border-b border-white/8 bg-[#071a2f]/90 px-5 backdrop-blur-md">
           <span className="text-sm font-bold tracking-[-0.03em] text-cyan-300">RASQ</span>
         </header>
-        <PilotConsentPanel onAccept={() => setConsentGiven(true)} />
+        <div className="flex-1">
+          <PilotConsentPanel onAccept={() => setConsentGiven(true)} />
+        </div>
+        <TrustFooter
+          variant="dark"
+          labels={trustFooterUi(lang)}
+          className="mx-auto w-full max-w-xl px-5 pb-8"
+        />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#071a2f] text-white">
+    <div className="flex min-h-screen flex-col bg-[#071a2f] text-white">
       <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-white/8 bg-[#071a2f]/90 px-5 backdrop-blur-md">
         <span className="text-sm font-bold tracking-[-0.03em] text-cyan-300">RASQ</span>
         {stage === "section" && (
@@ -860,6 +872,12 @@ export function PatientAssessmentClient() {
           </div>
         )}
       </main>
+
+      <TrustFooter
+        variant="dark"
+        labels={trustFooterUi(lang)}
+        className="mx-auto w-full max-w-xl px-5 pb-8"
+      />
     </div>
   );
 }

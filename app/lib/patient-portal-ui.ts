@@ -525,6 +525,62 @@ export function tokenLayoutUi(lang: PatientPortalLanguage): TokenLayoutUi {
   return TOKEN_LAYOUT[lang];
 }
 
+/* ── Trust footer & safety notice (Sprint D) ───────────────────────────────── */
+
+export type TrustFooterUi = {
+  privacy: string;
+  terms: string;
+  intendedUse: string;
+  clinicalSafety: string;
+};
+
+export type PatientSafetyNoticeUi = {
+  title: string;
+  line1: string;
+  line2: string;
+  line3: string;
+};
+
+const TRUST_FOOTER: Record<PatientPortalLanguage, TrustFooterUi> = {
+  en: {
+    privacy: "Privacy",
+    terms: "Terms",
+    intendedUse: "Intended Use",
+    clinicalSafety: "Clinical Safety",
+  },
+  ar: {
+    privacy: "الخصوصية",
+    terms: "الشروط",
+    intendedUse: "الاستخدام المقصود",
+    clinicalSafety: "السلامة السريرية",
+  },
+};
+
+const PATIENT_SAFETY_NOTICE: Record<PatientPortalLanguage, PatientSafetyNoticeUi> = {
+  en: {
+    title: "Safety notice",
+    line1:
+      "Stop if you feel sharp pain, dizziness, chest pain, shortness of breath, or unusual symptoms.",
+    line2: "Contact your therapist if symptoms worsen.",
+    line3:
+      "This platform supports your therapist's plan and does not replace clinical assessment.",
+  },
+  ar: {
+    title: "تنبيه السلامة",
+    line1: "توقّف إذا شعرت بألم حاد، دوخة، ألم في الصدر، ضيق تنفس، أو أعراض غير معتادة.",
+    line2: "تواصل مع معالجك إذا زادت الأعراض.",
+    line3: "هذه المنصة تدعم خطة معالجك ولا تستبدل التقييم السريري.",
+  },
+};
+
+export function trustFooterUi(lang: PatientPortalLanguage): TrustFooterUi {
+  return TRUST_FOOTER[lang];
+}
+
+export function patientSafetyNoticeUi(lang: PatientPortalLanguage): PatientSafetyNoticeUi {
+  return PATIENT_SAFETY_NOTICE[lang];
+}
+
 export function formatPortalDate(
   iso: string,
   lang: PatientPortalLanguage,
