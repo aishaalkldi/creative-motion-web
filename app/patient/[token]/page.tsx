@@ -20,8 +20,8 @@ function getGreeting(): string {
  * The first non-completed session is treated as today's session.
  */
 function sessionDisplayStatus(
-  sessions: PatientPlanData["sessions"],
-  session: PatientPlanData["sessions"][number],
+  sessions: { id: string; status: string }[],
+  session: { id: string; status: string },
 ): "done" | "today" | "upcoming" {
   if (session.status === "completed") return "done";
   const firstPending = sessions.find((s) => s.status !== "completed");
@@ -254,18 +254,7 @@ export default function PatientDashboard() {
           patientToken={token}
           variant="patient"
           getDisplayStatus={(sessions, session) =>
-            sessionDisplayStatus(
-              sessions.map((s) => ({
-                ...s,
-                exercises: s.exercises ?? [],
-                status: s.status as PatientPlanData["sessions"][number]["status"],
-              })),
-              {
-                ...session,
-                exercises: session.exercises ?? [],
-                status: session.status as PatientPlanData["sessions"][number]["status"],
-              },
-            )
+            sessionDisplayStatus(sessions, session)
           }
         />
       </div>

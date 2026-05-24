@@ -14,6 +14,18 @@ import {
   type PilotProgramSession,
   type PilotProgramTemplate,
 } from "@/app/lib/program-templates";
+import {
+  ExerciseLibraryPicker,
+  PrescribedExerciseEditor,
+} from "@/app/components/clinician/ExerciseLibraryPicker";
+import type { PrescribedExerciseV1 } from "@/app/lib/exercise-resolve";
+import { isPrescribedExerciseV1 } from "@/app/lib/exercise-prescription";
+
+type PlanSessionDraft = {
+  sessionNumber: number;
+  title: string;
+  exercises: (string | PrescribedExerciseV1)[];
+};
 
 /* ─── Phase row ──────────────────────────────────────────────────────────── */
 
@@ -175,9 +187,48 @@ function EditableSessionCard({
   session,
   onChange,
 }: {
-  session: PilotProgramSession;
-  onChange: (updated: PilotProgramSession) => void;
+  session: PlanSessionDraft;
+  onChange: (updated: PlanSessionDraft) => void;
 }) {
+  const structured = session.exercises.filter(isPrescribedExerciseV1);
+  const textLines = session.exercises
+    .filter((ex): ex is string => typeof ex === "string")
+    .join("\n");
+
+  function addExercise(exercise: PrescribedExerciseV1) {
+    onChange({ ...session, exercises: [...session.exercises, exercise] });
+  }
+
+  function updateStructured(index: number, updated: PrescribedExerciseV1) {
+    const next = [...session.exercises];
+    let si = 0;
+    for (let i = 0; i < next.length; i++) {
+      if (isPrescribedExerciseV1(next[i]!)) {
+        if (si === index) {
+          next[i] = updated;
+          break;
+        }
+        si++;
+      }
+    }
+    onChange({ ...session, exercises: next });
+  }
+
+  function removeStructured(index: number) {
+    const next = [...session.exercises];
+    let si = 0;
+    for (let i = 0; i < next.length; i++) {
+      if (isPrescribedExerciseV1(next[i]!)) {
+        if (si === index) {
+          next.splice(i, 1);
+          break;
+        }
+        si++;
+      }
+    }
+    onChange({ ...session, exercises: next });
+  }
+
   return (
     <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4 space-y-3">
       <div className="flex items-center gap-2">
@@ -194,23 +245,45 @@ function EditableSessionCard({
           className="flex-1 rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-sm font-semibold text-white outline-none focus:border-[#1D9E75]/40"
         />
       </div>
+
+      {structured.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">
+            Library exercises
+          </p>
+          {structured.map((ex, i) => (
+            <PrescribedExerciseEditor
+              key={`${ex.exerciseId}-${i}`}
+              exercise={ex}
+              onChange={(updated) => updateStructured(i, updated)}
+              onRemove={() => removeStructured(i)}
+            />
+          ))}
+        </div>
+      )}
+
+      <ExerciseLibraryPicker onAdd={addExercise} />
+
       <div>
         <label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-white/25">
-          Exercises
+          Custom exercises (text fallback)
         </label>
         <textarea
-          rows={Math.max(3, session.exercises.length)}
-          value={session.exercises.join("\n")}
-          onChange={(e) =>
-            onChange({
-              ...session,
-              exercises: e.target.value.split("\n").map((line) => line.trim()).filter(Boolean),
-            })
-          }
-          placeholder="One exercise per line"
+          rows={Math.max(2, textLines.split("\n").filter(Boolean).length || 2)}
+          value={textLines}
+          onChange={(e) => {
+            const customLines = e.target.value
+              .split("\n")
+              .map((line) => line.trim())
+              .filter(Boolean);
+            onChange({ ...session, exercises: [...structured, ...customLines] });
+          }}
+          placeholder="One exercise per line — used when not in library"
           className="w-full resize-y rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5 text-sm text-white outline-none placeholder:text-white/20 focus:border-[#1D9E75]/40"
         />
-        <p className="mt-1 text-[11px] text-white/20">One exercise per line. Edit before assigning.</p>
+        <p className="mt-1 text-[11px] text-white/20">
+          Library exercises above are saved with structured dose. Custom lines remain as text.
+        </p>
       </div>
     </div>
   );
@@ -231,7 +304,7 @@ function NewPlanInner() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [planTitle,  setPlanTitle]  = useState("");
   const [planGoal,   setPlanGoal]   = useState("");
-  const [planSessions, setPlanSessions] = useState<PilotProgramSession[]>([]);
+  const [planSessions, setPlanSessions] = useState<PlanSessionDraft[]>([]);
   const [saving,     setSaving]     = useState(false);
   const [saved,      setSaved]      = useState(false);
   const [saveError,  setSaveError]  = useState("");
@@ -284,7 +357,13 @@ function NewPlanInner() {
     setProgramId("");
     setPlanTitle(cloned.title);
     setPlanGoal(cloned.goal);
-    setPlanSessions(cloned.sessions);
+    setPlanSessions(
+      cloned.sessions.map((s) => ({
+        sessionNumber: s.sessionNumber,
+        title: s.title,
+        exercises: [...s.exercises],
+      })),
+    );
     setNotes((prev) => {
       if (prev.trim()) return prev;
       return cloned.safetyNote;
@@ -305,7 +384,7 @@ function NewPlanInner() {
     setPlanSessions([]);
   }
 
-  function updatePlanSession(index: number, updated: PilotProgramSession) {
+  function updatePlanSession(index: number, updated: PlanSessionDraft) {
     setPlanSessions((prev) => prev.map((s, i) => (i === index ? updated : s)));
   }
 

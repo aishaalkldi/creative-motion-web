@@ -5,6 +5,8 @@ import {
   groupSessionsBySchedule,
   type SchedulableSession,
 } from "@/app/lib/session-schedule";
+import { formatDoseLabel } from "@/app/lib/exercise-prescription";
+import { parseStoredExercise } from "@/app/lib/exercise-resolve";
 
 type Props = {
   sessions: SchedulableSession[];
@@ -18,6 +20,17 @@ type Props = {
     session: SchedulableSession,
   ) => "done" | "today" | "upcoming" | "completed" | "ready" | "in-progress";
 };
+
+function formatClinicianExerciseSummary(exercises: SchedulableSession["exercises"]): string {
+  const items = (exercises ?? []).slice(0, 2).map((raw) => {
+    const parsed = parseStoredExercise(raw);
+    const dose = formatDoseLabel(parsed);
+    return dose ? `${parsed.name} (${dose})` : parsed.name;
+  });
+  const count = exercises?.length ?? 0;
+  if (count > 2) items.push(`+${count - 2}`);
+  return items.join(" · ");
+}
 
 function defaultPatientStatus(
   sessions: SchedulableSession[],
@@ -103,7 +116,7 @@ export function SessionScheduleView({
                             <p className={`mt-1 ${subCls}`}>
                               {variant === "patient"
                                 ? `${exerciseCount} exercise${exerciseCount === 1 ? "" : "s"} · ~${estimatedMinutes} min`
-                                : `${session.exercises!.slice(0, 2).join(" · ")}${exerciseCount > 2 ? ` +${exerciseCount - 2}` : ""}`}
+                                : formatClinicianExerciseSummary(session.exercises)}
                             </p>
                           )}
                         </div>

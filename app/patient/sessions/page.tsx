@@ -16,6 +16,7 @@ import {
   type TreatmentPlan,
   type PlanSession,
 } from "../../lib/api/treatment-plans";
+import { getExerciseDisplayName } from "../../lib/exercise-prescription";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ function mapPlanToSessions(plan: TreatmentPlan): AssignedSession[] {
     sessionNumber: s.sessionNumber,
     totalSessions: plan.totalSessions,
     estimatedMinutes: s.estimatedMinutes,
-    exercises: s.exercises,
+    exercises: s.exercises.map(getExerciseDisplayName),
     status: s.status,
     completedDate: s.completedAt
       ? new Date(s.completedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })

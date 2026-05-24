@@ -10,37 +10,7 @@ import {
   deriveClinicalAction,
   deriveMissedSessionsCount,
 } from "@/app/lib/clinical-action-engine";
-
-/* ── Exercise instructions lookup ───────────────────────────────────────────── */
-
-const INSTRUCTIONS: Record<string, string> = {
-  "Sit-to-Stand":
-    "Sit at the edge of a sturdy chair with feet shoulder-width apart. Lean forward slightly, push through your heels, and stand up fully. Slowly lower back to sitting. Keep your core engaged and knees tracking over your toes throughout.",
-  "Mini Squat (0–45°)":
-    "Stand with feet shoulder-width apart. Slowly bend your knees to approximately 45°, keeping your chest tall and weight through your heels. Hold for 2 seconds, then return to standing. Do not let your knees cave inward.",
-  "Heel Raises":
-    "Stand behind a chair for support. Slowly rise up onto the balls of both feet, hold for 2 seconds at the top, then lower with control. Focus on equal weight through both feet.",
-  "Single Leg Stance":
-    "Stand on your operated leg with a slight bend in the knee. Hold your balance for the prescribed duration. Use a wall or chair for safety if needed. Aim to minimise hip drop on the lifted side.",
-  "Low Step-Up":
-    "Stand facing a low step (15–20 cm). Step up with your operated leg, driving through the heel to fully straighten the knee. Step down with control. Keep your trunk upright.",
-  "Resistance Band Squats":
-    "Place a resistance band just above your knees. Stand with feet shoulder-width apart. Squat to 45–60°, pressing outward against the band to keep knees aligned. Return to standing.",
-  "Step-Ups":
-    "Step up onto a stair or box with your operated leg leading. Drive through the heel to stand fully upright, then step back down with control. Keep your hips level throughout.",
-  "Balance Board":
-    "Stand on the balance board with feet hip-width apart. Maintain your balance for the prescribed time. Progress to single-leg if tolerated. Focus on steady posture and controlled weight shifts.",
-};
-
-const WHY_THIS_MATTERS =
-  "This exercise supports safe movement control and helps your therapist monitor your rehabilitation progress.";
-
-function getInstructions(exercise: string): string {
-  return (
-    INSTRUCTIONS[exercise] ??
-    "Perform this exercise with controlled, deliberate movement. Focus on correct form and pain-free range of motion. Stop if you experience sharp pain."
-  );
-}
+import { resolveExerciseView } from "@/app/lib/exercise-resolve";
 
 function getTodaysGoal(sessionTitle: string): string {
   if (sessionTitle.trim()) {
@@ -178,6 +148,7 @@ export default function SessionPlayerPage() {
   const total     = exercises.length;
   const isLast    = exerciseIndex === total - 1;
   const current   = exercises[exerciseIndex];
+  const currentView = current ? resolveExerciseView(current) : null;
   const todaysGoal = getTodaysGoal(session.title);
 
   const precheckReady =
@@ -537,20 +508,40 @@ export default function SessionPlayerPage() {
           className="text-[18px] font-bold text-[#0A0F1A]"
           style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
         >
-          {current}
+          {currentView?.name ?? "Exercise"}
         </h2>
-        <p
-          className="mt-1 text-[13px] font-semibold text-[#1D9E75]"
-          style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
-        >
-          As prescribed by your therapist
-        </p>
+        {currentView?.doseLabel && (
+          <p
+            className="mt-2 text-[13px] font-semibold text-[#1D9E75]"
+            style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+          >
+            {currentView.doseLabel}
+          </p>
+        )}
+        {!currentView?.doseLabel && (
+          <p
+            className="mt-1 text-[13px] font-semibold text-[#1D9E75]"
+            style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+          >
+            As prescribed by your therapist
+          </p>
+        )}
         <p className="mt-4 text-[14px] leading-[1.7] text-[#374151]">
-          {getInstructions(current)}
+          {currentView?.patientInstructions}
         </p>
+        {currentView?.clinicianNote && (
+          <p className="mt-3 rounded-[7px] border border-[#D1E7DE] bg-[#F0FAF6] px-3 py-2.5 text-[12px] leading-relaxed text-[#374151]">
+            <span className="font-semibold text-[#0A0F1A]">Note from your therapist: </span>
+            {currentView.clinicianNote}
+          </p>
+        )}
         <p className="mt-4 rounded-[7px] border border-[#E2E8E5] bg-[#F9FAFB] px-3 py-2.5 text-[12px] leading-relaxed text-[#6B7280]">
           <span className="font-semibold text-[#374151]">Why this matters: </span>
-          {WHY_THIS_MATTERS}
+          {currentView?.whyThisMatters}
+        </p>
+        <p className="mt-3 rounded-[7px] border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] leading-relaxed text-amber-900">
+          <span className="font-semibold">Stop if: </span>
+          {currentView?.precautions}
         </p>
       </div>
 

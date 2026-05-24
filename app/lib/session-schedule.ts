@@ -3,15 +3,23 @@
  * Does not mutate database rows.
  */
 
+import type { StoredExercise } from "./exercise-prescription";
+import { getExerciseDisplayNameFromStored } from "./exercise-resolve";
+
 export type SchedulableSession = {
   id: string;
   sessionNumber: number;
   title: string;
-  exercises?: string[];
+  /** Legacy strings or structured prescriptions from plan_sessions.exercises jsonb */
+  exercises?: StoredExercise[];
   status: string;
   completedAt?: string | null;
   scheduledAt?: string | null;
 };
+
+export function getSchedulableExerciseNames(session: SchedulableSession): string[] {
+  return (session.exercises ?? []).map(getExerciseDisplayNameFromStored);
+}
 
 export type SessionDayGroup = {
   dayLabel: string;

@@ -6,6 +6,11 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { generateSecurePatientToken } from "../../lib/patient-access-token";
 import { validatePatientOwnership } from "../../lib/validate-patient-ownership";
+import {
+  normalizeExercisesForStorage,
+  type PrescribedExerciseV1,
+} from "../../lib/exercise-resolve";
+import type { StoredExercise } from "../../lib/exercise-prescription";
 
 const PLAN_CREATE_ERROR = "Failed to create plan.";
 
@@ -29,7 +34,7 @@ export type PlanSessionRow = {
   provider_id: string;
   session_number: number;
   title: string;
-  exercises: string[];
+  exercises: StoredExercise[];
   status: string;
   scheduled_at: string | null;
   completed_at: string | null;
@@ -106,7 +111,7 @@ type PostBody = {
   sessions?: {
     sessionNumber: number;
     title: string;
-    exercises: string[];
+    exercises: (string | PrescribedExerciseV1)[];
   }[];
   assignedBy?: string;
 };
@@ -189,7 +194,7 @@ export async function POST(req: NextRequest) {
       patient_id:     patientId,
       session_number: s.sessionNumber,
       title:          s.title,
-      exercises:      s.exercises,
+      exercises:      normalizeExercisesForStorage(s.exercises),
       status:         "upcoming",
     }));
     const { error: sessErr } = await adminClient.from("plan_sessions").insert(sessionRows);

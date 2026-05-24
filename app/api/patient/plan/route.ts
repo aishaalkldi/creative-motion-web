@@ -14,6 +14,7 @@ import {
   enforceFailedTokenRateLimit,
   rateLimitExceededResponse,
 } from "../../../lib/rate-limit";
+import { parseStoredExercises, type PrescribedExerciseV1 } from "../../../lib/exercise-resolve";
 
 // ── Public types (imported by patient portal pages) ────────────────────────────
 
@@ -21,7 +22,8 @@ export type PatientSession = {
   id: string;
   sessionNumber: number;
   title: string;
-  exercises: string[];
+  /** Normalized prescriptions; legacy string plans resolved at read time. */
+  exercises: PrescribedExerciseV1[];
   /** DB status values — portal pages map these to display states */
   status: "upcoming" | "today" | "completed" | "skipped";
   scheduledAt?: string | null;
@@ -141,7 +143,7 @@ export async function GET(req: NextRequest) {
     id: string;
     session_number: number;
     title: string;
-    exercises: string[];
+    exercises: unknown;
     status: string;
     scheduled_at: string | null;
     completed_at: string | null;
@@ -180,7 +182,7 @@ export async function GET(req: NextRequest) {
       id:            s.id,
       sessionNumber: s.session_number,
       title:         s.title,
-      exercises:     s.exercises ?? [],
+      exercises:     parseStoredExercises(s.exercises),
       status:        s.status as PatientSession["status"],
       scheduledAt:   s.scheduled_at,
       completedAt:   s.completed_at,

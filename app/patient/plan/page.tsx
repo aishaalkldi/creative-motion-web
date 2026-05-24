@@ -8,6 +8,7 @@ import {
   REHAB_PROGRAMS,
   type TreatmentPlan,
 } from "../../lib/api/treatment-plans";
+import { getExerciseDisplayName, type StoredExercise } from "../../lib/exercise-prescription";
 
 // ── Exercise coaching cues ─────────────────────────────────────────────────────
 const EXERCISE_CUES: Record<string, { sets: number; reps: number | string; rest: string; cue: string; cvTracked: boolean }> = {
@@ -45,8 +46,9 @@ interface Exercise {
   cvTracked: boolean;
 }
 
-function buildExercises(exerciseNames: string[]): Exercise[] {
-  return exerciseNames.map((name, i) => {
+function buildExercises(exerciseItems: StoredExercise[]): Exercise[] {
+  return exerciseItems.map((item, i) => {
+    const name = getExerciseDisplayName(item);
     const cue = EXERCISE_CUES[name] ?? {
       sets: 3, reps: 10, rest: "60s",
       cue: "Follow your clinician's instructions for this exercise.",

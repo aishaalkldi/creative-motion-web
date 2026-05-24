@@ -14,6 +14,8 @@
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+import type { StoredExercise } from "../exercise-prescription";
+
 export type SessionStatus = "ready" | "in-progress" | "completed";
 export type PlanStatus = "active" | "completed" | "on-hold";
 
@@ -21,7 +23,8 @@ export interface PlanSession {
   id: string;
   sessionNumber: number;
   title: string;
-  exercises: string[];
+  /** Legacy strings or structured prescriptions from plan_sessions.exercises jsonb */
+  exercises: StoredExercise[];
   estimatedMinutes: number;
   status: SessionStatus;
   completedAt?: string;
