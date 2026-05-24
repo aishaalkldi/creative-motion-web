@@ -35,6 +35,18 @@ export const PATIENT_RATE_LIMIT_FAILED: RateLimitConfig = {
   windowMs: DEFAULT_WINDOW_MS,
 };
 
+/** Remote assessment token routes — per IP + token prefix */
+export const REMOTE_ASSESSMENT_RATE_LIMIT: RateLimitConfig = {
+  max: 20,
+  windowMs: DEFAULT_WINDOW_MS,
+};
+
+/** Clinician AssemblyAI proxy — per provider */
+export const ASSEMBLYAI_RATE_LIMIT: RateLimitConfig = {
+  max: 15,
+  windowMs: DEFAULT_WINDOW_MS,
+};
+
 /**
  * Extract client IP from proxy headers (Vercel, nginx, local dev).
  */
@@ -103,6 +115,32 @@ export function enforceFailedTokenRateLimit(req: NextRequest): NextResponse | nu
     return rateLimitExceededResponse(result.retryAfterSec);
   }
   return null;
+}
+
+function tokenBucketPrefix(token: string): string {
+  const trimmed = token.trim();
+  if (trimmed.length <= 16) return trimmed;
+  return trimmed.slice(0, 16);
+}
+
+/**
+ * Rate limit remote assessment routes by IP + token prefix (applied before DB lookup).
+ */
+export function checkRemoteAssessmentLimit(
+  req: NextRequest,
+  token: string,
+  route: string,
+): RateLimitResult {
+  const ip = getClientIp(req);
+  const prefix = tokenBucketPrefix(token);
+  return consumeRateLimit(`remote:${route}:${ip}:${prefix}`, REMOTE_ASSESSMENT_RATE_LIMIT);
+}
+
+/**
+ * Rate limit AssemblyAI routes per authenticated clinician.
+ */
+export function checkAssemblyAiLimit(providerId: string): RateLimitResult {
+  return consumeRateLimit(`assemblyai:${providerId}`, ASSEMBLYAI_RATE_LIMIT);
 }
 
 /** Standard 429 response — no token or internal details. */

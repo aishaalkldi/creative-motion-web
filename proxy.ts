@@ -92,8 +92,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/clinician", request.url));
   }
 
-  // Protected route — redirect to /login, preserving the intended destination
+  // Protected route — redirect pages to /login; return 401 JSON for API routes
   if (!isPublic(pathname) && !authed) {
+    if (pathname.startsWith("/api/")) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("returnTo", pathname);
     return NextResponse.redirect(loginUrl);

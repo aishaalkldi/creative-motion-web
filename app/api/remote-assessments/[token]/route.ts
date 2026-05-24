@@ -1,6 +1,10 @@
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import {
+  checkRemoteAssessmentLimit,
+  rateLimitExceededResponse,
+} from "@/app/lib/rate-limit";
 
 function adminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -23,13 +27,18 @@ type RequestRow = {
  * Patient-facing lookup — no auth, token only.
  */
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ token: string }> },
 ) {
   const { token } = await params;
   const trimmed = token?.trim();
   if (!trimmed) {
     return NextResponse.json({ error: "Invalid or expired link" }, { status: 404 });
+  }
+
+  const limited = checkRemoteAssessmentLimit(req, trimmed, "get");
+  if (!limited.allowed) {
+    return rateLimitExceededResponse(limited.retryAfterSec);
   }
 
   const admin = adminClient();
@@ -46,13 +55,7 @@ export async function GET(
     .maybeSingle<RequestRow>();
 
   if (error) {
-    if (error.code === "42P01") {
-      return NextResponse.json(
-        { error: "remote_assessment_requests table missing. Apply migration 006." },
-        { status: 500 },
-      );
-    }
-    console.error("[GET /api/remote-assessments/[token]] query failed:", error.message);
+    console.error("[GET /api/remote-assessments/[token]] query failed");
     return NextResponse.json({ error: "Failed to load assessment." }, { status: 500 });
   }
 
