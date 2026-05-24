@@ -104,16 +104,16 @@ export default function PatientsPage() {
             </div>
             <div className="flex items-center gap-2.5">
               <Link
-                href="/clinician/assessment/new"
+                href="/clinician/patients/new"
                 className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]"
               >
-                + New Assessment
+                Add Patient
               </Link>
               <Link
-                href="/clinician/patients/new"
+                href="/clinician/assessment/new"
                 className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-4 py-2.5 text-sm font-semibold text-white/60 transition hover:border-[#1D9E75]/25 hover:text-white"
               >
-                Add Patient
+                New Assessment
               </Link>
             </div>
           </div>
@@ -133,7 +133,7 @@ export default function PatientsPage() {
               </svg>
               <input
                 type="text"
-                placeholder="Search by name, diagnosis, or ID…"
+                placeholder="Search by name, diagnosis, or phone…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full rounded-[7px] border border-[#1E2D42] bg-[#0F1825] py-2.5 pl-9 pr-4 text-sm text-white outline-none placeholder:text-white/20 focus:border-[#1D9E75]/40"
@@ -175,8 +175,18 @@ export default function PatientsPage() {
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-10 text-center text-[12px] text-[#6B7280]">
-                      {search ? "No patients match the current search." : "No patients yet. Add your first patient to get started."}
+                    <td colSpan={6} className="px-5 py-10 text-center">
+                      <p className="text-[12px] text-[#6B7280]">
+                        {search ? "No patients match the current search." : "No patients yet. Add your first patient to begin the pilot workflow."}
+                      </p>
+                      {!search && (
+                        <Link
+                          href="/clinician/patients/new"
+                          className="mt-4 inline-flex rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]"
+                        >
+                          Add your first patient
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 ) : (
@@ -193,12 +203,9 @@ export default function PatientsPage() {
                           </span>
                           <div>
                             <p className="text-sm font-semibold text-white">{patient.full_name}</p>
-                            <p
-                              className="text-[10px] text-white/25"
-                              style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
-                            >
-                              {patient.id.slice(0, 8)}…
-                            </p>
+                            {patient.phone && (
+                              <p className="text-[11px] text-white/35">{patient.phone}</p>
+                            )}
                           </div>
                         </div>
                       </td>

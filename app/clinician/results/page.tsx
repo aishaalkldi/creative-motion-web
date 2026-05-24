@@ -338,8 +338,9 @@ export default function UnifiedResultsPage() {
             </p>
             <h1 className="mt-2 text-2xl font-bold text-white">Results</h1>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/45">
-              Which patients need your attention today? One card per patient — assessment status,
-              rehab progress, and the next clinical action.
+              {reviewQueue.length > 0
+                ? `Start with ${reviewQueue.length} patient${reviewQueue.length > 1 ? "s" : ""} in the review queue below, then browse the full pipeline.`
+                : "One card per patient — assessment status, rehab progress, and recommended next action."}
             </p>
           </div>
           <Link
@@ -383,21 +384,40 @@ export default function UnifiedResultsPage() {
           <div className="mb-6 flex flex-wrap items-center gap-2">
             <FilterButton active={filter === "all"} onClick={() => setFilter("all")} label="All" count={pipeline.length} />
             <FilterButton active={filter === "assessment"} onClick={() => setFilter("assessment")} label="Assessment submitted" count={assessmentCount} />
-            <FilterButton active={filter === "in_rehab"} onClick={() => setFilter("in_rehab")} label="In rehab / plan assigned" count={inRehabCount + planAssignedCount} />
+            <FilterButton active={filter === "in_rehab"} onClick={() => setFilter("in_rehab")} label="In rehab or plan assigned" count={inRehabCount + planAssignedCount} />
             <FilterButton active={filter === "needs_review"} onClick={() => setFilter("needs_review")} label="Needs therapist review" count={needsReviewCount} />
             <FilterButton active={filter === "completed"} onClick={() => setFilter("completed")} label="Completed" count={completedCount} />
           </div>
 
           {loading ? (
-            <p className="py-12 text-center text-sm text-white/40">Loading patient pipeline…</p>
+            <div className="flex flex-col items-center gap-3 py-12">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1E2D42] border-t-[#1D9E75]" />
+              <p className="text-sm text-white/40">Loading patient pipeline…</p>
+            </div>
           ) : error ? (
             <div className="rounded-[7px] border border-rose-400/20 bg-rose-400/8 px-4 py-3 text-sm text-rose-300">
               {error}
             </div>
           ) : filtered.length === 0 ? (
-            <p className="py-12 text-center text-sm text-white/40">
-              No patient results yet. Send a remote assessment or assign a treatment plan to start the pipeline.
-            </p>
+            <div className="py-12 text-center">
+              <p className="text-sm text-white/40">
+                No patient results yet. Send a remote assessment or assign a treatment plan to start the pipeline.
+              </p>
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                <Link
+                  href="/clinician/patients"
+                  className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]"
+                >
+                  Open patients
+                </Link>
+                <Link
+                  href="/clinician/plans/new"
+                  className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-2.5 text-sm font-semibold text-white/60 transition hover:text-white"
+                >
+                  Build plan
+                </Link>
+              </div>
+            </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               {filtered.map((card) => (
@@ -465,7 +485,7 @@ function ReviewQueueCard({
           href={profileHref}
           className="inline-flex rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-3 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
         >
-          Review patient
+          Review patient chart
         </Link>
         <Link
           href={planHref}
@@ -549,9 +569,14 @@ function PatientPipelineCardView({
         </div>
       ) : card.assessment ? (
         <div className="mt-4 grid grid-cols-2 gap-2">
-          <Metric label="Pain at rest" value={card.assessment.painAtRest ?? "—"} />
-          <Metric label="Pain on movement" value={card.assessment.painOnMovement ?? "—"} />
-          <Metric label="Body region" value={card.assessment.bodyRegion ?? "—"} className="col-span-2" />
+          <Metric
+            label={card.assessment.painOnMovement ? "Pain at rest" : "Pain score (NPRS)"}
+            value={card.assessment.painAtRest ?? "—"}
+          />
+          {card.assessment.painOnMovement ? (
+            <Metric label="Pain on movement" value={card.assessment.painOnMovement} />
+          ) : null}
+          <Metric label="Body region" value={card.assessment.bodyRegion ?? "—"} className={card.assessment.painOnMovement ? "" : "col-span-2"} />
         </div>
       ) : null}
 
@@ -581,7 +606,7 @@ function PatientPipelineCardView({
             href={reportHref(card.patientId, card.assessment.assessmentId)}
             className="inline-flex rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-3 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
           >
-            Open Clinical Report
+            Review assessment report
           </Link>
         )}
         {card.rehab && (
@@ -589,14 +614,14 @@ function PatientPipelineCardView({
             href={`${profileHref}#rehabilitation-plan`}
             className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
           >
-            View Plan &amp; Sessions
+            View plan &amp; sessions
           </Link>
         )}
         <Link
           href={profileHref}
           className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
         >
-          View Patient Profile
+          Open patient chart
         </Link>
       </div>
     </article>

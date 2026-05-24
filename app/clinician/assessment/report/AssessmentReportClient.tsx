@@ -552,7 +552,9 @@ function ProgramRecommendationSection({
                     P{i + 1}
                   </span>
                   <div className="min-w-0">
-                    <p className={`text-xs font-semibold ${i === 0 ? "text-cyan-200" : "text-white/50"}`}>{ph.name}</p>
+                    <p className={`text-xs font-semibold ${i === 0 ? "text-cyan-200" : "text-white/50"}`}>
+                      Phase {i + 1}: {ph.name}
+                    </p>
                     <p className="mt-0.5 text-[11px] text-white/40">{ph.durationHint} · {ph.defaultSessions} sessions</p>
                   </div>
                 </div>
@@ -562,6 +564,49 @@ function ProgramRecommendationSection({
         ))}
       </div>
     </ReportSection>
+  );
+}
+
+// ── Report next steps (pilot demo flow) ───────────────────────────────────────
+
+function ReportNextStepsFooter({
+  patientId,
+  existingPlan,
+}: {
+  patientId: string;
+  existingPlan: TreatmentPlan | null;
+}) {
+  const planHref = `/clinician/plans/new?patientId=${encodeURIComponent(patientId)}`;
+  const profileHref = `/clinician/patients/${patientId}`;
+  const profilePlanHref = `${profileHref}#rehabilitation-plan`;
+
+  return (
+    <section className="screen-only overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+      <h2 className="text-base font-bold text-white">Next steps</h2>
+      <p className="mt-1 text-sm text-white/45">
+        Review this report, then assign or update the treatment plan. All clinical decisions remain with you.
+      </p>
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <Link
+          href={planHref}
+          className="inline-flex items-center justify-center rounded-[7px] bg-[#1D9E75] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]"
+        >
+          {existingPlan ? "Update treatment plan →" : "Build treatment plan →"}
+        </Link>
+        <Link
+          href={existingPlan ? profilePlanHref : profileHref}
+          className="inline-flex items-center justify-center rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-5 py-2.5 text-sm font-semibold text-white/70 transition hover:text-white"
+        >
+          View patient chart →
+        </Link>
+        <Link
+          href="/clinician/results"
+          className="inline-flex items-center justify-center rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-5 py-2.5 text-sm font-semibold text-white/70 transition hover:text-white"
+        >
+          Open Results →
+        </Link>
+      </div>
+    </section>
   );
 }
 
@@ -575,6 +620,7 @@ function AssignPlanSection({
   existingPlan: TreatmentPlan | null;
 }) {
   const profileHref = `/clinician/patients/${patientId}`;
+  const planHref = `/clinician/plans/new?patientId=${encodeURIComponent(patientId)}`;
 
   return (
     <ReportSection
@@ -604,32 +650,28 @@ function AssignPlanSection({
         <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
           <p className="text-sm text-white/60">No treatment plan has been assigned to this patient yet.</p>
           <p className="mt-1 text-xs text-white/35">
-            Create a structured treatment plan from the patient profile.
+            Select a programme template, adjust dose, and share the patient portal link.
           </p>
         </div>
       )}
 
       <div className="flex flex-col gap-3 sm:flex-row">
         <Link
-          href={profileHref}
+          href={planHref}
           className="flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
-          {existingPlan ? "Update Treatment Plan" : "Assign Treatment Plan"}
+          {existingPlan ? "Update Treatment Plan" : "Build Treatment Plan"}
         </Link>
         <Link
-          href={profileHref}
+          href={`${profileHref}#rehabilitation-plan`}
           className="flex items-center justify-center rounded-2xl border border-white/12 bg-white/5 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
         >
-          View Patient Profile →
+          View plan on patient chart →
         </Link>
       </div>
-
-      <p className="mt-4 text-xs text-white/25">
-        Create a structured treatment plan from the patient profile.
-      </p>
     </ReportSection>
   );
 }
@@ -922,8 +964,9 @@ export function AssessmentReportClient() {
 
   if (loading) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#0B1220]">
-        <p className="text-sm text-white/40">Loading report…</p>
+      <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#0B1220]">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1E2D42] border-t-[#1D9E75]" />
+        <p className="text-sm text-white/40">Loading assessment report…</p>
       </main>
     );
   }
@@ -932,15 +975,20 @@ export function AssessmentReportClient() {
     return (
       <main className="min-h-screen bg-[#0B1220] text-white">
         <div className="mx-auto max-w-2xl px-6 py-20 text-center">
-          <h1 className="text-2xl font-bold text-white">No patient selected</h1>
+          <h1 className="text-2xl font-bold text-white">No report selected</h1>
           <p className="mt-3 text-sm text-white/45">
-            Add <code className="rounded-[5px] bg-[#1E2D42] px-1.5 py-0.5 text-xs">?patientId=</code> or{" "}
-            <code className="rounded-[5px] bg-[#1E2D42] px-1.5 py-0.5 text-xs">?assessmentId=</code> to the URL.
+            Open this report from the patient chart or the Results page.
           </p>
-          <Link href="/clinician/patients"
-            className="mt-8 inline-flex items-center rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-6 py-2.5 text-sm font-semibold text-white transition hover:text-white/80">
-            ← Patients list
-          </Link>
+          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
+            <Link href="/clinician/patients"
+              className="inline-flex items-center rounded-[7px] bg-[#1D9E75] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]">
+              Patient charts
+            </Link>
+            <Link href="/clinician/results"
+              className="inline-flex items-center rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-6 py-2.5 text-sm font-semibold text-white transition hover:text-white/80">
+              Results
+            </Link>
+          </div>
         </div>
       </main>
     );
@@ -1007,7 +1055,7 @@ export function AssessmentReportClient() {
               {patient?.full_name ?? "Patient"}
             </h1>
             <p className="mt-1 text-sm text-white/50">
-              {formatDate(reportDate)} {assessmentId && <>· ID {assessmentId.slice(0, 8)}…</>}
+              Submitted {formatDate(reportDate)}
             </p>
           </div>
         </section>
@@ -1039,6 +1087,7 @@ export function AssessmentReportClient() {
               </p>
             </section>
           ) : null}
+          <ReportNextStepsFooter patientId={patientId} existingPlan={existingPlan} />
           <p className="text-xs text-white/30">{DISCLAIMER}</p>
         </div>
       </main>
@@ -1066,7 +1115,7 @@ export function AssessmentReportClient() {
                 Export Clinical Report (PDF)
               </button>
               <p className="max-w-[220px] text-right text-[10px] leading-snug text-white/35">
-                To save as PDF, choose &ldquo;Microsoft Print to PDF&rdquo; or &ldquo;Save as PDF&rdquo; in the print dialog.
+                Use &ldquo;Save as PDF&rdquo; in your browser&apos;s print dialog.
               </p>
             </div>
           </div>
@@ -1080,12 +1129,13 @@ export function AssessmentReportClient() {
               {patient?.full_name ?? "Patient"}
             </h1>
             <p className="mt-1 text-sm text-white/50">
-              {formatDate(reportDate)} {assessmentId && <>· ID {assessmentId.slice(0, 8)}…</>}
+              Submitted {formatDate(reportDate)}
             </p>
           </div>
         </section>
-        <div className="print-report-body mx-auto max-w-4xl px-6 py-8">
+        <div className="print-report-body mx-auto max-w-4xl px-6 py-8 space-y-6">
         <StructuredAssessmentReport data={structuredData} notes={serverNotes} />
+        <ReportNextStepsFooter patientId={patientId} existingPlan={existingPlan} />
         </div>
       </main>
     );
@@ -1100,16 +1150,23 @@ export function AssessmentReportClient() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
             </svg>
           </div>
-          <h1 className="text-xl font-bold text-white">No assessment draft found</h1>
+          <h1 className="text-xl font-bold text-white">No report available</h1>
           <p className="mt-2 text-sm text-white/45">
             {assessmentId
-              ? "This assessment has no general MSK report data."
-              : "No saved assessment draft was found for this patient. Complete the assessment first."}
+              ? "This assessment does not have a printable report yet."
+              : "Complete an assessment first, then open the report from the patient chart."}
           </p>
-          <Link href={`/clinician/assessment?patientId=${patientId || patientIdParam}`}
-            className="mt-7 inline-flex items-center rounded-[7px] bg-[#1D9E75] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]">
-            Return to Assessment
-          </Link>
+          {patientId ? (
+            <Link href={`/clinician/patients/${patientId}`}
+              className="mt-7 inline-flex items-center rounded-[7px] bg-[#1D9E75] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]">
+              Open patient chart
+            </Link>
+          ) : (
+            <Link href="/clinician/patients"
+              className="mt-7 inline-flex items-center rounded-[7px] bg-[#1D9E75] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]">
+              Patient charts
+            </Link>
+          )}
         </div>
       </main>
     );
@@ -1153,19 +1210,19 @@ export function AssessmentReportClient() {
                 Export Clinical Report (PDF)
               </button>
               <p className="max-w-[220px] text-right text-[10px] leading-snug text-white/35">
-                To save as PDF, choose &ldquo;Microsoft Print to PDF&rdquo; or &ldquo;Save as PDF&rdquo; in the print dialog.
+                Use &ldquo;Save as PDF&rdquo; in your browser&apos;s print dialog.
               </p>
             </div>
             {serverBacked && (
               <span className="rounded-[5px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-2 py-1 text-[10px] font-semibold text-[#5DCAA5]">
-                Saved on server
+                Saved to patient record
               </span>
             )}
             <Link
-              href={`/clinician/patients/${patientId}`}
+              href={`/clinician/plans/new?patientId=${encodeURIComponent(patientId)}`}
               className="rounded-xl bg-cyan-400 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300"
             >
-              Create Structured Plan →
+              Build treatment plan →
             </Link>
           </div>
         </div>
@@ -1194,8 +1251,7 @@ export function AssessmentReportClient() {
             {patient?.full_name ?? `Patient #${patientId}`}
           </h1>
           <p className="mt-1.5 text-sm text-white/55 print:text-gray-600">
-            {formatDate(displayDate)} &nbsp;·&nbsp; Patient ID {patientId}
-            {assessmentId && <> &nbsp;·&nbsp; Assessment {assessmentId.slice(0, 8)}…</>}
+            {formatDate(displayDate)}
             {therapistDecisionLabel && (
               <> &nbsp;·&nbsp; <span className={therapistDecisionLabel.cls}>{therapistDecisionLabel.label}</span></>
             )}

@@ -593,18 +593,31 @@ export default function PatientProfilePage() {
             </Link>
             <h1 className="mt-1.5 text-2xl font-bold text-white">{patient.full_name}</h1>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <span
-                className="text-xs text-white/35"
-                style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
-              >
-                #{patient.id}
-              </span>
-              <span className="text-xs text-white/20">·</span>
-              <span className="text-xs text-white/35">{patient.diagnosis || "No diagnosis"}</span>
+              {patient.phone && (
+                <>
+                  <span className="text-xs text-white/35">{patient.phone}</span>
+                  <span className="text-xs text-white/20">·</span>
+                </>
+              )}
+              <span className="text-xs text-white/35">{patient.diagnosis || "No primary complaint recorded"}</span>
               <span className="text-xs text-white/20">·</span>
               <span className={`text-xs font-semibold ${patient.status?.toLowerCase() === "active" ? "text-[#5DCAA5]" : "text-amber-300"}`}>
                 {patient.status}
               </span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <a href="#clinical-assessment-summary" className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
+                Assessment
+              </a>
+              <a href="#rehabilitation-plan" className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
+                Treatment plan
+              </a>
+              <a href="#progress-snapshot" className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
+                Progress
+              </a>
+              <Link href="/clinician/results" className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
+                Results
+              </Link>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -764,7 +777,7 @@ export default function PatientProfilePage() {
                   href="/clinician/results"
                   className="rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3.5 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/14"
                 >
-                  View Results Dashboard
+                  View Results
                 </Link>
                 <button
                   type="button"
@@ -798,15 +811,25 @@ export default function PatientProfilePage() {
 
             {/* Assessment saved banner */}
             {showAssessmentBanner && (
-              <div className="flex items-start justify-between gap-3 rounded-[8px] border border-[#1D9E75]/30 bg-[#1D9E75]/8 px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-[#1D9E75]/30 bg-[#1D9E75]/8 px-4 py-3">
                 <p className="text-sm text-[#5DCAA5]">Assessment saved successfully.</p>
-                <button
-                  type="button"
-                  onClick={() => setShowAssessmentBanner(false)}
-                  className="mt-0.5 shrink-0 text-xs text-white/25 transition hover:text-white/60"
-                >
-                  ✕
-                </button>
+                <div className="flex items-center gap-2">
+                  {clinicalSummaryAssessmentId && (
+                    <Link
+                      href={primaryReportHref}
+                      className="rounded-[6px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-3 py-1.5 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
+                    >
+                      Review assessment report →
+                    </Link>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowAssessmentBanner(false)}
+                    className="shrink-0 text-xs text-white/25 transition hover:text-white/60"
+                  >
+                    ✕
+                  </button>
+                </div>
               </div>
             )}
 
@@ -825,10 +848,10 @@ export default function PatientProfilePage() {
             )}
 
             {/* Clinical Assessment Summary */}
-            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+            <section id="clinical-assessment-summary" className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 scroll-mt-6">
               <h2 className="text-lg font-bold text-white">Clinical Assessment Summary</h2>
               <p className="mt-1 mb-5 text-xs text-white/35">
-                Submitted patient assessments appear here. Session progress and adherence are on Results.
+                Remote and in-clinic assessments appear here. Session progress and review flags are on Results.
               </p>
 
               {clinicalSummary ? (
@@ -915,23 +938,32 @@ export default function PatientProfilePage() {
                       href={primaryReportHref}
                       className="inline-flex rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-4 py-2.5 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
                     >
-                      View Full Assessment Report →
+                      Review assessment report →
                     </Link>
                   )}
 
-                  <div className="rounded-[8px] border border-dashed border-[#1E2D42] bg-[#0B1220]/60 px-4 py-3 opacity-60">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">
-                      AI-assisted Clinical Draft
-                    </p>
-                    <p className="mt-1 text-xs leading-relaxed text-white/35">
-                      Available after clinician reviews and approves the assessment summary. Coming in a future update.
-                    </p>
-                  </div>
                 </div>
               ) : (
-                <p className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
-                  No submitted assessment yet.
-                </p>
+                <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4">
+                  <p className="text-sm leading-relaxed text-white/50">
+                    No submitted assessment yet. Send a remote link or document an in-clinic assessment to begin.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setSendModalOpen(true)}
+                      className="rounded-[7px] bg-[#1D9E75] px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-[#179165]"
+                    >
+                      Send remote assessment
+                    </button>
+                    <Link
+                      href={`/clinician/assessment/new?patientId=${patient.id}`}
+                      className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/60 transition hover:text-white"
+                    >
+                      Document in clinic
+                    </Link>
+                  </div>
+                </div>
               )}
             </section>
 
@@ -997,7 +1029,7 @@ export default function PatientProfilePage() {
 
               <div className="mb-6">
                 <h3 className="text-sm font-bold text-white">SOAP Documentation</h3>
-                <p className="text-xs text-white/45">Documentation templates are in development for the MVP pilot.</p>
+                <p className="text-xs text-white/45">Structured SOAP templates will be available in a future release.</p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <SoapPlaceholderCard title="Subjective" />
                   <SoapPlaceholderCard title="Objective" />
@@ -1062,7 +1094,7 @@ export default function PatientProfilePage() {
                               href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
                               className="mt-3 inline-flex text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
                             >
-                              Legacy session results →
+                              Open session record →
                             </Link>
                           </div>
                         ))}
@@ -1076,7 +1108,7 @@ export default function PatientProfilePage() {
             <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
               <h2 className="text-lg font-bold text-white">Therapy Session Results</h2>
                 <p className="mt-1 text-sm text-white/50">
-                  In-browser therapy sessions (pilot) for chart #{patient.id}.
+                  Optional in-browser therapy sessions for this patient.
                 </p>
 
               <div className="mt-6">
@@ -1137,12 +1169,11 @@ export default function PatientProfilePage() {
               <div className="mt-5 space-y-5">
                 {!therapyLoading && therapySessions.length > 0 ? (
                   therapySessions.map((t) => (
-                    <TherapySessionHistoryEntry key={t.id} t={t} patientNumericId={numericId || 0} />
+                    <TherapySessionHistoryEntry key={t.id} t={t} />
                   ))
                 ) : !therapyLoading ? (
                   <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-5 text-sm text-white/40">
-                    No therapy sessions logged for this patient ID yet. Run camera therapy and save using this numeric
-                    chart ID.
+                    No therapy sessions logged yet.
                   </div>
                 ) : null}
               </div>
@@ -1222,7 +1253,7 @@ export default function PatientProfilePage() {
                             </p>
                           )}
                           {isSubmitted && (
-                            <p className="mt-2 text-[11px] text-[#5DCAA5]/80">Ready for review in Patient-Submitted Assessment.</p>
+                            <p className="mt-2 text-[11px] text-[#5DCAA5]/80">Ready for review in Clinical Assessment Summary.</p>
                           )}
                         </div>
 
@@ -1262,7 +1293,7 @@ export default function PatientProfilePage() {
                         href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
                         className="mt-3 inline-flex text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
                       >
-                        Legacy session results →
+                        Open session record →
                       </Link>
                     </div>
                   ))}
@@ -1331,25 +1362,18 @@ function SoapPlaceholderCard({ title }: { title: string }) {
   return (
     <div className="rounded-[8px] border border-dashed border-[#1E2D42] bg-[#0B1220] p-4">
       <p className="text-xs font-semibold text-white/70">{title}</p>
-      <p className="mt-2 text-[11px] leading-relaxed text-white/45">Not recorded in this MVP pilot.</p>
+      <p className="mt-2 text-[11px] leading-relaxed text-white/45">Not recorded yet.</p>
     </div>
   );
 }
 
-function TherapySessionHistoryEntry({
-  t,
-  patientNumericId,
-}: {
-  t: TherapySessionLog;
-  patientNumericId: number;
-}) {
+function TherapySessionHistoryEntry({ t }: { t: TherapySessionLog }) {
   const rec = t.therapyRecommendation;
   const programId = t.programId ?? DEFAULT_THERAPY_PROGRAM_ID;
   const phase = t.phase ?? DEFAULT_THERAPY_PHASE;
   const sessionType = t.sessionType ?? DEFAULT_THERAPY_SESSION_TYPE;
   const left = t.leftKneeCount;
   const right = t.rightKneeCount;
-  const dataSource = t.backendRowId != null ? "Backend" : "Local";
   const symDisplay =
     t.symmetryPct != null
       ? `${t.symmetryPct}%`
@@ -1373,18 +1397,14 @@ function TherapySessionHistoryEntry({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ResultPill label={`Source: ${dataSource}`} tone={t.backendRowId != null ? "good" : "neutral"} />
           <ResultPill label={`Score: ${t.score ?? "—"}`} tone="score" />
         </div>
       </header>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <InfoCard label="Patient ID" value={String(patientNumericId)} />
-        <InfoCard label="Assessment ID" value={t.assessmentId?.trim() || "—"} />
-        <InfoCard
-          label="Program / phase / session type"
-          value={`${programId} · ${phase} · ${formatSessionTypeLabel(sessionType)}`}
-        />
+        <InfoCard label="Programme" value={t.programLabel?.trim() || programId.replace(/-/g, " ")} />
+        <InfoCard label="Phase" value={phase.replace(/-/g, " ")} />
+        <InfoCard label="Session type" value={formatSessionTypeLabel(sessionType)} />
       </div>
 
       <p className="mb-2 mt-5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
@@ -1618,7 +1638,7 @@ function ProgressSnapshotSection({
           href="/clinician/results"
           className="mt-4 inline-flex rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3.5 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/14"
         >
-          View Results Dashboard
+          Review Results
         </Link>
       </div>
     </section>
@@ -1677,7 +1697,7 @@ function TreatmentPlanSection({
           href={structuredPlanHref}
           className="shrink-0 rounded-[7px] bg-[#1D9E75] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#179165]"
         >
-          {plan ? "Create new structured plan" : "Create structured treatment plan"}
+          {plan ? "Assign updated plan" : "Build treatment plan"}
         </Link>
       </div>
 

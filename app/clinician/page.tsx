@@ -2,28 +2,27 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { getDashboardStats, type DashboardStats } from "@/app/lib/api";
 
 // ── Static data ────────────────────────────────────────────────────────────────
 
 const QUICK_ACTIONS = [
-  { title: "Add Patient",            description: "Create a new patient file",                 href: "/clinician/patients/new" },
-  { title: "Start Assessment",       description: "Begin in-clinic or remote workflow",         href: "/clinician/assessment/start" },
-  { title: "Generate Remote Link",   description: "Create a remote assessment request",         href: "/clinician/request" },
-  { title: "View Programs",          description: "Browse rehabilitation protocols",            href: "/library" },
-  { title: "Active Sessions",        description: "Manage ongoing therapy sessions",            href: "/sessions" },
-  { title: "Gait Analysis",          description: "10MWT gait assessment tool",                href: "/gait" },
+  { title: "Add Patient",          description: "Create a new patient file",              href: "/clinician/patients/new" },
+  { title: "Start Assessment",     description: "In-clinic or remote patient link",       href: "/clinician/assessment/start" },
+  { title: "Review Results",       description: "Assessment queue and rehab progress",    href: "/clinician/results" },
+  { title: "Build Plan",           description: "Assign a rehabilitation programme",      href: "/clinician/plans/new" },
+  { title: "Patient List",         description: "Open any patient chart",                 href: "/clinician/patients" },
+  { title: "Generate Remote Link", description: "Send a remote assessment request",     href: "/clinician/request" },
 ];
 
 const WORKFLOW_STEPS = [
-  { title: "1. Add Patient",          description: "Create a patient file from the clinician portal.",                    href: "/clinician/patients/new" },
-  { title: "2. Open Patient Profile", description: "Review patient details, case status, and clinical context.",          href: "/clinician/patients" },
-  { title: "3. Start Assessment",     description: "In-clinic guided assessment or remote patient link.",                  href: "/clinician/assessment/start" },
-  { title: "4. Review Results",       description: "Open findings, summaries, and returned assessments.",                 href: "/clinician/results" },
-  { title: "5. Assign Program",       description: "Select an appropriate rehabilitation protocol.",                       href: "/library" },
-  { title: "6. Start Session",        description: "Execute therapy: live, AI-guided, remote, or XR mode.",               href: "/sessions" },
-  { title: "7. Track Progress",       description: "Review session logs, outcomes, and longitudinal progress.",            href: "/clinician/patients" },
+  { title: "1. Add Patient",          description: "Create a patient file from the clinician portal.",           href: "/clinician/patients/new" },
+  { title: "2. Open Patient Profile", description: "Review details, send a remote link, or start in clinic.",   href: "/clinician/patients" },
+  { title: "3. Start Assessment",     description: "Patient completes remotely or you document in clinic.",      href: "/clinician/assessment/start" },
+  { title: "4. Review Report",        description: "Open the assessment summary and clinician notes.",           href: "/clinician/results" },
+  { title: "5. Assign Plan",          description: "Build and assign a structured rehabilitation plan.",         href: "/clinician/plans/new" },
+  { title: "6. Patient Portal",       description: "Patient completes home sessions and reports effort/pain.",   href: "/clinician/patients" },
+  { title: "7. Track Progress",       description: "Review adherence, flags, and the review queue.",             href: "/clinician/results" },
 ];
 
 // ── Components ─────────────────────────────────────────────────────────────────
@@ -46,13 +45,8 @@ function MetricCard({ title, value, subtitle, attention = false }: {
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function ClinicianDashboardPage() {
-  const router = useRouter();
   const [stats, setStats]   = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    router.replace("/clinician/dashboard");
-  }, [router]);
 
   useEffect(() => {
     getDashboardStats()
@@ -77,9 +71,11 @@ export default function ClinicianDashboardPage() {
           stats.remote_assessments_pending === 0
             ? "No remote assessments pending"
             : `${stats.remote_assessments_pending} remote assessment${stats.remote_assessments_pending > 1 ? "s" : ""} pending`,
-          "No follow-up alerts",
+          stats.pending_reviews > 0
+            ? "Open Results to review flagged patients"
+            : "Review queue is clear",
         ]
-      : ["No pending reviews", "No remote assessments pending", "No follow-up alerts"];
+      : ["Loading activity…", "Loading activity…", "Loading activity…"];
 
   return (
     <div className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
@@ -98,6 +94,9 @@ export default function ClinicianDashboardPage() {
             <Link href="/clinician/patients/new" className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]">
               + Add Patient
             </Link>
+            <Link href="/clinician/results" className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-4 py-2.5 text-sm font-semibold text-white/70 transition hover:border-[#1D9E75]/25 hover:text-white">
+              Review Results
+            </Link>
             <Link href="/clinician/assessment/start" className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-4 py-2.5 text-sm font-semibold text-white/70 transition hover:border-[#1D9E75]/25 hover:text-white">
               Start Assessment
             </Link>
@@ -112,10 +111,11 @@ export default function ClinicianDashboardPage() {
           →{" "}
           <Link href="/clinician/results" className="text-[#5DCAA5] hover:text-[#1D9E75]">Results</Link>{" "}
           →{" "}
-          <Link href="/library" className="text-[#5DCAA5] hover:text-[#1D9E75]">Assign Program</Link>{" "}
+          <Link href="/clinician/plans/new" className="text-[#5DCAA5] hover:text-[#1D9E75]">Assign Plan</Link>{" "}
           →{" "}
-          <Link href="/sessions" className="text-[#5DCAA5] hover:text-[#1D9E75]">Session</Link>{" "}
-          → Progress
+          <Link href="/clinician/patients" className="text-[#5DCAA5] hover:text-[#1D9E75]">Patient Portal</Link>{" "}
+          →{" "}
+          <Link href="/clinician/results" className="text-[#5DCAA5] hover:text-[#1D9E75]">Progress</Link>
         </div>
 
         {/* ── Metric cards ── */}
