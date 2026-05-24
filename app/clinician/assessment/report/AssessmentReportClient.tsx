@@ -46,7 +46,7 @@ import {
 import { ReportExportToolbar } from "@/app/components/reports/ReportExportToolbar";
 import { RemoteQuestionnairePrintReport } from "@/app/components/reports/RemoteQuestionnairePrintReport";
 import { PdfTranslationWarningModal } from "@/app/components/clinician/PdfTranslationWarningModal";
-import { isAiTranslationEnabled } from "@/app/lib/ai-translation-flag";
+import { isAiTranslationEnabled } from "@/app/lib/ai/ai-features";
 
 // ── Constants & labels ─────────────────────────────────────────────────────────
 

@@ -7,6 +7,14 @@ import { cookies } from "next/headers";
 import { validatePatientOwnership } from "../../../../lib/validate-patient-ownership";
 import { classifyOpenAiError } from "@/app/lib/openai/classify-openai-error";
 import { getOpenAiKeyConfig } from "@/app/lib/openai/server-env";
+import {
+  AI_ERROR_CODES,
+  aiErrorHttpStatus,
+  aiErrorMessage,
+  fromKeyConfigCode,
+  fromOpenAiClassified,
+} from "@/app/lib/ai/ai-errors";
+import { checkAiRateLimit } from "@/app/lib/ai/rate-limit";
 
 async function buildClients() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -42,32 +50,34 @@ type AssessmentRow = {
   structured_data: Record<string, unknown> | null;
 };
 
+function aiErrorJson(code: (typeof AI_ERROR_CODES)[keyof typeof AI_ERROR_CODES]) {
+  return NextResponse.json(
+    { error: aiErrorMessage(code), code },
+    { status: aiErrorHttpStatus(code) },
+  );
+}
+
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: assessmentId } = await params;
   if (!assessmentId?.trim()) {
-    return NextResponse.json({ error: "Assessment ID is required." }, { status: 400 });
+    return aiErrorJson(AI_ERROR_CODES.AI_INVALID_INPUT);
   }
 
   const keyConfig = getOpenAiKeyConfig();
   if (!keyConfig.ok) {
+    const code = fromKeyConfigCode(keyConfig.code);
     return NextResponse.json(
-      {
-        error:
-          keyConfig.code === "invalid_key"
-            ? "Translation service authentication failed."
-            : "Translation is not configured yet",
-        code: keyConfig.code,
-      },
-      { status: 503 },
+      { error: aiErrorMessage(code), code },
+      { status: aiErrorHttpStatus(code) },
     );
   }
 
   const clients = await buildClients();
   if (!clients) {
-    return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+    return aiErrorJson(AI_ERROR_CODES.AI_PROVIDER_UNAVAILABLE);
   }
   const { sessionClient, adminClient } = clients;
 
@@ -83,28 +93,22 @@ export async function POST(
   try {
     body = (await req.json()) as typeof body;
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+    return aiErrorJson(AI_ERROR_CODES.AI_INVALID_INPUT);
   }
 
   const { fieldKey, text } = body;
 
   if (!fieldKey || typeof fieldKey !== "string") {
-    return NextResponse.json({ error: "fieldKey is required" }, { status: 400 });
+    return aiErrorJson(AI_ERROR_CODES.AI_INVALID_INPUT);
   }
   if (!text || typeof text !== "string" || text.trim() === "") {
-    return NextResponse.json({ error: "text is required" }, { status: 400 });
+    return aiErrorJson(AI_ERROR_CODES.AI_INVALID_INPUT);
   }
   if (/^\d+$/.test(text.trim())) {
-    return NextResponse.json(
-      { error: "Numeric values do not require translation" },
-      { status: 400 },
-    );
+    return aiErrorJson(AI_ERROR_CODES.AI_INVALID_INPUT);
   }
   if (text.length > 2000) {
-    return NextResponse.json(
-      { error: "Text too long for translation" },
-      { status: 400 },
-    );
+    return aiErrorJson(AI_ERROR_CODES.AI_INVALID_INPUT);
   }
 
   const { data: assessment, error: queryErr } = await adminClient
@@ -116,15 +120,15 @@ export async function POST(
 
   if (queryErr) {
     console.error("[POST /api/assessments/[id]/translate] query failed:", queryErr.message);
-    return NextResponse.json({ error: "Failed to load assessment." }, { status: 500 });
+    return aiErrorJson(AI_ERROR_CODES.AI_PROVIDER_UNAVAILABLE);
   }
   if (!assessment) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return aiErrorJson(AI_ERROR_CODES.AI_CONTEXT_INVALID);
   }
 
   const ownership = await validatePatientOwnership(adminClient, assessment.patient_id, user.id);
   if (!ownership.ok) {
-    return NextResponse.json({ error: ownership.message }, { status: ownership.httpStatus });
+    return aiErrorJson(AI_ERROR_CODES.AI_CONTEXT_INVALID);
   }
 
   const structuredData = (assessment.structured_data ?? {}) as Record<string, unknown>;
@@ -137,6 +141,11 @@ export async function POST(
       generatedAt: typeof generatedAt === "string" ? generatedAt : null,
       cached: true,
     });
+  }
+
+  const rateLimit = checkAiRateLimit(user.id);
+  if (!rateLimit.allowed) {
+    return aiErrorJson(AI_ERROR_CODES.AI_RATE_LIMITED);
   }
 
   const openai = new OpenAI({ apiKey: keyConfig.apiKey });
@@ -175,18 +184,16 @@ Output format: translated text only, one paragraph.`,
     translation = response.choices[0]?.message?.content?.trim() ?? "";
   } catch (error) {
     const classified = classifyOpenAiError(error);
-    console.error("[POST /api/assessments/[id]/translate] OpenAI error:", classified.code);
+    const code = fromOpenAiClassified(classified.code);
+    console.error("[POST /api/assessments/[id]/translate] OpenAI error:", code);
     return NextResponse.json(
-      { error: classified.message, code: classified.code },
-      { status: classified.httpStatus },
+      { error: aiErrorMessage(code), code },
+      { status: aiErrorHttpStatus(code) },
     );
   }
 
   if (!translation) {
-    return NextResponse.json(
-      { error: "Translation returned empty result" },
-      { status: 500 },
-    );
+    return aiErrorJson(AI_ERROR_CODES.AI_NO_CONTENT);
   }
 
   const generatedAt = new Date().toISOString();
@@ -205,7 +212,7 @@ Output format: translated text only, one paragraph.`,
 
   if (updateError) {
     console.error("Failed to save translation:", updateError.code);
-    return NextResponse.json({ error: "Failed to save translation" }, { status: 500 });
+    return aiErrorJson(AI_ERROR_CODES.AI_PROVIDER_UNAVAILABLE);
   }
 
   return NextResponse.json({

@@ -17,7 +17,7 @@ import { TranslatableField } from "@/app/components/clinician/TranslatableField"
 import {
   AI_TRANSLATION_SETUP_NOTICE,
   isAiTranslationEnabled,
-} from "@/app/lib/ai-translation-flag";
+} from "@/app/lib/ai/ai-features";
 import {
   useTranslationProgress,
   type FieldTranslationState,

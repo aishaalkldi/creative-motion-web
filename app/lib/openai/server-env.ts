@@ -45,7 +45,7 @@ export function getOpenAiKeyDiagnostics(): {
   };
 }
 
-/** Clinician health endpoint payload — no key value, no PHI. */
+/** @deprecated Use buildOpenAiHealthReport from @/app/lib/ai/openai-health */
 export function getOpenAiHealthResponse(): {
   openaiKeyPresent: boolean;
   openaiKeyPrefixValid: boolean;

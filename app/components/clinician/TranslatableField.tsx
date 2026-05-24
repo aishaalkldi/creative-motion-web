@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AILabel } from "@/app/components/clinician/AILabel";
 
 type Props = {
   assessmentId: string;
@@ -13,17 +14,6 @@ type Props = {
   isVoiceAnswer?: boolean;
   onTranslate: () => void;
 };
-
-function formatGeneratedAt(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  } catch {
-    return iso;
-  }
-}
 
 export function TranslatableField({
   assessmentId,
@@ -114,12 +104,7 @@ export function TranslatableField({
               {translation}
             </p>
           </div>
-          <p className="text-[10px] italic text-[#9CA3AF] print:text-gray-500">
-            AI-assisted translation — clinician review required
-            {generatedAt ? (
-              <span className="print:hidden">{` · ${formatGeneratedAt(generatedAt)}`}</span>
-            ) : null}
-          </p>
+          <AILabel generatedAt={generatedAt || undefined} />
           <span
             role="button"
             tabIndex={0}

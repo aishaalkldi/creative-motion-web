@@ -1,6 +1,7 @@
-export const AI_TRANSLATION_SETUP_NOTICE =
-  "AI English translation is currently under setup. Original Arabic answers are available for clinician review.";
-
-export function isAiTranslationEnabled(): boolean {
-  return process.env.NEXT_PUBLIC_ENABLE_AI_TRANSLATION === "true";
-}
+export {
+  AI_TRANSLATION_SETUP_NOTICE,
+  AI_FEATURES,
+  isAiFeatureEnabled,
+  isAiTranslationEnabled,
+  type AiFeatureKey,
+} from "@/app/lib/ai/ai-features";

@@ -7,9 +7,8 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * GET /api/assessments/translate-health
- * Clinician-only safe diagnostics — delegates to shared OpenAI health report.
- * Prefer GET /api/health/openai for new integrations.
+ * GET /api/health/openai
+ * Clinician-only safe diagnostics — no key value, no PHI, no patient text.
  */
 export async function GET() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
