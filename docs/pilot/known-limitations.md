@@ -48,6 +48,14 @@ The current pilot build does **not** rely on voice dictation or speech recogniti
 
 API rate limiting for sensitive endpoints uses **in-memory** counters. Limits may **reset on server restart or deployment**. Do not rely on rate limits as durable abuse prevention for production contracts without infrastructure hardening.
 
+Pilot build limits include:
+
+- Patient portal routes (plan, logs, token validation, session complete)
+- Remote assessment token routes (GET + submit)
+- Clinician write routes (create/update/delete patients, plans, assessments, remote assessment links)
+
+All use per-IP or per-provider sliding windows in process memory — not shared across Vercel instances.
+
 ### Single-clinician ownership model
 
 Patient records and plans are scoped to the **authenticated clinician** who created them. Multi-clinic / multi-provider EMR-style sharing is not in pilot scope.

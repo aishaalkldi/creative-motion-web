@@ -7,8 +7,13 @@ import { validatePatientOwnership } from "@/app/lib/validate-patient-ownership";
 import {
   API_ERRORS,
   genericServerErrorResponse,
+  ownershipErrorResponse,
   serviceUnavailableResponse,
 } from "@/app/lib/api/safe-errors";
+import {
+  checkClinicianWriteLimit,
+  rateLimitExceededResponse,
+} from "@/app/lib/rate-limit";
 
 async function buildClients() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -59,6 +64,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
 
+  const limited = checkClinicianWriteLimit(user.id, "remote-assessments:create");
+  if (!limited.allowed) {
+    return rateLimitExceededResponse(limited.retryAfterSec);
+  }
+
   let body: {
     patientId?: string;
     assessmentType?: string;
@@ -77,7 +87,7 @@ export async function POST(req: NextRequest) {
 
   const ownership = await validatePatientOwnership(adminClient, patientId, user.id);
   if (!ownership.ok) {
-    return NextResponse.json({ error: ownership.message }, { status: ownership.httpStatus });
+    return ownershipErrorResponse(ownership);
   }
 
   const token = crypto.randomUUID();

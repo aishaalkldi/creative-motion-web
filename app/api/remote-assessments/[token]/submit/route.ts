@@ -9,6 +9,7 @@ import {
   isRemoteAssessmentBodyTooLarge,
   validateRemoteAssessmentStructuredData,
 } from "@/app/lib/remote-assessment-validation";
+import { serviceUnavailableResponse } from "@/app/lib/api/safe-errors";
 
 function adminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -53,7 +54,7 @@ export async function POST(
 
   const admin = adminClient();
   if (!admin) {
-    return NextResponse.json({ error: "Service not configured." }, { status: 503 });
+    return serviceUnavailableResponse();
   }
 
   let body: { structuredData?: unknown };

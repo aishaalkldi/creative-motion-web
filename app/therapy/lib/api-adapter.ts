@@ -100,26 +100,18 @@ export interface SyncConfig {
  * is empty or absent. No network call is ever attempted in that case.
  *
  * Environment variables:
- *   NEXT_PUBLIC_CM_API_URL    — Required. Base URL of the platform API,
- *                               without trailing slash.
- *                               E.g. "https://api.creativemotion.io/v1"
- *   NEXT_PUBLIC_CM_API_TOKEN  — Development/testing only. A static bearer
- *                               token. In production this should come from
- *                               the platform auth session, not an env var.
+ *   NEXT_PUBLIC_CM_API_URL — Optional hint only; sync stays disabled here until
+ *                            wired with session-derived credentials (never
+ *                            NEXT_PUBLIC_* bearer tokens).
  *
  * Usage:
  *   import { syncPatientSessions, getSyncConfig } from "@/lib/api-adapter";
  *   void syncPatientSessions(patientId, getSyncConfig());
  */
 export function getSyncConfig(): SyncConfig | null {
-  const baseUrl = process.env.NEXT_PUBLIC_CM_API_URL;
-  if (!baseUrl) return null; // No URL configured — stay fully local
-
-  return {
-    baseUrl,
-    authToken: process.env.NEXT_PUBLIC_CM_API_TOKEN ?? "",
-    enabled:   true,
-  };
+  // Never read bearer tokens from NEXT_PUBLIC_* — they ship in the client bundle.
+  // When platform sync is enabled, pass an explicit SyncConfig from clinician session auth.
+  return null;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════

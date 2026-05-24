@@ -47,6 +47,12 @@ export const ASSEMBLYAI_RATE_LIMIT: RateLimitConfig = {
   windowMs: DEFAULT_WINDOW_MS,
 };
 
+/** Clinician mutating API routes — per provider */
+export const CLINICIAN_WRITE_RATE_LIMIT: RateLimitConfig = {
+  max: 30,
+  windowMs: DEFAULT_WINDOW_MS,
+};
+
 /**
  * Extract client IP from proxy headers (Vercel, nginx, local dev).
  */
@@ -141,6 +147,19 @@ export function checkRemoteAssessmentLimit(
  */
 export function checkAssemblyAiLimit(providerId: string): RateLimitResult {
   return consumeRateLimit(`assemblyai:${providerId}`, ASSEMBLYAI_RATE_LIMIT);
+}
+
+/**
+ * Rate limit clinician write routes (create/update/delete) per provider.
+ */
+export function checkClinicianWriteLimit(
+  providerId: string,
+  route: string,
+): RateLimitResult {
+  return consumeRateLimit(
+    `clinician:write:${route}:${providerId}`,
+    CLINICIAN_WRITE_RATE_LIMIT,
+  );
 }
 
 /** Standard 429 response — no token or internal details. */

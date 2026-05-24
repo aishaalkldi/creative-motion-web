@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { buildOpenAiHealthReport } from "@/app/lib/ai/openai-health";
+import { serviceUnavailableResponse } from "@/app/lib/api/safe-errors";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -15,7 +16,7 @@ export async function GET() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !anonKey) {
-    return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+    return serviceUnavailableResponse();
   }
 
   const cookieStore = await cookies();

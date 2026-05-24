@@ -28,6 +28,7 @@ import {
   pickPreferredAssessment,
   type AssessmentSnapshot,
 } from "../../../lib/assessment-snapshot";
+import { serviceUnavailableResponse } from "../../../lib/api/safe-errors";
 
 export type ClinicianResultStatus = "pending_review" | "active" | "completed";
 
@@ -107,7 +108,7 @@ function deriveStatus(completed: number, total: number): ClinicianResultStatus {
 export async function GET(_req: NextRequest) {
   const clients = await buildClients();
   if (!clients) {
-    return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+    return serviceUnavailableResponse();
   }
   const { sessionClient, adminClient } = clients;
 

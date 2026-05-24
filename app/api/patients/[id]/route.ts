@@ -4,7 +4,15 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { validatePatientOwnership } from "../../../lib/validate-patient-ownership";
-import { API_ERRORS, serviceUnavailableResponse } from "../../../lib/api/safe-errors";
+import {
+  API_ERRORS,
+  ownershipErrorResponse,
+  serviceUnavailableResponse,
+} from "../../../lib/api/safe-errors";
+import {
+  checkClinicianWriteLimit,
+  rateLimitExceededResponse,
+} from "../../../lib/rate-limit";
 
 // ── Shared client factory (mirrors route.ts) ───────────────────────────────────
 async function buildClients() {
@@ -58,7 +66,7 @@ export async function GET(
   const { adminClient, user } = auth;
 
   const result = await validatePatientOwnership(adminClient, patientId, user.id);
-  if (!result.ok) return NextResponse.json({ error: result.message }, { status: result.httpStatus });
+  if (!result.ok) return ownershipErrorResponse(result);
   return NextResponse.json(result.patient);
 }
 
@@ -92,8 +100,13 @@ export async function PATCH(
   if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
   const { adminClient, user } = auth;
 
+  const limited = checkClinicianWriteLimit(user.id, "patients:update");
+  if (!limited.allowed) {
+    return rateLimitExceededResponse(limited.retryAfterSec);
+  }
+
   const ownership = await validatePatientOwnership(adminClient, patientId, user.id);
-  if (!ownership.ok) return NextResponse.json({ error: ownership.message }, { status: ownership.httpStatus });
+  if (!ownership.ok) return ownershipErrorResponse(ownership);
 
   let body: PatchBody;
   try { body = (await req.json()) as PatchBody; }
@@ -145,8 +158,13 @@ export async function DELETE(
   if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
   const { adminClient, user } = auth;
 
+  const limited = checkClinicianWriteLimit(user.id, "patients:delete");
+  if (!limited.allowed) {
+    return rateLimitExceededResponse(limited.retryAfterSec);
+  }
+
   const ownership = await validatePatientOwnership(adminClient, patientId, user.id);
-  if (!ownership.ok) return NextResponse.json({ error: ownership.message }, { status: ownership.httpStatus });
+  if (!ownership.ok) return ownershipErrorResponse(ownership);
 
   const { error: deleteError } = await adminClient
     .from("patients")

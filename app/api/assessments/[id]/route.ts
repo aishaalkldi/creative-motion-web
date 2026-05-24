@@ -12,6 +12,14 @@ import {
 } from "../../../lib/assessment-payload";
 import type { GeneralAssessmentDraft } from "../../../lib/general-assessment/types";
 import type { StoredAssessmentPayload } from "../../../lib/assessment-payload";
+import {
+  ownershipErrorResponse,
+  serviceUnavailableResponse,
+} from "../../../lib/api/safe-errors";
+import {
+  checkClinicianWriteLimit,
+  rateLimitExceededResponse,
+} from "../../../lib/rate-limit";
 
 export type AssessmentDetailResponse = {
   id: string;
@@ -78,7 +86,7 @@ export async function GET(
 
   const clients = await buildClients();
   if (!clients) {
-    return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+    return serviceUnavailableResponse();
   }
   const { sessionClient, adminClient } = clients;
 
@@ -107,7 +115,7 @@ export async function GET(
 
   const ownership = await validatePatientOwnership(adminClient, row.patient_id, user.id);
   if (!ownership.ok) {
-    return NextResponse.json({ error: ownership.message }, { status: ownership.httpStatus });
+    return ownershipErrorResponse(ownership);
   }
 
   const patient = ownership.patient;
@@ -148,7 +156,7 @@ export async function PATCH(
 
   const clients = await buildClients();
   if (!clients) {
-    return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+    return serviceUnavailableResponse();
   }
   const { sessionClient, adminClient } = clients;
 
@@ -158,6 +166,11 @@ export async function PATCH(
   } = await sessionClient.auth.getUser();
   if (authErr ?? !user) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const limited = checkClinicianWriteLimit(user.id, "assessments:update");
+  if (!limited.allowed) {
+    return rateLimitExceededResponse(limited.retryAfterSec);
   }
 
   let body: {
@@ -187,7 +200,7 @@ export async function PATCH(
 
     const ownership = await validatePatientOwnership(adminClient, row.patient_id, user.id);
     if (!ownership.ok) {
-      return NextResponse.json({ error: ownership.message }, { status: ownership.httpStatus });
+      return ownershipErrorResponse(ownership);
     }
 
     const existing =
@@ -269,7 +282,7 @@ export async function PATCH(
 
   const ownership = await validatePatientOwnership(adminClient, updated.patient_id, user.id);
   if (!ownership.ok) {
-    return NextResponse.json({ error: ownership.message }, { status: ownership.httpStatus });
+    return ownershipErrorResponse(ownership);
   }
 
   const response: AssessmentDetailResponse = {

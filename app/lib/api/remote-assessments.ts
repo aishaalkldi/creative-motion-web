@@ -314,7 +314,6 @@ export async function getRemoteAssessment(id: string): Promise<RemoteAssessmentR
       const res = await fetch(`/api/remote-assessments/${encodeURIComponent(id)}`);
       if (res.ok) {
         const data = (await res.json()) as {
-          patientId: string;
           assessmentType: string;
           includedSections: unknown;
           expiresAt?: string;
@@ -322,7 +321,7 @@ export async function getRemoteAssessment(id: string): Promise<RemoteAssessmentR
         const local = getRemoteAssessmentLocal(id);
         const req: RemoteAssessmentRequest = {
           id,
-          patientId: data.patientId,
+          patientId: local?.patientId ?? "",
           patientName: local?.patientName ?? "",
           assessmentType: parseAssessmentType(data.assessmentType),
           includedSections: parseIncludedSections(data.includedSections),

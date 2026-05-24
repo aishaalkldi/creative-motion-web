@@ -15,6 +15,14 @@ import {
   buildPlanProgramMetadata,
   type PlanProgramMetadata,
 } from "../../lib/plan-program-metadata";
+import {
+  checkClinicianWriteLimit,
+  rateLimitExceededResponse,
+} from "../../lib/rate-limit";
+import {
+  ownershipErrorResponse,
+  serviceUnavailableResponse,
+} from "../../lib/api/safe-errors";
 
 const PLAN_CREATE_ERROR = "Failed to create plan.";
 
@@ -137,11 +145,16 @@ type PostBody = {
  */
 export async function POST(req: NextRequest) {
   const clients = await buildClients();
-  if (!clients) return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+  if (!clients) return serviceUnavailableResponse();
   const { sessionClient, adminClient } = clients;
 
   const { data: { user }, error: authErr } = await sessionClient.auth.getUser();
   if (authErr ?? !user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+  const limited = checkClinicianWriteLimit(user.id, "plans:create");
+  if (!limited.allowed) {
+    return rateLimitExceededResponse(limited.retryAfterSec);
+  }
 
   let body: PostBody;
   try { body = (await req.json()) as PostBody; }
@@ -152,7 +165,7 @@ export async function POST(req: NextRequest) {
 
   // Verify ownership
   const ownership = await validatePatientOwnership(adminClient, patientId, user.id);
-  if (!ownership.ok) return NextResponse.json({ error: ownership.message }, { status: ownership.httpStatus });
+  if (!ownership.ok) return ownershipErrorResponse(ownership);
 
   const programMetadata = buildPlanProgramMetadata({
     programTemplateId:
@@ -274,7 +287,7 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   const clients = await buildClients();
-  if (!clients) return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+  if (!clients) return serviceUnavailableResponse();
   const { sessionClient, adminClient } = clients;
 
   const { data: { user }, error: authErr } = await sessionClient.auth.getUser();
@@ -284,7 +297,7 @@ export async function GET(req: NextRequest) {
   if (!patientId) return NextResponse.json({ error: "patientId is required." }, { status: 400 });
 
   const ownership = await validatePatientOwnership(adminClient, patientId, user.id);
-  if (!ownership.ok) return NextResponse.json({ error: ownership.message }, { status: ownership.httpStatus });
+  if (!ownership.ok) return ownershipErrorResponse(ownership);
 
   // Fetch plans
   const { data: plans, error: plansErr } = await adminClient

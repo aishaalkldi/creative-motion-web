@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { User } from "@supabase/supabase-js";
+import { serviceUnavailableResponse } from "./safe-errors";
 
 export type ClinicianSessionResult =
   | { ok: true; user: User }
@@ -17,7 +18,7 @@ export async function requireClinicianSession(): Promise<ClinicianSessionResult>
   if (!supabaseUrl || !anonKey) {
     return {
       ok: false,
-      response: NextResponse.json({ error: "Service not configured." }, { status: 503 }),
+      response: serviceUnavailableResponse(),
     };
   }
 

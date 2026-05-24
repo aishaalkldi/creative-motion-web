@@ -5,6 +5,7 @@ import {
   checkRemoteAssessmentLimit,
   rateLimitExceededResponse,
 } from "@/app/lib/rate-limit";
+import { serviceUnavailableResponse } from "@/app/lib/api/safe-errors";
 
 function adminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -16,7 +17,6 @@ function adminClient() {
 }
 
 type RequestRow = {
-  patient_id: string;
   assessment_type: string;
   included_sections: unknown;
   expires_at: string;
@@ -43,12 +43,12 @@ export async function GET(
 
   const admin = adminClient();
   if (!admin) {
-    return NextResponse.json({ error: "Service not configured." }, { status: 503 });
+    return serviceUnavailableResponse();
   }
 
   const { data: row, error } = await admin
     .from("remote_assessment_requests")
-    .select("patient_id, assessment_type, included_sections, expires_at")
+    .select("assessment_type, included_sections, expires_at")
     .eq("token", trimmed)
     .eq("status", "pending")
     .gt("expires_at", new Date().toISOString())
@@ -64,7 +64,6 @@ export async function GET(
   }
 
   return NextResponse.json({
-    patientId: row.patient_id,
     assessmentType: row.assessment_type,
     includedSections: Array.isArray(row.included_sections) ? row.included_sections : [],
     expiresAt: row.expires_at,

@@ -7,6 +7,7 @@ import {
   ensureProviderForUser,
   parseSafeProviderBody,
 } from "../../../lib/auth/ensure-provider";
+import { serviceUnavailableResponse } from "../../../lib/api/safe-errors";
 
 /**
  * POST /api/auth/create-provider
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    return NextResponse.json({ error: "Service not configured." }, { status: 503 });
+    return serviceUnavailableResponse();
   }
 
   const cookieStore = await cookies();

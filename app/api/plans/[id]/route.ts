@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import type { PlanRow, PlanSessionRow } from "../route";
+import { serviceUnavailableResponse } from "../../../lib/api/safe-errors";
 
 // ── Client factory ─────────────────────────────────────────────────────────────
 
@@ -47,7 +48,7 @@ export async function GET(
   if (!planId?.trim()) return NextResponse.json({ error: "Plan ID is required." }, { status: 400 });
 
   const clients = await buildClients();
-  if (!clients) return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+  if (!clients) return serviceUnavailableResponse();
   const { sessionClient, adminClient } = clients;
 
   const { data: { user }, error: authErr } = await sessionClient.auth.getUser();

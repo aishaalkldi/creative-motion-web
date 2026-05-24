@@ -9,6 +9,10 @@ import {
   genericServerErrorResponse,
   serviceUnavailableResponse,
 } from "../../lib/api/safe-errors";
+import {
+  checkClinicianWriteLimit,
+  rateLimitExceededResponse,
+} from "../../lib/rate-limit";
 
 // ── Shared client factory ──────────────────────────────────────────────────────
 
@@ -143,6 +147,11 @@ export async function POST(req: NextRequest) {
 
   if (authError ?? !user) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const limited = checkClinicianWriteLimit(user.id, "patients:create");
+  if (!limited.allowed) {
+    return rateLimitExceededResponse(limited.retryAfterSec);
   }
 
   // ── Parse + validate body ────────────────────────────────────────────────────

@@ -5,7 +5,11 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { validatePatientOwnership } from "../../lib/validate-patient-ownership";
 import type { AssessmentData } from "../../lib/assessment-types";
-import { API_ERRORS, genericServerErrorResponse, serviceUnavailableResponse } from "../../lib/api/safe-errors";
+import { API_ERRORS, genericServerErrorResponse, ownershipErrorResponse, serviceUnavailableResponse } from "../../lib/api/safe-errors";
+import {
+  checkClinicianWriteLimit,
+  rateLimitExceededResponse,
+} from "../../lib/rate-limit";
 import type { GeneralAssessmentDraft } from "../../lib/general-assessment/types";
 import {
   buildGeneralMskPayload,
@@ -92,6 +96,11 @@ export async function POST(req: NextRequest) {
   const { data: { user }, error: authError } = await sessionClient.auth.getUser();
   if (authError ?? !user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
+  const limited = checkClinicianWriteLimit(user.id, "assessments:create");
+  if (!limited.allowed) {
+    return rateLimitExceededResponse(limited.retryAfterSec);
+  }
+
   // ── Parse body ───────────────────────────────────────────────────────────────
   let body: {
     patient_id?: string;
@@ -125,7 +134,7 @@ export async function POST(req: NextRequest) {
 
   // ── Verify patient ownership ──────────────────────────────────────────────────
   const ownership = await validatePatientOwnership(adminClient, patientId, user.id);
-  if (!ownership.ok) return NextResponse.json({ error: ownership.message }, { status: ownership.httpStatus });
+  if (!ownership.ok) return ownershipErrorResponse(ownership);
 
   // ── Insert ───────────────────────────────────────────────────────────────────
   const { data: assessment, error: insertError } = await adminClient
@@ -183,7 +192,7 @@ export async function GET(req: NextRequest) {
 
   // ── Verify patient ownership ──────────────────────────────────────────────────
   const ownership = await validatePatientOwnership(adminClient, patientId, user.id);
-  if (!ownership.ok) return NextResponse.json({ error: ownership.message }, { status: ownership.httpStatus });
+  if (!ownership.ok) return ownershipErrorResponse(ownership);
 
   // ── Query ────────────────────────────────────────────────────────────────────
   const { data: assessments, error: queryError } = await adminClient

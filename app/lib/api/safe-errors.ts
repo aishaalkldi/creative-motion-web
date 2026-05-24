@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { enforceFailedTokenRateLimit } from "../rate-limit";
+import type { OwnershipFail } from "../validate-patient-ownership";
 
 /** Generic client-safe API error messages — no internal details. */
 export const API_ERRORS = {
   GENERIC: "Something went wrong.",
   UNABLE: "Unable to complete request.",
   UNAUTHORIZED: "Unauthorized.",
-  SERVICE_UNAVAILABLE: "Service not configured.",
+  SERVICE_UNAVAILABLE: "Service temporarily unavailable.",
   PATIENT_NOT_FOUND: "Patient not found.",
   INVALID_PATIENT_LINK: "Invalid or expired link.",
 } as const;
@@ -29,4 +30,9 @@ export function invalidPatientTokenResponse(req: NextRequest): NextResponse {
   const limited = enforceFailedTokenRateLimit(req);
   if (limited) return limited;
   return NextResponse.json({ error: API_ERRORS.INVALID_PATIENT_LINK }, { status: 404 });
+}
+
+/** Map ownership validation failures to safe client responses. */
+export function ownershipErrorResponse(failure: OwnershipFail): NextResponse {
+  return NextResponse.json({ error: failure.message }, { status: failure.httpStatus });
 }
