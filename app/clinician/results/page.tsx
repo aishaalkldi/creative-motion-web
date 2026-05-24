@@ -8,7 +8,11 @@ import type { PatientRow } from "@/app/lib/validate-patient-ownership";
 import { buildRemoteQuestionnaireSummary } from "@/app/lib/remote-questionnaire-summary";
 import { extractGeneralDraft, extractStructuredData } from "@/app/lib/assessment-payload";
 import { ClinicalActionCard } from "@/app/components/clinician/ClinicalActionCard";
-import type { ClinicalActionResult } from "@/app/lib/clinical-action-engine";
+import {
+  clinicalActionNeedsTherapistReview,
+  type ClinicalActionResult,
+  type ClinicalActionSeverity,
+} from "@/app/lib/clinical-action-engine";
 
 type PipelineFilter = "all" | "assessment" | "in_rehab" | "completed" | "needs_review";
 
@@ -208,9 +212,40 @@ function buildPipelineCards(
   });
 }
 
+const REVIEW_SEVERITY_ORDER: Record<ClinicalActionSeverity, number> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+};
+
+function compareReviewQueueCards(a: ClinicianResultCard, b: ClinicianResultCard): number {
+  const severityDiff =
+    REVIEW_SEVERITY_ORDER[a.clinicalAction.severity] -
+    REVIEW_SEVERITY_ORDER[b.clinicalAction.severity];
+  if (severityDiff !== 0) return severityDiff;
+  const aTime = a.lastCompletedAt ? new Date(a.lastCompletedAt).getTime() : 0;
+  const bTime = b.lastCompletedAt ? new Date(b.lastCompletedAt).getTime() : 0;
+  return bTime - aTime;
+}
+
+function buildReviewQueue(rehabResults: ClinicianResultCard[]): ClinicianResultCard[] {
+  const urgent = rehabResults.filter((card) =>
+    clinicalActionNeedsTherapistReview(card.clinicalAction.status),
+  );
+  const byPatient = new Map<string, ClinicianResultCard>();
+  for (const card of urgent) {
+    const existing = byPatient.get(card.patientId);
+    if (!existing || compareReviewQueueCards(card, existing) < 0) {
+      byPatient.set(card.patientId, card);
+    }
+  }
+  return Array.from(byPatient.values()).sort(compareReviewQueueCards);
+}
+
 export default function UnifiedResultsPage() {
   const [filter, setFilter] = useState<PipelineFilter>("all");
   const [pipeline, setPipeline] = useState<PatientPipelineCard[]>([]);
+  const [rehabResults, setRehabResults] = useState<ClinicianResultCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -280,6 +315,7 @@ export default function UnifiedResultsPage() {
         }
 
         setPipeline(buildPipelineCards(patients, assessmentsByPatient, rehabByPatient));
+        setRehabResults(rehabResults);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not load patient pipeline.");
         console.error(err);
@@ -322,6 +358,8 @@ export default function UnifiedResultsPage() {
   ).length;
   const needsReviewCount = pipeline.filter((card) => card.rehab?.needsReview === true).length;
 
+  const reviewQueue = useMemo(() => buildReviewQueue(rehabResults), [rehabResults]);
+
   return (
     <main className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
       <div className="mx-auto max-w-7xl">
@@ -343,6 +381,22 @@ export default function UnifiedResultsPage() {
             ← Dashboard
           </Link>
         </div>
+
+        {!loading && !error && reviewQueue.length > 0 && (
+          <section className="mb-6 rounded-[10px] border border-amber-400/20 bg-[#0F1825] p-6">
+            <div className="mb-4">
+              <h2 className="text-lg font-bold text-white">Patients Needing Review</h2>
+              <p className="mt-1 text-sm text-white/45">
+                Patients with recent responses that may need therapist attention.
+              </p>
+            </div>
+            <div className="grid gap-3">
+              {reviewQueue.map((card) => (
+                <ReviewQueueCard key={`${card.patientId}-${card.planId}`} card={card} />
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
           <div className="mb-6 grid gap-3 sm:grid-cols-4">
@@ -380,6 +434,63 @@ export default function UnifiedResultsPage() {
         </section>
       </div>
     </main>
+  );
+}
+
+function ReviewQueueCard({ card }: { card: ClinicianResultCard }) {
+  const profileHref = `/clinician/patients/${card.patientId}`;
+  const planHref = `${profileHref}#rehabilitation-plan`;
+  const styles =
+    card.clinicalAction.severity === "high"
+      ? "border-rose-400/25 bg-rose-400/5"
+      : "border-amber-400/20 bg-amber-400/5";
+
+  return (
+    <article className={`rounded-[8px] border p-4 ${styles}`}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold text-white">{card.patientName}</p>
+          <p className="mt-1 text-xs font-semibold text-amber-200/90">
+            {card.clinicalAction.title} · review recommended
+          </p>
+          <p className="mt-2 text-xs leading-relaxed text-white/60">{card.clinicalAction.reason}</p>
+        </div>
+        <span className="shrink-0 rounded-[5px] border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300">
+          Therapist attention
+        </span>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Metric
+          label="Pain response"
+          value={card.latestPainResponse ?? (card.latestPainScore != null ? `${card.latestPainScore}/10` : "—")}
+        />
+        <Metric
+          label="Effort"
+          value={card.latestEffortScore != null ? `${card.latestEffortScore}/10` : "—"}
+        />
+        <Metric label="Adherence" value={`${card.progressPct}%`} />
+        <Metric
+          label="Sessions"
+          value={`${card.sessionsCompleted} / ${card.totalSessions}`}
+        />
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link
+          href={profileHref}
+          className="inline-flex rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-3 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
+        >
+          Review patient
+        </Link>
+        <Link
+          href={planHref}
+          className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
+        >
+          View plan &amp; sessions
+        </Link>
+      </div>
+    </article>
   );
 }
 
