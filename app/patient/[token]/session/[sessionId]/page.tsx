@@ -104,6 +104,11 @@ export default function SessionPlayerPage() {
   const [completing,          setCompleting]          = useState(false);
   const [completeError,       setCompleteError]       = useState("");
   const [completed,           setCompleted]           = useState(false);
+  const [completionSummary,   setCompletionSummary]   = useState<{
+    effortScore: number;
+    painAfter: number;
+    exercisesCompleted: number;
+  } | null>(null);
 
   useEffect(() => {
     setPhase("precheck");
@@ -115,6 +120,7 @@ export default function SessionPlayerPage() {
     setPainAfter(null);
     setPatientNote("");
     setCompleted(false);
+    setCompletionSummary(null);
     setCompleteError("");
     setCompleting(false);
   }, [token, sessionId]);
@@ -218,13 +224,130 @@ export default function SessionPlayerPage() {
       }
 
       setCompleted(true);
+      setCompletionSummary({
+        effortScore,
+        painAfter,
+        exercisesCompleted: total,
+      });
     } catch (err) {
       setCompleteError(err instanceof Error ? err.message : "Could not save session. Please try again.");
       setCompleting(false);
     }
   }
 
+  /* Already completed — avoid confusing re-run */
+  if (session.status === "completed" && !completed) {
+    const completedLabel = session.completedAt
+      ? new Date(session.completedAt).toLocaleDateString(undefined, {
+          dateStyle: "medium",
+          timeStyle: "short",
+        })
+      : null;
+
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-5 px-4 text-center">
+        <div
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-[#E8F5F1] text-[24px] text-[#1D9E75]"
+          aria-hidden
+        >
+          ✓
+        </div>
+        <div>
+          <h2
+            className="text-[20px] font-medium text-[#0A0F1A]"
+            style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
+          >
+            Session already completed
+          </h2>
+          <p className="mt-2 text-[15px] font-semibold text-[#374151]">{session.title}</p>
+          <p className="mt-2 text-[14px] text-[#6B7280]">
+            You finished {total} exercise{total === 1 ? "" : "s"} in this session.
+            {completedLabel ? ` Completed ${completedLabel}.` : ""}
+          </p>
+          <p className="mt-3 max-w-sm text-[13px] leading-relaxed text-[#6B7280]">
+            Your therapist can review your progress on the plan dashboard. You do not need to repeat this session.
+          </p>
+        </div>
+        <div className="flex w-full max-w-xs flex-col gap-2.5">
+          <Link
+            href={`/patient/${token}`}
+            className="flex min-h-[48px] items-center justify-center rounded-[7px] bg-[#1D9E75] text-[15px] font-bold text-white transition hover:bg-[#179165]"
+          >
+            ← Back to my plan
+          </Link>
+          <Link
+            href={`/patient/${token}/progress`}
+            className="flex min-h-[44px] items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-white text-[14px] font-semibold text-[#374151] transition hover:bg-[#F9FAFB]"
+          >
+            View progress
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   /* Completion screen */
+  if (completed && completionSummary) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-5 px-4 text-center">
+        <div
+          className="flex h-14 w-14 items-center justify-center rounded-full bg-[#E8F5F1] text-[24px] text-[#1D9E75]"
+          aria-hidden
+        >
+          ✓
+        </div>
+        <div>
+          <h2
+            className="text-[20px] font-medium text-[#0A0F1A]"
+            style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
+          >
+            Session complete
+          </h2>
+          <p className="mt-2 text-[15px] font-semibold text-[#374151]">{session.title}</p>
+          <p className="mt-2 text-[14px] text-[#374151]">
+            {completionSummary.exercisesCompleted} exercise
+            {completionSummary.exercisesCompleted === 1 ? "" : "s"} completed
+          </p>
+          <div className="mx-auto mt-4 grid max-w-xs grid-cols-2 gap-2 text-left">
+            <div className="rounded-[8px] border border-[#E2E8E5] bg-white px-3 py-2.5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[#9CA3AF]">Effort</p>
+              <p className="mt-0.5 text-[16px] font-bold text-[#1D9E75]">
+                {completionSummary.effortScore}/10
+              </p>
+            </div>
+            <div className="rounded-[8px] border border-[#E2E8E5] bg-white px-3 py-2.5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[#9CA3AF]">Pain after</p>
+              <p className="mt-0.5 text-[16px] font-bold text-[#1D9E75]">
+                {completionSummary.painAfter}/10
+              </p>
+            </div>
+          </div>
+          <p className="mt-4 text-[14px] text-[#374151]">
+            Your progress has been saved for your therapist to review.
+          </p>
+          <p className="mt-3 max-w-sm text-[12px] italic leading-relaxed text-[#6B7280]">
+            If you feel sharp or unusual pain during exercises, stop immediately and contact your therapist.
+          </p>
+        </div>
+        <div className="flex w-full max-w-xs flex-col gap-2.5">
+          <Link
+            href={`/patient/${token}`}
+            className="flex min-h-[48px] items-center justify-center rounded-[7px] bg-[#1D9E75] text-[15px] font-bold text-white transition hover:bg-[#179165]"
+          >
+            ← Back to my plan
+          </Link>
+          <Link
+            href={`/patient/${token}/progress`}
+            className="flex min-h-[44px] items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-white text-[14px] font-semibold text-[#374151] transition hover:bg-[#F9FAFB]"
+          >
+            View progress
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  /* Completion screen (fallback if summary missing) */
   if (completed) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 px-4 text-center">
@@ -237,9 +360,6 @@ export default function SessionPlayerPage() {
           </h2>
           <p className="mt-2 text-[14px] text-[#374151]">
             Your progress has been updated for your therapist to review.
-          </p>
-          <p className="mt-3 max-w-sm text-[12px] italic leading-relaxed text-[#6B7280]">
-            If you feel sharp or unusual pain during exercises, stop immediately and contact your therapist.
           </p>
         </div>
         <Link
@@ -465,6 +585,12 @@ export default function SessionPlayerPage() {
         <div className="rounded-[7px] border border-rose-200 bg-rose-50 px-4 py-3">
           <p className="text-[13px] text-rose-600">{completeError}</p>
         </div>
+      )}
+
+      {isLast && (effortScore === null || painAfter === null) && (
+        <p className="text-center text-[12px] text-[#6B7280]">
+          Select how the session felt and your pain level after exercising to finish.
+        </p>
       )}
 
       <button

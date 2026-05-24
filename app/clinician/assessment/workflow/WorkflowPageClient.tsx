@@ -200,7 +200,7 @@ export function WorkflowPageClient() {
 
   const resultsHref =
     patientId && assessmentId
-      ? `/results?patientId=${encodeURIComponent(patientId)}&assessmentId=${encodeURIComponent(assessmentId)}`
+      ? `/clinician/assessment/report?patientId=${encodeURIComponent(patientId)}&assessmentId=${encodeURIComponent(assessmentId)}`
       : null;
 
   const bodyAxisHref =
@@ -599,7 +599,7 @@ export function WorkflowPageClient() {
                     href={resultsHref}
                     className="rounded-2xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10"
                   >
-                    Open results / reports
+                    Open Clinical Report
                   </Link>
                 ) : null}
               </div>

@@ -443,17 +443,17 @@ function PatientPipelineCardView({ card }: { card: PatientPipelineCard }) {
         )}
         {card.rehab && (
           <Link
-            href={profileHref}
-            className="inline-flex rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-3 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
+            href={`${profileHref}#rehabilitation-plan`}
+            className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
           >
-            View Rehabilitation Progress
+            View Plan &amp; Sessions
           </Link>
         )}
         <Link
           href={profileHref}
           className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
         >
-          View Profile
+          View Patient Profile
         </Link>
       </div>
     </article>

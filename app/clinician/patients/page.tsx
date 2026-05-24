@@ -232,15 +232,9 @@ export default function PatientsPage() {
                         <div className="flex items-center gap-2">
                           <Link
                             href={`/clinician/patients/${patient.id}`}
-                            className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-1.5 text-xs font-semibold text-white/60 transition hover:border-[#1D9E75]/25 hover:text-white"
+                            className="rounded-[6px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3 py-1.5 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
                           >
-                            Open
-                          </Link>
-                          <Link
-                            href={`/clinician/patients/${patient.id}`}
-                            className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-1.5 text-xs font-semibold text-white/60 transition hover:border-[#1D9E75]/25 hover:text-white"
-                          >
-                            View Profile
+                            Open profile
                           </Link>
                           <button
                             type="button"

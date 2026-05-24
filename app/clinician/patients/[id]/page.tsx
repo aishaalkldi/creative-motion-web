@@ -777,10 +777,10 @@ export default function PatientProfilePage() {
                   Build Plan
                 </Link>
                 <Link
-                  href={`/clinician/patients/${patient.id}`}
+                  href="/clinician/results"
                   className="rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3.5 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/14"
                 >
-                  View Rehabilitation Progress
+                  View Results Dashboard
                 </Link>
                 <button
                   type="button"
@@ -1070,7 +1070,7 @@ export default function PatientProfilePage() {
                               href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
                               className="mt-3 inline-flex text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
                             >
-                              View results →
+                              Legacy session results →
                             </Link>
                           </div>
                         ))}
@@ -1270,7 +1270,7 @@ export default function PatientProfilePage() {
                         href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
                         className="mt-3 inline-flex text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
                       >
-                        View results →
+                        Legacy session results →
                       </Link>
                     </div>
                   ))}
@@ -1493,7 +1493,7 @@ function ProgressSnapshotSection({
   const sessionsDone = planProgress?.sessionsCompleted ?? adherence?.sessionsCompleted ?? 0;
 
   return (
-    <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+    <section id="progress-snapshot" className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 scroll-mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-bold text-white">Progress Snapshot</h2>
         {planProgress?.needsReview && (
@@ -1599,10 +1599,10 @@ function ProgressSnapshotSection({
         )}
 
         <Link
-          href={`/clinician/patients/${patientId}`}
+          href="/clinician/results"
           className="mt-4 inline-flex rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3.5 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/14"
         >
-          View Rehabilitation Progress
+          View Results Dashboard
         </Link>
       </div>
     </section>
@@ -1743,7 +1743,7 @@ function TreatmentPlanSection({
   }
 
   return (
-    <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+    <section id="rehabilitation-plan" className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 scroll-mt-6">
       <h2 className="text-lg font-bold text-white">Rehabilitation Plan</h2>
       <div className="mt-4 mb-5 flex items-start justify-between gap-4">
         <div>

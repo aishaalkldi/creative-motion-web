@@ -84,6 +84,7 @@ export default function PatientDashboard() {
   const total     = plan.sessions.length;
   const progress  = total > 0 ? Math.round((completed / total) * 100) : 0;
   const hasSessions = total > 0;
+  const allSessionsComplete = hasSessions && completed === total;
   const sessionsPerWeek = plan.sessionsPerWeek ?? 3;
   const currentWeek = Math.min(
     Math.ceil((completed + 1) / sessionsPerWeek),
@@ -172,6 +173,22 @@ export default function PatientDashboard() {
         </div>
       </div>
 
+      {allSessionsComplete && (
+        <div className="rounded-[10px] border border-[#D1E7DE] bg-[#F0FAF6] p-5 text-center">
+          <p className="text-[16px] font-semibold text-[#085041]">All sessions complete</p>
+          <p className="mt-2 text-[13px] leading-relaxed text-[#374151]">
+            You have finished every session in your current plan. Your therapist will review your progress
+            and may update your program.
+          </p>
+          <Link
+            href={`/patient/${token}/progress`}
+            className="mt-4 inline-flex min-h-[44px] items-center justify-center rounded-[7px] bg-[#1D9E75] px-5 text-[14px] font-semibold text-white transition hover:bg-[#179165]"
+          >
+            View my progress
+          </Link>
+        </div>
+      )}
+
       {plan.clinicianNotes?.trim() && (
         <div
           style={{
@@ -219,7 +236,9 @@ export default function PatientDashboard() {
           Your sessions
         </p>
         <p className="mb-4 text-[12px] text-[#6B7280]">
-          Tap today&apos;s session when you are ready to begin.
+          {allSessionsComplete
+            ? "Your completed sessions are listed below."
+            : "Tap today's session when you are ready to begin."}
         </p>
         <SessionScheduleView
           sessions={plan.sessions.map((s) => ({
