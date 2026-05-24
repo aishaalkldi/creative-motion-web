@@ -11,9 +11,13 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
   checkPatientGeneralLimit,
-  enforceFailedTokenRateLimit,
   rateLimitExceededResponse,
 } from "../../../lib/rate-limit";
+import {
+  API_ERRORS,
+  invalidPatientTokenResponse,
+  serviceUnavailableResponse,
+} from "../../../lib/api/safe-errors";
 
 // ── Public types ───────────────────────────────────────────────────────────────
 
@@ -53,7 +57,7 @@ export async function GET(req: NextRequest) {
 
   const admin = buildAdminClient();
   if (!admin) {
-    return NextResponse.json({ error: "Service not configured." }, { status: 503 });
+    return serviceUnavailableResponse();
   }
 
   // Validate token first
@@ -65,22 +69,13 @@ export async function GET(req: NextRequest) {
     .maybeSingle<TokenRow>();
 
   if (tokenErr) {
-    return NextResponse.json({ error: "Could not validate token." }, { status: 500 });
+    return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
-  if (!tokenRow) {
-    const limited = enforceFailedTokenRateLimit(req);
-    if (limited) return limited;
-    return NextResponse.json({ error: "Invalid token." }, { status: 404 });
-  }
-  if (!tokenRow.is_active) {
-    const limited = enforceFailedTokenRateLimit(req);
-    if (limited) return limited;
-    return NextResponse.json({ error: "Token is inactive." }, { status: 403 });
+  if (!tokenRow || !tokenRow.is_active) {
+    return invalidPatientTokenResponse(req);
   }
   if (tokenRow.expires_at && new Date(tokenRow.expires_at) < new Date()) {
-    const limited = enforceFailedTokenRateLimit(req);
-    if (limited) return limited;
-    return NextResponse.json({ error: "Token has expired." }, { status: 403 });
+    return invalidPatientTokenResponse(req);
   }
 
   // Fetch logs (safe fields only — no provider_id, no patient_id)
@@ -102,7 +97,7 @@ export async function GET(req: NextRequest) {
 
   if (logsErr) {
     console.error("[GET /api/patient/logs] query failed:", logsErr.message);
-    return NextResponse.json({ error: "Could not load session logs." }, { status: 500 });
+    return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
 
   const result: SessionLogEntry[] = (logs ?? []).map((l) => ({

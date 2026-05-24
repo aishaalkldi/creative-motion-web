@@ -10,9 +10,14 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
   checkPatientGeneralLimit,
-  enforceFailedTokenRateLimit,
   rateLimitExceededResponse,
 } from "../../../lib/rate-limit";
+import {
+  API_ERRORS,
+  invalidPatientTokenResponse,
+  serviceUnavailableResponse,
+  unableToCompleteResponse,
+} from "../../../lib/api/safe-errors";
 
 export async function POST(req: NextRequest) {
   const general = checkPatientGeneralLimit(req, "validate-token");
@@ -35,7 +40,7 @@ export async function POST(req: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const svc = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !svc) {
-    return NextResponse.json({ error: "Service not configured." }, { status: 503 });
+    return serviceUnavailableResponse();
   }
 
   const admin = createAdminClient(url, svc, {
@@ -50,22 +55,13 @@ export async function POST(req: NextRequest) {
     .maybeSingle<TokenRow>();
 
   if (error) {
-    return NextResponse.json({ error: "Validation failed." }, { status: 500 });
+    return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
-  if (!tokenRow) {
-    const limited = enforceFailedTokenRateLimit(req);
-    if (limited) return limited;
-    return NextResponse.json({ error: "Invalid token." }, { status: 404 });
-  }
-  if (!tokenRow.is_active) {
-    const limited = enforceFailedTokenRateLimit(req);
-    if (limited) return limited;
-    return NextResponse.json({ error: "Token is inactive." }, { status: 403 });
+  if (!tokenRow || !tokenRow.is_active) {
+    return invalidPatientTokenResponse(req);
   }
   if (tokenRow.expires_at && new Date(tokenRow.expires_at) < new Date()) {
-    const limited = enforceFailedTokenRateLimit(req);
-    if (limited) return limited;
-    return NextResponse.json({ error: "Token has expired." }, { status: 403 });
+    return invalidPatientTokenResponse(req);
   }
 
   return NextResponse.json({ valid: true });

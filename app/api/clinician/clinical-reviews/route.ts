@@ -11,6 +11,12 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { validatePatientOwnership } from "../../../lib/validate-patient-ownership";
 import {
+  API_ERRORS,
+  genericServerErrorResponse,
+  serviceUnavailableResponse,
+  unableToCompleteResponse,
+} from "../../../lib/api/safe-errors";
+import {
   buildClinicalActionFromPlanData,
   clinicalActionNeedsTherapistReview,
 } from "../../../lib/clinical-action-engine";
@@ -59,7 +65,7 @@ async function buildClients() {
 export async function POST(req: NextRequest) {
   const clients = await buildClients();
   if (!clients) {
-    return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+    return serviceUnavailableResponse();
   }
   const { sessionClient, adminClient } = clients;
 
@@ -106,11 +112,11 @@ export async function POST(req: NextRequest) {
     .maybeSingle<{ id: string; patient_id: string; provider_id: string }>();
 
   if (planErr) {
-    console.error("[POST /api/clinician/clinical-reviews] plan lookup failed");
-    return NextResponse.json({ error: "Failed to validate plan." }, { status: 500 });
+    console.error("[POST /api/clinician/clinical-reviews] plan lookup failed:", planErr.message);
+    return genericServerErrorResponse();
   }
   if (!plan) {
-    return NextResponse.json({ error: "Plan not found." }, { status: 404 });
+    return unableToCompleteResponse(404);
   }
 
   const { data: sessions } = await adminClient
@@ -194,16 +200,13 @@ export async function POST(req: NextRequest) {
 
   if (existingErr) {
     if (existingErr.code === "42P01") {
-      return NextResponse.json(
-        {
-          error:
-            "Review acknowledgments table missing. Apply migration 007_clinical_review_acknowledgments.sql.",
-        },
-        { status: 503 },
+      console.error(
+        "[POST /api/clinician/clinical-reviews] clinical_review_acknowledgments table missing",
       );
+      return serviceUnavailableResponse();
     }
     console.error("[POST /api/clinician/clinical-reviews] existing lookup failed");
-    return NextResponse.json({ error: "Failed to record review." }, { status: 500 });
+    return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
 
   if (existing) {
@@ -240,16 +243,13 @@ export async function POST(req: NextRequest) {
       }
     }
     if (insertErr.code === "42P01") {
-      return NextResponse.json(
-        {
-          error:
-            "Review acknowledgments table missing. Apply migration 007_clinical_review_acknowledgments.sql.",
-        },
-        { status: 503 },
+      console.error(
+        "[POST /api/clinician/clinical-reviews] clinical_review_acknowledgments table missing",
       );
+      return serviceUnavailableResponse();
     }
     console.error("[POST /api/clinician/clinical-reviews] insert failed");
-    return NextResponse.json({ error: "Failed to record review." }, { status: 500 });
+    return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
 
   return NextResponse.json(

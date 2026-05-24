@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { validatePatientOwnership } from "../../../lib/validate-patient-ownership";
+import { API_ERRORS, serviceUnavailableResponse } from "../../../lib/api/safe-errors";
 
 // ── Shared client factory (mirrors route.ts) ───────────────────────────────────
 async function buildClients() {
@@ -30,7 +31,7 @@ async function buildClients() {
 // ── Auth helper ───────────────────────────────────────────────────────────────
 async function getAuthAndClients() {
   const clients = await buildClients();
-  if (!clients) return { error: "Supabase not configured.", status: 503 as const };
+  if (!clients) return { error: API_ERRORS.SERVICE_UNAVAILABLE, status: 503 as const };
   const { data: { user }, error: authError } = await clients.sessionClient.auth.getUser();
   if (authError ?? !user) return { error: "Unauthorized.", status: 401 as const };
   return { ...clients, user };

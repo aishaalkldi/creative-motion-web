@@ -10,6 +10,11 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { validatePatientOwnership } from "../../../lib/validate-patient-ownership";
 import {
+  serviceUnavailableResponse,
+  unableToCompleteResponse,
+  genericServerErrorResponse,
+} from "../../../lib/api/safe-errors";
+import {
   buildClinicalActionFromPlanData,
   clinicalActionNeedsTherapistReview,
   type ClinicalActionResult,
@@ -73,7 +78,7 @@ async function buildClients() {
 export async function GET(req: NextRequest) {
   const clients = await buildClients();
   if (!clients) {
-    return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+    return serviceUnavailableResponse();
   }
   const { sessionClient, adminClient } = clients;
 
@@ -97,9 +102,26 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: ownership.message }, { status: ownership.httpStatus });
   }
 
-  let planId = planIdParam;
-  if (!planId) {
-    const { data: plan } = await adminClient
+  let planId: string;
+  if (planIdParam) {
+    const { data: plan, error: planErr } = await adminClient
+      .from("treatment_plans")
+      .select("id")
+      .eq("id", planIdParam)
+      .eq("patient_id", patientId)
+      .eq("provider_id", user.id)
+      .maybeSingle<{ id: string }>();
+
+    if (planErr) {
+      console.error("[GET /api/clinician/patient-progress] plan lookup failed:", planErr.message);
+      return genericServerErrorResponse();
+    }
+    if (!plan) {
+      return unableToCompleteResponse(404);
+    }
+    planId = plan.id;
+  } else {
+    const { data: plan, error: planErr } = await adminClient
       .from("treatment_plans")
       .select("id")
       .eq("patient_id", patientId)
@@ -107,6 +129,11 @@ export async function GET(req: NextRequest) {
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle<{ id: string }>();
+
+    if (planErr) {
+      console.error("[GET /api/clinician/patient-progress] plan lookup failed:", planErr.message);
+      return genericServerErrorResponse();
+    }
     if (!plan) {
       return NextResponse.json({ error: "No plan found." }, { status: 404 });
     }

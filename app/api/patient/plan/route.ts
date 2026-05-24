@@ -11,9 +11,14 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
   checkPatientGeneralLimit,
-  enforceFailedTokenRateLimit,
   rateLimitExceededResponse,
 } from "../../../lib/rate-limit";
+import {
+  API_ERRORS,
+  invalidPatientTokenResponse,
+  serviceUnavailableResponse,
+  unableToCompleteResponse,
+} from "../../../lib/api/safe-errors";
 import { parseStoredExercises, type PrescribedExerciseV1 } from "../../../lib/exercise-resolve";
 import { getAssessmentLanguage, type AssessmentLanguage } from "../../../lib/assessment-payload";
 import { resolvePatientRehabFocus } from "../../../lib/plan-program-metadata";
@@ -80,7 +85,7 @@ export async function GET(req: NextRequest) {
 
   const admin = buildAdminClient();
   if (!admin) {
-    return NextResponse.json({ error: "Service not configured." }, { status: 503 });
+    return serviceUnavailableResponse();
   }
 
   // 1 — Token lookup (service role bypasses RLS on patient_access_tokens)
@@ -100,22 +105,13 @@ export async function GET(req: NextRequest) {
 
   if (tokenErr) {
     console.error("[GET /api/patient/plan] token lookup error");
-    return NextResponse.json({ error: "Token validation failed." }, { status: 500 });
+    return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
-  if (!tokenRow) {
-    const limited = enforceFailedTokenRateLimit(req);
-    if (limited) return limited;
-    return NextResponse.json({ error: "Invalid token." }, { status: 404 });
-  }
-  if (!tokenRow.is_active) {
-    const limited = enforceFailedTokenRateLimit(req);
-    if (limited) return limited;
-    return NextResponse.json({ error: "Token is inactive." }, { status: 403 });
+  if (!tokenRow || !tokenRow.is_active) {
+    return invalidPatientTokenResponse(req);
   }
   if (tokenRow.expires_at && new Date(tokenRow.expires_at) < new Date()) {
-    const limited = enforceFailedTokenRateLimit(req);
-    if (limited) return limited;
-    return NextResponse.json({ error: "Token has expired." }, { status: 403 });
+    return invalidPatientTokenResponse(req);
   }
 
   // 2 — Fetch treatment plan (exclude provider_id from select)
@@ -141,7 +137,7 @@ export async function GET(req: NextRequest) {
     .single<PlanRow>();
 
   if (planErr ?? !plan) {
-    return NextResponse.json({ error: "Plan not found." }, { status: 404 });
+    return unableToCompleteResponse(404);
   }
 
   // 3 — Fetch sessions (exclude provider_id from select)

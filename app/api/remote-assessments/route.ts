@@ -4,6 +4,11 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { validatePatientOwnership } from "@/app/lib/validate-patient-ownership";
+import {
+  API_ERRORS,
+  genericServerErrorResponse,
+  serviceUnavailableResponse,
+} from "@/app/lib/api/safe-errors";
 
 async function buildClients() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -42,7 +47,7 @@ async function buildClients() {
 export async function POST(req: NextRequest) {
   const clients = await buildClients();
   if (!clients) {
-    return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+    return serviceUnavailableResponse();
   }
   const { sessionClient, adminClient } = clients;
 
@@ -72,8 +77,7 @@ export async function POST(req: NextRequest) {
 
   const ownership = await validatePatientOwnership(adminClient, patientId, user.id);
   if (!ownership.ok) {
-    const status = ownership.httpStatus === 404 ? 403 : ownership.httpStatus;
-    return NextResponse.json({ error: ownership.message }, { status });
+    return NextResponse.json({ error: ownership.message }, { status: ownership.httpStatus });
   }
 
   const token = crypto.randomUUID();
@@ -95,13 +99,11 @@ export async function POST(req: NextRequest) {
 
   if (insertError) {
     if (insertError.code === "42P01") {
-      return NextResponse.json(
-        { error: "remote_assessment_requests table missing. Apply migration 006." },
-        { status: 500 },
-      );
+      console.error("[POST /api/remote-assessments] remote_assessment_requests table missing");
+      return genericServerErrorResponse();
     }
     console.error("[POST /api/remote-assessments] insert failed:", insertError.message);
-    return NextResponse.json({ error: "Failed to create remote assessment." }, { status: 500 });
+    return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
 
   return NextResponse.json({

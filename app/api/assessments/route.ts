@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { validatePatientOwnership } from "../../lib/validate-patient-ownership";
 import type { AssessmentData } from "../../lib/assessment-types";
+import { API_ERRORS, genericServerErrorResponse, serviceUnavailableResponse } from "../../lib/api/safe-errors";
 import type { GeneralAssessmentDraft } from "../../lib/general-assessment/types";
 import {
   buildGeneralMskPayload,
@@ -55,10 +56,10 @@ async function buildClients() {
 }
 
 function migrationPending(col: string) {
-  return NextResponse.json(
-    { error: `assessments.${col} column missing. Apply migration 004_assessments_add_columns.sql.` },
-    { status: 500 },
+  console.error(
+    `[POST/GET /api/assessments] assessments column missing (${col}) — apply migration 004`,
   );
+  return genericServerErrorResponse();
 }
 
 // ── POST /api/assessments ──────────────────────────────────────────────────────
@@ -81,7 +82,7 @@ function migrationPending(col: string) {
  */
 export async function POST(req: NextRequest) {
   const clients = await buildClients();
-  if (!clients) return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+  if (!clients) return serviceUnavailableResponse();
   const { sessionClient, adminClient } = clients;
 
   // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -142,7 +143,7 @@ export async function POST(req: NextRequest) {
   if (insertError) {
     if (insertError.code === "42703") return migrationPending("provider_id or structured_data");
     console.error("[POST /api/assessments] insert failed:", insertError.message);
-    return NextResponse.json({ error: "Failed to save assessment." }, { status: 500 });
+    return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
 
   return NextResponse.json(assessment as AssessmentRow, { status: 201 });
@@ -165,7 +166,7 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   const clients = await buildClients();
-  if (!clients) return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+  if (!clients) return serviceUnavailableResponse();
   const { sessionClient, adminClient } = clients;
 
   // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -192,7 +193,7 @@ export async function GET(req: NextRequest) {
   if (queryError) {
     if (queryError.code === "42703") return migrationPending("provider_id or structured_data");
     console.error("[GET /api/assessments] query failed:", queryError.message);
-    return NextResponse.json({ error: "Failed to load assessments." }, { status: 500 });
+    return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
 
   return NextResponse.json((assessments ?? []) as AssessmentRow[]);

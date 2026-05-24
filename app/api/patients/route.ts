@@ -4,6 +4,11 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import type { PatientRow } from "../../lib/validate-patient-ownership";
+import {
+  API_ERRORS,
+  genericServerErrorResponse,
+  serviceUnavailableResponse,
+} from "../../lib/api/safe-errors";
 
 // ── Shared client factory ──────────────────────────────────────────────────────
 
@@ -44,13 +49,8 @@ async function buildClients() {
 
 /** Returns a consistent 500 when migration 003 has not been applied yet. */
 function migrationPending() {
-  return NextResponse.json(
-    {
-      error:
-        "patients.provider_id column missing. Apply migration 003_patients_provider_id.sql.",
-    },
-    { status: 500 },
-  );
+  console.error("[/api/patients] patients.provider_id column missing — apply migration 003");
+  return genericServerErrorResponse();
 }
 
 // ── GET /api/patients ──────────────────────────────────────────────────────────
@@ -66,7 +66,7 @@ function migrationPending() {
 export async function GET(_req: NextRequest) {
   const clients = await buildClients();
   if (!clients) {
-    return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+    return serviceUnavailableResponse();
   }
   const { sessionClient, adminClient } = clients;
 
@@ -92,7 +92,7 @@ export async function GET(_req: NextRequest) {
     if (queryError.code === "42703") return migrationPending();
 
     console.error("[GET /api/patients] query failed:", queryError.message);
-    return NextResponse.json({ error: "Failed to load patients." }, { status: 500 });
+    return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
 
   return NextResponse.json((patients ?? []) as PatientRow[]);
@@ -131,7 +131,7 @@ type CreatePatientBody = {
 export async function POST(req: NextRequest) {
   const clients = await buildClients();
   if (!clients) {
-    return NextResponse.json({ error: "Supabase not configured." }, { status: 503 });
+    return serviceUnavailableResponse();
   }
   const { sessionClient, adminClient } = clients;
 
@@ -191,7 +191,7 @@ export async function POST(req: NextRequest) {
     if (insertError.code === "42703") return migrationPending();
 
     console.error("[POST /api/patients] insert failed:", insertError.message);
-    return NextResponse.json({ error: "Failed to create patient." }, { status: 500 });
+    return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
 
   return NextResponse.json(patient as PatientRow, { status: 201 });
