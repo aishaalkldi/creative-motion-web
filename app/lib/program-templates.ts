@@ -1,12 +1,20 @@
 /**
  * Pilot program templates — clinician-reviewed starting points for plan assignment.
  * Static config only; no auto-prescription. Clinician edits before assigning.
+ *
+ * Exercises are library-linked PrescribedExerciseV1 objects (not text fallback).
  */
+
+import { getLibraryExerciseById } from "@/app/lib/exercise-library-v1";
+import {
+  prescribedFromLibrary,
+  type PrescribedExerciseV1,
+} from "@/app/lib/exercise-resolve";
 
 export type PilotProgramSession = {
   sessionNumber: number;
   title: string;
-  exercises: string[];
+  exercises: PrescribedExerciseV1[];
 };
 
 export type PilotProgramTemplate = {
@@ -18,6 +26,18 @@ export type PilotProgramTemplate = {
   safetyNote: string;
   sessions: PilotProgramSession[];
 };
+
+function templateExercise(
+  exerciseId: string,
+  displayName: string,
+  overrides?: Partial<PrescribedExerciseV1>,
+): PrescribedExerciseV1 {
+  const entry = getLibraryExerciseById(exerciseId);
+  if (!entry) {
+    throw new Error(`Pilot template references unknown exerciseId: ${exerciseId}`);
+  }
+  return prescribedFromLibrary(entry, { name: displayName, ...overrides });
+}
 
 export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
   {
@@ -33,27 +53,27 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
         sessionNumber: 1,
         title: "Session 1 — Activation & mobility",
         exercises: [
-          "Quad activation",
-          "Heel slides",
-          "Seated knee extension",
+          templateExercise("quad-set", "Quad activation"),
+          templateExercise("heel-slide", "Heel slides"),
+          templateExercise("quad-set", "Seated knee extension"),
         ],
       },
       {
         sessionNumber: 2,
         title: "Session 2 — Strength & function",
         exercises: [
-          "Sit-to-stand practice",
-          "Mini squats",
-          "Calf raises",
+          templateExercise("sit-to-stand", "Sit-to-stand practice"),
+          templateExercise("mini-squat", "Mini squats"),
+          templateExercise("heel-raise", "Calf raises"),
         ],
       },
       {
         sessionNumber: 3,
         title: "Session 3 — Control & walking",
         exercises: [
-          "Step control",
-          "Balance hold",
-          "Walking tolerance",
+          templateExercise("step-up", "Step control"),
+          templateExercise("single-leg-stance", "Balance hold"),
+          templateExercise("walking-tolerance", "Walking tolerance"),
         ],
       },
     ],
@@ -71,27 +91,27 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
         sessionNumber: 1,
         title: "Session 1 — Mobility & breathing",
         exercises: [
-          "Diaphragmatic breathing",
-          "Pelvic tilts",
-          "Knee-to-chest",
+          templateExercise("diaphragmatic-breathing", "Diaphragmatic breathing"),
+          templateExercise("pelvic-tilt", "Pelvic tilts"),
+          templateExercise("pelvic-tilt", "Knee-to-chest"),
         ],
       },
       {
         sessionNumber: 2,
         title: "Session 2 — Spinal mobility & hinge",
         exercises: [
-          "Cat-cow",
-          "Bridge preparation",
-          "Hip hinge education",
+          templateExercise("cat-cow", "Cat-cow"),
+          templateExercise("glute-bridge", "Bridge preparation"),
+          templateExercise("hip-hinge", "Hip hinge education"),
         ],
       },
       {
         sessionNumber: 3,
         title: "Session 3 — Core & walking",
         exercises: [
-          "Glute bridge",
-          "Bird-dog preparation",
-          "Walking plan",
+          templateExercise("glute-bridge", "Glute bridge"),
+          templateExercise("bird-dog", "Bird-dog preparation"),
+          templateExercise("walking-tolerance", "Walking plan"),
         ],
       },
     ],
@@ -109,27 +129,27 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
         sessionNumber: 1,
         title: "Session 1 — Mobility & scapular setting",
         exercises: [
-          "Pendulum",
-          "Scapular setting",
-          "Table slides",
+          templateExercise("pendulum", "Pendulum"),
+          templateExercise("scapular-setting", "Scapular setting"),
+          templateExercise("table-slide", "Table slides"),
         ],
       },
       {
         sessionNumber: 2,
         title: "Session 2 — Controlled range & posture",
         exercises: [
-          "Wall slides",
-          "External rotation isometric",
-          "Posture reset",
+          templateExercise("wall-slide", "Wall slides"),
+          templateExercise("external-rotation", "External rotation isometric"),
+          templateExercise("posture-reset", "Posture reset"),
         ],
       },
       {
         sessionNumber: 3,
         title: "Session 3 — Functional reach",
         exercises: [
-          "Assisted shoulder flexion",
-          "Scapular retraction",
-          "Functional reach",
+          templateExercise("table-slide", "Assisted shoulder flexion"),
+          templateExercise("scapular-setting", "Scapular retraction"),
+          templateExercise("cross-body-stretch", "Functional reach"),
         ],
       },
     ],
@@ -137,9 +157,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
 ];
 
 /** Deep-clone a template for editable plan state (no shared references). */
-export function clonePilotTemplate(
-  template: PilotProgramTemplate,
-): {
+export function clonePilotTemplate(template: PilotProgramTemplate): {
   title: string;
   goal: string;
   safetyNote: string;
@@ -152,7 +170,7 @@ export function clonePilotTemplate(
     sessions: template.sessions.map((s) => ({
       sessionNumber: s.sessionNumber,
       title: s.title,
-      exercises: [...s.exercises],
+      exercises: s.exercises.map((ex) => ({ ...ex })),
     })),
   };
 }

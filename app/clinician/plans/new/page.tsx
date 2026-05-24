@@ -19,7 +19,7 @@ import {
   PrescribedExerciseEditor,
 } from "@/app/components/clinician/ExerciseLibraryPicker";
 import type { PrescribedExerciseV1 } from "@/app/lib/exercise-resolve";
-import { isPrescribedExerciseV1 } from "@/app/lib/exercise-prescription";
+import { isPrescribedExerciseV1, getExerciseDisplayName } from "@/app/lib/exercise-prescription";
 
 type PlanSessionDraft = {
   sessionNumber: number;
@@ -371,7 +371,12 @@ function NewPlanInner() {
     setPhases((prev) =>
       prev.map((p, i) =>
         i === 0
-          ? { ...p, exercises: cloned.sessions.map((s) => s.exercises.join(" · ")).join("\n") }
+          ? {
+              ...p,
+              exercises: cloned.sessions
+                .map((s) => s.exercises.map((ex) => getExerciseDisplayName(ex)).join(" · "))
+                .join("\n"),
+            }
           : p,
       ),
     );
