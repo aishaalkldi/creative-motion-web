@@ -3,28 +3,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { IBM_Plex_Sans_Arabic } from "next/font/google";
 import type { PatientPlanData } from "@/app/api/patient/plan/route";
 import type { SessionLogEntry } from "@/app/api/patient/logs/route";
+import { usePatientLanguage } from "@/app/components/patient/PatientLanguageProvider";
 import {
   deriveClinicalAction,
 } from "@/app/lib/clinical-action-engine";
-import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import {
   formatPortalDate,
   localizeClinicalActionMessage,
-  portalTextDir,
   progressPageUi,
 } from "@/app/lib/patient-portal-ui";
 import {
   parseSessionCoachNotes,
 } from "@/app/lib/session-coach-metadata";
-
-const arabicFont = IBM_Plex_Sans_Arabic({
-  subsets: ["arabic"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
 
 /* ── Page ───────────────────────────────────────────────────────────────────── */
 
@@ -70,12 +62,8 @@ export default function PatientProgressPage() {
       });
   }, [token, router]);
 
-  const lang: PatientExerciseLanguage =
-    plan && plan.patientLanguage === "ar" ? "ar" : "en";
+  const { language: lang, isArabic, textDir, arClass } = usePatientLanguage();
   const ui = progressPageUi(lang);
-  const isArabic = lang === "ar";
-  const textDir = portalTextDir(lang);
-  const arClass = isArabic ? arabicFont.className : "";
 
   const logBySessionId = useMemo(() => {
     const map = new Map<string, SessionLogEntry>();

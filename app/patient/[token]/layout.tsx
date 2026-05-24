@@ -1,43 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { IBM_Plex_Sans_Arabic } from "next/font/google";
-import type { PatientPlanData } from "@/app/api/patient/plan/route";
-import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
-import { portalTextDir, tokenLayoutUi } from "@/app/lib/patient-portal-ui";
-
-const arabicFont = IBM_Plex_Sans_Arabic({
-  subsets: ["arabic"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
+import { PatientLanguageProvider, usePatientLanguage } from "@/app/components/patient/PatientLanguageProvider";
+import { PatientLanguageToggle } from "@/app/components/patient/PatientLanguageToggle";
+import { tokenLayoutUi } from "@/app/lib/patient-portal-ui";
 
 export default function PatientTokenLayout({ children }: { children: React.ReactNode }) {
   const params = useParams();
   const token = String(params.token ?? "");
 
-  const [assignedBy, setAssignedBy] = useState("");
-  const [patientLanguage, setPatientLanguage] = useState<PatientExerciseLanguage>("en");
+  return (
+    <PatientLanguageProvider token={token}>
+      <PatientTokenLayoutShell>{children}</PatientTokenLayoutShell>
+    </PatientLanguageProvider>
+  );
+}
 
-  useEffect(() => {
-    if (!token) return;
-    fetch(`/api/patient/plan?token=${encodeURIComponent(token)}`)
-      .then(async (res) => {
-        if (!res.ok) return;
-        const data = (await res.json()) as PatientPlanData;
-        if (data.assignedBy) setAssignedBy(data.assignedBy);
-        setPatientLanguage(data.patientLanguage === "ar" ? "ar" : "en");
-      })
-      .catch(() => {
-        /* assignedBy is cosmetic */
-      });
-  }, [token]);
-
-  const isArabic = patientLanguage === "ar";
-  const layoutUi = tokenLayoutUi(patientLanguage);
-  const textDir = portalTextDir(patientLanguage);
-  const arClass = isArabic ? arabicFont.className : "";
+function PatientTokenLayoutShell({ children }: { children: React.ReactNode }) {
+  const { language, assignedBy, textDir, arClass } = usePatientLanguage();
+  const layoutUi = tokenLayoutUi(language);
 
   return (
     <div
@@ -55,11 +36,14 @@ export default function PatientTokenLayout({ children }: { children: React.React
         >
           RASQ
         </span>
-        {assignedBy && (
-          <span className="text-[11px] text-[#9CA3AF]" dir="ltr">
-            {layoutUi.assignedBy(assignedBy)}
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          <PatientLanguageToggle />
+          {assignedBy && (
+            <span className="text-[11px] text-[#9CA3AF]" dir="ltr">
+              {layoutUi.assignedBy(assignedBy)}
+            </span>
+          )}
+        </div>
       </nav>
 
       <main className="mx-auto max-w-[680px] px-6 py-8 md:px-8">{children}</main>

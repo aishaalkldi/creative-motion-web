@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { IBM_Plex_Sans_Arabic } from "next/font/google";
 import type { PatientPlanData, PatientSession } from "@/app/api/patient/plan/route";
 import type { SessionCompleteResponse } from "@/app/api/patient/session-complete/route";
+import { usePatientLanguage } from "@/app/components/patient/PatientLanguageProvider";
 import { encodeSessionCoachNotes } from "@/app/lib/session-coach-metadata";
 import {
   deriveClinicalAction,
@@ -13,22 +13,14 @@ import {
 } from "@/app/lib/clinical-action-engine";
 import {
   resolveExerciseView,
-  type PatientExerciseLanguage,
 } from "@/app/lib/exercise-resolve";
 import {
   formatExerciseProgress,
   localizeClinicalActionMessage,
   planHomeUi,
-  portalTextDir,
   sessionExerciseUi,
   sessionShellUi,
 } from "@/app/lib/patient-portal-ui";
-
-const arabicFont = IBM_Plex_Sans_Arabic({
-  subsets: ["arabic"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
 
 type SessionPhase = "precheck" | "active";
 
@@ -79,7 +71,7 @@ export default function SessionPlayerPage() {
   const [planSessions,        setPlanSessions]        = useState<PatientSession[]>([]);
   const [notFound,            setNotFound]            = useState(false);
   const [patientName,         setPatientName]         = useState("");
-  const [patientLanguage,     setPatientLanguage]     = useState<PatientExerciseLanguage>("en");
+  const { language: patientLanguage, isArabic, textDir, arClass } = usePatientLanguage();
   const [phase,               setPhase]               = useState<SessionPhase>("precheck");
   const [painBefore,          setPainBefore]          = useState<number | null>(null);
   const [safetyConcern,       setSafetyConcern]       = useState<boolean | null>(null);
@@ -128,16 +120,14 @@ export default function SessionPlayerPage() {
         setSession(s);
         setPlanSessions(plan.sessions);
         setPatientName(plan.patientName ?? "");
-        setPatientLanguage(plan.patientLanguage === "ar" ? "ar" : "en");
       })
       .catch(() => { setNotFound(true); });
   }, [token, sessionId, router]);
 
   if (notFound) {
     const shellUi = sessionShellUi(patientLanguage);
-    const arClass = patientLanguage === "ar" ? arabicFont.className : "";
     return (
-      <div className={`flex min-h-[50vh] items-center justify-center ${arClass}`} dir={portalTextDir(patientLanguage)}>
+      <div className={`flex min-h-[50vh] items-center justify-center ${arClass}`} dir={textDir}>
         <div className="text-center">
           <p className="text-[14px] font-semibold text-[#374151]">{shellUi.sessionNotFound}</p>
           <Link
@@ -152,8 +142,6 @@ export default function SessionPlayerPage() {
   }
 
   if (!session) {
-    const shellUi = sessionShellUi(patientLanguage);
-    const arClass = patientLanguage === "ar" ? arabicFont.className : "";
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
         <p className={`text-[13px] text-[#9CA3AF] ${arClass}`}>{planHomeUi(patientLanguage).loading}</p>
@@ -167,9 +155,6 @@ export default function SessionPlayerPage() {
   const current   = exercises[exerciseIndex];
   const exerciseUi = sessionExerciseUi(patientLanguage);
   const shellUi = sessionShellUi(patientLanguage);
-  const isArabic = patientLanguage === "ar";
-  const textDir = portalTextDir(patientLanguage);
-  const arClass = isArabic ? arabicFont.className : "";
   const currentView = current
     ? resolveExerciseView(current, { language: patientLanguage })
     : null;
@@ -528,7 +513,7 @@ export default function SessionPlayerPage() {
 
       <div className="rounded-[10px] border border-[#D1E7DE] bg-[#F0FAF6] px-4 py-3">
         <p
-          className={`text-[13px] leading-relaxed text-[#374151] ${isArabic ? arabicFont.className : ""}`}
+          className={`text-[13px] leading-relaxed text-[#374151] ${arClass}`}
           dir={isArabic ? "rtl" : "ltr"}
         >
           {exerciseUi.safetyBanner}
@@ -541,14 +526,14 @@ export default function SessionPlayerPage() {
         lang={patientLanguage}
       >
         <h2
-          className={`text-[18px] font-bold text-[#0A0F1A] ${isArabic ? arabicFont.className : ""}`}
+          className={`text-[18px] font-bold text-[#0A0F1A] ${arClass}`}
           style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
         >
           {currentView?.name ?? exerciseUi.exerciseFallback}
         </h2>
         {currentView?.doseLabel && (
           <p
-            className={`mt-2 text-[13px] font-semibold text-[#1D9E75] ${isArabic ? arabicFont.className : ""}`}
+            className={`mt-2 text-[13px] font-semibold text-[#1D9E75] ${arClass}`}
             style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
           >
             {currentView.doseLabel}
@@ -556,26 +541,26 @@ export default function SessionPlayerPage() {
         )}
         {!currentView?.doseLabel && (
           <p
-            className={`mt-1 text-[13px] font-semibold text-[#1D9E75] ${isArabic ? arabicFont.className : ""}`}
+            className={`mt-1 text-[13px] font-semibold text-[#1D9E75] ${arClass}`}
             style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
           >
             {exerciseUi.asPrescribed}
           </p>
         )}
-        <p className={`mt-4 text-[14px] leading-[1.7] text-[#374151] ${isArabic ? arabicFont.className : ""}`}>
+        <p className={`mt-4 text-[14px] leading-[1.7] text-[#374151] ${arClass}`}>
           {currentView?.patientInstructions}
         </p>
         {currentView?.clinicianNote && (
-          <p className={`mt-3 rounded-[7px] border border-[#D1E7DE] bg-[#F0FAF6] px-3 py-2.5 text-[12px] leading-relaxed text-[#374151] ${isArabic ? arabicFont.className : ""}`}>
+          <p className={`mt-3 rounded-[7px] border border-[#D1E7DE] bg-[#F0FAF6] px-3 py-2.5 text-[12px] leading-relaxed text-[#374151] ${arClass}`}>
             <span className="font-semibold text-[#0A0F1A]">{exerciseUi.therapistNote} </span>
             {currentView.clinicianNote}
           </p>
         )}
-        <p className={`mt-4 rounded-[7px] border border-[#E2E8E5] bg-[#F9FAFB] px-3 py-2.5 text-[12px] leading-relaxed text-[#6B7280] ${isArabic ? arabicFont.className : ""}`}>
+        <p className={`mt-4 rounded-[7px] border border-[#E2E8E5] bg-[#F9FAFB] px-3 py-2.5 text-[12px] leading-relaxed text-[#6B7280] ${arClass}`}>
           <span className="font-semibold text-[#374151]">{exerciseUi.whyThisMatters} </span>
           {currentView?.whyThisMatters}
         </p>
-        <p className={`mt-3 rounded-[7px] border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] leading-relaxed text-amber-900 ${isArabic ? arabicFont.className : ""}`}>
+        <p className={`mt-3 rounded-[7px] border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] leading-relaxed text-amber-900 ${arClass}`}>
           <span className="font-semibold">{exerciseUi.stopIf} </span>
           {currentView?.precautions}
         </p>

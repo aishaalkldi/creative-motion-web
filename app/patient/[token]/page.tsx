@@ -3,21 +3,13 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { IBM_Plex_Sans_Arabic } from "next/font/google";
 import type { PatientPlanData } from "@/app/api/patient/plan/route";
+import { usePatientLanguage } from "@/app/components/patient/PatientLanguageProvider";
 import { SessionScheduleView } from "@/app/components/SessionScheduleView";
-import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import {
   getPortalGreeting,
   planHomeUi,
-  portalTextDir,
 } from "@/app/lib/patient-portal-ui";
-
-const arabicFont = IBM_Plex_Sans_Arabic({
-  subsets: ["arabic"],
-  weight: ["400", "500", "600", "700"],
-  display: "swap",
-});
 
 function sessionDisplayStatus(
   sessions: { id: string; status: string }[],
@@ -59,12 +51,8 @@ export default function PatientDashboard() {
       });
   }, [token, router]);
 
-  const lang: PatientExerciseLanguage =
-    plan && plan.patientLanguage === "ar" ? "ar" : "en";
+  const { language: lang, isArabic, textDir, arClass } = usePatientLanguage();
   const ui = planHomeUi(lang);
-  const isArabic = lang === "ar";
-  const textDir = portalTextDir(lang);
-  const arClass = isArabic ? arabicFont.className : "";
 
   if (plan === undefined) {
     return (
