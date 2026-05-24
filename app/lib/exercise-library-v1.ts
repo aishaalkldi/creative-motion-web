@@ -31,7 +31,7 @@ export type ExerciseLibraryEntryV1 = {
 };
 
 export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
-  // ── Knee (7) ──────────────────────────────────────────────────────────────
+  // ── Knee (10) ─────────────────────────────────────────────────────────────
   {
     exerciseId: "quad-set",
     nameEn: "Quad Set / Activation",
@@ -46,6 +46,7 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 30,
     equipment: [],
     precautions: "Stop if sharp knee pain increases. Keep breathing steady.",
+    contraindications: "Acute knee effusion with inability to activate quad; severe post-operative restrictions unless cleared by surgeon.",
     whyThisMatters: "Waking up the front thigh muscle helps support the knee during daily activities.",
     patientInstructions:
       "Lie or sit with your leg straight. Tighten the muscle on the front of your thigh and press the back of your knee gently toward the surface. Hold 5 seconds, then relax. Repeat with controlled effort.",
@@ -70,6 +71,7 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 45,
     equipment: ["Non-slip surface"],
     precautions: "Move within a comfortable range. Do not force into pain.",
+    contraindications: "Recent knee surgery before flexion clearance; suspected meniscal block with locking.",
     whyThisMatters: "Gentle bending helps you sit, walk, and climb stairs more comfortably.",
     patientInstructions:
       "Lie on your back with legs extended. Slowly slide your heel toward your buttock, bending the knee. Hold briefly at end range, then slide back. Keep movements smooth.",
@@ -93,6 +95,7 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 60,
     equipment: ["Sturdy chair"],
     precautions: "Use chair arms only for balance, not to pull up. Stop if knee gives way.",
+    contraindications: "Non–weight-bearing status; severe balance impairment without supervision.",
     whyThisMatters: "Standing from a chair is essential for daily independence and builds leg strength.",
     patientInstructions:
       "Sit at the edge of a sturdy chair, feet shoulder-width apart. Lean forward slightly, push through your heels, and stand up fully. Lower back to sitting with control.",
@@ -116,6 +119,7 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 60,
     equipment: [],
     precautions: "Keep knees aligned over toes. Stop if sharp or increasing pain.",
+    contraindications: "Acute patellar instability; weight-bearing restrictions.",
     whyThisMatters: "Controlled squatting prepares your knee for stairs, lifting, and daily movement.",
     patientInstructions:
       "Stand with feet shoulder-width apart. Slowly bend knees to about 45°, keeping chest tall and weight through heels. Hold 2 seconds, return to standing.",
@@ -139,6 +143,7 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 45,
     equipment: ["Chair for balance"],
     precautions: "Hold support if balance is uncertain. Lower slowly.",
+    contraindications: "Achilles tendon rupture repair early phase; acute calf tear.",
     whyThisMatters: "Strong calves help you walk, climb stairs, and balance on your toes.",
     patientInstructions:
       "Stand behind a chair for support. Rise onto the balls of both feet, hold 2 seconds, lower with control. Keep weight even through both feet.",
@@ -162,6 +167,7 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 45,
     equipment: ["Wall or chair nearby"],
     precautions: "Stand near support. Stop if dizziness or sharp pain occurs.",
+    contraindications: "Severe vestibular symptoms; non–weight-bearing limb status.",
     whyThisMatters: "Balance on one leg is needed for walking, turning, and safe movement.",
     patientInstructions:
       "Stand on one leg with a slight knee bend. Hold your balance for the prescribed time. Use wall or chair lightly if needed. Minimise hip drop on the lifted side.",
@@ -185,6 +191,7 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 60,
     equipment: ["Step 15–20 cm"],
     precautions: "Use a stable step. Drive through the heel. Step down with control.",
+    contraindications: "Lower-extremity non–weight-bearing orders; unsteady gait without assistive device clearance.",
     whyThisMatters: "Step-ups build the strength you need for stairs and curbs in daily life.",
     patientInstructions:
       "Face a low step. Step up with your leading leg, drive through the heel to straighten the knee. Step down slowly. Keep trunk upright.",
@@ -194,8 +201,83 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     futureCvMeasurementTarget: "step height, knee valgus",
     libraryVersion: "v1",
   },
+  {
+    exerciseId: "terminal-knee-extension",
+    nameEn: "Terminal Knee Extension",
+    nameAr: "تمديد الركبة النهائي",
+    bodyRegion: "knee",
+    conditionCategory: ["ACL", "post-op knee", "knee extension lag"],
+    targetImpairment: "Terminal extension deficit / extension lag",
+    functionalGoal: "Restore full knee straightening for stable walking",
+    difficultyLevel: 1,
+    defaultSets: 3,
+    defaultReps: 15,
+    defaultRestSec: 45,
+    equipment: ["Resistance band", "Towel roll optional"],
+    precautions: "Keep thigh still. Extend only at the knee. Stop if sharp anterior knee pain.",
+    contraindications: "Post-operative range restrictions limiting extension; acute patellar tendinopathy flare.",
+    whyThisMatters: "Full knee straightening helps you walk evenly and feel stable when standing.",
+    patientInstructions:
+      "Loop a band behind the knee or use a fixed point. Sit or stand with thigh supported. Straighten the knee fully, squeeze the front thigh for 3 seconds, then return slowly. Keep hip still.",
+    biomechanicalRationale:
+      "Isolated terminal extension training reduces extension lag with low compressive load.",
+    progressionCriteria: "Ready for clinician progression review when full extension is held without pain for full set.",
+    regressionCriteria: "Reduce band tension or perform without band if irritation increases.",
+    futureCvMeasurementTarget: "knee extension angle, extension lag",
+    libraryVersion: "v1",
+  },
+  {
+    exerciseId: "short-arc-quad",
+    nameEn: "Short Arc Quad",
+    nameAr: "تقوية الفخذ الأمامية بمدى قصير",
+    bodyRegion: "knee",
+    conditionCategory: ["ACL", "post-op knee", "patellofemoral"],
+    targetImpairment: "Quadriceps weakness in mid-range extension",
+    functionalGoal: "Build quad strength before full-range loading",
+    difficultyLevel: 1,
+    defaultSets: 3,
+    defaultReps: 12,
+    defaultRestSec: 45,
+    equipment: ["Bolster or rolled towel"],
+    precautions: "Do not lift the thigh off the roll. Lower with control.",
+    contraindications: "Acute patellar pain with loaded extension; surgeon restrictions on active extension.",
+    whyThisMatters: "Strengthening in a safe range protects the kneecap while rebuilding thigh strength.",
+    patientInstructions:
+      "Lie on your back with a rolled towel under the knee. Straighten the knee to lift the foot, hold 3 seconds at the top, then lower slowly. Keep the back of the knee on the roll.",
+    biomechanicalRationale:
+      "Short-arc loading increases quadriceps activation with reduced patellofemoral stress vs deep flexion.",
+    progressionCriteria: "Ready for clinician progression review when reps are smooth with full terminal extension.",
+    regressionCriteria: "Reduce hold time or range if anterior knee pain increases.",
+    futureCvMeasurementTarget: "knee extension hold, quad activation",
+    libraryVersion: "v1",
+  },
+  {
+    exerciseId: "lateral-band-walk",
+    nameEn: "Lateral Band Walk",
+    nameAr: "المشي الجانبي بشريط المقاومة",
+    bodyRegion: "knee",
+    conditionCategory: ["ACL", "knee valgus control", "hip-knee stability"],
+    targetImpairment: "Hip abductor weakness and dynamic knee valgus",
+    functionalGoal: "Improve side-to-side stability during walking and squatting",
+    difficultyLevel: 2,
+    defaultSets: 2,
+    defaultReps: 10,
+    defaultRestSec: 60,
+    equipment: ["Loop band above knees or ankles"],
+    precautions: "Keep knees aligned over feet. Stay in quarter-squat posture. Do not let knees collapse inward.",
+    contraindications: "Acute hip or lateral knee pain with resisted abduction.",
+    whyThisMatters: "Hip and knee control during side steps helps prevent buckling and supports safer sports and stairs.",
+    patientInstructions:
+      "Place a band above your knees. Sit into a slight squat. Step sideways while keeping tension on the band and knees over toes. Take prescribed steps one direction, then return.",
+    biomechanicalRationale:
+      "Hip abductor and external rotator activation improves frontal-plane knee control during functional movement.",
+    progressionCriteria: "Ready for clinician progression review when alignment is maintained for full distance.",
+    regressionCriteria: "Higher band placement, shorter steps, or remove band if form breaks down.",
+    futureCvMeasurementTarget: "knee valgus angle, hip abduction control",
+    libraryVersion: "v1",
+  },
 
-  // ── Lumbar (7) ────────────────────────────────────────────────────────────
+  // ── Lumbar (10) ───────────────────────────────────────────────────────────
   {
     exerciseId: "diaphragmatic-breathing",
     nameEn: "Diaphragmatic Breathing",
@@ -210,12 +292,14 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 30,
     equipment: [],
     precautions: "Breathe comfortably. Do not force breath holds.",
+    contraindications: "Acute respiratory distress; severe anxiety where breath focus worsens symptoms without supervision.",
     whyThisMatters: "Relaxed breathing can reduce muscle tension and help you move more comfortably.",
     patientInstructions:
       "Lie on your back with knees bent. Place one hand on your chest and one on your belly. Breathe in slowly through your nose so your belly rises. Exhale gently through your mouth.",
     biomechanicalRationale: "Diaphragmatic breathing supports parasympathetic tone and baseline core coordination.",
     progressionCriteria: "Ready for clinician progression review when pattern is consistent without breath holding.",
     regressionCriteria: "Shorten duration or perform seated if lying is uncomfortable.",
+    futureCvMeasurementTarget: "respiratory rate, trunk relaxation",
     libraryVersion: "v1",
   },
   {
@@ -232,6 +316,7 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 30,
     equipment: [],
     precautions: "Move gently. Stay within a pain-free range.",
+    contraindications: "Suspected cauda equina or progressive neurological deficit — seek urgent medical review.",
     whyThisMatters: "Learning to move your pelvis gently helps reduce stiffness and supports safer bending.",
     patientInstructions:
       "Lie on your back, knees bent. Flatten your lower back toward the floor by gently tilting your pelvis. Hold 3 seconds, then release. Move slowly.",
@@ -255,6 +340,7 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 30,
     equipment: ["Mat"],
     precautions: "Avoid end-range pinching. Move with breath.",
+    contraindications: "Unstable spinal fracture; acute radicular pain worsened by flexion-extension.",
     whyThisMatters: "Gentle arching and rounding keeps your spine moving comfortably through the day.",
     patientInstructions:
       "On hands and knees, arch your back up like a cat, then slowly drop your belly and lift your chest. Move between positions with your breath.",
@@ -278,6 +364,7 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 45,
     equipment: ["Mat"],
     precautions: "Do not over-arch the lower back at the top. Squeeze glutes, not low back.",
+    contraindications: "Acute hamstring tear; hip replacement precautions limiting hip extension.",
     whyThisMatters: "Strong glutes help support your lower back when you stand, walk, and lift.",
     patientInstructions:
       "Lie on your back, knees bent, feet flat. Lift your hips until shoulders, hips, and knees align. Squeeze your glutes at the top. Lower slowly.",
@@ -301,6 +388,7 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 45,
     equipment: ["Mat"],
     precautions: "Keep trunk steady — avoid rocking. Stop if back pain increases.",
+    contraindications: "Wrist or knee loading intolerance in quadruped; acute shoulder instability in weight-bearing through arms.",
     whyThisMatters: "This exercise trains your core to stay stable while your arms and legs move.",
     patientInstructions:
       "On hands and knees, extend opposite arm and leg while keeping your trunk level. Hold 3 seconds, return, switch sides. Move slowly.",
@@ -324,6 +412,7 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 45,
     equipment: ["Wall or dowel optional"],
     precautions: "Keep spine neutral. Hinge at hips, not low back.",
+    contraindications: "Acute disc herniation with flexion intolerance until assessed by clinician.",
     whyThisMatters: "Bending from your hips protects your lower back during daily tasks.",
     patientInstructions:
       "Stand with feet hip-width apart. Push hips back while keeping a slight knee bend and neutral spine, as if closing a door with your hips. Return to standing.",
@@ -347,6 +436,7 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 0,
     equipment: [],
     precautions: "Walk at a comfortable pace. Stop and rest if symptoms flare beyond baseline.",
+    contraindications: "Unstable cardiovascular symptoms; physician-imposed activity restriction.",
     whyThisMatters: "Gradual walking helps you return to daily activities and supports overall recovery.",
     patientInstructions:
       "Walk at a comfortable pace on flat ground for the prescribed time. Stand tall, let arms swing naturally. Rest as needed.",
@@ -356,8 +446,83 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     futureCvMeasurementTarget: "gait speed, posture",
     libraryVersion: "v1",
   },
+  {
+    exerciseId: "dead-bug",
+    nameEn: "Dead Bug",
+    nameAr: "حشرة ميتة",
+    bodyRegion: "lumbar",
+    conditionCategory: ["LBP", "core stability", "motor control"],
+    targetImpairment: "Poor trunk stability with limb movement",
+    functionalGoal: "Maintain neutral spine while moving arms and legs",
+    difficultyLevel: 2,
+    defaultSets: 3,
+    defaultReps: 10,
+    defaultRestSec: 45,
+    equipment: ["Mat"],
+    precautions: "Keep low back gently pressed toward floor. Move slowly. Stop if back arches off the mat.",
+    contraindications: "Supine intolerance; acute hip flexor spasm with bilateral leg lowering.",
+    whyThisMatters: "Training your core in this position helps protect your back during rolling and reaching.",
+    patientInstructions:
+      "Lie on your back, arms toward ceiling, hips and knees at 90°. Lower opposite arm and leg toward the floor while keeping your trunk steady. Return and switch sides.",
+    biomechanicalRationale:
+      "Supine anti-extension challenge with alternating limb load for deep core coordination.",
+    progressionCriteria: "Ready for clinician progression review when lumbar contact stays stable for full set.",
+    regressionCriteria: "Move arm or leg only, or reduce range if back arches.",
+    futureCvMeasurementTarget: "lumbar flexion control, limb angle symmetry",
+    libraryVersion: "v1",
+  },
+  {
+    exerciseId: "side-plank",
+    nameEn: "Side Plank (modified)",
+    nameAr: "البلانك الجانبي (معدّل)",
+    bodyRegion: "lumbar",
+    conditionCategory: ["LBP", "lateral core", "hip stability"],
+    targetImpairment: "Lateral trunk and hip stability deficit",
+    functionalGoal: "Build side support for walking and lifting",
+    difficultyLevel: 2,
+    defaultSets: 2,
+    defaultDurationSec: 20,
+    defaultRestSec: 45,
+    equipment: ["Mat"],
+    precautions: "Keep body in straight line from knees or feet. Breathe steadily. Stop if shoulder pain occurs.",
+    contraindications: "Acute shoulder weight-bearing intolerance; painful hip abductor tear.",
+    whyThisMatters: "Side strength helps you stay upright when carrying bags or stepping off curbs.",
+    patientInstructions:
+      "Lie on your side, forearm on the mat, knees bent (easier) or legs straight. Lift hips until body forms a straight line. Hold for the prescribed time, then lower.",
+    biomechanicalRationale:
+      "Lateral chain isometric loading for quadratus lumborum and glute medius without spinal compression.",
+    progressionCriteria: "Ready for clinician progression review when hold time meets target with level hips.",
+    regressionCriteria: "Bent-knee version or shorter holds if form collapses.",
+    futureCvMeasurementTarget: "hip height symmetry, trunk lateral alignment",
+    libraryVersion: "v1",
+  },
+  {
+    exerciseId: "prone-press-up",
+    nameEn: "Prone Press-Up (Extension)",
+    nameAr: "الضغط على البطن (تمديد)",
+    bodyRegion: "lumbar",
+    conditionCategory: ["LBP", "extension preference", "disc-related LBP"],
+    targetImpairment: "Extension intolerance or stiffness in extension-biased LBP",
+    functionalGoal: "Restore comfortable backward bending when appropriate",
+    difficultyLevel: 2,
+    defaultSets: 2,
+    defaultReps: 10,
+    defaultRestSec: 45,
+    equipment: ["Mat"],
+    precautions: "Keep hips on the mat. Press with arms only. Stop immediately if leg symptoms worsen.",
+    contraindications: "Centralization worsens with extension; spinal stenosis with extension intolerance; spondylolisthesis unless cleared.",
+    whyThisMatters: "When your clinician approves extension, this can reduce stiffness and improve upright posture.",
+    patientInstructions:
+      "Lie face down, hands under shoulders. Gently press up, lifting chest while hips stay down. Go to a comfortable height, then lower. Move within symptom-free range.",
+    biomechanicalRationale:
+      "Repeated extension in lying can centralize symptoms in extension-responsive low back pain presentations.",
+    progressionCriteria: "Ready for clinician progression review when extension range improves without peripheral symptom spread.",
+    regressionCriteria: "Smaller range or fewer reps if symptoms peripheralize.",
+    futureCvMeasurementTarget: "lumbar extension ROM",
+    libraryVersion: "v1",
+  },
 
-  // ── Shoulder (6) ─────────────────────────────────────────────────────────
+  // ── Shoulder (8) ──────────────────────────────────────────────────────────
   {
     exerciseId: "pendulum",
     nameEn: "Pendulum Exercise",
@@ -372,12 +537,14 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 30,
     equipment: ["Table or chair for support"],
     precautions: "Let arm hang relaxed. Do not force circular motion.",
+    contraindications: "Acute shoulder dislocation; post-operative shoulder precautions until cleared.",
     whyThisMatters: "Gentle swinging helps loosen a stiff shoulder without heavy muscle effort.",
     patientInstructions:
       "Lean forward, support yourself with the unaffected arm on a table. Let the affected arm hang and gently swing in small circles. Keep shoulder relaxed.",
     biomechanicalRationale: "Gravity-assisted passive mobility with minimal active contraction.",
     progressionCriteria: "Ready for clinician progression review when range improves comfortably.",
     regressionCriteria: "Smaller circles or shorter duration if pain increases.",
+    futureCvMeasurementTarget: "passive shoulder circumduction range",
     libraryVersion: "v1",
   },
   {
@@ -394,6 +561,7 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 30,
     equipment: [],
     precautions: "Do not shrug toward ears. Gentle squeeze downward and back.",
+    contraindications: "Acute cervical radiculopathy aggravated by shoulder retraction.",
     whyThisMatters: "Good shoulder blade position supports healthy shoulder movement and posture.",
     patientInstructions:
       "Sit or stand tall. Gently draw shoulder blades down and slightly together, as if putting them in back pockets. Hold 5 seconds, relax.",
@@ -417,6 +585,7 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 45,
     equipment: ["Table"],
     precautions: "Slide within comfort. Do not force overhead range.",
+    contraindications: "Recent rotator cuff repair with flexion restrictions.",
     whyThisMatters: "Table slides help you regain reaching movement with support and less pain.",
     patientInstructions:
       "Sit at a table, place hands on a towel. Slide hands forward along the table, allowing arms to rise. Go to comfortable height, then slide back.",
@@ -440,6 +609,7 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 45,
     equipment: ["Resistance band", "Towel roll under arm optional"],
     precautions: "Keep elbow at side. Slow controlled movement. Light resistance only.",
+    contraindications: "Post-operative external rotation precautions; acute biceps tendon irritation.",
     whyThisMatters: "Strong rotator cuff muscles help keep the shoulder stable during daily tasks.",
     patientInstructions:
       "Elbow bent at 90°, tucked at your side. Rotate forearm outward against band resistance. Return slowly. Keep elbow fixed.",
@@ -463,6 +633,7 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 45,
     equipment: ["Wall"],
     precautions: "Keep contact with wall. Do not arch lower back excessively.",
+    contraindications: "Impingement with painful end-range elevation until modified range is prescribed.",
     whyThisMatters: "Wall slides train safe overhead movement with good posture.",
     patientInstructions:
       "Stand with back against wall, arms in W shape. Slide arms up the wall toward a Y shape, then back down. Keep wrists and elbows near wall.",
@@ -486,12 +657,64 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     defaultRestSec: 20,
     equipment: [],
     precautions: "Gentle chin tuck — do not force neck backward.",
+    contraindications: "Acute cervical spine instability or severe dizziness with head repositioning.",
     whyThisMatters: "Good posture reduces strain on your neck and shoulders during the day.",
     patientInstructions:
       "Sit or stand tall. Gently draw chin back, lengthen spine, relax shoulders down. Breathe steadily and hold comfortable alignment.",
     biomechanicalRationale: "Cervicothoracic alignment retraining for load distribution.",
     progressionCriteria: "Ready for clinician progression review when posture can be maintained during light activity.",
     regressionCriteria: "Shorter holds if neck tension occurs.",
+    futureCvMeasurementTarget: "cervical alignment, shoulder elevation",
+    libraryVersion: "v1",
+  },
+  {
+    exerciseId: "internal-rotation",
+    nameEn: "Internal Rotation (Band)",
+    nameAr: "الدوران الداخلي بشريط",
+    bodyRegion: "shoulder",
+    conditionCategory: ["rotator cuff", "shoulder stability", "post-op shoulder"],
+    targetImpairment: "Subscapularis / internal rotation weakness",
+    functionalGoal: "Balance rotator cuff strength for shoulder control",
+    difficultyLevel: 2,
+    defaultSets: 3,
+    defaultReps: 15,
+    defaultRestSec: 45,
+    equipment: ["Resistance band", "Towel roll under arm optional"],
+    precautions: "Elbow stays at side at 90°. Slow return. Light resistance only.",
+    contraindications: "Post-operative internal rotation restrictions; acute anterior shoulder pain at end range.",
+    whyThisMatters: "Balanced rotator cuff strength on both sides keeps the shoulder stable during daily tasks.",
+    patientInstructions:
+      "Anchor band at elbow height. Stand with elbow bent 90°, tucked at your side. Rotate forearm inward across your body against band resistance. Return slowly.",
+    biomechanicalRationale:
+      "Targets subscapularis for glenohumeral compression and internal rotation balance with external rotators.",
+    progressionCriteria: "Ready for clinician progression review when full set completed with stable scapula.",
+    regressionCriteria: "Lighter band or partial range if anterior shoulder pain occurs.",
+    futureCvMeasurementTarget: "internal rotation ROM",
+    libraryVersion: "v1",
+  },
+  {
+    exerciseId: "cross-body-stretch",
+    nameEn: "Cross-Body Stretch",
+    nameAr: "تمديد عبر الجسم",
+    bodyRegion: "shoulder",
+    conditionCategory: ["shoulder stiffness", "posterior cuff", "post-op shoulder"],
+    targetImpairment: "Posterior shoulder tightness",
+    functionalGoal: "Improve comfortable horizontal adduction for reaching across body",
+    difficultyLevel: 1,
+    defaultSets: 2,
+    defaultDurationSec: 30,
+    defaultRestSec: 30,
+    equipment: [],
+    precautions: "Gentle stretch only — do not force arm across body. Keep shoulder relaxed.",
+    contraindications: "Acute posterior shoulder pain; unstable shoulder with painful cross-body motion.",
+    whyThisMatters: "Gentle stretching can ease tightness so you can reach across your body more comfortably.",
+    patientInstructions:
+      "Bring the affected arm across your chest. Use the other hand to gently press above the elbow. Hold a comfortable stretch. Keep shoulders down and relaxed.",
+    biomechanicalRationale:
+      "Low-load static stretch of posterior deltoid and infraspinatus/teres minor complex.",
+    progressionCriteria: "Ready for clinician progression review when range improves without pain after stretch.",
+    regressionCriteria: "Shorter holds or less pressure if stretch provokes symptoms.",
+    futureCvMeasurementTarget: "horizontal adduction ROM",
     libraryVersion: "v1",
   },
 ];

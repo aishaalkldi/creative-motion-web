@@ -61,6 +61,23 @@ export const EXERCISE_NAME_ALIASES: Record<string, string> = {
   "table slides": "table-slide",
   "resistance band squats": "mini-squat",
   "balance board": "single-leg-stance",
+  "terminal knee extension": "terminal-knee-extension",
+  "tke": "terminal-knee-extension",
+  "short arc quad": "short-arc-quad",
+  "short-arc quad": "short-arc-quad",
+  "lateral band walk": "lateral-band-walk",
+  "side steps": "lateral-band-walk",
+  "dead bug": "dead-bug",
+  "side plank": "side-plank",
+  "prone press up": "prone-press-up",
+  "prone press-up": "prone-press-up",
+  "press ups": "prone-press-up",
+  "extension in lying": "prone-press-up",
+  "internal rotation": "internal-rotation",
+  "internal rotation band": "internal-rotation",
+  "cross body stretch": "cross-body-stretch",
+  "cross-body stretch": "cross-body-stretch",
+  "sleeper stretch": "cross-body-stretch",
 };
 
 const GENERIC_FALLBACK: Pick<
