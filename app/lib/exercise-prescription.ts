@@ -27,11 +27,30 @@ export function getExerciseDisplayName(exercise: StoredExercise): string {
   return exercise.name;
 }
 
-export function formatDoseLabel(p: Pick<
-  PrescribedExerciseV1,
-  "sets" | "reps" | "durationSec" | "restSec"
->): string | null {
+export function formatDoseLabel(
+  p: Pick<
+    PrescribedExerciseV1,
+    "sets" | "reps" | "durationSec" | "restSec"
+  >,
+  language: "en" | "ar" = "en",
+): string | null {
   const parts: string[] = [];
+  if (language === "ar") {
+    if (p.sets != null && p.reps != null) {
+      parts.push(`${p.sets} مجموعات × ${p.reps} تكرار`);
+    } else if (p.sets != null && p.durationSec != null) {
+      parts.push(`${p.sets} مجموعات × ${p.durationSec} ث`);
+    } else if (p.reps != null) {
+      parts.push(`${p.reps} تكرار`);
+    } else if (p.durationSec != null) {
+      parts.push(`${p.durationSec} ث`);
+    }
+    if (p.restSec != null && p.restSec > 0) {
+      parts.push(`راحة ${p.restSec} ث`);
+    }
+    return parts.length > 0 ? parts.join(" · ") : null;
+  }
+
   if (p.sets != null && p.reps != null) {
     parts.push(`${p.sets} sets × ${p.reps} reps`);
   } else if (p.sets != null && p.durationSec != null) {

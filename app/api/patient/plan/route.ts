@@ -15,6 +15,7 @@ import {
   rateLimitExceededResponse,
 } from "../../../lib/rate-limit";
 import { parseStoredExercises, type PrescribedExerciseV1 } from "../../../lib/exercise-resolve";
+import { getAssessmentLanguage, type AssessmentLanguage } from "../../../lib/assessment-payload";
 
 // ── Public types (imported by patient portal pages) ────────────────────────────
 
@@ -32,6 +33,8 @@ export type PatientSession = {
 
 export type PatientPlanData = {
   patientName: string;
+  /** Derived from latest assessment language; defaults to English */
+  patientLanguage: AssessmentLanguage;
   diagnosis: string | null;
   planId: string;
   planTitle: string;
@@ -163,10 +166,23 @@ export async function GET(req: NextRequest) {
     .eq("id", tokenRow.patient_id)
     .maybeSingle<PatientRow>();
 
+  // 5 — Latest assessment language (no schema change; read existing structured_data)
+  type AssessmentLangRow = { structured_data: unknown };
+  const { data: latestAssessment } = await admin
+    .from("assessments")
+    .select("structured_data")
+    .eq("patient_id", tokenRow.patient_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<AssessmentLangRow>();
+
+  const patientLanguage = getAssessmentLanguage(latestAssessment?.structured_data) ?? "en";
+
   const sd = plan.structured_data;
 
   const result: PatientPlanData = {
     patientName:     tokenRow.patient_name,
+    patientLanguage,
     diagnosis:       patientRow?.diagnosis ?? null,
     planId:          plan.id,
     planTitle:       plan.title,

@@ -19,6 +19,14 @@ export type { PrescribedExerciseV1, StoredExercise } from "./exercise-prescripti
 
 export type ResolveMatchType = "id" | "alias" | "name" | "fallback";
 
+export type PatientExerciseLanguage = "en" | "ar";
+
+export type ResolveExerciseViewOptions = {
+  includeClinicianFields?: boolean;
+  /** Patient-facing language for instructions, name, and dose label */
+  language?: PatientExerciseLanguage;
+};
+
 /** Legacy and catalog name aliases → exerciseId */
 export const EXERCISE_NAME_ALIASES: Record<string, string> = {
   "sit-to-stand": "sit-to-stand",
@@ -90,6 +98,35 @@ const GENERIC_FALLBACK: Pick<
     "This exercise supports safe movement control and helps your therapist monitor your rehabilitation progress.",
   precautions: "Stop if you feel sharp pain, dizziness, or unusual symptoms.",
 };
+
+const GENERIC_FALLBACK_AR: Pick<
+  ExerciseLibraryEntryV1,
+  "patientInstructionsAr" | "whyThisMattersAr" | "precautionsAr"
+> = {
+  patientInstructionsAr:
+    "نفّذ هذا التمرين بحركة بطيئة وتحكم. ركّز على الشكل الصحيح ومدى خالٍ من الألم. توقّف عند الشعور بألم حاد.",
+  whyThisMattersAr:
+    "هذا التمرين يدعم التحكم الآمن في الحركة ويساعد معالجك على متابعة تقدّمك في التأهيل.",
+  precautionsAr: "توقّف إذا شعرت بألم حاد أو دوخة أو أعراض غير معتادة.",
+};
+
+function localizePatientField(
+  language: PatientExerciseLanguage,
+  en: string,
+  ar: string | undefined,
+): string {
+  if (language === "ar" && ar?.trim()) return ar;
+  return en;
+}
+
+function resolveExerciseDisplayName(
+  language: PatientExerciseLanguage,
+  prescribedName: string,
+  entry: ExerciseLibraryEntryV1,
+): string {
+  if (language === "ar" && entry.nameAr.trim()) return entry.nameAr;
+  return prescribedName || entry.nameEn;
+}
 
 export type ResolvedExerciseView = {
   exerciseId: string;
@@ -230,8 +267,9 @@ export function parseStoredExercises(raw: unknown): PrescribedExerciseV1[] {
 
 export function resolveExerciseView(
   input: StoredExercise | PrescribedExerciseV1 | string,
-  options?: { includeClinicianFields?: boolean },
+  options?: ResolveExerciseViewOptions,
 ): ResolvedExerciseView {
+  const language = options?.language ?? "en";
   const prescribed = isPrescribedExerciseV1(input)
     ? input
     : typeof input === "string"
@@ -249,9 +287,28 @@ export function resolveExerciseView(
     matchType = "id";
   }
 
-  const doseLabel = formatDoseLabel(prescribed);
+  const doseSource = {
+    sets: prescribed.sets,
+    reps: prescribed.reps,
+    durationSec: prescribed.durationSec,
+    restSec: prescribed.restSec,
+  };
+  const doseLabel = formatDoseLabel(doseSource, language);
 
   if (!entry) {
+    const fallbackInstructions =
+      language === "ar"
+        ? GENERIC_FALLBACK_AR.patientInstructionsAr
+        : GENERIC_FALLBACK.patientInstructions;
+    const fallbackWhy =
+      language === "ar"
+        ? GENERIC_FALLBACK_AR.whyThisMattersAr
+        : GENERIC_FALLBACK.whyThisMatters;
+    const fallbackPrecautions =
+      language === "ar"
+        ? GENERIC_FALLBACK_AR.precautionsAr
+        : GENERIC_FALLBACK.precautions;
+
     return {
       exerciseId: prescribed.exerciseId,
       name: prescribed.name,
@@ -261,31 +318,45 @@ export function resolveExerciseView(
       restSec: prescribed.restSec,
       clinicianNote: prescribed.clinicianNote,
       doseLabel,
-      patientInstructions: GENERIC_FALLBACK.patientInstructions,
-      whyThisMatters: GENERIC_FALLBACK.whyThisMatters,
-      precautions: GENERIC_FALLBACK.precautions,
+      patientInstructions: fallbackInstructions,
+      whyThisMatters: fallbackWhy,
+      precautions: fallbackPrecautions,
       fromLibrary: false,
       matchType: "fallback",
     };
   }
 
-  const base: ResolvedExerciseView = {
-    exerciseId: entry.exerciseId,
-    name: prescribed.name || entry.nameEn,
+  const resolvedDose = {
     sets: prescribed.sets ?? entry.defaultSets,
     reps: prescribed.reps ?? entry.defaultReps,
     durationSec: prescribed.durationSec ?? entry.defaultDurationSec,
     restSec: prescribed.restSec ?? entry.defaultRestSec,
+  };
+
+  const base: ResolvedExerciseView = {
+    exerciseId: entry.exerciseId,
+    name: resolveExerciseDisplayName(language, prescribed.name, entry),
+    sets: resolvedDose.sets,
+    reps: resolvedDose.reps,
+    durationSec: resolvedDose.durationSec,
+    restSec: resolvedDose.restSec,
     clinicianNote: prescribed.clinicianNote,
-    doseLabel: formatDoseLabel({
-      sets: prescribed.sets ?? entry.defaultSets,
-      reps: prescribed.reps ?? entry.defaultReps,
-      durationSec: prescribed.durationSec ?? entry.defaultDurationSec,
-      restSec: prescribed.restSec ?? entry.defaultRestSec,
-    }),
-    patientInstructions: entry.patientInstructions,
-    whyThisMatters: entry.whyThisMatters,
-    precautions: entry.precautions,
+    doseLabel: formatDoseLabel(resolvedDose, language),
+    patientInstructions: localizePatientField(
+      language,
+      entry.patientInstructions,
+      entry.patientInstructionsAr,
+    ),
+    whyThisMatters: localizePatientField(
+      language,
+      entry.whyThisMatters,
+      entry.whyThisMattersAr,
+    ),
+    precautions: localizePatientField(
+      language,
+      entry.precautions,
+      entry.precautionsAr,
+    ),
     fromLibrary: true,
     matchType,
   };

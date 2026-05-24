@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { IBM_Plex_Sans_Arabic } from "next/font/google";
 import type { PatientPlanData, PatientSession } from "@/app/api/patient/plan/route";
 import type { SessionCompleteResponse } from "@/app/api/patient/session-complete/route";
 import { encodeSessionCoachNotes } from "@/app/lib/session-coach-metadata";
@@ -10,7 +11,20 @@ import {
   deriveClinicalAction,
   deriveMissedSessionsCount,
 } from "@/app/lib/clinical-action-engine";
-import { resolveExerciseView } from "@/app/lib/exercise-resolve";
+import {
+  resolveExerciseView,
+  type PatientExerciseLanguage,
+} from "@/app/lib/exercise-resolve";
+import {
+  formatExerciseProgress,
+  sessionExerciseUi,
+} from "@/app/lib/patient-exercise-ui";
+
+const arabicFont = IBM_Plex_Sans_Arabic({
+  subsets: ["arabic"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+});
 
 function getTodaysGoal(sessionTitle: string): string {
   if (sessionTitle.trim()) {
@@ -68,6 +82,7 @@ export default function SessionPlayerPage() {
   const [planSessions,        setPlanSessions]        = useState<PatientSession[]>([]);
   const [notFound,            setNotFound]            = useState(false);
   const [patientName,         setPatientName]         = useState("");
+  const [patientLanguage,     setPatientLanguage]     = useState<PatientExerciseLanguage>("en");
   const [phase,               setPhase]               = useState<SessionPhase>("precheck");
   const [painBefore,          setPainBefore]          = useState<number | null>(null);
   const [safetyConcern,       setSafetyConcern]       = useState<boolean | null>(null);
@@ -116,6 +131,7 @@ export default function SessionPlayerPage() {
         setSession(s);
         setPlanSessions(plan.sessions);
         setPatientName(plan.patientName ?? "");
+        setPatientLanguage(plan.patientLanguage === "ar" ? "ar" : "en");
       })
       .catch(() => { setNotFound(true); });
   }, [token, sessionId, router]);
@@ -148,7 +164,11 @@ export default function SessionPlayerPage() {
   const total     = exercises.length;
   const isLast    = exerciseIndex === total - 1;
   const current   = exercises[exerciseIndex];
-  const currentView = current ? resolveExerciseView(current) : null;
+  const exerciseUi = sessionExerciseUi(patientLanguage);
+  const isArabic = patientLanguage === "ar";
+  const currentView = current
+    ? resolveExerciseView(current, { language: patientLanguage })
+    : null;
   const todaysGoal = getTodaysGoal(session.title);
 
   const precheckReady =
@@ -494,25 +514,32 @@ export default function SessionPlayerPage() {
       </div>
 
       <p className="mb-2 text-center text-[11px] text-[#9CA3AF]">
-        Exercise {exerciseIndex + 1} of {total}
+        {formatExerciseProgress(patientLanguage, exerciseIndex + 1, total)}
       </p>
 
       <div className="rounded-[10px] border border-[#D1E7DE] bg-[#F0FAF6] px-4 py-3">
-        <p className="text-[13px] leading-relaxed text-[#374151]">
-          Move slowly and stop if you feel sharp pain, dizziness, or unusual symptoms.
+        <p
+          className={`text-[13px] leading-relaxed text-[#374151] ${isArabic ? arabicFont.className : ""}`}
+          dir={isArabic ? "rtl" : "ltr"}
+        >
+          {exerciseUi.safetyBanner}
         </p>
       </div>
 
-      <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-6">
+      <div
+        className="rounded-[10px] border border-[#E2E8E5] bg-white p-6"
+        dir={isArabic ? "rtl" : "ltr"}
+        lang={patientLanguage}
+      >
         <h2
-          className="text-[18px] font-bold text-[#0A0F1A]"
+          className={`text-[18px] font-bold text-[#0A0F1A] ${isArabic ? arabicFont.className : ""}`}
           style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
         >
-          {currentView?.name ?? "Exercise"}
+          {currentView?.name ?? (isArabic ? "تمرين" : "Exercise")}
         </h2>
         {currentView?.doseLabel && (
           <p
-            className="mt-2 text-[13px] font-semibold text-[#1D9E75]"
+            className={`mt-2 text-[13px] font-semibold text-[#1D9E75] ${isArabic ? arabicFont.className : ""}`}
             style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
           >
             {currentView.doseLabel}
@@ -520,27 +547,27 @@ export default function SessionPlayerPage() {
         )}
         {!currentView?.doseLabel && (
           <p
-            className="mt-1 text-[13px] font-semibold text-[#1D9E75]"
+            className={`mt-1 text-[13px] font-semibold text-[#1D9E75] ${isArabic ? arabicFont.className : ""}`}
             style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
           >
-            As prescribed by your therapist
+            {exerciseUi.asPrescribed}
           </p>
         )}
-        <p className="mt-4 text-[14px] leading-[1.7] text-[#374151]">
+        <p className={`mt-4 text-[14px] leading-[1.7] text-[#374151] ${isArabic ? arabicFont.className : ""}`}>
           {currentView?.patientInstructions}
         </p>
         {currentView?.clinicianNote && (
-          <p className="mt-3 rounded-[7px] border border-[#D1E7DE] bg-[#F0FAF6] px-3 py-2.5 text-[12px] leading-relaxed text-[#374151]">
-            <span className="font-semibold text-[#0A0F1A]">Note from your therapist: </span>
+          <p className={`mt-3 rounded-[7px] border border-[#D1E7DE] bg-[#F0FAF6] px-3 py-2.5 text-[12px] leading-relaxed text-[#374151] ${isArabic ? arabicFont.className : ""}`}>
+            <span className="font-semibold text-[#0A0F1A]">{exerciseUi.therapistNote} </span>
             {currentView.clinicianNote}
           </p>
         )}
-        <p className="mt-4 rounded-[7px] border border-[#E2E8E5] bg-[#F9FAFB] px-3 py-2.5 text-[12px] leading-relaxed text-[#6B7280]">
-          <span className="font-semibold text-[#374151]">Why this matters: </span>
+        <p className={`mt-4 rounded-[7px] border border-[#E2E8E5] bg-[#F9FAFB] px-3 py-2.5 text-[12px] leading-relaxed text-[#6B7280] ${isArabic ? arabicFont.className : ""}`}>
+          <span className="font-semibold text-[#374151]">{exerciseUi.whyThisMatters} </span>
           {currentView?.whyThisMatters}
         </p>
-        <p className="mt-3 rounded-[7px] border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] leading-relaxed text-amber-900">
-          <span className="font-semibold">Stop if: </span>
+        <p className={`mt-3 rounded-[7px] border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] leading-relaxed text-amber-900 ${isArabic ? arabicFont.className : ""}`}>
+          <span className="font-semibold">{exerciseUi.stopIf} </span>
           {currentView?.precautions}
         </p>
       </div>
