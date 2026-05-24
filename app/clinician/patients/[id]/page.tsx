@@ -98,6 +98,11 @@ export default function PatientProfilePage() {
     searchParams.get("assessmentSaved") === "true"
   );
 
+  // Plan-assigned banner (shown when redirected from /clinician/plans/new)
+  const [showPlanAssignedBanner, setShowPlanAssignedBanner] = useState(
+    searchParams.get("planAssigned") === "1"
+  );
+
   useEffect(() => {
     if (!id) { setIsLoading(false); return; }
     let isMounted = true;
@@ -247,6 +252,7 @@ export default function PatientProfilePage() {
       .finally(() => {
         setPlanLoading(false);
         if (planAssigned) {
+          setShowPlanAssignedBanner(true);
           router.replace(`/clinician/patients/${id}`, { scroll: false });
         }
       });
@@ -824,6 +830,20 @@ export default function PatientProfilePage() {
                 <button
                   type="button"
                   onClick={() => setShowAssessmentBanner(false)}
+                  className="mt-0.5 shrink-0 text-xs text-white/25 transition hover:text-white/60"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+
+            {/* Plan assigned banner */}
+            {showPlanAssignedBanner && (
+              <div className="flex items-start justify-between gap-3 rounded-[8px] border border-[#1D9E75]/30 bg-[#1D9E75]/8 px-4 py-3">
+                <p className="text-sm text-[#5DCAA5]">Treatment plan assigned successfully.</p>
+                <button
+                  type="button"
+                  onClick={() => setShowPlanAssignedBanner(false)}
                   className="mt-0.5 shrink-0 text-xs text-white/25 transition hover:text-white/60"
                 >
                   ✕

@@ -574,10 +574,7 @@ function AssignPlanSection({
   patientId: string;
   existingPlan: TreatmentPlan | null;
 }) {
-  const numericId = parseInt(patientId, 10);
-  const profileHref = !isNaN(numericId)
-    ? `/clinician/patients/${patientId}`
-    : "/clinician/patients";
+  const profileHref = `/clinician/patients/${patientId}`;
 
   return (
     <ReportSection
@@ -607,7 +604,7 @@ function AssignPlanSection({
         <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
           <p className="text-sm text-white/60">No treatment plan has been assigned to this patient yet.</p>
           <p className="mt-1 text-xs text-white/35">
-            Use the patient profile to assign a program with phase, frequency, and clinician notes.
+            Create a structured treatment plan from the patient profile.
           </p>
         </div>
       )}
@@ -631,7 +628,7 @@ function AssignPlanSection({
       </div>
 
       <p className="mt-4 text-xs text-white/25">
-        Treatment assignment is done from the patient profile. The Assign Plan panel will open automatically.
+        Create a structured treatment plan from the patient profile.
       </p>
     </ReportSection>
   );
@@ -1168,7 +1165,7 @@ export function AssessmentReportClient() {
               href={`/clinician/patients/${patientId}`}
               className="rounded-xl bg-cyan-400 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300"
             >
-              Assign Plan →
+              Create Structured Plan →
             </Link>
           </div>
         </div>
@@ -1227,7 +1224,7 @@ export function AssessmentReportClient() {
               { id: "ai", label: "Clinical Interpretation" },
               { id: "soap", label: "SOAP Documentation" },
               { id: "programs", label: "Treatment Recommendations" },
-              { id: "assign", label: "Assign Plan" },
+              { id: "assign", label: "Treatment Plan" },
             ].filter(Boolean).map((item) => item && (
               <a
                 key={item.id}
