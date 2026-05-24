@@ -6,6 +6,10 @@ import Link from "next/link";
 import type { PatientPlanData, PatientSession } from "@/app/api/patient/plan/route";
 import type { SessionCompleteResponse } from "@/app/api/patient/session-complete/route";
 import { encodeSessionCoachNotes } from "@/app/lib/session-coach-metadata";
+import {
+  deriveClinicalAction,
+  deriveMissedSessionsCount,
+} from "@/app/lib/clinical-action-engine";
 
 /* ── Exercise instructions lookup ───────────────────────────────────────────── */
 
@@ -91,6 +95,7 @@ export default function SessionPlayerPage() {
   const sessionId = String(params.sessionId ?? "");
 
   const [session,             setSession]             = useState<PatientSession | null>(null);
+  const [planSessions,        setPlanSessions]        = useState<PatientSession[]>([]);
   const [notFound,            setNotFound]            = useState(false);
   const [patientName,         setPatientName]         = useState("");
   const [phase,               setPhase]               = useState<SessionPhase>("precheck");
@@ -139,6 +144,7 @@ export default function SessionPlayerPage() {
         const s = plan.sessions.find((x) => x.id === sessionId);
         if (!s) { setNotFound(true); return; }
         setSession(s);
+        setPlanSessions(plan.sessions);
         setPatientName(plan.patientName ?? "");
       })
       .catch(() => { setNotFound(true); });
@@ -288,6 +294,23 @@ export default function SessionPlayerPage() {
 
   /* Completion screen */
   if (completed && completionSummary) {
+    const completedAfterThis =
+      planSessions.filter((s) => s.status === "completed").length + 1;
+    const completionAction = deriveClinicalAction({
+      painBefore,
+      painAfter: completionSummary.painAfter,
+      effortScore: completionSummary.effortScore,
+      safetyConcern: safetyConcern === true,
+      patientNote: patientNote.trim() || null,
+      completedSessionsCount: completedAfterThis,
+      missedSessionsCount: deriveMissedSessionsCount(
+        planSessions.map((s) => ({
+          status: s.status,
+          session_number: s.sessionNumber,
+        })),
+      ),
+    });
+
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-5 px-4 text-center">
         <div
@@ -322,8 +345,8 @@ export default function SessionPlayerPage() {
               </p>
             </div>
           </div>
-          <p className="mt-4 text-[14px] text-[#374151]">
-            Your progress has been saved for your therapist to review.
+          <p className="mt-4 text-[14px] leading-relaxed text-[#374151]">
+            {completionAction.patientSafeMessage}
           </p>
           <p className="mt-3 max-w-sm text-[12px] italic leading-relaxed text-[#6B7280]">
             If you feel sharp or unusual pain during exercises, stop immediately and contact your therapist.

@@ -10,7 +10,11 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { validatePatientOwnership } from "../../../lib/validate-patient-ownership";
 import {
-  deriveSessionNeedsReview,
+  buildClinicalActionFromPlanData,
+  clinicalActionNeedsTherapistReview,
+  type ClinicalActionResult,
+} from "../../../lib/clinical-action-engine";
+import {
   formatPainResponse,
   parseSessionCoachNotes,
 } from "../../../lib/session-coach-metadata";
@@ -26,6 +30,7 @@ export type PatientProgressSummary = {
   latestPainResponse: string | null;
   safetyConcernReported: boolean;
   needsReview: boolean;
+  clinicalAction: ClinicalActionResult;
   latestPatientNote: string | null;
   lastCompletedAt: string | null;
 };
@@ -100,28 +105,35 @@ export async function GET(req: NextRequest) {
 
   const { data: sessions } = await adminClient
     .from("plan_sessions")
-    .select("status")
+    .select("status, session_number")
     .eq("plan_id", planId)
-    .returns<{ status: string }[]>();
+    .returns<{ status: string; session_number: number }[]>();
 
   const total = sessions?.length ?? 0;
   const completed = (sessions ?? []).filter((s) => s.status === "completed").length;
 
-  const { data: latestLog } = await adminClient
+  const { data: planLogs } = await adminClient
     .from("session_logs")
     .select("effort_score, pain_score, notes, completed_at")
     .eq("plan_id", planId)
     .order("completed_at", { ascending: false })
-    .limit(1)
-    .maybeSingle<{
+    .returns<{
       effort_score: number | null;
       pain_score: number | null;
       notes: string | null;
       completed_at: string;
-    }>();
+    }[]>();
+
+  const latestLog = planLogs?.[0] ?? null;
 
   const coachMeta = parseSessionCoachNotes(latestLog?.notes);
   const painAfter = latestLog?.pain_score ?? null;
+  const clinicalAction = buildClinicalActionFromPlanData({
+    latestLog,
+    sessions: sessions ?? [],
+    parseNotes: parseSessionCoachNotes,
+    allLogs: [...(planLogs ?? [])].reverse(),
+  });
 
   const summary: PatientProgressSummary = {
     planId,
@@ -133,11 +145,8 @@ export async function GET(req: NextRequest) {
     latestPainBeforeScore: coachMeta.painBefore,
     latestPainResponse: formatPainResponse(coachMeta.painBefore, painAfter),
     safetyConcernReported: coachMeta.safetyConcern,
-    needsReview: deriveSessionNeedsReview({
-      painBefore: coachMeta.painBefore,
-      painAfter,
-      safetyConcern: coachMeta.safetyConcern,
-    }),
+    needsReview: clinicalActionNeedsTherapistReview(clinicalAction.status),
+    clinicalAction,
     latestPatientNote: coachMeta.patientNote,
     lastCompletedAt: latestLog?.completed_at ?? null,
   };

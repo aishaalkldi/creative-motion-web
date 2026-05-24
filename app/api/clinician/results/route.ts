@@ -10,7 +10,11 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
-  deriveSessionNeedsReview,
+  buildClinicalActionFromPlanData,
+  clinicalActionNeedsTherapistReview,
+  type ClinicalActionResult,
+} from "../../../lib/clinical-action-engine";
+import {
   formatPainResponse,
   parseSessionCoachNotes,
 } from "../../../lib/session-coach-metadata";
@@ -35,6 +39,8 @@ export type ClinicianResultCard = {
   latestPainResponse: string | null;
   safetyConcernReported: boolean;
   needsReview: boolean;
+  clinicalAction: ClinicalActionResult;
+  latestPatientNote: string | null;
   lastCompletedAt: string | null;
   status: ClinicianResultStatus;
   /** Latest preferred assessment for clinical report links (per patient). */
@@ -149,10 +155,10 @@ export async function GET(_req: NextRequest) {
 
   const planIds = plans.map((p) => p.id);
 
-  type SessionRow = { plan_id: string; status: string };
+  type SessionRow = { plan_id: string; status: string; session_number: number };
   const { data: sessions } = await adminClient
     .from("plan_sessions")
-    .select("plan_id, status")
+    .select("plan_id, status, session_number")
     .in("plan_id", planIds)
     .returns<SessionRow[]>();
 
@@ -178,10 +184,14 @@ export async function GET(_req: NextRequest) {
   });
 
   const latestLogByPlan = new Map<string, LogRow>();
+  const logsByPlan = new Map<string, LogRow[]>();
   (logs ?? []).forEach((log) => {
     if (!latestLogByPlan.has(log.plan_id)) {
       latestLogByPlan.set(log.plan_id, log);
     }
+    const arr = logsByPlan.get(log.plan_id) ?? [];
+    arr.push(log);
+    logsByPlan.set(log.plan_id, arr);
   });
 
   const patientIds = [...new Set(plans.map((p) => p.patient_id))];
@@ -223,6 +233,16 @@ export async function GET(_req: NextRequest) {
     const preferredAssessment = latestAssessmentByPatient.get(plan.patient_id) ?? null;
     const coachMeta = parseSessionCoachNotes(latest?.notes);
     const painAfter = latest?.pain_score ?? null;
+    const planLogs = logsByPlan.get(plan.id) ?? [];
+    const clinicalAction = buildClinicalActionFromPlanData({
+      latestLog: latest,
+      sessions: planSessions.map((s) => ({
+        status: s.status,
+        session_number: s.session_number,
+      })),
+      parseNotes: parseSessionCoachNotes,
+      allLogs: [...planLogs].reverse(),
+    });
 
     return {
       planId: plan.id,
@@ -238,11 +258,9 @@ export async function GET(_req: NextRequest) {
       latestPainBeforeScore: coachMeta.painBefore,
       latestPainResponse: formatPainResponse(coachMeta.painBefore, painAfter),
       safetyConcernReported: coachMeta.safetyConcern,
-      needsReview: deriveSessionNeedsReview({
-        painBefore: coachMeta.painBefore,
-        painAfter,
-        safetyConcern: coachMeta.safetyConcern,
-      }),
+      needsReview: clinicalActionNeedsTherapistReview(clinicalAction.status),
+      clinicalAction,
+      latestPatientNote: coachMeta.patientNote,
       lastCompletedAt: latest?.completed_at ?? null,
       status: deriveStatus(completed, total),
       latestAssessmentId: preferredAssessment?.id ?? null,

@@ -7,8 +7,10 @@ import type { AssessmentRow } from "@/app/api/assessments/route";
 import type { PatientRow } from "@/app/lib/validate-patient-ownership";
 import { buildRemoteQuestionnaireSummary } from "@/app/lib/remote-questionnaire-summary";
 import { extractGeneralDraft, extractStructuredData } from "@/app/lib/assessment-payload";
+import { ClinicalActionCard } from "@/app/components/clinician/ClinicalActionCard";
+import type { ClinicalActionResult } from "@/app/lib/clinical-action-engine";
 
-type PipelineFilter = "all" | "assessment" | "in_rehab" | "completed";
+type PipelineFilter = "all" | "assessment" | "in_rehab" | "completed" | "needs_review";
 
 type PipelineState =
   | { kind: "in_rehab"; completed: number; total: number }
@@ -33,6 +35,8 @@ type RehabSnapshot = {
   latestEffortScore: number | null;
   latestPainResponse: string | null;
   needsReview: boolean;
+  clinicalAction: ClinicalActionResult;
+  latestPatientNote: string | null;
   lastCompletedAt: string | null;
 };
 
@@ -269,6 +273,8 @@ export default function UnifiedResultsPage() {
             latestEffortScore: primary.latestEffortScore,
             latestPainResponse: primary.latestPainResponse,
             needsReview: primary.needsReview,
+            clinicalAction: primary.clinicalAction,
+            latestPatientNote: primary.latestPatientNote,
             lastCompletedAt: primary.lastCompletedAt,
           });
         }
@@ -293,6 +299,9 @@ export default function UnifiedResultsPage() {
     if (filter === "in_rehab") {
       return pipeline.filter((card) => card.state.kind === "in_rehab" || card.state.kind === "plan_assigned");
     }
+    if (filter === "needs_review") {
+      return pipeline.filter((card) => card.rehab?.needsReview === true);
+    }
     return pipeline.filter(
       (card) =>
         card.state.kind === "in_rehab" &&
@@ -311,6 +320,7 @@ export default function UnifiedResultsPage() {
       card.rehab.totalSessions > 0 &&
       card.rehab.sessionsCompleted >= card.rehab.totalSessions,
   ).length;
+  const needsReviewCount = pipeline.filter((card) => card.rehab?.needsReview === true).length;
 
   return (
     <main className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
@@ -346,6 +356,7 @@ export default function UnifiedResultsPage() {
             <FilterButton active={filter === "all"} onClick={() => setFilter("all")} label="All" count={pipeline.length} />
             <FilterButton active={filter === "assessment"} onClick={() => setFilter("assessment")} label="Assessment submitted" count={assessmentCount} />
             <FilterButton active={filter === "in_rehab"} onClick={() => setFilter("in_rehab")} label="In rehab / plan assigned" count={inRehabCount + planAssignedCount} />
+            <FilterButton active={filter === "needs_review"} onClick={() => setFilter("needs_review")} label="Needs therapist review" count={needsReviewCount} />
             <FilterButton active={filter === "completed"} onClick={() => setFilter("completed")} label="Completed" count={completedCount} />
           </div>
 
@@ -399,7 +410,7 @@ function PatientPipelineCardView({ card }: { card: PatientPipelineCard }) {
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           {card.rehab?.needsReview && (
             <span className="rounded-[5px] border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300">
-              Needs review
+              {card.rehab.clinicalAction.title}
             </span>
           )}
           <span className={`rounded-[5px] border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${badge.className}`}>
@@ -431,6 +442,17 @@ function PatientPipelineCardView({ card }: { card: PatientPipelineCard }) {
           <Metric label="Body region" value={card.assessment.bodyRegion ?? "—"} className="col-span-2" />
         </div>
       ) : null}
+
+      {showRehabMetrics && card.rehab && (card.rehab.sessionsCompleted > 0 || card.rehab.needsReview) && (
+        <div className="mt-4">
+          <ClinicalActionCard
+            action={card.rehab.clinicalAction}
+            patientNote={card.rehab.latestPatientNote}
+            planSessionsHref={`${profileHref}#rehabilitation-plan`}
+            compact
+          />
+        </div>
+      )}
 
       <div className="mt-4 flex flex-wrap gap-2">
         {card.assessment && (

@@ -47,6 +47,7 @@ import {
 } from "../../../lib/api/remote-assessments";
 import { SendAssessmentModal } from "./SendAssessmentModal";
 import { SessionScheduleView } from "../../../components/SessionScheduleView";
+import { ClinicalActionCard } from "../../../components/clinician/ClinicalActionCard";
 import type { PatientProgressSummary } from "../../../api/clinician/patient-progress/route";
 import {
   buildRemoteQuestionnaireSummary,
@@ -1496,9 +1497,9 @@ function ProgressSnapshotSection({
     <section id="progress-snapshot" className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 scroll-mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-lg font-bold text-white">Progress Snapshot</h2>
-        {planProgress?.needsReview && (
+        {planProgress?.needsReview && planProgress.clinicalAction && (
           <span className="rounded-[5px] border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-300">
-            Needs review
+            {planProgress.clinicalAction.title}
           </span>
         )}
       </div>
@@ -1554,6 +1555,16 @@ function ProgressSnapshotSection({
           </div>
         )}
 
+        {planProgress?.clinicalAction && sessionsDone > 0 && (
+          <div className="mt-4">
+            <ClinicalActionCard
+              action={planProgress.clinicalAction}
+              patientNote={planProgress.latestPatientNote}
+              planSessionsHref={`#rehabilitation-plan`}
+            />
+          </div>
+        )}
+
         {planProgress?.safetyConcernReported && (
           <div className="mt-3 rounded-[8px] border border-amber-400/25 bg-amber-400/10 px-4 py-3">
             <p className="text-xs leading-relaxed text-amber-200">
@@ -1563,7 +1574,7 @@ function ProgressSnapshotSection({
           </div>
         )}
 
-        {planProgress?.latestPatientNote && (
+        {planProgress?.latestPatientNote && !planProgress.clinicalAction && (
           <div className="mt-3 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3">
             <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">
               Patient note from last session
