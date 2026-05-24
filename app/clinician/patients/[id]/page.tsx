@@ -975,6 +975,13 @@ export default function PatientProfilePage() {
               plan={treatmentPlan}
               planProgress={planProgress}
               adherence={adherence}
+              onReviewAcknowledged={(reviewedAt) => {
+                setPlanProgress((prev) =>
+                  prev
+                    ? { ...prev, reviewAcknowledged: true, reviewedAt }
+                    : prev,
+                );
+              }}
             />
 
             {/* Patient access link */}
@@ -1494,6 +1501,7 @@ interface ProgressSnapshotSectionProps {
   plan: TreatmentPlan | null;
   planProgress: PatientProgressSummary | null;
   adherence: Adherence | null;
+  onReviewAcknowledged?: (reviewedAt: string) => void;
 }
 
 function ProgressSnapshotSection({
@@ -1501,6 +1509,7 @@ function ProgressSnapshotSection({
   plan,
   planProgress,
   adherence,
+  onReviewAcknowledged,
 }: ProgressSnapshotSectionProps) {
   const sessionsDone = planProgress?.sessionsCompleted ?? adherence?.sessionsCompleted ?? 0;
 
@@ -1572,6 +1581,18 @@ function ProgressSnapshotSection({
               action={planProgress.clinicalAction}
               patientNote={planProgress.latestPatientNote}
               planSessionsHref={`#rehabilitation-plan`}
+              review={
+                planProgress.needsReview
+                  ? {
+                      patientId,
+                      planId: planProgress.planId,
+                      sessionLogId: planProgress.latestSessionLogId,
+                      reviewAcknowledged: planProgress.reviewAcknowledged,
+                      reviewedAt: planProgress.reviewedAt,
+                      onAcknowledged: onReviewAcknowledged,
+                    }
+                  : undefined
+              }
             />
           </div>
         )}

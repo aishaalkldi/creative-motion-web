@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ClinicalActionResult, ClinicalActionSeverity } from "@/app/lib/clinical-action-engine";
+import { ClinicalReviewActions } from "@/app/components/clinician/ClinicalReviewActions";
 
 const SEVERITY_STYLES: Record<
   ClinicalActionSeverity,
@@ -27,6 +28,14 @@ type ClinicalActionCardProps = {
   patientNote?: string | null;
   planSessionsHref?: string;
   compact?: boolean;
+  review?: {
+    patientId: string;
+    planId: string;
+    sessionLogId?: string | null;
+    reviewAcknowledged: boolean;
+    reviewedAt?: string | null;
+    onAcknowledged?: (reviewedAt: string) => void;
+  };
 };
 
 export function ClinicalActionCard({
@@ -34,6 +43,7 @@ export function ClinicalActionCard({
   patientNote,
   planSessionsHref,
   compact = false,
+  review,
 }: ClinicalActionCardProps) {
   const styles = SEVERITY_STYLES[action.severity];
 
@@ -73,6 +83,18 @@ export function ClinicalActionCard({
         >
           View Plan &amp; Sessions
         </Link>
+      )}
+      {review && (
+        <ClinicalReviewActions
+          patientId={review.patientId}
+          planId={review.planId}
+          sessionLogId={review.sessionLogId}
+          actionStatus={action.status}
+          reviewAcknowledged={review.reviewAcknowledged}
+          reviewedAt={review.reviewedAt}
+          onAcknowledged={review.onAcknowledged}
+          compact={compact}
+        />
       )}
     </div>
   );

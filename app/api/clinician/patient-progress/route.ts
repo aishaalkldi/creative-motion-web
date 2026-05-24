@@ -18,6 +18,11 @@ import {
   formatPainResponse,
   parseSessionCoachNotes,
 } from "../../../lib/session-coach-metadata";
+import {
+  deriveMissedSessionsForReview,
+  resolveClinicalReviewState,
+  type ClinicalReviewAckRow,
+} from "../../../lib/clinical-review";
 
 export type PatientProgressSummary = {
   planId: string;
@@ -33,6 +38,11 @@ export type PatientProgressSummary = {
   clinicalAction: ClinicalActionResult;
   latestPatientNote: string | null;
   lastCompletedAt: string | null;
+  latestSessionLogId: string | null;
+  planSessionId: string | null;
+  clinicalReviewTriggerKey: string | null;
+  reviewAcknowledged: boolean;
+  reviewedAt: string | null;
 };
 
 async function buildClients() {
@@ -114,10 +124,12 @@ export async function GET(req: NextRequest) {
 
   const { data: planLogs } = await adminClient
     .from("session_logs")
-    .select("effort_score, pain_score, notes, completed_at")
+    .select("id, plan_session_id, effort_score, pain_score, notes, completed_at")
     .eq("plan_id", planId)
     .order("completed_at", { ascending: false })
     .returns<{
+      id: string;
+      plan_session_id: string | null;
       effort_score: number | null;
       pain_score: number | null;
       notes: string | null;
@@ -135,6 +147,29 @@ export async function GET(req: NextRequest) {
     allLogs: [...(planLogs ?? [])].reverse(),
   });
 
+  const missedSessionsCount = deriveMissedSessionsForReview(sessions ?? []);
+  const acknowledgmentsByTriggerKey = new Map<string, ClinicalReviewAckRow>();
+  const { data: ackRows, error: ackErr } = await adminClient
+    .from("clinical_review_acknowledgments")
+    .select("trigger_key, reviewed_at")
+    .eq("provider_id", user.id)
+    .eq("plan_id", planId)
+    .returns<ClinicalReviewAckRow[]>();
+
+  if (!ackErr) {
+    (ackRows ?? []).forEach((row) => {
+      acknowledgmentsByTriggerKey.set(row.trigger_key, row);
+    });
+  }
+
+  const reviewState = resolveClinicalReviewState({
+    planId,
+    actionStatus: clinicalAction.status,
+    latestSessionLogId: latestLog?.id ?? null,
+    missedSessionsCount,
+    acknowledgmentsByTriggerKey,
+  });
+
   const summary: PatientProgressSummary = {
     planId,
     sessionsCompleted: completed,
@@ -149,6 +184,11 @@ export async function GET(req: NextRequest) {
     clinicalAction,
     latestPatientNote: coachMeta.patientNote,
     lastCompletedAt: latestLog?.completed_at ?? null,
+    latestSessionLogId: latestLog?.id ?? null,
+    planSessionId: latestLog?.plan_session_id ?? null,
+    clinicalReviewTriggerKey: reviewState.clinicalReviewTriggerKey,
+    reviewAcknowledged: reviewState.reviewAcknowledged,
+    reviewedAt: reviewState.reviewedAt,
   };
 
   return NextResponse.json(summary);

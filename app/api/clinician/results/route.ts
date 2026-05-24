@@ -18,6 +18,11 @@ import {
   formatPainResponse,
   parseSessionCoachNotes,
 } from "../../../lib/session-coach-metadata";
+import {
+  deriveMissedSessionsForReview,
+  resolveClinicalReviewState,
+  type ClinicalReviewAckRow,
+} from "../../../lib/clinical-review";
 
 export type ClinicianResultStatus = "pending_review" | "active" | "completed";
 
@@ -46,6 +51,11 @@ export type ClinicianResultCard = {
   /** Latest preferred assessment for clinical report links (per patient). */
   latestAssessmentId: string | null;
   latestAssessmentType: string | null;
+  latestSessionLogId: string | null;
+  planSessionId: string | null;
+  clinicalReviewTriggerKey: string | null;
+  reviewAcknowledged: boolean;
+  reviewedAt: string | null;
 };
 
 type AssessmentPickRow = { id: string; patient_id: string; type: string; created_at: string };
@@ -163,7 +173,9 @@ export async function GET(_req: NextRequest) {
     .returns<SessionRow[]>();
 
   type LogRow = {
+    id: string;
     plan_id: string;
+    plan_session_id: string | null;
     effort_score: number | null;
     pain_score: number | null;
     notes: string | null;
@@ -171,7 +183,7 @@ export async function GET(_req: NextRequest) {
   };
   const { data: logs } = await adminClient
     .from("session_logs")
-    .select("plan_id, effort_score, pain_score, notes, completed_at")
+    .select("id, plan_id, plan_session_id, effort_score, pain_score, notes, completed_at")
     .in("plan_id", planIds)
     .order("completed_at", { ascending: false })
     .returns<LogRow[]>();
@@ -225,6 +237,24 @@ export async function GET(_req: NextRequest) {
     );
   });
 
+  const acknowledgmentsByTriggerKey = new Map<string, ClinicalReviewAckRow>();
+  const { data: ackRows, error: ackErr } = await adminClient
+    .from("clinical_review_acknowledgments")
+    .select("trigger_key, reviewed_at")
+    .eq("provider_id", user.id)
+    .in("plan_id", planIds)
+    .returns<ClinicalReviewAckRow[]>();
+
+  if (ackErr) {
+    if (ackErr.code !== "42P01") {
+      console.error("[GET /api/clinician/results] acknowledgments query failed");
+    }
+  } else {
+    (ackRows ?? []).forEach((row) => {
+      acknowledgmentsByTriggerKey.set(row.trigger_key, row);
+    });
+  }
+
   const cards: ClinicianResultCard[] = plans.map((plan) => {
     const planSessions = sessionsByPlan.get(plan.id) ?? [];
     const total = planSessions.length;
@@ -242,6 +272,20 @@ export async function GET(_req: NextRequest) {
       })),
       parseNotes: parseSessionCoachNotes,
       allLogs: [...planLogs].reverse(),
+    });
+
+    const missedSessionsCount = deriveMissedSessionsForReview(
+      planSessions.map((s) => ({
+        status: s.status,
+        session_number: s.session_number,
+      })),
+    );
+    const reviewState = resolveClinicalReviewState({
+      planId: plan.id,
+      actionStatus: clinicalAction.status,
+      latestSessionLogId: latest?.id ?? null,
+      missedSessionsCount,
+      acknowledgmentsByTriggerKey,
     });
 
     return {
@@ -265,6 +309,11 @@ export async function GET(_req: NextRequest) {
       status: deriveStatus(completed, total),
       latestAssessmentId: preferredAssessment?.id ?? null,
       latestAssessmentType: preferredAssessment?.type ?? null,
+      latestSessionLogId: latest?.id ?? null,
+      planSessionId: latest?.plan_session_id ?? null,
+      clinicalReviewTriggerKey: reviewState.clinicalReviewTriggerKey,
+      reviewAcknowledged: reviewState.reviewAcknowledged,
+      reviewedAt: reviewState.reviewedAt,
     };
   });
 

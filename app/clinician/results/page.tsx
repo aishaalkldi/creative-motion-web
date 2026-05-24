@@ -8,6 +8,7 @@ import type { PatientRow } from "@/app/lib/validate-patient-ownership";
 import { buildRemoteQuestionnaireSummary } from "@/app/lib/remote-questionnaire-summary";
 import { extractGeneralDraft, extractStructuredData } from "@/app/lib/assessment-payload";
 import { ClinicalActionCard } from "@/app/components/clinician/ClinicalActionCard";
+import { ClinicalReviewActions } from "@/app/components/clinician/ClinicalReviewActions";
 import {
   clinicalActionNeedsTherapistReview,
   type ClinicalActionResult,
@@ -42,6 +43,9 @@ type RehabSnapshot = {
   clinicalAction: ClinicalActionResult;
   latestPatientNote: string | null;
   lastCompletedAt: string | null;
+  latestSessionLogId: string | null;
+  reviewAcknowledged: boolean;
+  reviewedAt: string | null;
 };
 
 type PatientPipelineCard = {
@@ -229,8 +233,10 @@ function compareReviewQueueCards(a: ClinicianResultCard, b: ClinicianResultCard)
 }
 
 function buildReviewQueue(rehabResults: ClinicianResultCard[]): ClinicianResultCard[] {
-  const urgent = rehabResults.filter((card) =>
-    clinicalActionNeedsTherapistReview(card.clinicalAction.status),
+  const urgent = rehabResults.filter(
+    (card) =>
+      clinicalActionNeedsTherapistReview(card.clinicalAction.status) &&
+      !card.reviewAcknowledged,
   );
   const byPatient = new Map<string, ClinicianResultCard>();
   for (const card of urgent) {
@@ -311,6 +317,9 @@ export default function UnifiedResultsPage() {
             clinicalAction: primary.clinicalAction,
             latestPatientNote: primary.latestPatientNote,
             lastCompletedAt: primary.lastCompletedAt,
+            latestSessionLogId: primary.latestSessionLogId,
+            reviewAcknowledged: primary.reviewAcknowledged,
+            reviewedAt: primary.reviewedAt,
           });
         }
 
@@ -360,6 +369,30 @@ export default function UnifiedResultsPage() {
 
   const reviewQueue = useMemo(() => buildReviewQueue(rehabResults), [rehabResults]);
 
+  function handleReviewAcknowledged(planId: string, reviewedAt: string) {
+    setRehabResults((prev) =>
+      prev.map((card) =>
+        card.planId === planId
+          ? { ...card, reviewAcknowledged: true, reviewedAt }
+          : card,
+      ),
+    );
+    setPipeline((prev) =>
+      prev.map((card) =>
+        card.rehab?.planId === planId
+          ? {
+              ...card,
+              rehab: {
+                ...card.rehab,
+                reviewAcknowledged: true,
+                reviewedAt,
+              },
+            }
+          : card,
+      ),
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
       <div className="mx-auto max-w-7xl">
@@ -392,7 +425,13 @@ export default function UnifiedResultsPage() {
             </div>
             <div className="grid gap-3">
               {reviewQueue.map((card) => (
-                <ReviewQueueCard key={`${card.patientId}-${card.planId}`} card={card} />
+                <ReviewQueueCard
+                  key={`${card.patientId}-${card.planId}`}
+                  card={card}
+                  onAcknowledged={(reviewedAt) =>
+                    handleReviewAcknowledged(card.planId, reviewedAt)
+                  }
+                />
               ))}
             </div>
           </section>
@@ -427,7 +466,11 @@ export default function UnifiedResultsPage() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               {filtered.map((card) => (
-                <PatientPipelineCardView key={card.patientId} card={card} />
+                <PatientPipelineCardView
+                  key={card.patientId}
+                  card={card}
+                  onReviewAcknowledged={handleReviewAcknowledged}
+                />
               ))}
             </div>
           )}
@@ -437,7 +480,13 @@ export default function UnifiedResultsPage() {
   );
 }
 
-function ReviewQueueCard({ card }: { card: ClinicianResultCard }) {
+function ReviewQueueCard({
+  card,
+  onAcknowledged,
+}: {
+  card: ClinicianResultCard;
+  onAcknowledged: (reviewedAt: string) => void;
+}) {
   const profileHref = `/clinician/patients/${card.patientId}`;
   const planHref = `${profileHref}#rehabilitation-plan`;
   const styles =
@@ -490,11 +539,28 @@ function ReviewQueueCard({ card }: { card: ClinicianResultCard }) {
           View plan &amp; sessions
         </Link>
       </div>
+
+      <ClinicalReviewActions
+        patientId={card.patientId}
+        planId={card.planId}
+        sessionLogId={card.latestSessionLogId}
+        actionStatus={card.clinicalAction.status}
+        reviewAcknowledged={card.reviewAcknowledged}
+        reviewedAt={card.reviewedAt}
+        onAcknowledged={onAcknowledged}
+        compact
+      />
     </article>
   );
 }
 
-function PatientPipelineCardView({ card }: { card: PatientPipelineCard }) {
+function PatientPipelineCardView({
+  card,
+  onReviewAcknowledged,
+}: {
+  card: PatientPipelineCard;
+  onReviewAcknowledged: (planId: string, reviewedAt: string) => void;
+}) {
   const badge = stateBadge(card.state);
   const showRehabMetrics = card.rehab != null && card.state.kind !== "assessment_submitted";
   const profileHref = `/clinician/patients/${card.patientId}`;
@@ -561,6 +627,15 @@ function PatientPipelineCardView({ card }: { card: PatientPipelineCard }) {
             patientNote={card.rehab.latestPatientNote}
             planSessionsHref={`${profileHref}#rehabilitation-plan`}
             compact
+            review={{
+              patientId: card.patientId,
+              planId: card.rehab.planId,
+              sessionLogId: card.rehab.latestSessionLogId,
+              reviewAcknowledged: card.rehab.reviewAcknowledged,
+              reviewedAt: card.rehab.reviewedAt,
+              onAcknowledged: (reviewedAt) =>
+                onReviewAcknowledged(card.rehab!.planId, reviewedAt),
+            }}
           />
         </div>
       )}
