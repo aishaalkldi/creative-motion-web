@@ -5,7 +5,10 @@
  * Exercises are library-linked PrescribedExerciseV1 objects (not text fallback).
  */
 
-import { getLibraryExerciseById } from "@/app/lib/exercise-library-v1";
+import {
+  getLibraryExerciseById,
+  type BodyRegion,
+} from "@/app/lib/exercise-library-v1";
 import {
   prescribedFromLibrary,
   type PrescribedExerciseV1,
@@ -22,8 +25,17 @@ export type PilotProgramTemplate = {
   title: string;
   conditionArea: string;
   level: string;
-  goal: string;
-  safetyNote: string;
+  programGoal: string;
+  conditionCategory: string;
+  bodyRegion: BodyRegion;
+  suitableFor: string;
+  notSuitableFor: string;
+  phaseGoal: string;
+  expectedResponse: string;
+  safetyNotes: string;
+  reviewCriteria: string;
+  clinicianUseNote: string;
+  patientFriendlyGoal: string;
   sessions: PilotProgramSession[];
 };
 
@@ -45,9 +57,25 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     title: "Knee Rehab — Beginner",
     conditionArea: "Knee",
     level: "Beginner",
-    goal: "Basic knee strength, mobility, and walking confidence.",
-    safetyNote:
+    programGoal: "Basic knee strength, mobility, and walking confidence.",
+    conditionCategory: "ACL, knee OA, post-op knee, general knee rehab",
+    bodyRegion: "knee",
+    suitableFor:
+      "Patients with mild–moderate knee symptoms who can tolerate low-load activation, gentle ROM, and supported functional movement.",
+    notSuitableFor:
+      "Non–weight-bearing status, acute effusion with inability to activate quad, or post-operative restrictions without clearance.",
+    phaseGoal:
+      "Restore voluntary quadriceps control, comfortable knee flexion, and sit-to-stand confidence before progression.",
+    expectedResponse:
+      "Stable or decreasing pain after sessions, manageable effort scores, and improving control on activation and functional tasks.",
+    safetyNotes:
       "Stop if sharp or increasing pain occurs. Progress only when movement quality is controlled.",
+    reviewCriteria:
+      "Consider progression after 2–3 stable sessions with pain ≤ 4/10 after exercise and controlled sit-to-stand form.",
+    clinicianUseNote:
+      "Phase 1 knee starting point. Review dose, session order, and contraindications before assigning.",
+    patientFriendlyGoal:
+      "Build strength and confidence in your knee for sitting, standing, and walking.",
     sessions: [
       {
         sessionNumber: 1,
@@ -83,9 +111,25 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     title: "Low Back Pain — Beginner",
     conditionArea: "Low back",
     level: "Beginner",
-    goal: "Gentle mobility, core activation, and functional confidence.",
-    safetyNote:
+    programGoal: "Gentle mobility, core activation, and functional confidence.",
+    conditionCategory: "Lumbar disc herniation, mechanical low back pain, deconditioning",
+    bodyRegion: "lumbar",
+    suitableFor:
+      "Patients with mild–moderate lumbar symptoms who benefit from breathing, mobility, and gradual core activation.",
+    notSuitableFor:
+      "Red-flag symptoms, progressive neurological deficit, or acute radicular pain requiring medical review first.",
+    phaseGoal:
+      "Calm symptoms, restore gentle spinal mobility, and establish neutral spine control for daily movement.",
+    expectedResponse:
+      "Symptoms stable or easing after sessions; patient reports improved confidence with bending and walking tasks.",
+    safetyNotes:
       "Avoid pain-provoking ranges. Emphasize controlled breathing and neutral spine during movement.",
+    reviewCriteria:
+      "Progress when pain response is stable across 2–3 sessions and patient tolerates bird-dog and walking tasks.",
+    clinicianUseNote:
+      "Conservative lumbar entry program. Adjust exercises if extension or flexion bias is required.",
+    patientFriendlyGoal:
+      "Move more comfortably and rebuild confidence in your back for everyday activities.",
     sessions: [
       {
         sessionNumber: 1,
@@ -121,9 +165,25 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     title: "Shoulder Mobility — Beginner",
     conditionArea: "Shoulder",
     level: "Beginner",
-    goal: "Gentle shoulder mobility, scapular control, and pain-free movement.",
-    safetyNote:
+    programGoal: "Gentle shoulder mobility, scapular control, and pain-free movement.",
+    conditionCategory: "Shoulder impingement, post-op shoulder, frozen shoulder, rotator cuff",
+    bodyRegion: "shoulder",
+    suitableFor:
+      "Patients with shoulder stiffness or mild impingement who need graded mobility and scapular control.",
+    notSuitableFor:
+      "Acute dislocation, post-operative precautions not yet cleared, or sharp pinching pain through range.",
+    phaseGoal:
+      "Restore comfortable passive and assisted range with scapular stability before loaded rotation work.",
+    expectedResponse:
+      "Gradual ROM improvement, reduced stiffness after sessions, and no increase in night pain or pinching.",
+    safetyNotes:
       "Stay within a comfortable range. Do not push through pinching or sharp shoulder pain.",
+    reviewCriteria:
+      "Review for progression after consistent tolerance of table slides and wall slides with stable pain response.",
+    clinicianUseNote:
+      "Mobility-first shoulder template. Verify surgical precautions and irritability level before assigning.",
+    patientFriendlyGoal:
+      "Loosen a stiff shoulder and move more comfortably for reaching and daily tasks.",
     sessions: [
       {
         sessionNumber: 1,
@@ -165,8 +225,8 @@ export function clonePilotTemplate(template: PilotProgramTemplate): {
 } {
   return {
     title: template.title,
-    goal: template.goal,
-    safetyNote: template.safetyNote,
+    goal: template.programGoal,
+    safetyNote: template.safetyNotes,
     sessions: template.sessions.map((s) => ({
       sessionNumber: s.sessionNumber,
       title: s.title,

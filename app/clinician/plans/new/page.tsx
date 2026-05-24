@@ -149,6 +149,65 @@ function PlanField({ label, hint, children }: { label: string; hint?: string; ch
   );
 }
 
+function ProgramDetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-white/40">{label}</p>
+      <p className="mt-0.5 text-[11px] leading-relaxed text-white/60">{value}</p>
+    </div>
+  );
+}
+
+function ProgramTemplateDetails({
+  template,
+  compact = false,
+}: {
+  template: PilotProgramTemplate;
+  compact?: boolean;
+}) {
+  const panel = (
+    <div className={`space-y-2.5 ${compact ? "pt-2" : "mt-2 border-t border-[#1E2D42] pt-2.5"}`}>
+      <ProgramDetailRow label="Program goal" value={template.programGoal} />
+      <ProgramDetailRow label="Condition category" value={template.conditionCategory} />
+      <ProgramDetailRow label="Body region" value={template.bodyRegion} />
+      <ProgramDetailRow label="Suitable for" value={template.suitableFor} />
+      <ProgramDetailRow label="Not suitable for" value={template.notSuitableFor} />
+      <ProgramDetailRow label="Phase goal" value={template.phaseGoal} />
+      <ProgramDetailRow label="Expected response" value={template.expectedResponse} />
+      <ProgramDetailRow label="Safety notes" value={template.safetyNotes} />
+      <ProgramDetailRow label="Review criteria" value={template.reviewCriteria} />
+      <ProgramDetailRow label="Clinician use" value={template.clinicianUseNote} />
+      <ProgramDetailRow label="Patient-friendly goal" value={template.patientFriendlyGoal} />
+    </div>
+  );
+
+  if (compact) {
+    return (
+      <details className="group mt-2">
+        <summary className="cursor-pointer list-none text-[10px] font-semibold text-[#5DCAA5]/70 transition hover:text-[#5DCAA5] [&::-webkit-details-marker]:hidden">
+          <span className="inline-flex items-center gap-1">
+            <span className="text-white/25 transition group-open:rotate-90">▸</span>
+            Program details
+          </span>
+        </summary>
+        {panel}
+      </details>
+    );
+  }
+
+  return (
+    <details className="group rounded-[7px] border border-[#1E2D42] bg-[#0B1220] p-4">
+      <summary className="cursor-pointer list-none text-[11px] font-semibold text-[#5DCAA5]/80 transition hover:text-[#5DCAA5] [&::-webkit-details-marker]:hidden">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="text-white/25 transition group-open:rotate-90">▸</span>
+          Program details — {template.title}
+        </span>
+      </summary>
+      {panel}
+    </details>
+  );
+}
+
 function PilotTemplateCard({
   template,
   selected,
@@ -167,11 +226,18 @@ function PilotTemplateCard({
       }`}
     >
       <p className="text-sm font-semibold text-white">{template.title}</p>
-      <p className="mt-1 text-xs text-white/40">{template.conditionArea} · {template.level}</p>
-      <p className="mt-2 text-xs leading-relaxed text-white/55">{template.goal}</p>
-      <p className="mt-2 text-[11px] text-white/30">
-        {template.sessions.length} sessions · {template.sessions.map((s) => s.exercises.length).reduce((a, b) => a + b, 0)} exercises
+      <p className="mt-1 text-xs text-white/40">
+        {template.conditionArea} · {template.level} · {template.bodyRegion}
       </p>
+      <p className="mt-2 text-xs leading-relaxed text-white/55">{template.programGoal}</p>
+      <p className="mt-2 text-[11px] leading-snug text-white/35 line-clamp-2">
+        <span className="font-semibold text-white/45">Suitable for:</span> {template.suitableFor}
+      </p>
+      <p className="mt-2 text-[11px] text-white/30">
+        {template.sessions.length} sessions ·{" "}
+        {template.sessions.map((s) => s.exercises.length).reduce((a, b) => a + b, 0)} exercises
+      </p>
+      <ProgramTemplateDetails template={template} compact />
       <button
         type="button"
         onClick={onUse}
@@ -710,6 +776,15 @@ function NewPlanInner() {
                     Clear template
                   </button>
                 </div>
+
+                {(() => {
+                  const activeTemplate = PILOT_PROGRAM_TEMPLATES.find(
+                    (t) => t.id === selectedTemplateId,
+                  );
+                  return activeTemplate ? (
+                    <ProgramTemplateDetails template={activeTemplate} />
+                  ) : null;
+                })()}
 
                 <div className="space-y-4">
                   <div>
