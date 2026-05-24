@@ -32,13 +32,28 @@ export function getOpenAiKeyConfig(): OpenAiKeyConfig {
 export function getOpenAiKeyDiagnostics(): {
   openaiKeyPresent: boolean;
   openaiKeyPrefixValid: boolean;
+  openaiKeyLength: number;
 } {
   const apiKey = resolveOpenAiApiKey();
   if (!apiKey) {
-    return { openaiKeyPresent: false, openaiKeyPrefixValid: false };
+    return { openaiKeyPresent: false, openaiKeyPrefixValid: false, openaiKeyLength: 0 };
   }
   return {
     openaiKeyPresent: true,
     openaiKeyPrefixValid: isOpenAiKeyPrefixValid(apiKey),
+    openaiKeyLength: apiKey.length,
+  };
+}
+
+/** Clinician health endpoint payload — no key value, no PHI. */
+export function getOpenAiHealthResponse(): {
+  openaiKeyPresent: boolean;
+  openaiKeyPrefixValid: boolean;
+  openaiKeyLength: number;
+  nodeEnv: string | null;
+} {
+  return {
+    ...getOpenAiKeyDiagnostics(),
+    nodeEnv: process.env.NODE_ENV ?? null,
   };
 }

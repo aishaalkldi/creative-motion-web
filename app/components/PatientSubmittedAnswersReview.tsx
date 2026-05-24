@@ -15,6 +15,10 @@ import {
 } from "@/app/lib/patient-assessment-questions";
 import { TranslatableField } from "@/app/components/clinician/TranslatableField";
 import {
+  AI_TRANSLATION_SETUP_NOTICE,
+  isAiTranslationEnabled,
+} from "@/app/lib/ai-translation-flag";
+import {
   useTranslationProgress,
   type FieldTranslationState,
 } from "@/hooks/useTranslationProgress";
@@ -98,6 +102,7 @@ export function PatientSubmittedAnswersReview({
   compact = false,
   onTranslationProgress,
 }: Props) {
+  const aiTranslationEnabled = isAiTranslationEnabled();
   const blocks = buildFullClinicianReview(patientDraft, includedSections);
 
   const arabicFields = useMemo(
@@ -130,7 +135,9 @@ export function PatientSubmittedAnswersReview({
   } = translationProgress;
 
   useEffect(() => {
-    if (!onTranslationProgress || assessmentLanguage !== "ar" || !assessmentId) return;
+    if (!aiTranslationEnabled || !onTranslationProgress || assessmentLanguage !== "ar" || !assessmentId) {
+      return;
+    }
     onTranslationProgress({
       doneCount,
       totalCount,
@@ -140,6 +147,7 @@ export function PatientSubmittedAnswersReview({
     });
   }, [
     onTranslationProgress,
+    aiTranslationEnabled,
     assessmentLanguage,
     assessmentId,
     doneCount,
@@ -158,9 +166,15 @@ export function PatientSubmittedAnswersReview({
   }
 
   const allValues = blocks.flatMap((block) => block.entries.map((entry) => entry.value));
-  const showArabicNotice = isArabicAssessmentContent(assessmentLanguage, allValues);
+  const showArabicNotice =
+    aiTranslationEnabled && isArabicAssessmentContent(assessmentLanguage, allValues);
+  const showSetupNotice = !aiTranslationEnabled && assessmentLanguage === "ar" && !compact;
   const showTranslateHeader =
-    !compact && assessmentLanguage === "ar" && !!assessmentId && totalCount > 0;
+    aiTranslationEnabled &&
+    !compact &&
+    assessmentLanguage === "ar" &&
+    !!assessmentId &&
+    totalCount > 0;
 
   return (
     <div className={compact ? "space-y-3" : "space-y-4"}>
@@ -193,6 +207,12 @@ export function PatientSubmittedAnswersReview({
         <p className="text-sm font-bold text-white">Patient-Submitted Assessment</p>
       ) : null}
 
+      {showSetupNotice && (
+        <div className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5">
+          <p className="text-xs leading-relaxed text-[#9CA3AF]">{AI_TRANSLATION_SETUP_NOTICE}</p>
+        </div>
+      )}
+
       {showArabicNotice && (
         <div className="rounded-[7px] border border-amber-300/25 bg-amber-400/10 px-3 py-2.5">
           <p className="text-xs leading-relaxed text-amber-100/90">{ARABIC_READABILITY_NOTICE}</p>
@@ -214,6 +234,7 @@ export function PatientSubmittedAnswersReview({
               const voiceAnswered = isVoiceAnswered(submissionMeta, entry.fieldKey);
               const fieldKey = entry.fieldKey;
               const useTranslation =
+                aiTranslationEnabled &&
                 assessmentLanguage === "ar" &&
                 !!assessmentId &&
                 !!fieldKey &&

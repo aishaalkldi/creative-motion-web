@@ -46,6 +46,7 @@ import {
 import { ReportExportToolbar } from "@/app/components/reports/ReportExportToolbar";
 import { RemoteQuestionnairePrintReport } from "@/app/components/reports/RemoteQuestionnairePrintReport";
 import { PdfTranslationWarningModal } from "@/app/components/clinician/PdfTranslationWarningModal";
+import { isAiTranslationEnabled } from "@/app/lib/ai-translation-flag";
 
 // ── Constants & labels ─────────────────────────────────────────────────────────
 
@@ -696,6 +697,10 @@ export function AssessmentReportClient() {
   );
 
   const handleRemoteQuestionnaireExport = useCallback(() => {
+    if (!isAiTranslationEnabled()) {
+      window.print();
+      return;
+    }
     const assessmentLanguage = patientAnsweredInArabic ? "ar" : "en";
     const untranslatedCount = translationExport.totalCount - translationExport.doneCount;
     if (untranslatedCount > 0 && assessmentLanguage === "ar") {

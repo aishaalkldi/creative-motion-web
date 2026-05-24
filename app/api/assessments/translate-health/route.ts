@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { getOpenAiKeyDiagnostics } from "@/app/lib/openai/server-env";
+import { getOpenAiHealthResponse } from "@/app/lib/openai/server-env";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 /**
  * GET /api/assessments/translate-health
@@ -32,5 +35,5 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  return NextResponse.json(getOpenAiKeyDiagnostics());
+  return NextResponse.json(getOpenAiHealthResponse());
 }
