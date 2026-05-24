@@ -1,10 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
-import type { PatientPlanData } from "@/app/api/patient/plan/route";
-import { usePatientLanguage } from "@/app/components/patient/PatientLanguageProvider";
+import { usePatientLanguage, usePatientPlan } from "@/app/components/patient/PatientLanguageProvider";
 import { SessionScheduleView } from "@/app/components/SessionScheduleView";
 import {
   getPortalGreeting,
@@ -23,38 +21,13 @@ function sessionDisplayStatus(
 
 export default function PatientDashboard() {
   const params = useParams();
-  const router = useRouter();
   const token  = String(params.token ?? "");
 
-  const [plan,    setPlan]    = useState<PatientPlanData | null | undefined>(undefined);
-  const [loadErr, setLoadErr] = useState("");
-
-  useEffect(() => {
-    if (!token) { router.replace("/patient/invalid"); return; }
-
-    fetch(`/api/patient/plan?token=${encodeURIComponent(token)}`)
-      .then(async (res) => {
-        if (res.status === 404 || res.status === 403) {
-          router.replace("/patient/invalid");
-          return;
-        }
-        if (!res.ok) {
-          setLoadErr("load");
-          setPlan(null);
-          return;
-        }
-        setPlan((await res.json()) as PatientPlanData);
-      })
-      .catch(() => {
-        setLoadErr("connection");
-        setPlan(null);
-      });
-  }, [token, router]);
-
+  const { plan, planLoadError, isPlanLoading } = usePatientPlan();
   const { language: lang, isArabic, textDir, arClass } = usePatientLanguage();
   const ui = planHomeUi(lang);
 
-  if (plan === undefined) {
+  if (isPlanLoading || plan === undefined) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <p className={`text-[13px] text-[#9CA3AF] ${arClass}`}>{ui.loading}</p>
@@ -66,7 +39,7 @@ export default function PatientDashboard() {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <p className={`text-[13px] text-rose-400 ${arClass}`}>
-          {loadErr === "connection" ? ui.connectionError : ui.loadError}
+          {planLoadError === "connection" ? ui.connectionError : ui.loadError}
         </p>
       </div>
     );

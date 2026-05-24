@@ -14,16 +14,19 @@ import {
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export type AssessmentRow = {
+export type AssessmentListRow = {
   id: string;
   patient_id: string;
   provider_id: string;
   type: string;
-  structured_data: StoredAssessmentPayload | null;
   notes: string | null;
   status: string;
   created_at: string;
   updated_at: string;
+};
+
+export type AssessmentRow = AssessmentListRow & {
+  structured_data: StoredAssessmentPayload | null;
 };
 
 // ── Shared client factory ──────────────────────────────────────────────────────
@@ -158,7 +161,7 @@ export async function POST(req: NextRequest) {
  * Query params:
  *   patientId   string (UUID)  required
  *
- * Response 200: AssessmentRow[]
+ * Response 200: AssessmentListRow[]
  * Response 400: { error }
  * Response 401: { error }
  * Response 404: { error } — patient not found or not owned
@@ -185,7 +188,7 @@ export async function GET(req: NextRequest) {
   // ── Query ────────────────────────────────────────────────────────────────────
   const { data: assessments, error: queryError } = await adminClient
     .from("assessments")
-    .select("id, patient_id, provider_id, type, structured_data, notes, status, created_at, updated_at")
+    .select("id, patient_id, provider_id, type, notes, status, created_at, updated_at")
     .eq("patient_id", patientId)
     .eq("provider_id", user.id)
     .order("created_at", { ascending: false });
@@ -196,5 +199,5 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
 
-  return NextResponse.json((assessments ?? []) as AssessmentRow[]);
+  return NextResponse.json((assessments ?? []) as AssessmentListRow[]);
 }

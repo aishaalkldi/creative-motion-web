@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
-import type { PatientPlanData, PatientSession } from "@/app/api/patient/plan/route";
+import type { PatientSession } from "@/app/api/patient/plan/route";
 import type { SessionCompleteResponse } from "@/app/api/patient/session-complete/route";
-import { usePatientLanguage } from "@/app/components/patient/PatientLanguageProvider";
+import { usePatientLanguage, usePatientPlan } from "@/app/components/patient/PatientLanguageProvider";
 import { encodeSessionCoachNotes } from "@/app/lib/session-coach-metadata";
 import {
   deriveClinicalAction,
@@ -63,7 +63,6 @@ function PainScale({
 
 export default function SessionPlayerPage() {
   const params    = useParams();
-  const router    = useRouter();
   const token     = String(params.token ?? "");
   const sessionId = String(params.sessionId ?? "");
 
@@ -71,6 +70,7 @@ export default function SessionPlayerPage() {
   const [planSessions,        setPlanSessions]        = useState<PatientSession[]>([]);
   const [notFound,            setNotFound]            = useState(false);
   const [patientName,         setPatientName]         = useState("");
+  const { plan, isPlanLoading } = usePatientPlan();
   const { language: patientLanguage, isArabic, textDir, arClass } = usePatientLanguage();
   const [phase,               setPhase]               = useState<SessionPhase>("precheck");
   const [painBefore,          setPainBefore]          = useState<number | null>(null);
@@ -105,24 +105,23 @@ export default function SessionPlayerPage() {
   }, [token, sessionId]);
 
   useEffect(() => {
-    if (!token) { router.replace("/patient/invalid"); return; }
+    if (!token || isPlanLoading) return;
+    if (plan === null) {
+      setNotFound(true);
+      return;
+    }
+    if (!plan) return;
 
-    fetch(`/api/patient/plan?token=${encodeURIComponent(token)}`)
-      .then(async (res) => {
-        if (res.status === 404 || res.status === 403) {
-          router.replace("/patient/invalid");
-          return;
-        }
-        if (!res.ok) { setNotFound(true); return; }
-        const plan = (await res.json()) as PatientPlanData;
-        const s = plan.sessions.find((x) => x.id === sessionId);
-        if (!s) { setNotFound(true); return; }
-        setSession(s);
-        setPlanSessions(plan.sessions);
-        setPatientName(plan.patientName ?? "");
-      })
-      .catch(() => { setNotFound(true); });
-  }, [token, sessionId, router]);
+    const s = plan.sessions.find((x) => x.id === sessionId);
+    if (!s) {
+      setNotFound(true);
+      return;
+    }
+    setSession(s);
+    setPlanSessions(plan.sessions);
+    setPatientName(plan.patientName ?? "");
+    setNotFound(false);
+  }, [token, sessionId, plan, isPlanLoading]);
 
   if (notFound) {
     const shellUi = sessionShellUi(patientLanguage);

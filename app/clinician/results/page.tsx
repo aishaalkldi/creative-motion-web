@@ -2,11 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import type { ClinicianResultCard } from "@/app/api/clinician/results/route";
-import type { AssessmentRow } from "@/app/api/assessments/route";
+import type { ClinicianResultCard, ClinicianResultsResponse } from "@/app/api/clinician/results/route";
+import type { AssessmentSnapshot } from "@/app/lib/assessment-snapshot";
 import type { PatientRow } from "@/app/lib/validate-patient-ownership";
-import { buildRemoteQuestionnaireSummary } from "@/app/lib/remote-questionnaire-summary";
-import { extractGeneralDraft, extractStructuredData } from "@/app/lib/assessment-payload";
 import { ClinicalActionCard } from "@/app/components/clinician/ClinicalActionCard";
 import { ClinicalReviewActions } from "@/app/components/clinician/ClinicalReviewActions";
 import {
@@ -22,14 +20,7 @@ type PipelineState =
   | { kind: "plan_assigned" }
   | { kind: "assessment_submitted" };
 
-type AssessmentSnapshot = {
-  assessmentId: string;
-  assessmentType: string;
-  submittedAt: string;
-  painAtRest?: string;
-  painOnMovement?: string;
-  bodyRegion?: string;
-};
+type AssessmentSnapshotView = AssessmentSnapshot;
 
 type RehabSnapshot = {
   planId: string;
@@ -54,7 +45,7 @@ type PatientPipelineCard = {
   condition: string | null;
   lastActivityAt: string | null;
   state: PipelineState;
-  assessment: AssessmentSnapshot | null;
+  assessment: AssessmentSnapshotView | null;
   rehab: RehabSnapshot | null;
 };
 
@@ -71,52 +62,6 @@ function reportHref(patientId: string, assessmentId: string): string {
   return `/clinician/assessment/report?${params.toString()}`;
 }
 
-function pickPreferredAssessment(rows: AssessmentRow[]): AssessmentRow | null {
-  if (rows.length === 0) return null;
-  return (
-    rows.find((row) => row.type === "remote_questionnaire") ??
-    rows.find((row) => row.type === "general_msk") ??
-    rows[0] ??
-    null
-  );
-}
-
-function extractAssessmentSnapshot(row: AssessmentRow): AssessmentSnapshot {
-  const base: AssessmentSnapshot = {
-    assessmentId: row.id,
-    assessmentType: row.type,
-    submittedAt: row.created_at,
-  };
-
-  if (row.type === "remote_questionnaire") {
-    const summary = buildRemoteQuestionnaireSummary(row.structured_data, row.created_at);
-    if (summary) {
-      for (const metric of summary.metrics) {
-        if (metric.label === "Pain at rest") base.painAtRest = metric.value;
-        if (metric.label === "Pain on movement") base.painOnMovement = metric.value;
-        if (metric.label === "Body region") base.bodyRegion = metric.value;
-      }
-    }
-    return base;
-  }
-
-  const general = extractGeneralDraft(row.structured_data, row.type);
-  if (general) {
-    if (general.subjective.nprs.trim()) base.painAtRest = `${general.subjective.nprs}/10`;
-    if (general.subjective.painLocation.trim()) base.bodyRegion = general.subjective.painLocation;
-    return base;
-  }
-
-  const structured = extractStructuredData(row.structured_data);
-  if (structured) {
-    base.painAtRest = `${structured.painAtRest}/10`;
-    base.painOnMovement = `${structured.painOnMovement}/10`;
-    base.bodyRegion = structured.bodyRegion;
-  }
-
-  return base;
-}
-
 function pickPrimaryRehabPlan(plans: ClinicianResultCard[]): ClinicianResultCard | null {
   if (plans.length === 0) return null;
   const active = plans.filter((plan) => plan.sessionsCompleted > 0);
@@ -131,7 +76,7 @@ function pickPrimaryRehabPlan(plans: ClinicianResultCard[]): ClinicianResultCard
 }
 
 function derivePipelineState(
-  assessment: AssessmentSnapshot | null,
+  assessment: AssessmentSnapshotView | null,
   rehab: RehabSnapshot | null,
 ): PipelineState {
   if (rehab) {
@@ -169,7 +114,7 @@ function stateBadge(state: PipelineState): { label: string; className: string } 
 
 function buildPipelineCards(
   patients: PatientRow[],
-  assessmentsByPatient: Map<string, AssessmentSnapshot>,
+  assessmentsByPatient: Map<string, AssessmentSnapshotView>,
   rehabByPatient: Map<string, RehabSnapshot>,
 ): PatientPipelineCard[] {
   const patientIds = new Set<string>([
@@ -276,22 +221,12 @@ export default function UnifiedResultsPage() {
         }
 
         const patients = (await patientsRes.json()) as PatientRow[];
-        const rehabResults = (await rehabRes.json()) as ClinicianResultCard[];
+        const resultsPayload = (await rehabRes.json()) as ClinicianResultsResponse;
+        const rehabResults = resultsPayload.cards;
 
-        const assessmentEntries = await Promise.all(
-          patients.map(async (patient) => {
-            const res = await fetch(`/api/assessments?patientId=${encodeURIComponent(patient.id)}`);
-            if (!res.ok) return null;
-            const rows = (await res.json()) as AssessmentRow[];
-            const preferred = pickPreferredAssessment(rows);
-            if (!preferred) return null;
-            return [patient.id, extractAssessmentSnapshot(preferred)] as const;
-          }),
-        );
-
-        const assessmentsByPatient = new Map<string, AssessmentSnapshot>();
-        for (const entry of assessmentEntries) {
-          if (entry) assessmentsByPatient.set(entry[0], entry[1]);
+        const assessmentsByPatient = new Map<string, AssessmentSnapshotView>();
+        for (const snapshot of resultsPayload.patientAssessments) {
+          assessmentsByPatient.set(snapshot.patientId, snapshot);
         }
 
         const rehabGrouped = new Map<string, ClinicianResultCard[]>();

@@ -9,7 +9,8 @@ import {
   type AssessmentOut,
 } from "../../../lib/api";
 import type { SavedAssessment } from "../../../lib/mock-clinical-data";
-import type { AssessmentRow } from "../../../api/assessments/route";
+import type { AssessmentListRow, AssessmentRow } from "../../../api/assessments/route";
+import { pickPreferredAssessment } from "../../../lib/assessment-snapshot";
 import {
   extractGeneralDraft,
   extractStructuredData,
@@ -49,7 +50,6 @@ import { ClinicalActionCard } from "../../../components/clinician/ClinicalAction
 import type { PatientProgressSummary } from "../../../api/clinician/patient-progress/route";
 import {
   buildRemoteQuestionnaireSummary,
-  extractRemoteQuestionnaireDraft,
 } from "../../../lib/remote-questionnaire-summary";
 
 export default function PatientProfilePage() {
@@ -91,7 +91,8 @@ export default function PatientProfilePage() {
 
   // RASQ new-style assessments (from rasq_assessments localStorage)
   const [rasqAssessments, setRasqAssessments] = useState<SavedAssessment[]>([]);
-  const [supabaseAssessmentRows, setSupabaseAssessmentRows] = useState<AssessmentRow[]>([]);
+  const [supabaseAssessmentRows, setSupabaseAssessmentRows] = useState<AssessmentListRow[]>([]);
+  const [clinicalSummaryDetail, setClinicalSummaryDetail] = useState<AssessmentRow | null>(null);
 
   // Assessment-saved banner (shown when redirected from /clinician/assessment/new)
   const [showAssessmentBanner, setShowAssessmentBanner] = useState(
@@ -272,69 +273,44 @@ export default function PatientProfilePage() {
     void fetch(`/api/assessments?patientId=${patient.id}`)
       .then(async (res) => {
         if (!res.ok) return;
-        const rows = (await res.json()) as AssessmentRow[];
+        const rows = (await res.json()) as AssessmentListRow[];
         setSupabaseAssessmentRows(rows);
-        // Map Supabase AssessmentRow → SavedAssessment for legacy display cards
-        const mapped: SavedAssessment[] = rows.map((r) => {
-          const remoteDraft = extractRemoteQuestionnaireDraft(r.structured_data, r.type);
-          if (remoteDraft) {
-            const painScore = remoteDraft.pain?.painScore?.trim();
-            return {
-              id: r.id,
-              patientId: 0,
-              patientName: "",
-              type: r.type,
-              typeLabel: "Remote Questionnaire Assessment",
-              date: r.created_at.split("T")[0] ?? "",
-              pain: painScore ? Number.parseInt(painScore, 10) || 0 : 0,
-              rom: 0,
-              strength: "See report",
-              mobilityNotes: remoteDraft.pain?.chiefComplaint ?? r.notes ?? "",
-              savedAt: r.created_at,
-              bodyRegion: remoteDraft.pain?.painLocation || undefined,
-              rehabilitationPhase: undefined,
-              assessmentData: undefined,
-            };
-          }
-          const general = extractGeneralDraft(r.structured_data, r.type);
-          if (general) {
-            const nprs = Number.parseInt(general.subjective.nprs, 10);
-            return {
-              id: r.id,
-              patientId: 0,
-              patientName: "",
-              type: r.type,
-              typeLabel: "General MSK Assessment",
-              date: r.created_at.split("T")[0] ?? "",
-              pain: Number.isFinite(nprs) ? nprs : 0,
-              rom: 0,
-              strength: "See report",
-              mobilityNotes: r.notes ?? general.subjective.chiefComplaint ?? "",
-              savedAt: r.created_at,
-              bodyRegion: general.subjective.painLocation || undefined,
-              rehabilitationPhase: undefined,
-              assessmentData: undefined,
-            };
-          }
-          const structured = extractStructuredData(r.structured_data);
-          return {
-            id: r.id,
-            patientId: 0,
-            patientName: "",
-            type: r.type,
-            typeLabel: structured?.bodyRegion ?? r.type,
-            date: r.created_at.split("T")[0] ?? "",
-            pain: structured?.painAtRest ?? 0,
-            rom: structured?.rom?.measurements?.[0]?.value ?? 0,
-            strength: "See assessment data",
-            mobilityNotes: r.notes ?? structured?.clinicalNotes ?? "",
-            savedAt: r.created_at,
-            bodyRegion: structured?.bodyRegion,
-            rehabilitationPhase: structured?.rehabilitationPhase,
-            assessmentData: structured ?? undefined,
-          };
-        });
+
+        const mapped: SavedAssessment[] = rows.map((r) => ({
+          id: r.id,
+          patientId: 0,
+          patientName: "",
+          type: r.type,
+          typeLabel:
+            r.type === "remote_questionnaire"
+              ? "Remote Questionnaire Assessment"
+              : r.type === "general_msk"
+                ? "General MSK Assessment"
+                : r.type,
+          date: r.created_at.split("T")[0] ?? "",
+          pain: 0,
+          rom: 0,
+          strength: "See report",
+          mobilityNotes: r.notes ?? "",
+          savedAt: r.created_at,
+          bodyRegion: undefined,
+          rehabilitationPhase: undefined,
+          assessmentData: undefined,
+        }));
         setRasqAssessments(mapped);
+
+        const preferred = pickPreferredAssessment(rows);
+        if (!preferred) {
+          setClinicalSummaryDetail(null);
+          return;
+        }
+
+        const detailRes = await fetch(`/api/assessments/${encodeURIComponent(preferred.id)}`);
+        if (!detailRes.ok) {
+          setClinicalSummaryDetail(null);
+          return;
+        }
+        setClinicalSummaryDetail((await detailRes.json()) as AssessmentRow);
       })
       .catch(() => { /* silently ignore — empty state shown */ });
   }, [patient]);
@@ -383,10 +359,7 @@ export default function PatientProfilePage() {
     return "Not recorded";
   }, [therapySessions]);
 
-  const clinicalSummaryRow = useMemo(() => {
-    const remote = supabaseAssessmentRows.find((row) => row.type === "remote_questionnaire");
-    return remote ?? supabaseAssessmentRows[0] ?? null;
-  }, [supabaseAssessmentRows]);
+  const clinicalSummaryRow = clinicalSummaryDetail;
 
   const clinicalSummary = useMemo(() => {
     if (!clinicalSummaryRow) return null;
@@ -869,7 +842,7 @@ export default function PatientProfilePage() {
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {clinicalSummaryRow?.type === "remote_questionnaire" && (
+                        {clinicalSummaryDetail?.type === "remote_questionnaire" && (
                           <span className="rounded-[5px] border border-[#1E2D42] bg-[#0F1825] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white/45">
                             Remote
                           </span>

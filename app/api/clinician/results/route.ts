@@ -23,11 +23,13 @@ import {
   resolveClinicalReviewState,
   type ClinicalReviewAckRow,
 } from "../../../lib/clinical-review";
+import {
+  buildPatientAssessmentSnapshots,
+  pickPreferredAssessment,
+  type AssessmentSnapshot,
+} from "../../../lib/assessment-snapshot";
 
 export type ClinicianResultStatus = "pending_review" | "active" | "completed";
-
-/** Prefer general MSK report, then structured wizard, then questionnaire. */
-const ASSESSMENT_TYPE_PRIORITY = ["general_msk", "structured", "questionnaire"] as const;
 
 export type ClinicianResultCard = {
   planId: string;
@@ -58,22 +60,18 @@ export type ClinicianResultCard = {
   reviewedAt: string | null;
 };
 
-type AssessmentPickRow = { id: string; patient_id: string; type: string; created_at: string };
+export type ClinicianResultsResponse = {
+  cards: ClinicianResultCard[];
+  patientAssessments: AssessmentSnapshot[];
+};
 
-function pickPreferredAssessment(rows: AssessmentPickRow[]): AssessmentPickRow | null {
-  if (rows.length === 0) return null;
-  const newestByType = new Map<string, AssessmentPickRow>();
-  for (const row of rows) {
-    if (!newestByType.has(row.type)) {
-      newestByType.set(row.type, row);
-    }
-  }
-  for (const preferred of ASSESSMENT_TYPE_PRIORITY) {
-    const match = newestByType.get(preferred);
-    if (match) return match;
-  }
-  return rows[0] ?? null;
-}
+type AssessmentPickRow = {
+  id: string;
+  patient_id: string;
+  type: string;
+  created_at: string;
+  structured_data: unknown;
+};
 
 async function buildClients() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -135,7 +133,10 @@ export async function GET(_req: NextRequest) {
 
   const patientMap = new Map((patients ?? []).map((p) => [p.id, p.full_name]));
   if (patientMap.size === 0) {
-    return NextResponse.json([] satisfies ClinicianResultCard[]);
+    return NextResponse.json({
+      cards: [],
+      patientAssessments: [],
+    } satisfies ClinicianResultsResponse);
   }
 
   type PlanRow = {
@@ -160,7 +161,10 @@ export async function GET(_req: NextRequest) {
   }
 
   if (!plans?.length) {
-    return NextResponse.json([] satisfies ClinicianResultCard[]);
+    return NextResponse.json({
+      cards: [],
+      patientAssessments: [],
+    } satisfies ClinicianResultsResponse);
   }
 
   const planIds = plans.map((p) => p.id);
@@ -212,7 +216,7 @@ export async function GET(_req: NextRequest) {
   if (patientIds.length > 0) {
     const { data: assessmentRows, error: assessErr } = await adminClient
       .from("assessments")
-      .select("id, patient_id, type, created_at")
+      .select("id, patient_id, type, created_at, structured_data")
       .eq("provider_id", user.id)
       .in("patient_id", patientIds)
       .order("created_at", { ascending: false })
@@ -317,5 +321,12 @@ export async function GET(_req: NextRequest) {
     };
   });
 
-  return NextResponse.json(cards);
+  const patientAssessments = buildPatientAssessmentSnapshots(
+    patientIds.flatMap((pid) => assessmentsByPatient.get(pid) ?? []),
+  );
+
+  return NextResponse.json({
+    cards,
+    patientAssessments,
+  } satisfies ClinicianResultsResponse);
 }

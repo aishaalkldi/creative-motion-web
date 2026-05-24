@@ -5,8 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { REHAB_PROGRAMS, type PlanSession } from "@/app/lib/api/treatment-plans";
 import type { PatientRow } from "@/app/lib/validate-patient-ownership";
-import type { AssessmentRow } from "@/app/api/assessments/route";
-import { extractGeneralDraft, extractStructuredData } from "@/app/lib/assessment-payload";
+import type { AssessmentListRow } from "@/app/api/assessments/route";
 import type { PlanRow } from "@/app/api/plans/route";
 import {
   PILOT_PROGRAM_TEMPLATES,
@@ -383,7 +382,7 @@ function NewPlanInner() {
   const [selectedPatient, setSelectedPatient] = useState<PatientRow | null>(null);
 
   // Assessments for the selected patient (from Supabase)
-  const [assessments,      setAssessments]     = useState<AssessmentRow[]>([]);
+  const [assessments,      setAssessments]     = useState<AssessmentListRow[]>([]);
 
   // Load patient list when no patientId pre-selected
   useEffect(() => {
@@ -407,7 +406,7 @@ function NewPlanInner() {
   useEffect(() => {
     if (!patientId) { setAssessments([]); return; }
     fetch(`/api/assessments?patientId=${patientId}`)
-      .then(async (r) => { if (r.ok) setAssessments((await r.json()) as AssessmentRow[]); })
+      .then(async (r) => { if (r.ok) setAssessments((await r.json()) as AssessmentListRow[]); })
       .catch(() => {});
   }, [patientId]);
 
@@ -718,22 +717,20 @@ function NewPlanInner() {
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-white">
-                          {extractStructuredData(a.structured_data)?.bodyRegion
-                            ?? (extractGeneralDraft(a.structured_data, a.type) ? "General MSK" : null)
-                            ?? a.type}
+                          {a.type === "remote_questionnaire"
+                            ? "Remote Questionnaire"
+                            : a.type === "general_msk"
+                              ? "General MSK"
+                              : a.type === "structured"
+                                ? "Structured Assessment"
+                                : a.type}
                         </p>
                         <p
                           className="text-[10px] text-white/30"
                           style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
                         >
-                          {a.created_at.split("T")[0]} · Pain{" "}
-                          {(extractStructuredData(a.structured_data)?.painAtRest
-                            ?? Number.parseInt(
-                              extractGeneralDraft(a.structured_data, a.type)?.subjective.nprs ?? "",
-                              10,
-                            ))
-                            || 0}
-                          /10
+                          {a.created_at.split("T")[0]}
+                          {a.notes?.trim() ? ` · ${a.notes.trim().slice(0, 40)}` : ""}
                         </p>
                       </div>
                       {baselineId === a.id && (

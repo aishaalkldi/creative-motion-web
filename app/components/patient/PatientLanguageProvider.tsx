@@ -8,6 +8,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
 import { IBM_Plex_Sans_Arabic } from "next/font/google";
 import type { PatientPlanData } from "@/app/api/patient/plan/route";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
@@ -24,16 +25,19 @@ const arabicFont = IBM_Plex_Sans_Arabic({
   display: "swap",
 });
 
-type PatientLanguageContextValue = {
+type PatientPortalContextValue = {
+  plan: PatientPlanData | null | undefined;
+  planLoadError: "load" | "connection" | "";
   language: PatientExerciseLanguage;
   setLanguage: (language: PatientExerciseLanguage) => void;
   assignedBy: string;
   isArabic: boolean;
   textDir: "rtl" | "ltr";
   arClass: string;
+  isPlanLoading: boolean;
 };
 
-const PatientLanguageContext = createContext<PatientLanguageContextValue | null>(null);
+const PatientPortalContext = createContext<PatientPortalContextValue | null>(null);
 
 export function PatientLanguageProvider({
   token,
@@ -42,30 +46,49 @@ export function PatientLanguageProvider({
   token: string;
   children: React.ReactNode;
 }) {
+  const router = useRouter();
+  const [plan, setPlan] = useState<PatientPlanData | null | undefined>(undefined);
+  const [planLoadError, setPlanLoadError] = useState<"load" | "connection" | "">("");
   const [language, setLanguageState] = useState<PatientExerciseLanguage>("en");
   const [assignedBy, setAssignedBy] = useState("");
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      router.replace("/patient/invalid");
+      return;
+    }
 
     const stored = readStoredPatientLanguage(token);
     if (stored) {
       setLanguageState(stored);
     }
 
+    setPlan(undefined);
+    setPlanLoadError("");
+
     fetch(`/api/patient/plan?token=${encodeURIComponent(token)}`)
       .then(async (res) => {
-        if (!res.ok) return;
+        if (res.status === 404 || res.status === 403) {
+          router.replace("/patient/invalid");
+          return;
+        }
+        if (!res.ok) {
+          setPlanLoadError("load");
+          setPlan(null);
+          return;
+        }
         const data = (await res.json()) as PatientPlanData;
+        setPlan(data);
         if (data.assignedBy) setAssignedBy(data.assignedBy);
         if (!readStoredPatientLanguage(token)) {
           setLanguageState(normalizeApiPatientLanguage(data.patientLanguage));
         }
       })
       .catch(() => {
-        /* assignedBy and API fallback are cosmetic */
+        setPlanLoadError("connection");
+        setPlan(null);
       });
-  }, [token]);
+  }, [token, router]);
 
   const setLanguage = useCallback(
     (next: PatientExerciseLanguage) => {
@@ -78,30 +101,42 @@ export function PatientLanguageProvider({
   const isArabic = language === "ar";
   const textDir = portalTextDir(language);
   const arClass = isArabic ? arabicFont.className : "";
+  const isPlanLoading = plan === undefined;
 
   const value = useMemo(
     () => ({
+      plan,
+      planLoadError,
       language,
       setLanguage,
       assignedBy,
       isArabic,
       textDir,
       arClass,
+      isPlanLoading,
     }),
-    [language, setLanguage, assignedBy, isArabic, textDir, arClass],
+    [plan, planLoadError, language, setLanguage, assignedBy, isArabic, textDir, arClass, isPlanLoading],
   );
 
   return (
-    <PatientLanguageContext.Provider value={value}>
+    <PatientPortalContext.Provider value={value}>
       {children}
-    </PatientLanguageContext.Provider>
+    </PatientPortalContext.Provider>
   );
 }
 
-export function usePatientLanguage(): PatientLanguageContextValue {
-  const context = useContext(PatientLanguageContext);
+export function usePatientPlan(): PatientPortalContextValue {
+  const context = useContext(PatientPortalContext);
   if (!context) {
-    throw new Error("usePatientLanguage must be used within PatientLanguageProvider");
+    throw new Error("usePatientPlan must be used within PatientLanguageProvider");
   }
   return context;
+}
+
+export function usePatientLanguage(): Pick<
+  PatientPortalContextValue,
+  "language" | "setLanguage" | "assignedBy" | "isArabic" | "textDir" | "arClass"
+> {
+  const { language, setLanguage, assignedBy, isArabic, textDir, arClass } = usePatientPlan();
+  return { language, setLanguage, assignedBy, isArabic, textDir, arClass };
 }
