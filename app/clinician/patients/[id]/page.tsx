@@ -31,13 +31,11 @@ import {
 } from "../../../lib/therapy-sessions-store";
 import { loadTherapySessionsForDisplay } from "../../../lib/therapy-session-persistence";
 import {
-  REHAB_PROGRAMS,
   type TreatmentPlan,
   type Adherence,
   type PlanSession,
 } from "../../../lib/api/treatment-plans";
 import type { PlanRow } from "../../../api/plans/route";
-import { getClinician } from "../../../lib/auth";
 import {
   listPatientAssessments,
   ASSESSMENT_TYPE_LABELS,
@@ -163,6 +161,7 @@ export default function PatientProfilePage() {
 
   useEffect(() => {
     if (!patient) return;
+    const planAssigned = searchParams.get("planAssigned") === "1";
     setPlanLoading(true);
     fetch(`/api/plans?patientId=${patient.id}`)
       .then(async (res) => {
@@ -245,8 +244,13 @@ export default function PatientProfilePage() {
         }
       })
       .catch(() => { /* silent — empty state shown */ })
-      .finally(() => setPlanLoading(false));
-  }, [patient]);
+      .finally(() => {
+        setPlanLoading(false);
+        if (planAssigned) {
+          router.replace(`/clinician/patients/${id}`, { scroll: false });
+        }
+      });
+  }, [patient, searchParams, router, id]);
 
   useEffect(() => {
     if (!patient) return;
@@ -775,7 +779,7 @@ export default function PatientProfilePage() {
                   href={`/clinician/plans/new?patientId=${patient.id}`}
                   className="rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3.5 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/14"
                 >
-                  Build Plan
+                  Create structured treatment plan
                 </Link>
                 <Link
                   href="/clinician/results"
@@ -942,20 +946,7 @@ export default function PatientProfilePage() {
             <TreatmentPlanSection
               patientId={patient.id}
               plan={treatmentPlan}
-              adherence={adherence}
               loading={planLoading}
-              onPlanUpdated={(p, a) => {
-                setTreatmentPlan(p);
-                setAdherence(a);
-                setPlanProgress(null);
-                if (p?.id) {
-                  void fetch(
-                    `/api/clinician/patient-progress?patientId=${encodeURIComponent(patient.id)}&planId=${encodeURIComponent(p.id)}`,
-                  )
-                    .then(async (res) => (res.ok ? (res.json() as Promise<PatientProgressSummary>) : null))
-                    .then((prog) => setPlanProgress(prog));
-                }
-              }}
             />
 
             {/* Progress Snapshot */}
@@ -1625,9 +1616,7 @@ function ProgressSnapshotSection({
 interface TreatmentPlanSectionProps {
   patientId: string;
   plan: TreatmentPlan | null;
-  adherence: Adherence | null;
   loading: boolean;
-  onPlanUpdated: (plan: TreatmentPlan, adherence: Adherence | null) => void;
 }
 
 function clinicianSessionDisplayStatus(
@@ -1643,107 +1632,9 @@ function clinicianSessionDisplayStatus(
 function TreatmentPlanSection({
   patientId,
   plan,
-  adherence,
   loading,
-  onPlanUpdated,
 }: TreatmentPlanSectionProps) {
-  const [assignOpen, setAssignOpen] = useState(false);
-  const [assigning, setAssigning] = useState(false);
-  const [assignError, setAssignError] = useState("");
-  const [selectedProgramId, setSelectedProgramId] = useState(REHAB_PROGRAMS[0].id);
-  const [selectedPhase, setSelectedPhase] = useState(REHAB_PROGRAMS[0].phases[0].id);
-  const [sessionsPerWeek, setSessionsPerWeek] = useState(3);
-  const [notes, setNotes] = useState("");
-
-  const selectedProgram = REHAB_PROGRAMS.find((p) => p.id === selectedProgramId) ?? REHAB_PROGRAMS[0];
-  const selectedPhaseObj = selectedProgram.phases.find((ph) => ph.id === selectedPhase) ?? selectedProgram.phases[0];
-
-  function handleProgramChange(programId: string) {
-    setSelectedProgramId(programId);
-    const prog = REHAB_PROGRAMS.find((p) => p.id === programId);
-    if (prog) setSelectedPhase(prog.phases[0].id);
-  }
-
-  async function handleAssign(e: React.FormEvent) {
-    e.preventDefault();
-    setAssigning(true);
-    setAssignError("");
-    try {
-      const clinician = getClinician();
-      const prog  = REHAB_PROGRAMS.find((p) => p.id === selectedProgramId) ?? REHAB_PROGRAMS[0];
-      const phase = prog.phases.find((ph) => ph.id === selectedPhase) ?? prog.phases[0];
-
-      const sessions: PlanSession[] = Array.from({ length: phase.defaultSessions }, (_, i) => ({
-        id:              `s-${i + 1}`,
-        sessionNumber:   i + 1,
-        title:           i % 2 === 0
-          ? `${phase.name.split("—")[1]?.trim() ?? "Rehab"} Session A`
-          : `${phase.name.split("—")[1]?.trim() ?? "Rehab"} Session B`,
-        exercises:       phase.exercises,
-        estimatedMinutes: 25,
-        status:          "ready" as const,
-      }));
-
-      const res = await fetch("/api/plans", {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          patientId,
-          title:          prog.name,
-          programId:      prog.id,
-          programName:    prog.name,
-          phase:          phase.id,
-          phaseName:      phase.name,
-          phaseGoal:      phase.goal,
-          sessionsPerWeek,
-          totalWeeks:     Math.ceil(phase.defaultSessions / sessionsPerWeek),
-          clinicianNote:  notes,
-          assignedBy:     clinician?.full_name ?? "Clinician",
-          sessions:       sessions.map((s) => ({
-            sessionNumber: s.sessionNumber,
-            title:         s.title,
-            exercises:     s.exercises,
-          })),
-        }),
-      });
-
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({})) as { error?: string };
-        throw new Error(body.error ?? `Failed to assign plan (${res.status})`);
-      }
-
-      const planRow = (await res.json()) as PlanRow;
-      if (!planRow.patient_token) {
-        throw new Error("Plan was not fully created. Please try again.");
-      }
-      const sd = planRow.structured_data;
-      const newPlan: TreatmentPlan = {
-        id:              planRow.id,
-        patientId:       0,
-        patientToken:    planRow.patient_token ?? undefined,
-        programId:       sd?.programId ?? prog.id,
-        programName:     sd?.programName ?? prog.name,
-        phase:           sd?.phase ?? phase.id,
-        phaseName:       sd?.phaseName ?? phase.name,
-        phaseGoal:       sd?.phaseGoal ?? phase.goal,
-        sessionsPerWeek,
-        totalSessions:   sessions.length,
-        clinicianNotes:  notes,
-        assignedAt:      planRow.created_at,
-        assignedBy:      clinician?.full_name ?? "Clinician",
-        status:          "active",
-        sessions,
-      };
-
-      onPlanUpdated(newPlan, null);
-      setAssignOpen(false);
-      setNotes("");
-    } catch (err) {
-      setAssignError(err instanceof Error ? err.message : "Failed to assign plan.");
-    } finally {
-      setAssigning(false);
-    }
-  }
+  const structuredPlanHref = `/clinician/plans/new?patientId=${encodeURIComponent(patientId)}`;
 
   if (loading) {
     return (
@@ -1768,23 +1659,23 @@ function TreatmentPlanSection({
             </>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => setAssignOpen((v) => !v)}
+        <Link
+          href={structuredPlanHref}
           className="shrink-0 rounded-[7px] bg-[#1D9E75] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#179165]"
         >
-          {plan ? "Reassign Plan" : "Assign Plan"}
-        </button>
+          {plan ? "Create new structured plan" : "Create structured treatment plan"}
+        </Link>
       </div>
 
-      {!plan && !assignOpen && (
+      {!plan && (
         <p className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
-          No rehabilitation plan assigned yet.
+          No rehabilitation plan assigned yet. Use the structured plan builder to select exercises from
+          the library, set dose, and share the patient portal link.
         </p>
       )}
 
       {/* Current plan summary */}
-      {plan && !assignOpen && (
+      {plan && (
         <div className="space-y-3">
           <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
             <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/25">Goal</p>
@@ -1820,120 +1711,6 @@ function TreatmentPlanSection({
             />
           </div>
         </div>
-      )}
-
-      {/* Assignment form */}
-      {assignOpen && (
-        <form onSubmit={handleAssign} className="space-y-4 pt-1">
-          <div>
-            <label className="block">
-              <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-white/30">
-                Program <span className="text-rose-400">*</span>
-              </span>
-              <select
-                value={selectedProgramId}
-                onChange={(e) => handleProgramChange(e.target.value)}
-                className="w-full rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-3 text-sm text-white outline-none focus:border-[#1D9E75]/40"
-              >
-                {REHAB_PROGRAMS.map((p) => (
-                  <option key={p.id} value={p.id} className="bg-[#0B1220]">
-                    {p.name} ({p.category})
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div>
-            <p className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-white/30">
-              Phase <span className="text-rose-400">*</span>
-            </p>
-            <div className="space-y-2">
-              {selectedProgram.phases.map((ph) => (
-                <label
-                  key={ph.id}
-                  className={`flex cursor-pointer items-start gap-3 rounded-[7px] border p-3 transition ${
-                    selectedPhase === ph.id
-                      ? "border-[#1D9E75]/30 bg-[#1D9E75]/8"
-                      : "border-[#1E2D42] bg-[#0B1220] hover:border-[#1D9E75]/15"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="phase"
-                    value={ph.id}
-                    checked={selectedPhase === ph.id}
-                    onChange={() => setSelectedPhase(ph.id)}
-                    className="mt-0.5 accent-[#1D9E75]"
-                  />
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-white">{ph.name}</p>
-                    <p className="mt-0.5 text-xs text-white/45">{ph.goal}</p>
-                    <p className="mt-1 text-xs text-[#5DCAA5]/70">
-                      {ph.durationHint} · {ph.defaultSessions} sessions
-                    </p>
-                  </div>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <label className="block">
-              <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-white/30">Sessions per week</span>
-              <div className="flex items-center gap-2">
-                {[2, 3, 4, 5].map((n) => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setSessionsPerWeek(n)}
-                    className={`rounded-[7px] px-4 py-2 text-sm font-semibold transition ${
-                      sessionsPerWeek === n
-                        ? "bg-[#1D9E75] text-white"
-                        : "border border-[#1E2D42] bg-[#0B1220] text-white/60 hover:text-white"
-                    }`}
-                  >
-                    {n}×
-                  </button>
-                ))}
-              </div>
-            </label>
-          </div>
-
-          <div>
-            <label className="block">
-              <span className="mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-white/30">Clinician notes (optional)</span>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={3}
-                placeholder={`Phase goal: ${selectedPhaseObj.goal}`}
-                className="w-full resize-none rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-[#1D9E75]/40"
-              />
-            </label>
-          </div>
-
-          {assignError && (
-            <p className="rounded-[7px] border border-rose-400/20 bg-rose-400/8 px-4 py-3 text-sm text-rose-300">{assignError}</p>
-          )}
-
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              disabled={assigning}
-              className="rounded-[7px] bg-[#1D9E75] px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-[#179165] disabled:opacity-60"
-            >
-              {assigning ? "Assigning…" : plan ? "Update Plan" : "Assign Plan"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setAssignOpen(false)}
-              className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-6 py-2.5 text-sm font-semibold text-white/50 transition hover:text-white"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
       )}
     </section>
   );

@@ -495,7 +495,10 @@ function NewPlanInner() {
       }
 
       setSaved(true);
-      setTimeout(() => router.push(`/clinician/patients/${selectedPatient.id}`), 1000);
+      setTimeout(
+        () => router.push(`/clinician/patients/${selectedPatient.id}?planAssigned=1`),
+        1000,
+      );
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Failed to assign plan.");
       setSaving(false);
@@ -523,19 +526,31 @@ function NewPlanInner() {
       <div className="mx-auto max-w-2xl space-y-6">
 
         {/* Back */}
-        <Link href="/clinician/patients" className="flex items-center gap-1.5 text-sm text-white/35 transition hover:text-white/65">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
-          </svg>
-          Patients
-        </Link>
+        {patientId && selectedPatient ? (
+          <Link
+            href={`/clinician/patients/${patientId}`}
+            className="flex items-center gap-1.5 text-sm text-white/35 transition hover:text-white/65"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            Back to {selectedPatient.full_name}
+          </Link>
+        ) : (
+          <Link href="/clinician/patients" className="flex items-center gap-1.5 text-sm text-white/35 transition hover:text-white/65">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            Patients
+          </Link>
+        )}
 
         {/* Header */}
         <div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">Treatment Plan</p>
           <h1 className="mt-1.5 text-2xl font-bold text-white">Build rehabilitation plan</h1>
           <p className="mt-1 text-sm text-white/40">
-            Define phase structure, exercise assignment, and progression milestones.
+            Select exercises from the library, set dose, and assign structured sessions.
           </p>
         </div>
 
