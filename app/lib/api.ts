@@ -409,14 +409,15 @@ export async function getResultsByPatient(patientId: number): Promise<ResultOut[
 // ── Dashboard Stats ───────────────────────────────────────────────────
 
 export type DashboardStats = {
-  total_patients: number;
-  active_cases: number;
-  pending_reviews: number;
-  remote_assessments_pending: number;
+  totalPatients: number | null;
+  activeCases: number | null;
+  pendingReviews: number | null;
+  remoteAssessmentsPending: number | null;
+  generatedAt: string;
 };
 
 export async function getDashboardStats(): Promise<DashboardStats> {
-  const response = await fetch(`${baseUrl()}/api/v1/stats`, {
+  const response = await fetch("/api/clinician/stats", {
     method: "GET",
     headers: { Accept: "application/json", ...getAuthHeaders() },
     cache: "no-store",

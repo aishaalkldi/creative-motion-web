@@ -44,6 +44,25 @@ function MetricCard({ title, value, subtitle, attention = false }: {
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
+function formatMetric(value: number | null | undefined, loading: boolean): string {
+  if (loading) return "…";
+  if (value === null || value === undefined) return "–";
+  return String(value);
+}
+
+function formatStatsTime(iso: string | undefined): string | null {
+  if (!iso) return null;
+  try {
+    return new Date(iso).toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    return null;
+  }
+}
+
 export default function ClinicianDashboardPage() {
   const [stats, setStats]   = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,22 +75,28 @@ export default function ClinicianDashboardPage() {
   }, []);
 
   const metricCards = [
-    { title: "Total Patients",              value: loading ? "…" : String(stats?.total_patients ?? "–"),              subtitle: "Connected patient records",           attention: false },
-    { title: "Active Cases",                value: loading ? "…" : String(stats?.active_cases ?? "–"),                subtitle: "Currently active patients",           attention: false },
-    { title: "Pending Reviews",             value: loading ? "…" : String(stats?.pending_reviews ?? "–"),             subtitle: "Awaiting clinician review",           attention: true  },
-    { title: "Remote Assessments Pending",  value: loading ? "…" : String(stats?.remote_assessments_pending ?? "–"), subtitle: "Patient links not yet completed",     attention: false },
+    { title: "Total Patients",              value: formatMetric(stats?.totalPatients, loading),              subtitle: "Connected patient records",           attention: false },
+    { title: "Active Cases",                value: formatMetric(stats?.activeCases, loading),                subtitle: "Currently active patients",           attention: false },
+    { title: "Pending Reviews",             value: formatMetric(stats?.pendingReviews, loading),             subtitle: "Awaiting clinician review",           attention: true  },
+    { title: "Remote Assessments Pending",  value: formatMetric(stats?.remoteAssessmentsPending, loading), subtitle: "Patient links not yet completed",     attention: false },
   ];
+
+  const statsUpdatedAt = formatStatsTime(stats?.generatedAt);
 
   const activityQueue =
     !loading && stats
       ? [
-          stats.pending_reviews === 0
-            ? "No pending reviews"
-            : `${stats.pending_reviews} assessment${stats.pending_reviews > 1 ? "s" : ""} awaiting review`,
-          stats.remote_assessments_pending === 0
-            ? "No remote assessments pending"
-            : `${stats.remote_assessments_pending} remote assessment${stats.remote_assessments_pending > 1 ? "s" : ""} pending`,
-          stats.pending_reviews > 0
+          stats.pendingReviews === null
+            ? "Review queue unavailable"
+            : stats.pendingReviews === 0
+              ? "No pending reviews"
+              : `${stats.pendingReviews} patient${stats.pendingReviews > 1 ? "s" : ""} awaiting review`,
+          stats.remoteAssessmentsPending === null
+            ? "Remote assessment count unavailable"
+            : stats.remoteAssessmentsPending === 0
+              ? "No remote assessments pending"
+              : `${stats.remoteAssessmentsPending} remote assessment${stats.remoteAssessmentsPending > 1 ? "s" : ""} pending`,
+          stats.pendingReviews != null && stats.pendingReviews > 0
             ? "Open Results to review flagged patients"
             : "Review queue is clear",
         ]
@@ -89,6 +114,11 @@ export default function ClinicianDashboardPage() {
             <p className="mt-1 text-sm text-white/40">
               Manage patients, assessments, and rehabilitation plans from one place.
             </p>
+            {!loading && statsUpdatedAt && (
+              <p className="mt-1 text-[11px] text-white/25">
+                Data updated: {statsUpdatedAt}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <Link href="/clinician/patients/new" className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]">
