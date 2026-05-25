@@ -108,6 +108,16 @@ export const EXERCISE_NAME_ALIASES: Record<string, string> = {
   "seated leg extension": "terminal-knee-extension",
   "standing hip abduction": "lateral-band-walk",
   "step touch side to side": "lateral-band-walk",
+  "straight leg raise": "straight-leg-raise",
+  "nordic hamstring curl": "nordic-hamstring-curl",
+  "wall press-up": "wall-press-up",
+  "postural awareness exercise": "postural-awareness",
+  "heel-toe walking supported": "heel-toe-walking-supported",
+  "upper limb reaching seated": "upper-limb-reaching-seated",
+  "gentle neck rotation": "gentle-neck-rotation",
+  "shoulder circles": "shoulder-circles",
+  "seated trunk rotation": "seated-trunk-rotation",
+  "ankle pumps neurological": "ankle-pumps-neuro",
 };
 
 const GENERIC_FALLBACK: Pick<
