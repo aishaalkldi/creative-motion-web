@@ -63,7 +63,7 @@ export function ClinicalActionCard({
         {action.reason}
       </p>
       <p className={`mt-2 leading-relaxed text-white/55 ${compact ? "text-xs" : "text-sm"}`}>
-        <span className="font-semibold text-white/70">Suggested action: </span>
+        <span className="font-semibold text-white/70">Clinician follow-up note: </span>
         {action.suggestedClinicianAction}
       </p>
       {patientNote?.trim() && (

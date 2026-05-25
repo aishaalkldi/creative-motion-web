@@ -58,8 +58,8 @@ const STATUS_COPY: Record<
     severity: "high",
   },
   pain_increase: {
-    title: "Pain increased after session",
-    reason: "Pain increased after session compared to before.",
+    title: "Patient-reported pain increased after session",
+    reason: "Patient-reported pain increased after session compared to before.",
     suggestedClinicianAction: "Review pain response and consider adjusting session intensity.",
     patientSafeMessage:
       "You reported more pain after this session. Rest as needed and contact your therapist if pain persists.",
@@ -82,17 +82,19 @@ const STATUS_COPY: Record<
     severity: "medium",
   },
   ready_for_progression_review: {
-    title: "Ready for progression review",
-    reason: "Patient completed multiple sessions with stable response.",
-    suggestedClinicianAction: "Ready for clinician progression review — assess whether the plan should be updated.",
+    title: "Multiple sessions completed",
+    reason: "Patient completed multiple sessions without active review flags in recent responses.",
+    suggestedClinicianAction:
+      "Review session responses and determine whether plan updates are clinically relevant.",
     patientSafeMessage:
       "You've completed several sessions. Your therapist will review whether your plan should be updated.",
     severity: "low",
   },
   stable: {
-    title: "Stable response",
-    reason: "No concerning response detected from latest session.",
-    suggestedClinicianAction: "Continue monitoring session response at the next visit.",
+    title: "No active review flag",
+    reason: "No review flag generated from the latest patient response.",
+    suggestedClinicianAction:
+      "Review the patient-reported response during routine follow-up if clinically relevant.",
     patientSafeMessage: "Good work. Your responses have been saved for your therapist to review.",
     severity: "low",
   },
