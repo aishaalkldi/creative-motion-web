@@ -300,8 +300,18 @@ export async function createRemoteAssessment(input: {
         writeIndex(patientId, [req.id, ...ids]);
         return req;
       }
-    } catch {
-      /* fall through to localStorage */
+
+      let message = `Could not create assessment link (HTTP ${res.status}).`;
+      try {
+        const body = (await res.json()) as { error?: string };
+        if (body.error) message = body.error;
+      } catch {
+        /* ignore parse errors */
+      }
+      throw new Error(message);
+    } catch (err) {
+      if (err instanceof Error) throw err;
+      throw new Error("Could not create assessment link. Check your connection and try again.");
     }
   }
 

@@ -33,6 +33,8 @@ export function SendAssessmentModal({ patientId, patientName, onClose, onCreated
   const [sections, setSections] = useState<PatientSectionId[]>(DEFAULT_SECTIONS["general_msk"]);
   const [generated, setGenerated] = useState<RemoteAssessmentRequest | null>(null);
   const [copied, setCopied] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
   const overlayRef = useRef<HTMLDivElement>(null);
 
   // Update default sections when type changes
@@ -47,8 +49,18 @@ export function SendAssessmentModal({ patientId, patientName, onClose, onCreated
   }
 
   async function handleGenerate() {
-    const req = await createRemoteAssessment({ patientId, patientName, assessmentType, includedSections: sections });
-    setGenerated(req);
+    setGenerating(true);
+    setGenerateError(null);
+    try {
+      const req = await createRemoteAssessment({ patientId, patientName, assessmentType, includedSections: sections });
+      setGenerated(req);
+    } catch (err) {
+      setGenerateError(
+        err instanceof Error ? err.message : "Could not generate the assessment link. Try again.",
+      );
+    } finally {
+      setGenerating(false);
+    }
   }
 
   function assessmentLink(req: RemoteAssessmentRequest) {
@@ -182,14 +194,20 @@ export function SendAssessmentModal({ patientId, patientName, onClose, onCreated
                 </p>
               </div>
 
+              {generateError && (
+                <div className="rounded-2xl border border-rose-300/25 bg-rose-400/10 px-4 py-3 text-xs leading-5 text-rose-200">
+                  {generateError}
+                </div>
+              )}
+
               {/* Generate button */}
               <button
                 type="button"
-                disabled={sections.length === 0}
+                disabled={sections.length === 0 || generating}
                 onClick={handleGenerate}
                 className="w-full rounded-2xl bg-cyan-400 py-3 text-sm font-bold text-slate-950 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Generate Assessment Link
+                {generating ? "Generating link…" : "Generate Assessment Link"}
               </button>
             </div>
           ) : (

@@ -373,6 +373,15 @@ export default function UnifiedResultsPage() {
           </section>
         )}
 
+        {!loading && !error && reviewQueue.length === 0 && (
+          <section className="mb-6 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] px-6 py-5">
+            <h2 className="text-sm font-semibold text-white">Review queue</h2>
+            <p className="mt-1 text-sm text-white/45">
+              No active review flags. All patient responses are within expected parameters.
+            </p>
+          </section>
+        )}
+
         <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
           <div className="mb-6 grid gap-3 sm:grid-cols-4">
             <MiniStat label="Patients in pipeline" value={String(pipeline.length)} />

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams, notFound } from "next/navigation";
 import type { AssessmentRecord } from "../../../lib/domain-types";
 import {
@@ -285,14 +285,23 @@ export default function PatientProfilePage() {
 
   useEffect(() => {
     if (!patient) return;
-    fetch(`/api/clinician/patient-progress?patientId=${encodeURIComponent(patient.id)}&timelineOnly=1`)
-      .then(async (res) => {
-        if (!res.ok) return;
-        setTimelineBundle((await res.json()) as PatientTimelineBundle);
-      })
-      .catch(() => {
-        setTimelineBundle(null);
-      });
+    const refreshTimeline = () => {
+      void fetch(`/api/clinician/patient-progress?patientId=${encodeURIComponent(patient.id)}&timelineOnly=1`)
+        .then(async (res) => {
+          if (!res.ok) return;
+          setTimelineBundle((await res.json()) as PatientTimelineBundle);
+        })
+        .catch(() => {
+          setTimelineBundle(null);
+        });
+    };
+    refreshTimeline();
+    window.addEventListener("focus", refreshTimeline);
+    document.addEventListener("visibilitychange", refreshTimeline);
+    return () => {
+      window.removeEventListener("focus", refreshTimeline);
+      document.removeEventListener("visibilitychange", refreshTimeline);
+    };
   }, [patient?.id]);
 
   useEffect(() => {
@@ -300,56 +309,72 @@ export default function PatientProfilePage() {
     const refreshRemote = () => setRemoteAssessments(listPatientAssessments(patient.id));
     refreshRemote();
     window.addEventListener("focus", refreshRemote);
-    return () => window.removeEventListener("focus", refreshRemote);
+    document.addEventListener("visibilitychange", refreshRemote);
+    return () => {
+      window.removeEventListener("focus", refreshRemote);
+      document.removeEventListener("visibilitychange", refreshRemote);
+    };
+  }, [patient?.id]);
+
+  const refreshClinicalAssessments = useCallback(async () => {
+    if (!patient) return;
+    try {
+      const res = await fetch(`/api/assessments?patientId=${patient.id}`);
+      if (!res.ok) return;
+      const rows = (await res.json()) as AssessmentListRow[];
+      setSupabaseAssessmentRows(rows);
+
+      const mapped: SavedAssessment[] = rows.map((r) => ({
+        id: r.id,
+        patientId: 0,
+        patientName: "",
+        type: r.type,
+        typeLabel:
+          r.type === "remote_questionnaire"
+            ? "Remote Questionnaire Assessment"
+            : r.type === "general_msk"
+              ? "General MSK Assessment"
+              : r.type,
+        date: r.created_at.split("T")[0] ?? "",
+        pain: 0,
+        rom: 0,
+        strength: "See report",
+        mobilityNotes: r.notes ?? "",
+        savedAt: r.created_at,
+        bodyRegion: undefined,
+        rehabilitationPhase: undefined,
+        assessmentData: undefined,
+      }));
+      setRasqAssessments(mapped);
+
+      const preferred = pickPreferredAssessment(rows);
+      if (!preferred) {
+        setClinicalSummaryDetail(null);
+        return;
+      }
+
+      const detailRes = await fetch(`/api/assessments/${encodeURIComponent(preferred.id)}`);
+      if (!detailRes.ok) {
+        setClinicalSummaryDetail(null);
+        return;
+      }
+      setClinicalSummaryDetail((await detailRes.json()) as AssessmentRow);
+    } catch {
+      /* silently ignore — empty state shown */
+    }
   }, [patient?.id]);
 
   useEffect(() => {
     if (!patient) return;
-    // Load structured RASQ assessments from Supabase
-    void fetch(`/api/assessments?patientId=${patient.id}`)
-      .then(async (res) => {
-        if (!res.ok) return;
-        const rows = (await res.json()) as AssessmentListRow[];
-        setSupabaseAssessmentRows(rows);
-
-        const mapped: SavedAssessment[] = rows.map((r) => ({
-          id: r.id,
-          patientId: 0,
-          patientName: "",
-          type: r.type,
-          typeLabel:
-            r.type === "remote_questionnaire"
-              ? "Remote Questionnaire Assessment"
-              : r.type === "general_msk"
-                ? "General MSK Assessment"
-                : r.type,
-          date: r.created_at.split("T")[0] ?? "",
-          pain: 0,
-          rom: 0,
-          strength: "See report",
-          mobilityNotes: r.notes ?? "",
-          savedAt: r.created_at,
-          bodyRegion: undefined,
-          rehabilitationPhase: undefined,
-          assessmentData: undefined,
-        }));
-        setRasqAssessments(mapped);
-
-        const preferred = pickPreferredAssessment(rows);
-        if (!preferred) {
-          setClinicalSummaryDetail(null);
-          return;
-        }
-
-        const detailRes = await fetch(`/api/assessments/${encodeURIComponent(preferred.id)}`);
-        if (!detailRes.ok) {
-          setClinicalSummaryDetail(null);
-          return;
-        }
-        setClinicalSummaryDetail((await detailRes.json()) as AssessmentRow);
-      })
-      .catch(() => { /* silently ignore — empty state shown */ });
-  }, [patient]);
+    void refreshClinicalAssessments();
+    const onRefresh = () => void refreshClinicalAssessments();
+    window.addEventListener("focus", onRefresh);
+    document.addEventListener("visibilitychange", onRefresh);
+    return () => {
+      window.removeEventListener("focus", onRefresh);
+      document.removeEventListener("visibilitychange", onRefresh);
+    };
+  }, [patient, refreshClinicalAssessments]);
 
   const latestAssessment = useMemo(() => assessments[0] ?? null, [assessments]);
   const recentAssessments = useMemo(() => assessments.slice(0, 3), [assessments]);
@@ -665,7 +690,10 @@ export default function PatientProfilePage() {
         patientId={patient.id}
         patientName={patient.full_name}
         onClose={() => setSendModalOpen(false)}
-        onCreated={() => setRemoteAssessments(listPatientAssessments(patient.id))}
+        onCreated={() => {
+          setRemoteAssessments(listPatientAssessments(patient.id));
+          void refreshClinicalAssessments();
+        }}
       />
     )}
 

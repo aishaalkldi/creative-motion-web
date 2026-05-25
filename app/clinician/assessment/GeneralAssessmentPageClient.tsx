@@ -1135,7 +1135,7 @@ function SpecialTestsSection({
         </svg>
         <p className="text-xs leading-5 text-amber-200/90">
           Special tests are clinician-entered findings and are not AI-generated diagnoses. Results are used
-          to inform clinical reasoning and treatment recommendation only.
+          to inform clinical reasoning and suggested rehabilitation direction only.
         </p>
       </div>
 
