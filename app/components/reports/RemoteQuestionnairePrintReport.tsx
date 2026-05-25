@@ -1,6 +1,16 @@
 import type { PatientAssessmentDraft, PatientSectionId } from "@/app/lib/api/remote-assessments";
 import { buildFullClinicianReview } from "@/app/lib/patient-assessment-questions";
 import type { RemoteQuestionnaireSummary } from "@/app/lib/remote-questionnaire-summary";
+import {
+  CLINICAL_DISCLAIMER_FULL,
+  patientReportedLabel,
+  RED_FLAG_PATIENT_REPORTED,
+  SAFETY_NONE_DOCUMENTED,
+  SAFETY_REVIEW_REQUIRED,
+  SECTION_OVERVIEW,
+  SECTION_PATIENT_REPORTED_SUMMARY,
+  SECTION_SAFETY_INDICATORS,
+} from "@/app/lib/reports/clinical-report-copy";
 import { ReportPrintLayout, ReportPrintSection } from "./ReportPrintLayout";
 
 function PrintFieldRows({ rows }: { rows: { label: string; value: string }[] }) {
@@ -66,7 +76,7 @@ function PrintSubmittedAnswers({
               return (
                 <div key={`${block.section}-${entry.label}`} className="px-3 py-2.5">
                   <dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-                    {entry.label}
+                    {patientReportedLabel(entry.label)}
                   </dt>
                   <dd className="mt-0.5 text-sm leading-relaxed text-gray-900 whitespace-pre-wrap" dir="rtl">
                     {entry.value}
@@ -74,7 +84,7 @@ function PrintSubmittedAnswers({
                   {translation ? (
                     <div className="mt-2 rounded border-l-2 border-[#1D9E75] bg-[#F0FAF6] px-3 py-2">
                       <p className="text-[10px] italic text-gray-500">
-                        AI-assisted translation — clinician review required
+                        Translation for clinician review — verify before clinical use
                       </p>
                       <p className="mt-1 text-sm leading-relaxed text-[#0D6B4F] whitespace-pre-wrap">
                         {translation}
@@ -118,35 +128,32 @@ export function RemoteQuestionnairePrintReport({
   return (
     <ReportPrintLayout
       meta={{
-        assessmentTypeLabel: "Remote Questionnaire",
+        assessmentTypeLabel: "Remote questionnaire",
+        sourceLabel: "Patient-reported",
         patientName,
         patientId,
         assessmentId,
         submittedDate: summary.submittedAt,
       }}
     >
-      {hasSummaryContent ? (
-        <ReportPrintSection title="Clinical Assessment Summary">
-          <PrintMetricGrid metrics={summary.metrics} />
-          {summary.metrics.length > 0 && summary.rows.length > 0 ? (
-            <div className="mt-4" />
-          ) : null}
-          <PrintFieldRows rows={summary.rows} />
-        </ReportPrintSection>
-      ) : null}
+      <ReportPrintSection title={SECTION_OVERVIEW}>
+        <PrintMetricGrid metrics={summary.metrics} />
+        {hasSummaryContent ? <PrintFieldRows rows={summary.rows} /> : null}
+      </ReportPrintSection>
 
-      {summary.hasRedFlag ? (
-        <ReportPrintSection title="Red Flags">
-          <div className="rounded border border-amber-400 bg-amber-50 px-3 py-2.5">
-            <p className="text-sm font-semibold text-amber-900">
-              Patient reported a possible red flag — review before proceeding.
-            </p>
+      <ReportPrintSection title={SECTION_SAFETY_INDICATORS}>
+        {summary.hasRedFlag ? (
+          <div className="rounded border border-amber-400 bg-amber-50 px-3 py-2.5 space-y-2">
+            <p className="text-sm font-semibold text-amber-900">{RED_FLAG_PATIENT_REPORTED}</p>
+            <p className="text-sm text-amber-900">{SAFETY_REVIEW_REQUIRED}</p>
           </div>
-        </ReportPrintSection>
-      ) : null}
+        ) : (
+          <p className="text-sm text-gray-800">{SAFETY_NONE_DOCUMENTED}</p>
+        )}
+      </ReportPrintSection>
 
       {hasAnswers ? (
-        <ReportPrintSection title="Patient Submitted Answers">
+        <ReportPrintSection title={SECTION_PATIENT_REPORTED_SUMMARY}>
           <PrintSubmittedAnswers
             patientDraft={summary.patientDraft}
             includedSections={summary.includedSections}
@@ -157,10 +164,16 @@ export function RemoteQuestionnairePrintReport({
       ) : null}
 
       {notes ? (
-        <ReportPrintSection title="Clinician Notes">
+        <ReportPrintSection title="Therapist-entered clinical note">
           <p className="text-sm leading-relaxed text-gray-900 whitespace-pre-wrap">{notes}</p>
         </ReportPrintSection>
       ) : null}
+
+      <section className="print-document-section">
+        <p className="rounded border border-gray-300 bg-gray-50 px-3 py-2.5 text-[11px] leading-relaxed text-gray-700">
+          {CLINICAL_DISCLAIMER_FULL}
+        </p>
+      </section>
     </ReportPrintLayout>
   );
 }

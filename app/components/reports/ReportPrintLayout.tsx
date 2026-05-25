@@ -1,5 +1,11 @@
 import type { ReactNode } from "react";
-import { formatReportDate, formatReportDateTime } from "@/app/lib/reports/format-report-date";
+import { formatReportDateTime } from "@/app/lib/reports/format-report-date";
+import {
+  CLINICAL_DISCLAIMER_FULL,
+  CLINICAL_REPORT_INTRO,
+  CLINICAL_REPORT_SUBTITLE,
+  CLINICAL_REPORT_TITLE,
+} from "@/app/lib/reports/clinical-report-copy";
 
 export type ReportPrintMeta = {
   assessmentTypeLabel: string;
@@ -8,6 +14,7 @@ export type ReportPrintMeta = {
   assessmentId?: string;
   submittedDate: string;
   generatedDate?: string;
+  sourceLabel?: string;
 };
 
 function RasqMark() {
@@ -52,13 +59,15 @@ export function ReportPrintLayout({
           <RasqMark />
           <div>
             <p className="text-base font-bold text-black">RASQ by Creative Motion Lab</p>
-            <p className="text-[11px] text-gray-600">Rehabilitation Assessment System</p>
+            <p className="text-[11px] text-gray-600">{CLINICAL_REPORT_SUBTITLE}</p>
           </div>
         </div>
 
-        <h1 className="mt-4 text-xl font-bold text-black">Clinical Assessment Report</h1>
+        <h1 className="mt-4 text-xl font-bold text-black">{CLINICAL_REPORT_TITLE}</h1>
+        <p className="mt-1 text-xs text-gray-600">{CLINICAL_REPORT_INTRO}</p>
         <p className="mt-2 text-sm font-semibold text-gray-800">
           Assessment type: {meta.assessmentTypeLabel}
+          {meta.sourceLabel ? ` · Source: ${meta.sourceLabel}` : ""}
         </p>
 
         <dl className="mt-4 grid gap-2 text-sm text-gray-800 sm:grid-cols-2">
@@ -91,9 +100,7 @@ export function ReportPrintLayout({
 
       <footer className="print-report-footer">
         <p className="text-sm font-semibold text-black">RASQ by Creative Motion Lab</p>
-        <p className="mt-1 text-[11px] leading-relaxed text-gray-600">
-          Clinical decision-support document. Must be reviewed by a licensed clinician.
-        </p>
+        <p className="mt-2 text-[11px] leading-relaxed text-gray-700">{CLINICAL_DISCLAIMER_FULL}</p>
       </footer>
     </div>
   );

@@ -47,11 +47,32 @@ import { ReportExportToolbar } from "@/app/components/reports/ReportExportToolba
 import { RemoteQuestionnairePrintReport } from "@/app/components/reports/RemoteQuestionnairePrintReport";
 import { PdfTranslationWarningModal } from "@/app/components/clinician/PdfTranslationWarningModal";
 import { isAiTranslationEnabled } from "@/app/lib/ai/ai-features";
+import {
+  BADGE_FOR_THERAPIST_REVIEW,
+  CLINICAL_DISCLAIMER_FULL,
+  CLINICAL_REPORT_INTRO,
+  CLINICAL_REPORT_SUBTITLE,
+  CLINICAL_REPORT_TITLE,
+  LABEL_THERAPIST_CLINICAL_IMPRESSION,
+  LEGACY_IMPRESSION_NOTE,
+  PATIENT_REPORTED_INTRO,
+  patientReportedLabel,
+  SECTION_OVERVIEW,
+  RED_FLAG_PATIENT_REPORTED,
+  REPORT_NEXT_STEPS,
+  SAFETY_NONE_DOCUMENTED,
+  SAFETY_REVIEW_REQUIRED,
+  SECTION_CLINICAL_FINDINGS,
+  SECTION_PATIENT_REPORTED_SUMMARY,
+  SECTION_SAFETY_INDICATORS,
+  SECTION_SUGGESTED_DIRECTION,
+  SUGGESTED_DIRECTION_INTRO,
+  SUGGESTED_DIRECTION_MATCH_NOTE,
+  SUGGESTED_DIRECTION_NO_MATCH,
+  therapistEnteredLabel,
+} from "@/app/lib/reports/clinical-report-copy";
 
 // ── Constants & labels ─────────────────────────────────────────────────────────
-
-const DISCLAIMER =
-  "Clinical decision-support draft — this report is generated from patient-submitted data and must be reviewed by a licensed clinician before treatment is assigned.";
 
 const OBJECTIVE_LABELS: Record<ObjectiveKey, string> = {
   posture: "Posture",
@@ -154,8 +175,8 @@ function matchPrograms(d: GeneralAssessmentDraft): RehabProgram[] {
   });
 }
 
-function hasRiskData(d: GeneralAssessmentDraft) {
-  return d.subjective.redFlags.trim() || d.ai.safetyNotes.trim();
+function hasRiskData(d: GeneralAssessmentDraft): boolean {
+  return Boolean(d.subjective.redFlags.trim() || d.ai.safetyNotes.trim());
 }
 
 function formatDate(iso: string): string {
@@ -227,10 +248,10 @@ function EditableSoapSection({
   saveMessage: string;
 }) {
   const fields: { key: keyof GeneralAssessmentDraft["soap"]; label: string }[] = [
-    { key: "subjective", label: "S — Subjective" },
-    { key: "objective", label: "O — Objective" },
-    { key: "assessment", label: "A — Assessment" },
-    { key: "plan", label: "P — Plan" },
+    { key: "subjective", label: "S — Subjective: Patient-reported and clinician-entered information" },
+    { key: "objective", label: "O — Objective: Clinician examination required" },
+    { key: "assessment", label: "A — Clinical impression: Clinician to complete" },
+    { key: "plan", label: "P — Plan: Clinician decision" },
   ];
 
   return (
@@ -281,20 +302,56 @@ const DOC_ICON = (
 function StructuredAssessmentReport({ data, notes }: { data: AssessmentData; notes: string | null }) {
   return (
     <div className="mx-auto max-w-4xl space-y-5 px-6 py-8">
-      <ReportSection id="summary" title="Structured Assessment Summary" defaultOpen icon={DOC_ICON}>
+      <ReportSection id="overview" title="Patient & Assessment Overview" defaultOpen icon={DOC_ICON}>
         <div className="grid gap-3 sm:grid-cols-2">
-          <InfoTile label="Body region" value={data.bodyRegion} />
-          <InfoTile label="Rehab phase" value={data.rehabilitationPhase} />
-          <InfoTile label="Pain at rest" value={`${data.painAtRest}/10`} accent="text-rose-300" />
-          <InfoTile label="Pain on movement" value={`${data.painOnMovement}/10`} accent="text-rose-300" />
-          <InfoTile label="Pain location" value={data.painLocation || "—"} />
-          <InfoTile label="Onset" value={data.onset} />
+          <InfoTile label="Assessment type" value="Structured assessment (clinician-entered)" />
+          <InfoTile label="Source" value="Mixed — clinician-entered wizard" />
+          <InfoTile label="Assessed at" value={formatDate(data.assessedAt)} />
+          <InfoTile label="Assessed by" value={data.assessedBy || "—"} />
         </div>
-        {data.clinicalNotes && <TextBlock label="Clinical notes" value={data.clinicalNotes} />}
-        {notes && <TextBlock label="Provider notes" value={notes} />}
+      </ReportSection>
+      <ReportSection id="patient-reported" title={SECTION_PATIENT_REPORTED_SUMMARY} defaultOpen icon={DOC_ICON}>
+        <p className="mb-4 text-xs text-white/40">
+          Values below are clinician-entered during structured assessment. Labelled as patient-reported where they reflect patient history.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <InfoTile label={patientReportedLabel("Body region")} value={data.bodyRegion} />
+          <InfoTile label={patientReportedLabel("Pain at rest")} value={`${data.painAtRest}/10`} accent="text-rose-300" />
+          <InfoTile label={patientReportedLabel("Pain on movement")} value={`${data.painOnMovement}/10`} accent="text-rose-300" />
+          <InfoTile label={patientReportedLabel("Pain location")} value={data.painLocation || "—"} />
+          <InfoTile label={patientReportedLabel("Onset")} value={data.onset} />
+          <InfoTile label="Rehabilitation phase (clinician-entered)" value={data.rehabilitationPhase} />
+        </div>
+      </ReportSection>
+      <ReportSection id="clinical-findings" title={SECTION_CLINICAL_FINDINGS} defaultOpen icon={DOC_ICON}>
+        {data.clinicalNotes && (
+          <TextBlock label={therapistEnteredLabel("Clinical notes")} value={data.clinicalNotes} />
+        )}
+        {notes && <TextBlock label={therapistEnteredLabel("Provider notes")} value={notes} />}
+        {data.gaitObservations && (
+          <TextBlock label={therapistEnteredLabel("Gait observations")} value={data.gaitObservations} />
+        )}
+        {data.posturalFindings && (
+          <TextBlock label={therapistEnteredLabel("Postural findings")} value={data.posturalFindings} />
+        )}
+        {data.rehabilitationGoals?.length > 0 && (
+          <TextBlock
+            label={therapistEnteredLabel("Rehabilitation goals")}
+            value={data.rehabilitationGoals.join(", ")}
+          />
+        )}
+        {data.aggravatingFactors?.length > 0 && (
+          <TextBlock
+            label={patientReportedLabel("Aggravating factors")}
+            value={data.aggravatingFactors.join(", ")}
+          />
+        )}
+      </ReportSection>
+      <ReportSection id="safety" title={SECTION_SAFETY_INDICATORS} icon={DOC_ICON}>
+        <p className="text-sm text-white/70">{SAFETY_NONE_DOCUMENTED}</p>
       </ReportSection>
       {data.rom?.measurements?.length > 0 && (
-        <ReportSection id="objective" title="Range of Motion" defaultOpen icon={DOC_ICON}>
+        <ReportSection id="objective" title="Range of Motion (clinician-entered)" defaultOpen icon={DOC_ICON}>
           <div className="space-y-2">
             {data.rom.measurements.map((m) => (
               <div key={m.label} className="flex justify-between border-b border-white/8 py-2 text-sm">
@@ -381,16 +438,82 @@ function ReportSection({
   );
 }
 
+function ClinicalDisclaimerBlock({ className = "" }: { className?: string }) {
+  return (
+    <div
+      className={`flex items-start gap-3 rounded-[7px] border border-amber-400/20 bg-amber-400/[0.07] px-4 py-3 ${className}`}
+    >
+      <svg className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+      </svg>
+      <p className="text-xs leading-5 text-amber-200/90">{CLINICAL_DISCLAIMER_FULL}</p>
+    </div>
+  );
+}
+
+function ReportScreenHeader({
+  patientName,
+  displayDate,
+  assessmentTypeLabel,
+  sourceLabel,
+  languageLabel,
+  hasRiskFlags,
+}: {
+  patientName: string;
+  displayDate: string;
+  assessmentTypeLabel: string;
+  sourceLabel: string;
+  languageLabel?: string | null;
+  hasRiskFlags?: boolean;
+}) {
+  return (
+    <section className="screen-only border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.07),transparent_38%),linear-gradient(135deg,#071a2f_0%,#0d1f3c_55%,#0f1f45_100%)]">
+      <div className="mx-auto max-w-4xl px-6 py-10">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{CLINICAL_REPORT_TITLE}</p>
+        <p className="mt-1 text-xs text-white/50">{CLINICAL_REPORT_SUBTITLE}</p>
+        <p className="mt-2 text-xs text-white/45">{CLINICAL_REPORT_INTRO}</p>
+        <h1 className="mt-4 text-3xl font-bold text-white">{patientName}</h1>
+        <p className="mt-1.5 text-sm text-white/55">Assessment date: {formatDate(displayDate)}</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <span className="rounded-full border border-white/15 bg-white/[0.06] px-3 py-0.5 text-[11px] font-semibold text-white/50">
+            {assessmentTypeLabel}
+          </span>
+          <span className="rounded-full border border-white/15 bg-white/[0.06] px-3 py-0.5 text-[11px] font-semibold text-white/50">
+            Source: {sourceLabel}
+          </span>
+          {languageLabel ? (
+            <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-0.5 text-[11px] font-semibold text-amber-200">
+              Language: {languageLabel}
+            </span>
+          ) : null}
+          {hasRiskFlags ? (
+            <span className="rounded-full border border-rose-400/30 bg-rose-400/15 px-3 py-0.5 text-[11px] font-semibold text-rose-300">
+              Clinician review required
+            </span>
+          ) : null}
+        </div>
+        <div className="mt-5">
+          <ClinicalDisclaimerBlock />
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function RasqPrintHeader({
   patientName,
   patientId,
   displayDate,
   assessmentId,
+  assessmentTypeLabel = "General MSK assessment",
+  sourceLabel = "Mixed",
 }: {
   patientName: string;
   patientId: string;
   displayDate: string;
   assessmentId?: string;
+  assessmentTypeLabel?: string;
+  sourceLabel?: string;
 }) {
   return (
     <header className="print-only print-report-header">
@@ -402,17 +525,21 @@ function RasqPrintHeader({
         </svg>
         <div>
           <p className="text-base font-bold text-black">RASQ</p>
-          <p className="text-[11px] text-gray-600">Rehabilitation Assessment System</p>
+          <p className="text-[11px] text-gray-600">{CLINICAL_REPORT_SUBTITLE}</p>
         </div>
       </div>
-      <h1 className="mt-4 text-xl font-bold text-black">Clinical Assessment Report</h1>
-      <p className="mt-2 text-sm font-semibold text-black">{patientName}</p>
+      <h1 className="mt-4 text-xl font-bold text-black">{CLINICAL_REPORT_TITLE}</h1>
+      <p className="mt-1 text-xs text-gray-600">{CLINICAL_REPORT_INTRO}</p>
+      <p className="mt-3 text-sm font-semibold text-black">{patientName}</p>
       <p className="mt-1 text-xs text-gray-600">
         {formatDate(displayDate)} · Patient ID {patientId}
         {assessmentId ? ` · Ref ${assessmentId.slice(0, 8)}` : ""}
       </p>
+      <p className="mt-2 text-xs text-gray-700">
+        Assessment type: {assessmentTypeLabel} · Source: {sourceLabel}
+      </p>
       <p className="mt-3 rounded border border-gray-300 bg-gray-50 px-3 py-2 text-[11px] leading-relaxed text-gray-700">
-        {DISCLAIMER}
+        {CLINICAL_DISCLAIMER_FULL}
       </p>
     </header>
   );
@@ -421,22 +548,25 @@ function RasqPrintHeader({
 function PatientSubmittedPrintSection({ draft }: { draft: GeneralAssessmentDraft }) {
   return (
     <ReportSection
-      id="patient-submitted"
-      title="Patient-Submitted Assessment"
+      id="patient-portal-answers"
+      title={SECTION_PATIENT_REPORTED_SUMMARY}
       defaultOpen
       hideWhenEmptyPrint
       hasPrintContent={hasPatientSubmittedContent(draft)}
       icon={DOC_ICON}
     >
+      <p className="mb-3 text-xs text-white/40 print:text-gray-600">
+        Patient-reported information only. Not objective examination findings.
+      </p>
       <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-1">
-        <TextBlock label="Chief complaint" value={draft.subjective.chiefComplaint} />
-        <TextBlock label="Pain score (NPRS)" value={draft.subjective.nprs} />
-        <TextBlock label="Pain location" value={draft.subjective.painLocation} />
-        <TextBlock label="Aggravating factors" value={draft.subjective.aggravating} />
-        <TextBlock label="Easing factors" value={draft.subjective.easing} />
-        <TextBlock label="Functional limitations" value={draft.subjective.functionalLimitations} />
-        <TextBlock label="Patient goals" value={draft.subjective.goals} />
-        <TextBlock label="Red flags reported" value={draft.subjective.redFlags} />
+        <TextBlock label={patientReportedLabel("Main complaint")} value={draft.subjective.chiefComplaint} />
+        <TextBlock label={patientReportedLabel("Pain score (NPRS)")} value={draft.subjective.nprs} />
+        <TextBlock label={patientReportedLabel("Pain location")} value={draft.subjective.painLocation} />
+        <TextBlock label={patientReportedLabel("Aggravating factors")} value={draft.subjective.aggravating} />
+        <TextBlock label={patientReportedLabel("Easing factors")} value={draft.subjective.easing} />
+        <TextBlock label={patientReportedLabel("Functional limitations")} value={draft.subjective.functionalLimitations} />
+        <TextBlock label={patientReportedLabel("Goals")} value={draft.subjective.goals} />
+        <TextBlock label={patientReportedLabel("Red flags reported")} value={draft.subjective.redFlags} />
       </div>
     </ReportSection>
   );
@@ -444,42 +574,51 @@ function PatientSubmittedPrintSection({ draft }: { draft: GeneralAssessmentDraft
 
 // ── Section 4: Risk Flags (elevated layout, outside wrapper) ───────────────────
 
-function RiskFlagsAlert({ draft }: { draft: GeneralAssessmentDraft }) {
+function SafetyIndicatorsSection({ draft }: { draft: GeneralAssessmentDraft }) {
   const hasFlags = hasRiskData(draft);
-  if (!hasFlags) return null;
 
   return (
-    <div className="rounded-[10px] border border-rose-400/30 bg-rose-400/[0.07] p-6">
-      <div className="mb-5 flex items-center gap-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] border border-rose-400/30 bg-rose-400/15 text-rose-300">
-          <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-          </svg>
-        </div>
-        <div>
-          <h2 className="text-base font-bold text-rose-200">Risk Flags — Therapist Review Required</h2>
-          <p className="mt-0.5 text-xs text-rose-300/70">Review all flagged items before proceeding with treatment assignment.</p>
-        </div>
-      </div>
+    <ReportSection
+      id="safety"
+      title={SECTION_SAFETY_INDICATORS}
+      defaultOpen={hasFlags}
+      accent={hasFlags ? "border-rose-400/30 bg-rose-400/10 text-rose-300" : "border-lime-300/25 bg-lime-400/10 text-lime-300"}
+      icon={DOC_ICON}
+    >
+      {hasFlags ? (
+        <>
+          <p className="mb-4 text-sm font-semibold text-rose-200">{SAFETY_REVIEW_REQUIRED}</p>
+          <div className="space-y-3">
+            {draft.subjective.redFlags.trim() && (
+              <div className="rounded-[8px] border border-rose-400/25 bg-rose-400/10 p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-rose-300/80">
+                  {patientReportedLabel("Red flags reported")}
+                </p>
+                <p className="text-sm leading-6 text-white/85 whitespace-pre-wrap">{draft.subjective.redFlags}</p>
+              </div>
+            )}
+            {draft.ai.safetyNotes.trim() && (
+              <div className="rounded-[8px] border border-amber-400/25 bg-amber-400/10 p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-amber-300/80">
+                  {therapistEnteredLabel("Safety notes (draft for review)")}
+                </p>
+                <p className="text-sm leading-6 text-white/85 whitespace-pre-wrap">{draft.ai.safetyNotes}</p>
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <p className="text-sm text-white/70">{SAFETY_NONE_DOCUMENTED}</p>
+      )}
+    </ReportSection>
+  );
+}
 
-      <div className="space-y-3">
-        {draft.subjective.redFlags.trim() && (
-          <div className="rounded-[8px] border border-rose-400/25 bg-rose-400/10 p-4">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-rose-300/80">
-              Red flags (clinician-documented)
-            </p>
-            <p className="text-sm leading-6 text-white/85 whitespace-pre-wrap">{draft.subjective.redFlags}</p>
-          </div>
-        )}
-        {draft.ai.safetyNotes.trim() && (
-          <div className="rounded-[8px] border border-amber-400/25 bg-amber-400/10 p-4">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-amber-300/80">
-              AI safety notes (must be therapist-verified)
-            </p>
-            <p className="text-sm leading-6 text-white/85 whitespace-pre-wrap">{draft.ai.safetyNotes}</p>
-          </div>
-        )}
-      </div>
+function RiskFlagsAlert({ draft }: { draft: GeneralAssessmentDraft }) {
+  if (!hasRiskData(draft)) return null;
+  return (
+    <div id="risk-flags" className="screen-only">
+      <SafetyIndicatorsSection draft={draft} />
     </div>
   );
 }
@@ -502,7 +641,7 @@ function ProgramRecommendationSection({
   return (
     <ReportSection
       id="programs"
-      title="Treatment Recommendations"
+      title={SECTION_SUGGESTED_DIRECTION}
       defaultOpen
       accent="border-violet-300/25 bg-violet-400/10 text-violet-300"
       icon={
@@ -511,15 +650,12 @@ function ProgramRecommendationSection({
         </svg>
       }
     >
+      <p className="mb-4 text-xs leading-relaxed text-white/50">{SUGGESTED_DIRECTION_INTRO}</p>
       {!isMatched && (
-        <p className="mb-4 text-xs text-white/40 italic">
-          No specific program matched automatically. Showing all available programs — select based on clinical assessment.
-        </p>
+        <p className="mb-4 text-xs text-white/40 italic">{SUGGESTED_DIRECTION_NO_MATCH}</p>
       )}
       {isMatched && (
-        <p className="mb-4 text-xs text-cyan-300/70">
-          Matched from clinical impression and diagnosis text.
-        </p>
+        <p className="mb-4 text-xs text-cyan-300/70">{SUGGESTED_DIRECTION_MATCH_NOTE}</p>
       )}
 
       <div className="space-y-4">
@@ -528,13 +664,13 @@ function ProgramRecommendationSection({
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
                 <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40">
-                  {prog.category}
+                  Program option · {prog.category}
                 </span>
                 <h3 className="mt-0.5 text-sm font-bold text-white">{prog.name}</h3>
               </div>
               {isMatched && (
                 <span className="shrink-0 rounded-full border border-violet-300/25 bg-violet-400/10 px-2.5 py-0.5 text-[10px] font-semibold text-violet-300">
-                  Recommended
+                  {BADGE_FOR_THERAPIST_REVIEW}
                 </span>
               )}
             </div>
@@ -583,8 +719,13 @@ function ReportNextStepsFooter({
   return (
     <section className="screen-only overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
       <h2 className="text-base font-bold text-white">Next steps</h2>
-      <p className="mt-1 text-sm text-white/45">
-        Review this report, then assign or update the treatment plan. All clinical decisions remain with you.
+      <ul className="mt-3 list-inside list-disc space-y-1 text-sm text-white/55">
+        {REPORT_NEXT_STEPS.map((step) => (
+          <li key={step}>{step}</li>
+        ))}
+      </ul>
+      <p className="mt-4 text-sm text-white/45">
+        Select or adapt a rehabilitation plan after reviewing this report. All clinical decisions remain with the treating physiotherapist.
       </p>
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <Link
@@ -625,7 +766,7 @@ function AssignPlanSection({
   return (
     <ReportSection
       id="assign"
-      title="Assign Treatment Plan"
+      title="Rehabilitation Plan Assignment"
       defaultOpen
       screenOnly
       accent="border-cyan-300/25 bg-cyan-400/10 text-cyan-300"
@@ -1046,29 +1187,42 @@ export function AssessmentReportClient() {
             totalCount={translationExport.totalCount}
           />
         ) : null}
-        <section className="screen-only border-b border-white/10 bg-[#0F1825] px-6 py-8">
-          <div className="mx-auto max-w-4xl">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
-              Remote Questionnaire Assessment
-            </p>
-            <h1 className="mt-1 text-2xl font-bold text-white">
-              {patient?.full_name ?? "Patient"}
-            </h1>
-            <p className="mt-1 text-sm text-white/50">
-              Submitted {formatDate(reportDate)}
-            </p>
-          </div>
-        </section>
+        <ReportScreenHeader
+          patientName={patient?.full_name ?? "Patient"}
+          displayDate={reportDate}
+          assessmentTypeLabel="Remote questionnaire"
+          sourceLabel="Patient-reported"
+          languageLabel={patientAnsweredInArabic ? "Arabic" : "English"}
+          hasRiskFlags={hasRedFlag}
+        />
         <div className="screen-only print-report-body mx-auto max-w-4xl px-6 py-8 space-y-6">
-          <section className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-            {hasRedFlag && (
-              <div className="rounded-[7px] border border-amber-300/25 bg-amber-400/10 px-4 py-3">
-                <p className="text-sm font-semibold text-amber-200">
-                  Patient reported a possible red flag — review before proceeding.
-                </p>
-              </div>
+          <ReportSection id="overview" title={SECTION_OVERVIEW} defaultOpen icon={DOC_ICON}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <InfoTile label="Patient reference" value={patient?.full_name ?? `#${patientId}`} />
+              <InfoTile label="Assessment type" value="Remote questionnaire" />
+              <InfoTile label="Assessment date" value={formatDate(reportDate)} />
+              <InfoTile label="Source" value="Patient-reported" />
+              {patientAnsweredInArabic && <InfoTile label="Language" value="Arabic" />}
+            </div>
+          </ReportSection>
+          <ReportSection
+            id="safety"
+            title={SECTION_SAFETY_INDICATORS}
+            defaultOpen={hasRedFlag}
+            icon={DOC_ICON}
+            accent={hasRedFlag ? "border-rose-400/30 bg-rose-400/10 text-rose-300" : "border-lime-300/25 bg-lime-400/10 text-lime-300"}
+          >
+            {hasRedFlag ? (
+              <>
+                <p className="text-sm font-semibold text-rose-200">{RED_FLAG_PATIENT_REPORTED}</p>
+                <p className="mt-2 text-sm text-rose-200/80">{SAFETY_REVIEW_REQUIRED}</p>
+              </>
+            ) : (
+              <p className="text-sm text-white/70">{SAFETY_NONE_DOCUMENTED}</p>
             )}
-            <div className={hasRedFlag ? "mt-4" : undefined}>
+          </ReportSection>
+          <section className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+            <div>
               <PatientSubmittedAnswersReview
                 patientDraft={remoteQuestionnaireDraft}
                 includedSections={remoteIncludedSections}
@@ -1081,14 +1235,14 @@ export function AssessmentReportClient() {
           </section>
           {serverNotes?.trim() ? (
             <section className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <h2 className="text-base font-bold text-white">Clinician notes</h2>
+              <h2 className="text-base font-bold text-white">Therapist-entered clinical note</h2>
               <p className="mt-3 text-sm leading-relaxed text-white/80 whitespace-pre-wrap">
                 {serverNotes.trim()}
               </p>
             </section>
           ) : null}
           <ReportNextStepsFooter patientId={patientId} existingPlan={existingPlan} />
-          <p className="text-xs text-white/30">{DISCLAIMER}</p>
+          <ClinicalDisclaimerBlock />
         </div>
       </main>
     );
@@ -1102,6 +1256,8 @@ export function AssessmentReportClient() {
           patientId={patientId}
           displayDate={reportDate}
           assessmentId={assessmentId || undefined}
+          assessmentTypeLabel="Structured assessment"
+          sourceLabel="Mixed — clinician-entered"
         />
         <header className="screen-only sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220]">
           <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
@@ -1120,22 +1276,16 @@ export function AssessmentReportClient() {
             </div>
           </div>
         </header>
-        <section className="screen-only border-b border-white/10 bg-[#0F1825] px-6 py-8">
-          <div className="mx-auto max-w-4xl">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">
-              Clinical Assessment Report
-            </p>
-            <h1 className="mt-1 text-2xl font-bold text-white">
-              {patient?.full_name ?? "Patient"}
-            </h1>
-            <p className="mt-1 text-sm text-white/50">
-              Submitted {formatDate(reportDate)}
-            </p>
-          </div>
-        </section>
+        <ReportScreenHeader
+          patientName={patient?.full_name ?? "Patient"}
+          displayDate={reportDate}
+          assessmentTypeLabel="Structured assessment"
+          sourceLabel="Mixed — clinician-entered"
+        />
         <div className="print-report-body mx-auto max-w-4xl px-6 py-8 space-y-6">
         <StructuredAssessmentReport data={structuredData} notes={serverNotes} />
         <ReportNextStepsFooter patientId={patientId} existingPlan={existingPlan} />
+        <ClinicalDisclaimerBlock />
         </div>
       </main>
     );
@@ -1184,6 +1334,8 @@ export function AssessmentReportClient() {
         patientId={patientId}
         displayDate={displayDate}
         assessmentId={assessmentId || undefined}
+        assessmentTypeLabel="General MSK assessment"
+        sourceLabel={patientAnsweredInArabic ? "Mixed" : "Clinician-entered / patient-reported"}
       />
 
       {/* ── Sticky top bar ── */}
@@ -1228,65 +1380,37 @@ export function AssessmentReportClient() {
         </div>
       </header>
 
-      {/* ── Report header (screen) ── */}
-      <section className="screen-only border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.07),transparent_38%),linear-gradient(135deg,#071a2f_0%,#0d1f3c_55%,#0f1f45_100%)]">
-        <div className="mx-auto max-w-4xl px-6 py-10">
-          <div className="mb-2 flex flex-wrap items-center gap-2">
-            <span className="rounded-full border border-white/15 bg-white/[0.06] px-3 py-0.5 text-[11px] font-semibold text-white/50 print:border-gray-300 print:bg-gray-100 print:text-gray-700">
-              Clinical Assessment Report
-            </span>
-            {hasFlags && (
-              <span className="rounded-full border border-rose-400/30 bg-rose-400/15 px-3 py-0.5 text-[11px] font-semibold text-rose-300">
-                ⚠ Risk Flags Present
-              </span>
-            )}
-            {patientAnsweredInArabic && (
-              <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-0.5 text-[11px] font-semibold text-amber-200">
-                Patient answered in Arabic
-              </span>
-            )}
-          </div>
-
-          <h1 className="text-3xl font-bold text-white">
-            {patient?.full_name ?? `Patient #${patientId}`}
-          </h1>
-          <p className="mt-1.5 text-sm text-white/55 print:text-gray-600">
-            {formatDate(displayDate)}
-            {therapistDecisionLabel && (
-              <> &nbsp;·&nbsp; <span className={therapistDecisionLabel.cls}>{therapistDecisionLabel.label}</span></>
-            )}
-          </p>
-
-          {/* Global disclaimer */}
-          <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-400/20 bg-amber-400/[0.07] px-4 py-3">
-            <svg className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-            </svg>
-            <p className="text-xs leading-5 text-amber-200/90">{DISCLAIMER}</p>
-          </div>
-        </div>
-      </section>
+      <ReportScreenHeader
+        patientName={patient?.full_name ?? `Patient #${patientId}`}
+        displayDate={displayDate}
+        assessmentTypeLabel="General MSK assessment"
+        sourceLabel={patientAnsweredInArabic ? "Mixed" : "Clinician-entered / patient-reported"}
+        languageLabel={patientAnsweredInArabic ? "Arabic (patient-reported sections)" : "English"}
+        hasRiskFlags={hasFlags}
+      />
 
       {/* ── Section jump nav ── */}
       <div className="screen-only sticky top-[53px] z-20 border-b border-white/[0.06] bg-[#071a2f]/90 backdrop-blur-md">
         <div className="mx-auto max-w-4xl overflow-x-auto px-6 py-2">
           <div className="flex min-w-max gap-1">
             {[
-              hasFlags ? { id: "risk-flags", label: "⚠ Risk Flags" } : null,
-              { id: "summary", label: "Summary" },
+              { id: "overview", label: "Overview" },
+              { id: "patient-reported", label: "Patient-reported" },
+              hasFlags ? { id: "safety", label: "Safety" } : null,
+              { id: "clinical-findings", label: "Clinical findings" },
               { id: "objective", label: "Objective" },
               { id: "functional", label: "Functional" },
               { id: "outcomes", label: "Outcomes" },
-              { id: "ai", label: "Clinical Interpretation" },
-              { id: "soap", label: "SOAP Documentation" },
-              { id: "programs", label: "Treatment Recommendations" },
-              { id: "assign", label: "Treatment Plan" },
+              { id: "ai", label: "Therapist notes" },
+              { id: "soap", label: "SOAP" },
+              { id: "programs", label: "Rehab direction" },
+              { id: "assign", label: "Plan assignment" },
             ].filter(Boolean).map((item) => item && (
               <a
                 key={item.id}
                 href={`#${item.id}`}
                 className={`shrink-0 rounded-xl px-3 py-1.5 text-[11px] font-semibold transition ${
-                  item.id === "risk-flags"
+                  item.id === "safety"
                     ? "text-rose-300 hover:bg-rose-400/10"
                     : "text-white/50 hover:bg-white/8 hover:text-white"
                 }`}
@@ -1301,55 +1425,79 @@ export function AssessmentReportClient() {
       {/* ── Report body ── */}
       <div className="print-report-body mx-auto max-w-4xl space-y-5 px-6 py-8">
 
-        {/* Risk flags — screen review only */}
-        {hasFlags && (
-          <div id="risk-flags" className="screen-only">
-            <RiskFlagsAlert draft={draft} />
-          </div>
-        )}
-
-        {/* ── Section 1: Assessment Summary ── */}
         <ReportSection
-          id="summary"
-          title="Assessment Summary"
+          id="overview"
+          title={SECTION_OVERVIEW}
           defaultOpen
+          icon={DOC_ICON}
           accent="border-cyan-300/25 bg-cyan-400/10 text-cyan-300"
-          icon={
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0zm1.294 6.336a6.721 6.721 0 01-3.17.789 6.721 6.721 0 01-3.168-.789 3.376 3.376 0 016.338 0z" />
-            </svg>
-          }
         >
-          <div className="mb-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <InfoTile label="Patient" value={patient?.full_name ?? `#${patientId}`} />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <InfoTile label="Patient reference" value={patient?.full_name ?? `#${patientId}`} />
+            <InfoTile label="Assessment type" value="General MSK assessment" />
             <InfoTile label="Assessment date" value={formatDate(draft.updatedAt)} />
             <InfoTile
-              label="Therapist decision"
-              value={therapistDecisionLabel?.label ?? "Pending"}
+              label="Source"
+              value={patientAnsweredInArabic ? "Mixed" : "Clinician-entered / patient-reported"}
+            />
+            {patientAnsweredInArabic && (
+              <InfoTile label="Language" value="Arabic (patient-reported sections)" />
+            )}
+            <InfoTile
+              label="Therapist decision status"
+              value={therapistDecisionLabel?.label ?? "Pending clinician review"}
               accent={therapistDecisionLabel?.cls ?? "text-white/40"}
             />
-            <InfoTile label="NPRS pain score" value={draft.subjective.nprs || "Not recorded"} />
-            <InfoTile label="Pain location" value={draft.subjective.painLocation || "Not recorded"} />
-            <InfoTile
-              label="Final diagnosis"
-              value={draft.therapist.finalDiagnosis || "Not recorded"}
-            />
           </div>
+        </ReportSection>
 
+        <ReportSection
+          id="patient-reported"
+          title={SECTION_PATIENT_REPORTED_SUMMARY}
+          defaultOpen
+          icon={DOC_ICON}
+          accent="border-amber-300/25 bg-amber-400/10 text-amber-200"
+        >
+          <p className="mb-4 text-xs text-white/45">{PATIENT_REPORTED_INTRO}</p>
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-1">
-            <TextBlock label="Chief complaint" value={draft.subjective.chiefComplaint} />
-            <TextBlock label="Aggravating factors" value={draft.subjective.aggravating} />
-            <TextBlock label="Easing factors" value={draft.subjective.easing} />
-            <TextBlock label="Functional limitations" value={draft.subjective.functionalLimitations} />
-            <TextBlock label="Patient goals" value={draft.subjective.goals} />
-            <TextBlock label="Treatment priorities" value={draft.therapist.treatmentPriorities} />
+            <TextBlock label={patientReportedLabel("Chief complaint")} value={draft.subjective.chiefComplaint} />
+            <TextBlock label={patientReportedLabel("Pain location / body region")} value={draft.subjective.painLocation} />
+            <TextBlock label={patientReportedLabel("NPRS pain score")} value={draft.subjective.nprs} />
+            <TextBlock label={patientReportedLabel("Aggravating factors")} value={draft.subjective.aggravating} />
+            <TextBlock label={patientReportedLabel("Easing factors")} value={draft.subjective.easing} />
+            <TextBlock label={patientReportedLabel("Functional limitations")} value={draft.subjective.functionalLimitations} />
+            <TextBlock label={patientReportedLabel("Patient goals")} value={draft.subjective.goals} />
             {!draft.subjective.chiefComplaint && !draft.subjective.nprs && (
-              <p className="py-3 text-sm text-white/30 italic">No subjective data recorded.</p>
+              <p className="py-3 text-sm text-white/30 italic">No patient-reported subjective data recorded.</p>
             )}
           </div>
         </ReportSection>
 
         <PatientSubmittedPrintSection draft={draft} />
+
+        <div id="safety">
+          <SafetyIndicatorsSection draft={draft} />
+        </div>
+
+        <ReportSection
+          id="clinical-findings"
+          title={SECTION_CLINICAL_FINDINGS}
+          defaultOpen
+          icon={DOC_ICON}
+          accent="border-violet-300/25 bg-violet-400/10 text-violet-300"
+        >
+          <TextBlock
+            label={LABEL_THERAPIST_CLINICAL_IMPRESSION}
+            value={draft.therapist.finalDiagnosis}
+          />
+          {draft.therapist.finalDiagnosis?.trim() && (
+            <p className="mb-4 text-xs text-white/40 italic">{LEGACY_IMPRESSION_NOTE}</p>
+          )}
+          <TextBlock label="Therapist-entered treatment priorities" value={draft.therapist.treatmentPriorities} />
+          {!draft.therapist.finalDiagnosis?.trim() && !draft.therapist.treatmentPriorities?.trim() && (
+            <p className="text-sm text-white/30 italic">No therapist-entered clinical impression recorded.</p>
+          )}
+        </ReportSection>
 
         {/* ── Section 2: Objective Findings (screen only) ── */}
         <ReportSection
@@ -1426,8 +1574,8 @@ export function AssessmentReportClient() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                 </svg>
                 <p className="text-xs leading-5 text-amber-200/90">
-                  Special tests are clinician-entered findings and are not AI-generated diagnoses. Results inform
-                  clinical reasoning and treatment recommendation only.
+                  Special tests are therapist-entered clinical findings. Results support clinician review and do not
+                  constitute a medical diagnosis or treatment prescription.
                 </p>
               </div>
 
@@ -1549,29 +1697,6 @@ export function AssessmentReportClient() {
           </div>
         </ReportSection>
 
-        {/* ── Section 4 (elevated): Risk Flags — shown inline if no flags present ── */}
-        {!hasFlags && (
-          <ReportSection
-            id="outcomes-risk"
-            title="Risk Flags"
-            defaultOpen={false}
-            screenOnly
-            accent="border-lime-300/25 bg-lime-400/10 text-lime-300"
-            icon={
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-              </svg>
-            }
-          >
-            <div className="flex items-center gap-3 rounded-[7px] border border-lime-300/20 bg-lime-400/[0.06] px-5 py-4">
-              <svg className="h-5 w-5 shrink-0 text-lime-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-              </svg>
-              <p className="text-sm text-lime-200/80">No red flags or safety concerns documented in this assessment.</p>
-            </div>
-          </ReportSection>
-        )}
-
         {/* ── Section 3b: Outcome Measures (screen only) ── */}
         <ReportSection
           id="outcomes"
@@ -1623,10 +1748,10 @@ export function AssessmentReportClient() {
           </div>
         </ReportSection>
 
-        {/* ── Section 5: Clinical Interpretation ── */}
+        {/* ── Therapist-entered draft notes (legacy AI fields) ── */}
         <ReportSection
           id="ai"
-          title="Clinical Interpretation"
+          title="Therapist-Entered Notes (Draft for Review)"
           defaultOpen
           hideWhenEmptyPrint
           hasPrintContent={hasClinicalInterpretation(draft)}
@@ -1637,16 +1762,16 @@ export function AssessmentReportClient() {
             </svg>
           }
         >
-          <div className="mb-5 rounded-[7px] border border-amber-400/20 bg-amber-400/[0.07] px-4 py-3 screen-only">
-            <p className="text-xs leading-5 text-amber-200/90">{DISCLAIMER}</p>
-          </div>
+          <p className="mb-4 text-xs text-white/45">
+            Draft documentation for clinician review. Not generated by RASQ as a medical diagnosis.
+          </p>
 
           <div className="space-y-3">
             {[
-              { label: "Clinical impression suggestion", value: draft.ai.clinicalImpression },
-              { label: "Supporting findings", value: draft.ai.supportingFindings },
-              { label: "Missing tests / gaps", value: draft.ai.missingTests },
-              { label: "Confidence level", value: draft.ai.confidenceLevel },
+              { label: therapistEnteredLabel("Clinical impression (draft)"), value: draft.ai.clinicalImpression },
+              { label: therapistEnteredLabel("Supporting findings"), value: draft.ai.supportingFindings },
+              { label: therapistEnteredLabel("Missing tests / gaps"), value: draft.ai.missingTests },
+              { label: therapistEnteredLabel("Confidence level (draft)"), value: draft.ai.confidenceLevel },
             ].map(({ label, value }) => (
               <div key={label} className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] p-4">
                 <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-amber-300/60">{label}</p>
@@ -1684,22 +1809,17 @@ export function AssessmentReportClient() {
             />
           ) : (
             <div className="mb-5 grid gap-3 sm:grid-cols-2">
-              <SoapCard label="S — Subjective" value={draft.soap.subjective} />
-              <SoapCard label="O — Objective" value={draft.soap.objective} />
-              <SoapCard label="A — Assessment" value={draft.soap.assessment} />
-              <SoapCard label="P — Plan" value={draft.soap.plan} />
+              <SoapCard label="S — Subjective: Patient-reported and clinician-entered information" value={draft.soap.subjective} />
+              <SoapCard label="O — Objective: Clinician examination required" value={draft.soap.objective} />
+              <SoapCard label="A — Clinical impression: Clinician to complete" value={draft.soap.assessment} />
+              <SoapCard label="P — Plan: Clinician decision" value={draft.soap.plan} />
             </div>
           )}
-
-          {(draft.therapist.finalDiagnosis || draft.therapist.treatmentPriorities) && (
-            <div className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-5 py-1">
-              <TextBlock label="Final diagnosis" value={draft.therapist.finalDiagnosis} />
-              <TextBlock label="Treatment priorities" value={draft.therapist.treatmentPriorities} />
-            </div>
+          {!hasSoapContent(draft) && (
+            <p className="text-sm text-white/30 italic">Requires clinician completion.</p>
           )}
         </ReportSection>
 
-        {/* ── Section 7: Recommended Rehab Program ── */}
         <ProgramRecommendationSection
           draft={draft}
           patientId={patientId}
@@ -1709,11 +1829,14 @@ export function AssessmentReportClient() {
         {/* ── Section 8: Assign Treatment Plan ── */}
         <AssignPlanSection patientId={patientId} existingPlan={existingPlan} />
 
-        {/* Footer */}
-        <p className="screen-only pb-8 text-center text-xs text-white/20">
-          {serverBacked ? "Server-backed assessment" : "Local draft (not yet finalized)"} · {formatDate(displayDate)} · Patient #{patientId}
-          {" · "}All AI content is decision-support only and requires therapist verification.
-        </p>
+        <ReportNextStepsFooter patientId={patientId} existingPlan={existingPlan} />
+
+        <div className="pb-8 print:block">
+          <ClinicalDisclaimerBlock className="print:border-gray-300 print:bg-gray-50" />
+          <p className="mt-3 text-center text-[10px] text-white/25 print:text-gray-500">
+            {serverBacked ? "Server-backed assessment" : "Local draft (not yet finalized)"} · {formatDate(displayDate)} · Patient #{patientId}
+          </p>
+        </div>
       </div>
     </main>
   );

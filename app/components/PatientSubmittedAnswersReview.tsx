@@ -18,6 +18,7 @@ import {
   AI_TRANSLATION_SETUP_NOTICE,
   isAiTranslationEnabled,
 } from "@/app/lib/ai/ai-features";
+import { patientReportedLabel } from "@/app/lib/reports/clinical-report-copy";
 import {
   useTranslationProgress,
   type FieldTranslationState,
@@ -180,7 +181,7 @@ export function PatientSubmittedAnswersReview({
     <div className={compact ? "space-y-3" : "space-y-4"}>
       {showTranslateHeader ? (
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#1E2D42] pb-3">
-          <p className="text-sm font-bold text-white">Patient-Submitted Assessment</p>
+          <p className="text-sm font-bold text-white">Patient-Reported Summary</p>
           <div className="flex flex-wrap items-center gap-3">
             {!allTranslated && totalCount > 0 ? (
               <p className="text-[10px] text-[#6B7280]">
@@ -204,7 +205,7 @@ export function PatientSubmittedAnswersReview({
           </div>
         </div>
       ) : !compact ? (
-        <p className="text-sm font-bold text-white">Patient-Submitted Assessment</p>
+        <p className="text-sm font-bold text-white">Patient-Reported Summary</p>
       ) : null}
 
       {showSetupNotice && (
@@ -244,7 +245,7 @@ export function PatientSubmittedAnswersReview({
               return (
                 <div key={`${block.section}-${entry.label}`} className="px-3 py-2.5">
                   <dt className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
-                    {entry.label}
+                    {patientReportedLabel(entry.label)}
                   </dt>
                   <dd className="mt-0.5">
                     {useTranslation ? (
