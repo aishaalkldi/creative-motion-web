@@ -47,7 +47,9 @@ import {
 import { SendAssessmentModal } from "./SendAssessmentModal";
 import { SessionScheduleView } from "../../../components/SessionScheduleView";
 import { ClinicalActionCard } from "../../../components/clinician/ClinicalActionCard";
-import type { PatientProgressSummary } from "../../../api/clinician/patient-progress/route";
+import { PatientJourneyTimeline } from "../../../components/clinician/PatientJourneyTimeline";
+import type { PatientProgressSummary, PatientTimelineBundle } from "../../../api/clinician/patient-progress/route";
+import { buildPatientTimeline } from "../../../lib/clinician/patient-timeline";
 import {
   buildRemoteQuestionnaireSummary,
 } from "../../../lib/remote-questionnaire-summary";
@@ -84,6 +86,8 @@ export default function PatientProfilePage() {
   const [adherence, setAdherence] = useState<Adherence | null>(null);
   const [planProgress, setPlanProgress] = useState<PatientProgressSummary | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
+  const [patientPlanRows, setPatientPlanRows] = useState<PlanRow[]>([]);
+  const [timelineBundle, setTimelineBundle] = useState<PatientTimelineBundle | null>(null);
 
   // Remote assessment state
   const [sendModalOpen, setSendModalOpen] = useState(false);
@@ -173,6 +177,7 @@ export default function PatientProfilePage() {
       .then(async (res) => {
         if (!res.ok) return;
         const plans = (await res.json()) as PlanRow[];
+        setPatientPlanRows(plans);
         if (plans.length > 0) {
           const p = plans[0];
           const sd = p.structured_data;
@@ -247,6 +252,7 @@ export default function PatientProfilePage() {
           }
         } else {
           setPlanProgress(null);
+          setPatientPlanRows([]);
         }
       })
       .catch(() => { /* silent — empty state shown */ })
@@ -258,6 +264,18 @@ export default function PatientProfilePage() {
         }
       });
   }, [patient, searchParams, router, id]);
+
+  useEffect(() => {
+    if (!patient) return;
+    fetch(`/api/clinician/patient-progress?patientId=${encodeURIComponent(patient.id)}&timelineOnly=1`)
+      .then(async (res) => {
+        if (!res.ok) return;
+        setTimelineBundle((await res.json()) as PatientTimelineBundle);
+      })
+      .catch(() => {
+        setTimelineBundle(null);
+      });
+  }, [patient?.id]);
 
   useEffect(() => {
     if (!patient) return;
@@ -419,6 +437,44 @@ export default function PatientProfilePage() {
     }
     return null;
   }, [clinicalSummaryRow]);
+
+  const rehabilitationTimelineEvents = useMemo(() => {
+    return buildPatientTimeline({
+      assessments: supabaseAssessmentRows.map((row) => ({
+        id: row.id,
+        created_at: row.created_at,
+        type: row.type,
+        status: row.status,
+      })),
+      plans: patientPlanRows.map((plan) => ({
+        id: plan.id,
+        created_at: plan.created_at,
+        title: plan.title,
+        planTitle: plan.title,
+        programName: plan.structured_data?.programName ?? plan.title,
+        structured_data: plan.structured_data,
+      })),
+      sessionLogs: (timelineBundle?.timelineSessionLogs ?? []).map((log) => ({
+        id: log.id,
+        completed_at: log.completed_at,
+        pain_score: log.pain_score,
+        effort_score: log.effort_score,
+        session_number: log.session_number,
+        notes: log.notes,
+      })),
+      reviewAcknowledgments: (timelineBundle?.timelineReviewAcks ?? []).map((ack) => ({
+        id: ack.id,
+        reviewed_at: ack.reviewed_at,
+        review_note: ack.review_note,
+      })),
+      remoteAssessmentRequests: remoteAssessments.map((req) => ({
+        id: req.id,
+        createdAt: req.createdAt,
+        status: req.status,
+        submittedAt: req.submittedAt,
+      })),
+    });
+  }, [supabaseAssessmentRows, patientPlanRows, timelineBundle, remoteAssessments]);
 
   const clinicalSummaryArabicNotice = useMemo(() => {
     if (!clinicalSummary || !clinicalSummaryRow) return false;
@@ -987,6 +1043,11 @@ export default function PatientProfilePage() {
                     : prev,
                 );
               }}
+            />
+
+            <PatientJourneyTimeline
+              events={rehabilitationTimelineEvents}
+              patientName={patient.full_name}
             />
 
             {/* Patient access link */}

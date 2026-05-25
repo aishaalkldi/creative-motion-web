@@ -4,7 +4,7 @@
  * Latest session completion metrics for clinician patient profile.
  */
 import { createServerClient } from "@supabase/ssr";
-import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { createClient as createAdminClient, type SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
@@ -29,6 +29,24 @@ import {
   type ClinicalReviewAckRow,
 } from "../../../lib/clinical-review";
 
+export type PatientTimelineSessionLog = {
+  id: string;
+  plan_id: string;
+  plan_session_id: string | null;
+  session_number: number | null;
+  effort_score: number | null;
+  pain_score: number | null;
+  notes: string | null;
+  completed_at: string;
+};
+
+export type PatientTimelineReviewAck = {
+  id: string;
+  session_log_id: string | null;
+  reviewed_at: string;
+  review_note: string | null;
+};
+
 export type PatientProgressSummary = {
   planId: string;
   sessionsCompleted: number;
@@ -49,6 +67,88 @@ export type PatientProgressSummary = {
   reviewAcknowledged: boolean;
   reviewedAt: string | null;
 };
+
+export type PatientTimelineBundle = {
+  timelineSessionLogs: PatientTimelineSessionLog[];
+  timelineReviewAcks: PatientTimelineReviewAck[];
+};
+
+async function fetchPatientTimelineBundle(
+  adminClient: SupabaseClient,
+  patientId: string,
+  providerId: string,
+): Promise<PatientTimelineBundle> {
+  const { data: patientLogs } = await adminClient
+    .from("session_logs")
+    .select("id, plan_id, plan_session_id, effort_score, pain_score, notes, completed_at")
+    .eq("patient_id", patientId)
+    .eq("provider_id", providerId)
+    .order("completed_at", { ascending: true })
+    .returns<{
+      id: string;
+      plan_id: string;
+      plan_session_id: string | null;
+      effort_score: number | null;
+      pain_score: number | null;
+      notes: string | null;
+      completed_at: string;
+    }[]>();
+
+  const sessionIds = [
+    ...new Set(
+      (patientLogs ?? [])
+        .map((log) => log.plan_session_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+
+  const sessionNumberById = new Map<string, number>();
+  if (sessionIds.length > 0) {
+    const { data: sessionRows } = await adminClient
+      .from("plan_sessions")
+      .select("id, session_number")
+      .in("id", sessionIds)
+      .returns<{ id: string; session_number: number }[]>();
+
+    (sessionRows ?? []).forEach((row) => {
+      sessionNumberById.set(row.id, row.session_number);
+    });
+  }
+
+  const { data: ackRows } = await adminClient
+    .from("clinical_review_acknowledgments")
+    .select("id, session_log_id, reviewed_at, review_note")
+    .eq("patient_id", patientId)
+    .eq("provider_id", providerId)
+    .order("reviewed_at", { ascending: true })
+    .returns<{
+      id: string;
+      session_log_id: string | null;
+      reviewed_at: string;
+      review_note: string | null;
+    }[]>();
+
+  return {
+    timelineSessionLogs: (patientLogs ?? []).map((log) => ({
+      id: log.id,
+      plan_id: log.plan_id,
+      plan_session_id: log.plan_session_id,
+      session_number: log.plan_session_id
+        ? sessionNumberById.get(log.plan_session_id) ?? null
+        : null,
+      effort_score: log.effort_score,
+      pain_score: log.pain_score,
+      notes: log.notes,
+      completed_at: log.completed_at,
+    })),
+    timelineReviewAcks: (ackRows ?? []).map((row) => ({
+      id: row.id,
+      session_log_id: row.session_log_id,
+      reviewed_at: row.reviewed_at,
+      review_note: row.review_note,
+    })),
+  };
+}
 
 async function buildClients() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -92,6 +192,7 @@ export async function GET(req: NextRequest) {
 
   const patientId = new URL(req.url).searchParams.get("patientId")?.trim() ?? "";
   const planIdParam = new URL(req.url).searchParams.get("planId")?.trim() ?? "";
+  const timelineOnly = new URL(req.url).searchParams.get("timelineOnly") === "1";
 
   if (!patientId) {
     return NextResponse.json({ error: "patientId is required." }, { status: 400 });
@@ -100,6 +201,11 @@ export async function GET(req: NextRequest) {
   const ownership = await validatePatientOwnership(adminClient, patientId, user.id);
   if (!ownership.ok) {
     return NextResponse.json({ error: ownership.message }, { status: ownership.httpStatus });
+  }
+
+  if (timelineOnly) {
+    const timeline = await fetchPatientTimelineBundle(adminClient, patientId, user.id);
+    return NextResponse.json(timeline);
   }
 
   let planId: string;
