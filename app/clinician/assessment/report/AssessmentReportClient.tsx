@@ -71,6 +71,19 @@ import {
   SUGGESTED_DIRECTION_NO_MATCH,
   therapistEnteredLabel,
 } from "@/app/lib/reports/clinical-report-copy";
+import {
+  FOCUS_AREA_LABEL,
+  FOCUS_BADGE_THERAPIST_REVIEW,
+  FOCUS_CATEGORY_LABEL,
+  FOCUS_CONFIRMATION_TEXT,
+  FOCUS_DIRECTION_LABEL,
+  FOCUS_DIRECTION_VALUE,
+  FOCUS_PHASE_LABEL,
+  FOCUS_SECTION_SUBTITLE,
+  FOCUS_SECTION_TITLE,
+} from "@/app/lib/clinical-focus-copy";
+import { deriveClinicalFocusLabels } from "@/app/lib/clinical-focus-labels";
+import { buildGeneralMskPayload } from "@/app/lib/assessment-payload";
 
 // ── Constants & labels ─────────────────────────────────────────────────────────
 
@@ -620,6 +633,65 @@ function RiskFlagsAlert({ draft }: { draft: GeneralAssessmentDraft }) {
     <div id="risk-flags" className="screen-only">
       <SafetyIndicatorsSection draft={draft} />
     </div>
+  );
+}
+
+// ── Assessment focus context (Sprint O) ───────────────────────────────────────
+
+const FOCUS_ICON = (
+  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.745 3.745 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z"
+    />
+  </svg>
+);
+
+function AssessmentFocusContextSection({
+  assessmentType,
+  structuredData,
+}: {
+  assessmentType?: string;
+  structuredData?: unknown;
+}) {
+  const labels = useMemo(
+    () => deriveClinicalFocusLabels(assessmentType, structuredData),
+    [assessmentType, structuredData],
+  );
+
+  const dataSourceNote =
+    labels.dataSource === "patient-reported"
+      ? "Based on patient-reported fields."
+      : labels.dataSource === "clinician-entered"
+        ? "Based on clinician-entered fields."
+        : labels.dataSource === "mixed"
+          ? "Based on patient-reported and clinician-entered fields."
+          : "Based on limited assessment fields.";
+
+  return (
+    <ReportSection
+      id="focus-context"
+      title={FOCUS_SECTION_TITLE}
+      defaultOpen
+      accent="border-cyan-300/25 bg-cyan-400/10 text-cyan-300"
+      icon={FOCUS_ICON}
+    >
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <p className="max-w-2xl text-xs leading-relaxed text-white/50">{FOCUS_SECTION_SUBTITLE}</p>
+        <span className="shrink-0 rounded-full border border-cyan-300/25 bg-cyan-400/10 px-2.5 py-0.5 text-[10px] font-semibold text-cyan-300">
+          {FOCUS_BADGE_THERAPIST_REVIEW}
+        </span>
+      </div>
+      <p className="mb-4 text-[10px] text-white/35">{dataSourceNote}</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <InfoTile label={FOCUS_AREA_LABEL} value={labels.focusArea} />
+        <InfoTile label={FOCUS_CATEGORY_LABEL} value={labels.clinicalCategory} />
+        <InfoTile label={FOCUS_PHASE_LABEL} value={labels.phaseContext} />
+        <InfoTile label={FOCUS_DIRECTION_LABEL} value={FOCUS_DIRECTION_VALUE} />
+      </div>
+      <p className="mt-4 text-xs leading-relaxed text-white/45">{FOCUS_CONFIRMATION_TEXT}</p>
+    </ReportSection>
   );
 }
 
@@ -1241,6 +1313,10 @@ export function AssessmentReportClient() {
               </p>
             </section>
           ) : null}
+          <AssessmentFocusContextSection
+            assessmentType="remote_questionnaire"
+            structuredData={remoteSubmissionMeta}
+          />
           <ReportNextStepsFooter patientId={patientId} existingPlan={existingPlan} />
           <ClinicalDisclaimerBlock />
         </div>
@@ -1284,6 +1360,10 @@ export function AssessmentReportClient() {
         />
         <div className="print-report-body mx-auto max-w-4xl px-6 py-8 space-y-6">
         <StructuredAssessmentReport data={structuredData} notes={serverNotes} />
+        <AssessmentFocusContextSection
+          assessmentType="structured"
+          structuredData={structuredData}
+        />
         <ReportNextStepsFooter patientId={patientId} existingPlan={existingPlan} />
         <ClinicalDisclaimerBlock />
         </div>
@@ -1819,6 +1899,14 @@ export function AssessmentReportClient() {
             <p className="text-sm text-white/30 italic">Requires clinician completion.</p>
           )}
         </ReportSection>
+
+        <AssessmentFocusContextSection
+          assessmentType="general_msk"
+          structuredData={buildGeneralMskPayload(
+            draft,
+            patientAnsweredInArabic ? "ar" : undefined,
+          )}
+        />
 
         <ProgramRecommendationSection
           draft={draft}

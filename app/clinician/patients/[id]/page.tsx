@@ -12,6 +12,15 @@ import type { SavedAssessment } from "../../../lib/mock-clinical-data";
 import type { AssessmentListRow, AssessmentRow } from "../../../api/assessments/route";
 import { pickPreferredAssessment } from "../../../lib/assessment-snapshot";
 import {
+  FOCUS_AREA_LABEL,
+  FOCUS_CATEGORY_LABEL,
+  FOCUS_DIRECTION_LABEL,
+  FOCUS_DIRECTION_VALUE,
+  FOCUS_PROFILE_DISCLAIMER,
+  FOCUS_SECTION_TITLE,
+} from "../../../lib/clinical-focus-copy";
+import { deriveClinicalFocusLabels } from "../../../lib/clinical-focus-labels";
+import {
   extractGeneralDraft,
   extractStructuredData,
   getAssessmentLanguage,
@@ -436,6 +445,14 @@ export default function PatientProfilePage() {
       };
     }
     return null;
+  }, [clinicalSummaryRow]);
+
+  const clinicalFocusLabels = useMemo(() => {
+    if (!clinicalSummaryRow) return null;
+    return deriveClinicalFocusLabels(
+      clinicalSummaryRow.type,
+      clinicalSummaryRow.structured_data,
+    );
   }, [clinicalSummaryRow]);
 
   const rehabilitationTimelineEvents = useMemo(() => {
@@ -945,6 +962,43 @@ export default function PatientProfilePage() {
                         <p className="text-xs leading-relaxed text-amber-100/90">
                           {ARABIC_READABILITY_NOTICE}
                         </p>
+                      </div>
+                    )}
+
+                    {clinicalFocusLabels && (
+                      <div className="mt-4 rounded-[8px] border border-cyan-400/20 bg-cyan-400/5 px-4 py-4">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-300/80">
+                          {FOCUS_SECTION_TITLE}
+                        </p>
+                        <p className="mt-2 text-xs leading-relaxed text-white/45">
+                          {FOCUS_PROFILE_DISCLAIMER}
+                        </p>
+                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                          <div className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+                              {FOCUS_AREA_LABEL}
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-white">
+                              {clinicalFocusLabels.focusArea}
+                            </p>
+                          </div>
+                          <div className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+                              {FOCUS_CATEGORY_LABEL}
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-white">
+                              {clinicalFocusLabels.clinicalCategory}
+                            </p>
+                          </div>
+                          <div className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+                              {FOCUS_DIRECTION_LABEL}
+                            </p>
+                            <p className="mt-1 text-sm font-semibold text-white">
+                              {FOCUS_DIRECTION_VALUE}
+                            </p>
+                          </div>
+                        </div>
                       </div>
                     )}
 
