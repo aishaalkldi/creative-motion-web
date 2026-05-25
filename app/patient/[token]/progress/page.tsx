@@ -6,11 +6,8 @@ import Link from "next/link";
 import type { SessionLogEntry } from "@/app/api/patient/logs/route";
 import { usePatientLanguage, usePatientPlan } from "@/app/components/patient/PatientLanguageProvider";
 import {
-  deriveClinicalAction,
-} from "@/app/lib/clinical-action-engine";
-import {
   formatPortalDate,
-  localizeClinicalActionMessage,
+  getLatestReportedScores,
   progressPageUi,
 } from "@/app/lib/patient-portal-ui";
 import {
@@ -77,17 +74,8 @@ export default function PatientProgressPage() {
 
   const completedSessions = plan.sessions.filter((s) => s.status === "completed").length;
   const totalSessions = plan.sessions.length;
-  const adherence = totalSessions > 0 ? Math.round((completedSessions / totalSessions) * 100) : 0;
 
-  const effortLogs = logs.filter((l) => l.effortScore !== null);
-  const avgEffort =
-    effortLogs.length > 0
-      ? Math.round(
-          effortLogs.reduce((sum, l) => sum + (l.effortScore ?? 0), 0) / effortLogs.length,
-        )
-      : null;
-  const painLogs = logs.filter((l) => l.painScore !== null);
-  const latestPain = painLogs.length > 0 ? painLogs[0].painScore : null;
+  const latestReported = getLatestReportedScores(logs);
 
   const sortedSessions = [...plan.sessions].sort(
     (a, b) => a.sessionNumber - b.sessionNumber,
@@ -114,63 +102,53 @@ export default function PatientProgressPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {[
-          {
-            label: ui.sessionsCompleted,
-            value: `${completedSessions}/${totalSessions}`,
-            sub: ui.inYourPlan,
-          },
-          { label: ui.progress, value: `${adherence}%`, sub: ui.completionRate },
-          { label: ui.adherence, value: `${adherence}%`, sub: ui.completionRate },
-          {
-            label: ui.latestPain,
-            value: latestPain !== null ? `${latestPain}/10` : "—",
-            sub: latestPain !== null ? ui.selfReported : ui.notRecordedYet,
-          },
-          {
-            label: ui.averageEffort,
-            value: avgEffort !== null ? `${avgEffort}/10` : "—",
-            sub: avgEffort !== null ? ui.selfReported : ui.notRecordedYet,
-          },
-        ].map(({ label, value, sub }) => (
-          <div
-            key={label}
-            className="rounded-[10px] border border-[#E2E8E5] bg-white p-4 text-center"
-          >
-            <p
-              className="text-[20px] font-bold text-[#1D9E75]"
-              style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
-            >
-              {value}
-            </p>
-            <p className="mt-0.5 text-[11px] font-semibold text-[#374151]">{label}</p>
-            <p className="text-[10px] text-[#9CA3AF]">{sub}</p>
-          </div>
-        ))}
+      <div
+        className="rounded-[8px] border border-[#E2E8E5] bg-[#F9FAFB] px-3.5 py-2.5"
+        style={{ borderWidth: "0.5px", marginBottom: "16px" }}
+      >
+        <p className={`text-[12px] leading-[1.7] text-[#6B7280] ${arClass}`}>
+          {ui.contextNotice}
+        </p>
       </div>
 
-      {completedSessions < 2 && (
-        <p className="mt-4 text-center text-[12px] italic text-[#6B7280]">{ui.keepGoing}</p>
-      )}
+      <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-4">
+        <p
+          className="text-[20px] font-bold text-[#1D9E75]"
+          style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+        >
+          {completedSessions}/{totalSessions}
+        </p>
+        <p className={`mt-0.5 text-[11px] font-semibold text-[#374151] ${arClass}`}>
+          {ui.sessionsCompleted}
+        </p>
+        <p className={`text-[10px] text-[#9CA3AF] ${arClass}`}>{ui.inYourPlan}</p>
+      </div>
 
-      <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
-        <div className="flex items-center justify-between">
-          <p className="text-[12px] font-semibold text-[#374151]">{ui.overallProgress}</p>
+      {latestReported && (latestReported.painScore != null || latestReported.effortScore != null) && (
+        <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
           <p
-            className="text-[13px] font-bold text-[#1D9E75]"
-            style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+            className={`text-[10px] font-bold uppercase text-[#9CA3AF] ${arClass}`}
+            style={{ letterSpacing: "0.06em" }}
           >
-            {adherence}%
+            {ui.lastReportedIndicators}
+          </p>
+          <div className={`mt-2 space-y-1 ${arClass}`}>
+            {latestReported.painScore != null && (
+              <p className="text-[13px] text-[#374151]">
+                {ui.lastReportedPain(latestReported.painScore)}
+              </p>
+            )}
+            {latestReported.effortScore != null && (
+              <p className="text-[13px] text-[#374151]">
+                {ui.lastReportedEffort(latestReported.effortScore)}
+              </p>
+            )}
+          </div>
+          <p className={`mt-2 text-[10px] italic text-[#9CA3AF] ${arClass}`}>
+            {ui.lastReportedTherapistNote}
           </p>
         </div>
-        <div className="mt-3 h-[6px] w-full overflow-hidden rounded-full bg-[#E2E8E5]">
-          <div
-            className="h-full rounded-full bg-[#1D9E75] transition-all"
-            style={{ width: `${adherence}%` }}
-          />
-        </div>
-      </div>
+      )}
 
       {sortedSessions.length > 0 && completedSessions === 0 ? (
         <p className="text-center text-[12px] italic text-[#9CA3AF]">{ui.completeFirstSession}</p>
@@ -184,20 +162,6 @@ export default function PatientProgressPage() {
               const isCompleted = session.status === "completed";
               const log = logBySessionId.get(session.id);
               const meta = parseSessionCoachNotes(log?.notes);
-              const clinicalAction = log
-                ? deriveClinicalAction({
-                    painBefore: meta.painBefore,
-                    painAfter: log.painScore,
-                    effortScore: log.effortScore,
-                    safetyConcern: meta.safetyConcern,
-                    patientNote: meta.patientNote,
-                    completedSessionsCount: isCompleted ? 1 : 0,
-                    missedSessionsCount: 0,
-                    stableSessionsCount: 0,
-                  })
-                : null;
-              const showClinicalMessage =
-                clinicalAction != null && clinicalAction.status !== "stable";
 
               return (
                 <div
@@ -263,16 +227,6 @@ export default function PatientProgressPage() {
                         {meta.patientNote}
                       </p>
                     </div>
-                  )}
-
-                  {showClinicalMessage && clinicalAction && (
-                    <p className="mt-3 text-[12px] leading-relaxed text-[#6B7280]">
-                      {localizeClinicalActionMessage(
-                        clinicalAction.status,
-                        lang,
-                        clinicalAction.patientSafeMessage,
-                      )}
-                    </p>
                   )}
 
                   {isCompleted && log && log.exercisesCompleted > 0 && (

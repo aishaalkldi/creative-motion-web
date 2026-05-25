@@ -21,7 +21,10 @@ import {
 } from "../../../lib/api/safe-errors";
 import { parseStoredExercises, type PrescribedExerciseV1 } from "../../../lib/exercise-resolve";
 import { getAssessmentLanguage, type AssessmentLanguage } from "../../../lib/assessment-payload";
-import { resolvePatientRehabFocus } from "../../../lib/plan-program-metadata";
+import {
+  extractPlanProgramMetadata,
+  resolvePatientRehabFocus,
+} from "../../../lib/plan-program-metadata";
 
 // ── Public types (imported by patient portal pages) ────────────────────────────
 
@@ -49,6 +52,8 @@ export type PatientPlanData = {
   phaseGoal: string;
   /** Patient-facing rehab focus (from program metadata or safe fallback) */
   patientRehabFocus: string;
+  /** Explicit patient-friendly goal from plan metadata, if set by clinician */
+  patientFriendlyGoal: string | null;
   sessionsPerWeek: number;
   totalWeeks: number | null;
   /** Clinician note visible to the patient */
@@ -178,6 +183,7 @@ export async function GET(req: NextRequest) {
   const patientLanguage = getAssessmentLanguage(latestAssessment?.structured_data) ?? "en";
 
   const sd = plan.structured_data;
+  const programMeta = extractPlanProgramMetadata(sd);
 
   const result: PatientPlanData = {
     patientName:     tokenRow.patient_name,
@@ -189,6 +195,7 @@ export async function GET(req: NextRequest) {
     phaseName:       sd?.phaseName ?? "Phase 1",
     phaseGoal:       sd?.phaseGoal ?? "",
     patientRehabFocus: resolvePatientRehabFocus(sd, sd?.phaseGoal, patientLanguage),
+    patientFriendlyGoal: programMeta.patientFriendlyGoal ?? null,
     sessionsPerWeek: sd?.sessionsPerWeek ?? 3,
     totalWeeks:      plan.total_weeks ?? null,
     clinicianNotes:  plan.clinician_note ?? "",

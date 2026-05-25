@@ -159,6 +159,7 @@ export type SessionShellUi = {
   painAfterLabel: string;
   viewProgress: string;
   completionSafetyNote: string;
+  sessionSavedForReview: string;
   wellDone: string;
   progressUpdated: string;
   alreadyCompleted: string;
@@ -206,6 +207,8 @@ const SESSION_SHELL: Record<PatientPortalLanguage, SessionShellUi> = {
     viewProgress: "View progress",
     completionSafetyNote:
       "If you feel sharp or unusual pain during exercises, stop immediately and contact your therapist.",
+    sessionSavedForReview:
+      "Your session response has been saved. Your therapist can review what you reported.",
     wellDone: "Well done.",
     progressUpdated: "Your progress has been updated for your therapist to review.",
     alreadyCompleted: "Session already completed",
@@ -253,6 +256,8 @@ const SESSION_SHELL: Record<PatientPortalLanguage, SessionShellUi> = {
     viewProgress: "عرض التقدّم",
     completionSafetyNote:
       "إذا شعرت بألم حاد أو غير معتاد أثناء التمارين، توقّف فوراً وتواصل مع معالجك.",
+    sessionSavedForReview:
+      "تم حفظ استجابتك للجلسة. يمكن لمعالجك مراجعة ما قمت بتسجيله.",
     wellDone: "أحسنت.",
     progressUpdated: "تم تحديث تقدّمك ليراجعه معالجك.",
     alreadyCompleted: "الجلسة مكتملة مسبقاً",
@@ -427,6 +432,11 @@ export type ProgressPageUi = {
   noteToTherapist: string;
   noSessionDataYet: string;
   exercisesCompleted: (count: number) => string;
+  contextNotice: string;
+  lastReportedIndicators: string;
+  lastReportedPain: (score: number) => string;
+  lastReportedEffort: (score: number) => string;
+  lastReportedTherapistNote: string;
 };
 
 const PROGRESS_PAGE: Record<PatientPortalLanguage, ProgressPageUi> = {
@@ -464,6 +474,13 @@ const PROGRESS_PAGE: Record<PatientPortalLanguage, ProgressPageUi> = {
     noSessionDataYet: "No session data recorded yet.",
     exercisesCompleted: (count) =>
       `${count} exercise${count === 1 ? "" : "s"} completed`,
+    contextNotice:
+      "This page reflects the sessions, pain, and effort you have reported. Your therapist uses this information together with clinical assessment to follow your rehabilitation journey.",
+    lastReportedIndicators: "Last reported indicators",
+    lastReportedPain: (score) => `Last reported pain: ${score}/10`,
+    lastReportedEffort: (score) => `Last reported effort: ${score}/10`,
+    lastReportedTherapistNote:
+      "Your therapist reviews these indicators to follow your response to rehabilitation",
   },
   ar: {
     loading: "جاري التحميل…",
@@ -499,6 +516,13 @@ const PROGRESS_PAGE: Record<PatientPortalLanguage, ProgressPageUi> = {
     noSessionDataYet: "لا توجد بيانات مسجّلة لهذه الجلسة بعد.",
     exercisesCompleted: (count) =>
       count === 1 ? "تمرين واحد مكتمل" : `${count} تمارين مكتملة`,
+    contextNotice:
+      "تعكس هذه الصفحة ما قمت بتسجيله من جلسات، ألم، وجهد. يستخدم معالجك هذه المعلومات مع تقييمه السريري لمتابعة رحلتك التأهيلية.",
+    lastReportedIndicators: "آخر مؤشرات مُبلَّغ عنها",
+    lastReportedPain: (score) => `آخر ألم مُبلَّغ عنه: ${score}/10`,
+    lastReportedEffort: (score) => `آخر جهد مُبلَّغ عنه: ${score}/10`,
+    lastReportedTherapistNote:
+      "يقوم معالجك بمراجعة هذه المؤشرات لمتابعة استجابتك للتأهيل",
   },
 };
 
@@ -579,6 +603,110 @@ export function trustFooterUi(lang: PatientPortalLanguage): TrustFooterUi {
 
 export function patientSafetyNoticeUi(lang: PatientPortalLanguage): PatientSafetyNoticeUi {
   return PATIENT_SAFETY_NOTICE[lang];
+}
+
+/* ── Journey context card (Sprint G) ─────────────────────────────────────────── */
+
+export type JourneyContextUi = {
+  rehabGoalLabel: string;
+  sessionsCompletedLabel: string;
+  sessionsCompleted: (completed: number, total: number) => string;
+  weekOfProgram: (week: number, totalWeeks: number) => string;
+  lastReportedLabel: string;
+  painScore: (score: number) => string;
+  effortScore: (score: number) => string;
+  lastReportedNote: string;
+  clinicianNoteLabel: string;
+  therapistVisibility: string;
+};
+
+const JOURNEY_CONTEXT: Record<PatientPortalLanguage, JourneyContextUi> = {
+  en: {
+    rehabGoalLabel: "Your rehabilitation goal",
+    sessionsCompletedLabel: "Sessions completed",
+    sessionsCompleted: (completed, total) =>
+      `${completed} of ${total} session${total === 1 ? "" : "s"}`,
+    weekOfProgram: (week, totalWeeks) => `Week ${week} of ${totalWeeks}`,
+    lastReportedLabel: "Last reported",
+    painScore: (score) => `Pain: ${score}/10`,
+    effortScore: (score) => `Effort: ${score}/10`,
+    lastReportedNote:
+      "This information helps your therapist follow your rehabilitation journey",
+    clinicianNoteLabel: "A note from your therapist",
+    therapistVisibility: "Your therapist reviews what you report after each session",
+  },
+  ar: {
+    rehabGoalLabel: "هدفك التأهيلي",
+    sessionsCompletedLabel: "الجلسات المكتملة",
+    sessionsCompleted: (completed, total) => `${completed} من ${total} جلسة`,
+    weekOfProgram: (week, totalWeeks) => `الأسبوع ${week} من ${totalWeeks}`,
+    lastReportedLabel: "آخر ما سجّلته",
+    painScore: (score) => `الألم: ${score}/10`,
+    effortScore: (score) => `الجهد: ${score}/10`,
+    lastReportedNote: "هذه المعلومات تساعد معالجك في متابعة رحلتك التأهيلية",
+    clinicianNoteLabel: "ملاحظة معالجك",
+    therapistVisibility: "معالجك يطّلع على ما تسجّله بعد كل جلسة",
+  },
+};
+
+export function journeyContextUi(lang: PatientPortalLanguage): JourneyContextUi {
+  return JOURNEY_CONTEXT[lang];
+}
+
+/* ── Session focus & exercise safety (Sprint G) ──────────────────────────────── */
+
+export type SessionFocusUi = {
+  todaysSessionFocus: string;
+  exerciseSafetyReminder: string;
+};
+
+const SESSION_FOCUS: Record<PatientPortalLanguage, SessionFocusUi> = {
+  en: {
+    todaysSessionFocus: "Today's session focus",
+    exerciseSafetyReminder:
+      "Stop if you feel sharp pain or unusual symptoms and contact your therapist",
+  },
+  ar: {
+    todaysSessionFocus: "تركيز جلسة اليوم",
+    exerciseSafetyReminder:
+      "توقف إذا شعرت بألم حاد أو أعراض غير معتادة وتواصل مع معالجك",
+  },
+};
+
+export function sessionFocusUi(lang: PatientPortalLanguage): SessionFocusUi {
+  return SESSION_FOCUS[lang];
+}
+
+export function isDescriptiveSessionTitle(title: string): boolean {
+  const t = title.trim();
+  if (!t) return false;
+  if (/^Session\s+\d+(\s*[—–-]\s*)?$/i.test(t)) return false;
+  if (/^الجلسة\s+\d+(\s*[—–-]\s*)?$/i.test(t)) return false;
+  return true;
+}
+
+export function resolveSessionFocusPurpose(
+  sessionTitle: string,
+  patientFriendlyGoal: string | null | undefined,
+): string | null {
+  if (isDescriptiveSessionTitle(sessionTitle)) return sessionTitle.trim();
+  const goal = patientFriendlyGoal?.trim();
+  if (goal) return goal;
+  return null;
+}
+
+export function getLatestReportedScores(
+  logs: { painScore: number | null; effortScore: number | null; completedAt: string }[],
+): { painScore: number | null; effortScore: number | null } | null {
+  const sorted = [...logs].sort(
+    (a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime(),
+  );
+  for (const log of sorted) {
+    if (log.painScore != null || log.effortScore != null) {
+      return { painScore: log.painScore, effortScore: log.effortScore };
+    }
+  }
+  return null;
 }
 
 export function formatPortalDate(

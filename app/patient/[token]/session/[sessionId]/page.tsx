@@ -8,17 +8,14 @@ import type { SessionCompleteResponse } from "@/app/api/patient/session-complete
 import { usePatientLanguage, usePatientPlan } from "@/app/components/patient/PatientLanguageProvider";
 import { encodeSessionCoachNotes } from "@/app/lib/session-coach-metadata";
 import {
-  deriveClinicalAction,
-  deriveMissedSessionsCount,
-} from "@/app/lib/clinical-action-engine";
-import {
   resolveExerciseView,
 } from "@/app/lib/exercise-resolve";
 import {
   formatExerciseProgress,
-  localizeClinicalActionMessage,
   planHomeUi,
+  resolveSessionFocusPurpose,
   sessionExerciseUi,
+  sessionFocusUi,
   sessionShellUi,
 } from "@/app/lib/patient-portal-ui";
 
@@ -67,7 +64,6 @@ export default function SessionPlayerPage() {
   const sessionId = String(params.sessionId ?? "");
 
   const [session,             setSession]             = useState<PatientSession | null>(null);
-  const [planSessions,        setPlanSessions]        = useState<PatientSession[]>([]);
   const [notFound,            setNotFound]            = useState(false);
   const [patientName,         setPatientName]         = useState("");
   const { plan, isPlanLoading } = usePatientPlan();
@@ -118,7 +114,6 @@ export default function SessionPlayerPage() {
       return;
     }
     setSession(s);
-    setPlanSessions(plan.sessions);
     setPatientName(plan.patientName ?? "");
     setNotFound(false);
   }, [token, sessionId, plan, isPlanLoading]);
@@ -154,10 +149,15 @@ export default function SessionPlayerPage() {
   const current   = exercises[exerciseIndex];
   const exerciseUi = sessionExerciseUi(patientLanguage);
   const shellUi = sessionShellUi(patientLanguage);
+  const focusUi = sessionFocusUi(patientLanguage);
   const currentView = current
     ? resolveExerciseView(current, { language: patientLanguage })
     : null;
   const todaysGoal = shellUi.todaysGoal(session.title);
+  const sessionFocusPurpose = resolveSessionFocusPurpose(
+    session.title,
+    plan?.patientFriendlyGoal,
+  );
 
   const precheckReady =
     painBefore !== null &&
@@ -273,23 +273,6 @@ export default function SessionPlayerPage() {
 
   /* Completion screen */
   if (completed && completionSummary) {
-    const completedAfterThis =
-      planSessions.filter((s) => s.status === "completed").length + 1;
-    const completionAction = deriveClinicalAction({
-      painBefore,
-      painAfter: completionSummary.painAfter,
-      effortScore: completionSummary.effortScore,
-      safetyConcern: safetyConcern === true,
-      patientNote: patientNote.trim() || null,
-      completedSessionsCount: completedAfterThis,
-      missedSessionsCount: deriveMissedSessionsCount(
-        planSessions.map((s) => ({
-          status: s.status,
-          session_number: s.sessionNumber,
-        })),
-      ),
-    });
-
     return (
       <div className={`flex min-h-[60vh] flex-col items-center justify-center gap-5 px-4 text-center ${arClass}`} dir={textDir}>
         <div
@@ -324,11 +307,7 @@ export default function SessionPlayerPage() {
             </div>
           </div>
           <p className="mt-4 text-[14px] leading-relaxed text-[#374151]">
-            {localizeClinicalActionMessage(
-              completionAction.status,
-              patientLanguage,
-              completionAction.patientSafeMessage,
-            )}
+            {shellUi.sessionSavedForReview}
           </p>
           <p className="mt-3 max-w-sm text-[12px] italic leading-relaxed text-[#6B7280]">
             {shellUi.completionSafetyNote}
@@ -361,9 +340,9 @@ export default function SessionPlayerPage() {
             className="text-[20px] font-medium text-[#0A0F1A]"
             style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
           >
-            {shellUi.wellDone}
+            {shellUi.sessionComplete}
           </h2>
-          <p className="mt-2 text-[14px] text-[#374151]">{shellUi.progressUpdated}</p>
+          <p className="mt-2 text-[14px] text-[#374151]">{shellUi.sessionSavedForReview}</p>
         </div>
         <Link
           href={`/patient/${token}`}
@@ -506,6 +485,23 @@ export default function SessionPlayerPage() {
         </div>
       </div>
 
+      {sessionFocusPurpose && (
+        <div
+          className="rounded-[8px] bg-[#F0FAF6] px-3.5 py-2.5"
+          style={{ marginBottom: "16px" }}
+        >
+          <p
+            className={`text-[9px] font-bold uppercase text-[#1D9E75] ${arClass}`}
+            style={{ letterSpacing: "0.06em", marginBottom: "3px" }}
+          >
+            {focusUi.todaysSessionFocus}
+          </p>
+          <p className={`text-[13px] leading-[1.5] text-[#065F46] ${arClass}`}>
+            {sessionFocusPurpose}
+          </p>
+        </div>
+      )}
+
       <p className="mb-2 text-center text-[11px] text-[#9CA3AF]">
         {formatExerciseProgress(patientLanguage, exerciseIndex + 1, total)}
       </p>
@@ -562,6 +558,12 @@ export default function SessionPlayerPage() {
         <p className={`mt-3 rounded-[7px] border border-amber-200 bg-amber-50 px-3 py-2.5 text-[12px] leading-relaxed text-amber-900 ${arClass}`}>
           <span className="font-semibold">{exerciseUi.stopIf} </span>
           {currentView?.precautions}
+        </p>
+        <p
+          className={`mt-2 text-[11px] italic text-[#9CA3AF] ${arClass}`}
+          style={{ marginTop: "8px" }}
+        >
+          {focusUi.exerciseSafetyReminder}
         </p>
       </div>
 

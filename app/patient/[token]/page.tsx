@@ -1,11 +1,15 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import type { SessionLogEntry } from "@/app/api/patient/logs/route";
 import { usePatientLanguage, usePatientPlan } from "@/app/components/patient/PatientLanguageProvider";
 import { SessionScheduleView } from "@/app/components/SessionScheduleView";
 import {
+  getLatestReportedScores,
   getPortalGreeting,
+  journeyContextUi,
   planHomeUi,
 } from "@/app/lib/patient-portal-ui";
 
@@ -26,6 +30,19 @@ export default function PatientDashboard() {
   const { plan, planLoadError, isPlanLoading } = usePatientPlan();
   const { language: lang, isArabic, textDir, arClass } = usePatientLanguage();
   const ui = planHomeUi(lang);
+  const journeyUi = journeyContextUi(lang);
+  const [logs, setLogs] = useState<SessionLogEntry[]>([]);
+
+  useEffect(() => {
+    if (!token) return;
+    fetch(`/api/patient/logs?token=${encodeURIComponent(token)}`)
+      .then(async (res) => {
+        if (res.ok) setLogs((await res.json()) as SessionLogEntry[]);
+      })
+      .catch(() => {
+        /* logs are optional */
+      });
+  }, [token]);
 
   if (isPlanLoading || plan === undefined) {
     return (
@@ -59,6 +76,9 @@ export default function PatientDashboard() {
     plan.totalWeeks ?? 1,
   );
   const showWeekContext = plan.totalWeeks != null && plan.totalWeeks > 1;
+  const patientFriendlyGoal = plan.patientFriendlyGoal?.trim() || null;
+  const latestReported = getLatestReportedScores(logs);
+  const clinicianNote = plan.clinicianNotes?.trim() || null;
 
   if (!hasSessions) {
     return (
@@ -75,7 +95,7 @@ export default function PatientDashboard() {
           </p>
         </div>
 
-        {plan.patientRehabFocus?.trim() && (
+        {plan.patientRehabFocus?.trim() && !patientFriendlyGoal && (
           <div className="rounded-[10px] border border-[#D1E7DE] bg-[#F0FAF6] p-4">
             <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#085041]">
               {ui.yourRehabFocus}
@@ -133,7 +153,7 @@ export default function PatientDashboard() {
         </p>
       </div>
 
-      {plan.patientRehabFocus?.trim() && (
+      {plan.patientRehabFocus?.trim() && !patientFriendlyGoal && (
         <div className="rounded-[10px] border border-[#D1E7DE] bg-[#F0FAF6] p-4">
           <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#085041]">
             {ui.yourRehabFocus}
@@ -143,6 +163,101 @@ export default function PatientDashboard() {
           </p>
         </div>
       )}
+
+      <div
+        className="rounded-[10px] border border-[#E2E8E5] bg-white px-4 py-3.5"
+        style={{ borderWidth: "0.5px", marginBottom: "14px" }}
+      >
+        {patientFriendlyGoal && (
+          <>
+            <p
+              className={`text-[9px] font-bold uppercase text-[#1D9E75] ${arClass}`}
+              style={{ letterSpacing: "0.06em" }}
+            >
+              {journeyUi.rehabGoalLabel}
+            </p>
+            <p
+              className={`mt-1.5 text-[14px] leading-[1.5] text-[#0A0F1A] ${arClass}`}
+              style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)", fontWeight: 500 }}
+            >
+              {patientFriendlyGoal}
+            </p>
+            <div className="my-2.5" style={{ borderTop: "0.5px solid #F4F4F4" }} />
+          </>
+        )}
+
+        <p
+          className={`text-[9px] font-bold uppercase text-[#9CA3AF] ${arClass}`}
+          style={{ letterSpacing: "0.06em" }}
+        >
+          {journeyUi.sessionsCompletedLabel}
+        </p>
+        <p className={`mt-1 text-[13px] font-medium text-[#0A0F1A] ${arClass}`}>
+          {journeyUi.sessionsCompleted(completed, total)}
+        </p>
+        {showWeekContext && (
+          <p className={`mt-0.5 text-[11px] text-[#9CA3AF] ${arClass}`}>
+            {journeyUi.weekOfProgram(currentWeek, plan.totalWeeks ?? 1)}
+          </p>
+        )}
+
+        {latestReported && (latestReported.painScore != null || latestReported.effortScore != null) && (
+          <>
+            <div className="my-2.5" style={{ borderTop: "0.5px solid #F4F4F4" }} />
+            <p
+              className={`text-[9px] font-bold uppercase text-[#9CA3AF] ${arClass}`}
+              style={{ letterSpacing: "0.06em" }}
+            >
+              {journeyUi.lastReportedLabel}
+            </p>
+            <div className={`mt-1.5 space-y-0.5 ${arClass}`}>
+              {latestReported.painScore != null && (
+                <p className="text-[12px] text-[#374151]">
+                  {journeyUi.painScore(latestReported.painScore)}
+                </p>
+              )}
+              {latestReported.effortScore != null && (
+                <p className="text-[12px] text-[#374151]">
+                  {journeyUi.effortScore(latestReported.effortScore)}
+                </p>
+              )}
+            </div>
+            <p className={`mt-2 text-[10px] italic text-[#9CA3AF] ${arClass}`}>
+              {journeyUi.lastReportedNote}
+            </p>
+          </>
+        )}
+
+        {clinicianNote && (
+          <>
+            <div className="my-2.5" style={{ borderTop: "0.5px solid #F4F4F4" }} />
+            <p
+              className={`text-[9px] font-bold uppercase text-[#1D9E75] ${arClass}`}
+              style={{ letterSpacing: "0.06em" }}
+            >
+              {journeyUi.clinicianNoteLabel}
+            </p>
+            <div
+              className={`mt-1.5 rounded-[6px] bg-[#F9FAFB] px-3 py-2 text-[12px] leading-[1.6] text-[#374151] ${arClass}`}
+              style={{
+                borderLeft: isArabic ? undefined : "3px solid #1D9E75",
+                borderRight: isArabic ? "3px solid #1D9E75" : undefined,
+              }}
+              dir="auto"
+            >
+              {clinicianNote}
+            </div>
+          </>
+        )}
+
+        <div className="my-2.5" style={{ borderTop: "0.5px solid #F4F4F4" }} />
+        <p className={`flex items-start gap-1.5 text-[11px] italic text-[#6B7280] ${arClass}`}>
+          <span className="mt-1 shrink-0 text-[8px] text-[#1D9E75]" aria-hidden>
+            ●
+          </span>
+          <span>{journeyUi.therapistVisibility}</span>
+        </p>
+      </div>
 
       <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
         <div className="flex items-center justify-between gap-3">
@@ -172,31 +287,15 @@ export default function PatientDashboard() {
         </div>
       )}
 
-      {plan.clinicianNotes?.trim() && (
-        <div
-          style={{
-            background: "#F9FAFB",
-            border: "0.5px solid #E2E8E5",
-            borderLeft: isArabic ? undefined : "3px solid #1D9E75",
-            borderRight: isArabic ? "3px solid #1D9E75" : undefined,
-            borderRadius: "8px",
-            padding: "10px 14px",
-            fontSize: "12px",
-            color: "#6B7280",
-            fontStyle: "italic",
-            marginBottom: "16px",
-          }}
-        >
-          {ui.noteFromTherapistInline}{" "}
-          <span dir="ltr">{plan.clinicianNotes}</span>
-        </div>
-      )}
-
       <div className="grid grid-cols-3 gap-3">
         {[
           { label: ui.totalSessions, value: String(total), sub: ui.inYourPlan },
           { label: ui.completed, value: String(completed), sub: ui.sessionsDone },
-          { label: ui.progress, value: `${progress}%`, sub: ui.completion },
+          {
+            label: journeyUi.sessionsCompletedLabel,
+            value: journeyUi.sessionsCompleted(completed, total),
+            sub: ui.inYourPlan,
+          },
         ].map(({ label, value, sub }) => (
           <div
             key={label}
