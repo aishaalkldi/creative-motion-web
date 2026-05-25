@@ -148,6 +148,9 @@ function PlanField({ label, hint, children }: { label: string; hint?: string; ch
   );
 }
 
+const TEMPLATE_SAFETY_DISCLAIMER =
+  "Program templates are clinical starting points. The treating physiotherapist must review, adapt, and approve the plan before assignment.";
+
 function ProgramDetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -157,27 +160,45 @@ function ProgramDetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function ProgramTemplateDetails({
+/** Sprint M — full clinical profile for clinician review before assignment. */
+function ClinicalProgramProfile({
   template,
   compact = false,
 }: {
   template: PilotProgramTemplate;
   compact?: boolean;
 }) {
-  const panel = (
-    <div className={`space-y-2.5 ${compact ? "pt-2" : "mt-2 border-t border-[#1E2D42] pt-2.5"}`}>
-      <ProgramDetailRow label="Program goal" value={template.programGoal} />
-      <ProgramDetailRow label="Condition category" value={template.conditionCategory} />
-      <ProgramDetailRow label="Body region" value={template.bodyRegion} />
-      <ProgramDetailRow label="Suitable for" value={template.suitableFor} />
-      <ProgramDetailRow label="Not suitable for" value={template.notSuitableFor} />
-      <ProgramDetailRow label="Phase goal" value={template.phaseGoal} />
-      <ProgramDetailRow label="Expected response" value={template.expectedResponse} />
-      <ProgramDetailRow label="Safety notes" value={template.safetyNotes} />
-      <ProgramDetailRow label="Review criteria" value={template.reviewCriteria} />
-      <ProgramDetailRow label="Clinician use" value={template.clinicianUseNote} />
-      <ProgramDetailRow label="Patient-friendly goal" value={template.patientFriendlyGoal} />
-    </div>
+  const metaItems: { label: string; value: string }[] = [
+    { label: "Clinical category", value: template.conditionCategory },
+    { label: "Body region", value: template.bodyRegion },
+    { label: "Level", value: template.level },
+  ];
+  if (template.durationWeeks != null) {
+    metaItems.push({ label: "Duration", value: `${template.durationWeeks} weeks` });
+  }
+  if (template.sessionsPerWeek != null) {
+    metaItems.push({ label: "Sessions per week", value: String(template.sessionsPerWeek) });
+  }
+
+  const clinicalRows: { label: string; value: string }[] = [
+    { label: "Program goal", value: template.programGoal },
+    { label: "Patient-friendly goal", value: template.patientFriendlyGoal },
+    { label: "Suitable for", value: template.suitableFor },
+    { label: "Not suitable for", value: template.notSuitableFor },
+    { label: "Safety notes", value: template.safetyNotes },
+  ];
+  if (template.redFlags?.trim()) {
+    clinicalRows.push({ label: "Red flags", value: template.redFlags });
+  }
+  clinicalRows.push(
+    { label: "Review criteria", value: template.reviewCriteria },
+    { label: "Clinician use note", value: template.clinicianUseNote },
+  );
+
+  const disclaimer = (
+    <p className="rounded-[6px] border border-amber-400/20 bg-amber-400/8 px-3 py-2.5 text-[11px] leading-relaxed text-amber-100/85">
+      {TEMPLATE_SAFETY_DISCLAIMER}
+    </p>
   );
 
   if (compact) {
@@ -186,24 +207,67 @@ function ProgramTemplateDetails({
         <summary className="cursor-pointer list-none text-[10px] font-semibold text-[#5DCAA5]/70 transition hover:text-[#5DCAA5] [&::-webkit-details-marker]:hidden">
           <span className="inline-flex items-center gap-1">
             <span className="text-white/25 transition group-open:rotate-90">▸</span>
-            Program details
+            Preview clinical profile
           </span>
         </summary>
-        {panel}
+        <div className="space-y-2.5 pt-2">
+          {disclaimer}
+          <div className="flex flex-wrap gap-1.5">
+            {metaItems.map((item) => (
+              <span
+                key={item.label}
+                className="rounded-[4px] border border-[#1E2D42] bg-[#0B1220] px-2 py-0.5 text-[10px] text-white/45"
+              >
+                {item.label}: {item.value}
+              </span>
+            ))}
+          </div>
+          {clinicalRows.slice(0, 4).map((row) => (
+            <ProgramDetailRow key={row.label} label={row.label} value={row.value} />
+          ))}
+          <p className="text-[10px] text-white/30">
+            Use template to open the full clinical profile for review and editing.
+          </p>
+        </div>
       </details>
     );
   }
 
   return (
-    <details className="group rounded-[7px] border border-[#1E2D42] bg-[#0B1220] p-4">
-      <summary className="cursor-pointer list-none text-[11px] font-semibold text-[#5DCAA5]/80 transition hover:text-[#5DCAA5] [&::-webkit-details-marker]:hidden">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="text-white/25 transition group-open:rotate-90">▸</span>
-          Program details — {template.title}
-        </span>
-      </summary>
-      {panel}
-    </details>
+    <section
+      className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4 space-y-4"
+      aria-labelledby={`clinical-profile-${template.id}`}
+    >
+      <div>
+        <h3
+          id={`clinical-profile-${template.id}`}
+          className="text-sm font-bold text-white"
+        >
+          Clinical Program Profile
+        </h3>
+        <p className="mt-0.5 text-xs text-white/40">{template.title}</p>
+      </div>
+
+      {disclaimer}
+
+      <div className="flex flex-wrap gap-2">
+        {metaItems.map((item) => (
+          <span
+            key={item.label}
+            className="rounded-[5px] border border-[#1E2D42] bg-[#0F1825] px-2.5 py-1 text-[10px] font-medium text-white/55"
+          >
+            <span className="text-white/35">{item.label}: </span>
+            {item.value}
+          </span>
+        ))}
+      </div>
+
+      <div className="space-y-3 border-t border-[#1E2D42] pt-3">
+        {clinicalRows.map((row) => (
+          <ProgramDetailRow key={row.label} label={row.label} value={row.value} />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -236,7 +300,7 @@ function PilotTemplateCard({
         {template.sessions.length} sessions ·{" "}
         {template.sessions.map((s) => s.exercises.length).reduce((a, b) => a + b, 0)} exercises
       </p>
-      <ProgramTemplateDetails template={template} compact />
+      <ClinicalProgramProfile template={template} compact />
       <button
         type="button"
         onClick={onUse}
@@ -602,7 +666,7 @@ function NewPlanInner() {
 
   return (
     <div className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
-      <div className="mx-auto max-w-2xl space-y-6">
+      <div className="mx-auto max-w-5xl space-y-6">
 
         {/* Back */}
         {patientId && selectedPatient ? (
@@ -749,10 +813,11 @@ function NewPlanInner() {
               <div>
                 <h2 className="text-sm font-bold text-white">Start from a pilot template</h2>
                 <p className="mt-1 text-xs text-white/35">
-                  Templates are starting points. Clinician must review and adapt before assigning.
+                  {PILOT_PROGRAM_TEMPLATES.length} program templates available. Templates are
+                  clinical starting points — review and adapt before assigning.
                 </p>
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {PILOT_PROGRAM_TEMPLATES.map((template) => (
                   <PilotTemplateCard
                     key={template.id}
@@ -788,7 +853,7 @@ function NewPlanInner() {
                     (t) => t.id === selectedTemplateId,
                   );
                   return activeTemplate ? (
-                    <ProgramTemplateDetails template={activeTemplate} />
+                    <ClinicalProgramProfile template={activeTemplate} />
                   ) : null;
                 })()}
 
