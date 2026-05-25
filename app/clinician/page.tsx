@@ -63,9 +63,45 @@ function formatStatsTime(iso: string | undefined): string | null {
   }
 }
 
+function formatSnapshotMetric(value: number | null | undefined, loading: boolean): string {
+  if (loading) return "…";
+  if (value === null || value === undefined) return "Not available";
+  return String(value);
+}
+
+function formatGeneratedAt(iso: string | undefined, loading: boolean): string {
+  if (loading) return "…";
+  if (!iso) return "Not available";
+  try {
+    return new Date(iso).toLocaleString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    return "Not available";
+  }
+}
+
+function buildPilotSummaryText(stats: DashboardStats | null, loading: boolean): string | null {
+  if (loading || !stats) return null;
+  return [
+    "RASQ Pilot Snapshot",
+    `Patients created: ${formatSnapshotMetric(stats.totalPatients, false)}`,
+    `Active rehabilitation plans: ${formatSnapshotMetric(stats.activeCases, false)}`,
+    `Unreviewed review flags: ${formatSnapshotMetric(stats.pendingReviews, false)}`,
+    `Pending assessment links: ${formatSnapshotMetric(stats.remoteAssessmentsPending, false)}`,
+    `Generated: ${formatGeneratedAt(stats.generatedAt, false)}`,
+  ].join("\n");
+}
+
 export default function ClinicianDashboardPage() {
   const [stats, setStats]   = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [copyFeedback, setCopyFeedback] = useState<"idle" | "copied" | "unavailable">("idle");
 
   useEffect(() => {
     getDashboardStats()
@@ -74,11 +110,39 @@ export default function ClinicianDashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    if (copyFeedback === "idle") return;
+    const timer = window.setTimeout(() => setCopyFeedback("idle"), 2000);
+    return () => window.clearTimeout(timer);
+  }, [copyFeedback]);
+
+  async function handleCopyPilotSummary() {
+    const text = buildPilotSummaryText(stats, loading);
+    if (!text) {
+      setCopyFeedback("unavailable");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopyFeedback("copied");
+    } catch {
+      setCopyFeedback("unavailable");
+    }
+  }
+
   const metricCards = [
-    { title: "Total Patients",              value: formatMetric(stats?.totalPatients, loading),              subtitle: "Connected patient records",           attention: false },
-    { title: "Active Cases",                value: formatMetric(stats?.activeCases, loading),                subtitle: "Currently active patients",           attention: false },
-    { title: "Pending Reviews",             value: formatMetric(stats?.pendingReviews, loading),             subtitle: "Awaiting clinician review",           attention: true  },
-    { title: "Remote Assessments Pending",  value: formatMetric(stats?.remoteAssessmentsPending, loading), subtitle: "Patient links not yet completed",     attention: false },
+    { title: "Total Patients",              value: formatMetric(stats?.totalPatients, loading),              subtitle: "Connected patient records",              attention: false },
+    { title: "Active Cases",                value: formatMetric(stats?.activeCases, loading),                subtitle: "Patients with active rehabilitation plans", attention: false },
+    { title: "Pending Reviews",             value: formatMetric(stats?.pendingReviews, loading),             subtitle: "Unreviewed clinical review flags",        attention: true  },
+    { title: "Remote Assessments Pending",  value: formatMetric(stats?.remoteAssessmentsPending, loading), subtitle: "Assessment links awaiting response",      attention: false },
+  ];
+
+  const snapshotRows = [
+    { label: "Patients created", value: formatSnapshotMetric(stats?.totalPatients, loading) },
+    { label: "Active rehabilitation plans", value: formatSnapshotMetric(stats?.activeCases, loading) },
+    { label: "Unreviewed review flags", value: formatSnapshotMetric(stats?.pendingReviews, loading) },
+    { label: "Pending assessment links", value: formatSnapshotMetric(stats?.remoteAssessmentsPending, loading) },
+    { label: "Generated", value: formatGeneratedAt(stats?.generatedAt, loading) },
   ];
 
   const statsUpdatedAt = formatStatsTime(stats?.generatedAt);
@@ -89,8 +153,8 @@ export default function ClinicianDashboardPage() {
           stats.pendingReviews === null
             ? "Review queue unavailable"
             : stats.pendingReviews === 0
-              ? "No pending reviews"
-              : `${stats.pendingReviews} patient${stats.pendingReviews > 1 ? "s" : ""} awaiting review`,
+              ? "No unreviewed clinical flags"
+              : `${stats.pendingReviews} unreviewed clinical flag${stats.pendingReviews > 1 ? "s" : ""}`,
           stats.remoteAssessmentsPending === null
             ? "Remote assessment count unavailable"
             : stats.remoteAssessmentsPending === 0
@@ -149,10 +213,55 @@ export default function ClinicianDashboardPage() {
         </div>
 
         {/* ── Metric cards ── */}
-        <section className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {metricCards.map((c) => (
-            <MetricCard key={c.title} title={c.title} value={c.value} subtitle={c.subtitle} attention={c.attention} />
-          ))}
+        <section className="mb-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {metricCards.map((c) => (
+              <MetricCard key={c.title} title={c.title} value={c.value} subtitle={c.subtitle} attention={c.attention} />
+            ))}
+          </div>
+          <p className="mt-3 text-[11px] leading-relaxed text-white/25">
+            These metrics reflect the current clinician account and are intended for pilot monitoring.
+          </p>
+        </section>
+
+        {/* ── Pilot evidence snapshot ── */}
+        <section className="mb-6 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-white">Pilot Evidence Snapshot</h2>
+              <p className="mt-1 text-xs text-white/35">
+                Compact summary for clinic demos and investor evidence.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void handleCopyPilotSummary()}
+              disabled={loading || !stats}
+              className="shrink-0 rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-1.5 text-[11px] font-semibold text-white/50 transition hover:border-[#1D9E75]/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {copyFeedback === "copied"
+                ? "Copied"
+                : copyFeedback === "unavailable"
+                  ? "Copy unavailable"
+                  : "Copy pilot summary"}
+            </button>
+          </div>
+          <dl className="mt-4 grid gap-2 sm:grid-cols-2">
+            {snapshotRows.map((row) => (
+              <div
+                key={row.label}
+                className="flex items-baseline justify-between gap-3 rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5"
+              >
+                <dt className="text-[11px] text-white/40">{row.label}</dt>
+                <dd
+                  className="text-[12px] font-semibold text-white/70"
+                  style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+                >
+                  {row.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
         </section>
 
         {/* ── Main columns ── */}
