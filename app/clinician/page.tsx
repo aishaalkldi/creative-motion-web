@@ -183,6 +183,12 @@ export default function ClinicianDashboardPage() {
                 Data updated: {statsUpdatedAt}
               </p>
             )}
+            <Link
+              href="/clinician/pilot"
+              className="mt-2 inline-block text-[11px] font-semibold text-white/25 transition hover:text-[#5DCAA5]"
+            >
+              Pilot workspace →
+            </Link>
           </div>
           <div className="flex items-center gap-2">
             <Link href="/clinician/patients/new" className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]">
