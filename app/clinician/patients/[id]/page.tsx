@@ -21,6 +21,15 @@ import {
 } from "../../../lib/clinical-focus-copy";
 import { deriveClinicalFocusLabels } from "../../../lib/clinical-focus-labels";
 import {
+  PROGRAM_DIRECTION_CTA,
+  PROGRAM_DIRECTION_FOOTER,
+  PROGRAM_DIRECTION_PROFILE_INTRO,
+  PROGRAM_DIRECTION_PROFILE_TITLE,
+  PROGRAM_DIRECTION_NO_OPTIONS,
+  PROGRAM_DIRECTION_RED_FLAG,
+} from "../../../lib/program-direction-copy";
+import { resolveProgramOptionsForFocus } from "../../../lib/program-direction-options";
+import {
   extractGeneralDraft,
   extractStructuredData,
   getAssessmentLanguage,
@@ -454,6 +463,13 @@ export default function PatientProfilePage() {
       clinicalSummaryRow.structured_data,
     );
   }, [clinicalSummaryRow]);
+
+  const programDirectionOptions = useMemo(() => {
+    if (!clinicalFocusLabels) return [];
+    return resolveProgramOptionsForFocus(clinicalFocusLabels, {
+      hasRedFlag: clinicalSummary?.hasRedFlag ?? false,
+    });
+  }, [clinicalFocusLabels, clinicalSummary?.hasRedFlag]);
 
   const rehabilitationTimelineEvents = useMemo(() => {
     return buildPatientTimeline({
@@ -999,6 +1015,50 @@ export default function PatientProfilePage() {
                             </p>
                           </div>
                         </div>
+                      </div>
+                    )}
+
+                    {clinicalFocusLabels && (
+                      <div className="mt-4 rounded-[8px] border border-violet-400/20 bg-violet-400/5 px-4 py-4">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-violet-300/80">
+                          {PROGRAM_DIRECTION_PROFILE_TITLE}
+                        </p>
+                        <p className="mt-2 text-xs leading-relaxed text-white/45">
+                          {PROGRAM_DIRECTION_PROFILE_INTRO}
+                        </p>
+                        {clinicalSummary?.hasRedFlag && (
+                          <p className="mt-3 text-xs leading-relaxed text-amber-200/90">
+                            {PROGRAM_DIRECTION_RED_FLAG}
+                          </p>
+                        )}
+                        {programDirectionOptions.length === 0 ? (
+                          <p className="mt-3 text-sm leading-relaxed text-white/50">
+                            {PROGRAM_DIRECTION_NO_OPTIONS}
+                          </p>
+                        ) : (
+                          <ul className="mt-3 space-y-2">
+                            {programDirectionOptions.map((option) => (
+                              <li
+                                key={option.templateId}
+                                className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5"
+                              >
+                                <p className="text-sm font-semibold text-white">{option.title}</p>
+                                <p className="mt-0.5 text-[11px] text-white/40">
+                                  {option.conditionArea} · {option.level}
+                                </p>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        <Link
+                          href={`/clinician/plans/new?patientId=${encodeURIComponent(patient.id)}`}
+                          className="mt-3 inline-flex text-xs font-semibold text-violet-300 transition hover:text-violet-200"
+                        >
+                          {PROGRAM_DIRECTION_CTA} →
+                        </Link>
+                        <p className="mt-3 text-[11px] leading-relaxed text-white/35">
+                          {PROGRAM_DIRECTION_FOOTER}
+                        </p>
                       </div>
                     )}
 

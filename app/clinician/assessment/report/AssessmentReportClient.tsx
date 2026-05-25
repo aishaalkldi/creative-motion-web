@@ -84,6 +84,19 @@ import {
 } from "@/app/lib/clinical-focus-copy";
 import { deriveClinicalFocusLabels } from "@/app/lib/clinical-focus-labels";
 import { buildGeneralMskPayload } from "@/app/lib/assessment-payload";
+import {
+  PROGRAM_DIRECTION_CARD_BADGE,
+  PROGRAM_DIRECTION_CATEGORY_LINE,
+  PROGRAM_DIRECTION_CTA,
+  PROGRAM_DIRECTION_FOCUS_LINE,
+  PROGRAM_DIRECTION_FOOTER,
+  PROGRAM_DIRECTION_INTRO,
+  PROGRAM_DIRECTION_LOW_CONFIDENCE,
+  PROGRAM_DIRECTION_NO_OPTIONS,
+  PROGRAM_DIRECTION_RED_FLAG,
+  PROGRAM_DIRECTION_SECTION_TITLE,
+} from "@/app/lib/program-direction-copy";
+import { resolveProgramOptionsForFocus } from "@/app/lib/program-direction-options";
 
 // ── Constants & labels ─────────────────────────────────────────────────────────
 
@@ -691,6 +704,113 @@ function AssessmentFocusContextSection({
         <InfoTile label={FOCUS_DIRECTION_LABEL} value={FOCUS_DIRECTION_VALUE} />
       </div>
       <p className="mt-4 text-xs leading-relaxed text-white/45">{FOCUS_CONFIRMATION_TEXT}</p>
+    </ReportSection>
+  );
+}
+
+// ── Sprint P: Program options for therapist review ─────────────────────────────
+
+const PROGRAM_DIRECTION_ICON = (
+  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
+    />
+  </svg>
+);
+
+function ProgramDirectionForReviewSection({
+  assessmentType,
+  structuredData,
+  patientId,
+}: {
+  assessmentType?: string;
+  structuredData?: unknown;
+  patientId: string;
+}) {
+  const labels = useMemo(
+    () => deriveClinicalFocusLabels(assessmentType, structuredData),
+    [assessmentType, structuredData],
+  );
+  const hasRedFlag = useMemo(() => detectRedFlag(structuredData), [structuredData]);
+  const options = useMemo(
+    () => resolveProgramOptionsForFocus(labels, { hasRedFlag }),
+    [labels, hasRedFlag],
+  );
+  const planBuilderHref = patientId
+    ? `/clinician/plans/new?patientId=${encodeURIComponent(patientId)}`
+    : "/clinician/plans/new";
+
+  return (
+    <ReportSection
+      id="program-direction"
+      title={PROGRAM_DIRECTION_SECTION_TITLE}
+      defaultOpen
+      accent="border-violet-300/25 bg-violet-400/10 text-violet-300"
+      icon={PROGRAM_DIRECTION_ICON}
+    >
+      <p className="mb-4 max-w-2xl text-xs leading-relaxed text-white/50">
+        {PROGRAM_DIRECTION_INTRO}
+      </p>
+
+      <div className="mb-4 grid gap-2 sm:grid-cols-2">
+        <p className="text-xs text-white/55">
+          <span className="font-semibold text-white/70">{PROGRAM_DIRECTION_FOCUS_LINE}</span>{" "}
+          {labels.focusArea}
+        </p>
+        <p className="text-xs text-white/55">
+          <span className="font-semibold text-white/70">{PROGRAM_DIRECTION_CATEGORY_LINE}</span>{" "}
+          {labels.clinicalCategory}
+        </p>
+      </div>
+
+      {hasRedFlag && (
+        <div className="mb-4 rounded-xl border border-amber-300/25 bg-amber-400/10 px-4 py-3">
+          <p className="text-xs leading-relaxed text-amber-200">{PROGRAM_DIRECTION_RED_FLAG}</p>
+        </div>
+      )}
+
+      {labels.confidence === "low" && options.length > 0 && (
+        <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+          <p className="text-xs leading-relaxed text-white/50">{PROGRAM_DIRECTION_LOW_CONFIDENCE}</p>
+        </div>
+      )}
+
+      {options.length === 0 ? (
+        <p className="text-sm leading-relaxed text-white/50">{PROGRAM_DIRECTION_NO_OPTIONS}</p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-3">
+          {options.map((option) => (
+            <div
+              key={option.templateId}
+              className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+            >
+              <div className="mb-3 flex items-start justify-between gap-2">
+                <h3 className="text-sm font-bold text-white">{option.title}</h3>
+                <span className="shrink-0 rounded-full border border-violet-300/25 bg-violet-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-violet-300">
+                  {PROGRAM_DIRECTION_CARD_BADGE}
+                </span>
+              </div>
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-white/35">
+                {option.conditionArea} · {option.level}
+              </p>
+              <p className="mt-2 text-[11px] leading-relaxed text-white/45">{option.displayNote}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <Link
+          href={planBuilderHref}
+          className="inline-flex rounded-xl border border-violet-300/30 bg-violet-400/10 px-4 py-2.5 text-xs font-semibold text-violet-200 transition hover:bg-violet-400/15"
+        >
+          {PROGRAM_DIRECTION_CTA} →
+        </Link>
+      </div>
+
+      <p className="mt-4 text-xs leading-relaxed text-white/40">{PROGRAM_DIRECTION_FOOTER}</p>
     </ReportSection>
   );
 }
@@ -1317,6 +1437,11 @@ export function AssessmentReportClient() {
             assessmentType="remote_questionnaire"
             structuredData={remoteSubmissionMeta}
           />
+          <ProgramDirectionForReviewSection
+            assessmentType="remote_questionnaire"
+            structuredData={remoteSubmissionMeta}
+            patientId={patientId}
+          />
           <ReportNextStepsFooter patientId={patientId} existingPlan={existingPlan} />
           <ClinicalDisclaimerBlock />
         </div>
@@ -1363,6 +1488,11 @@ export function AssessmentReportClient() {
         <AssessmentFocusContextSection
           assessmentType="structured"
           structuredData={structuredData}
+        />
+        <ProgramDirectionForReviewSection
+          assessmentType="structured"
+          structuredData={structuredData}
+          patientId={patientId}
         />
         <ReportNextStepsFooter patientId={patientId} existingPlan={existingPlan} />
         <ClinicalDisclaimerBlock />
@@ -1906,6 +2036,15 @@ export function AssessmentReportClient() {
             draft,
             patientAnsweredInArabic ? "ar" : undefined,
           )}
+        />
+
+        <ProgramDirectionForReviewSection
+          assessmentType="general_msk"
+          structuredData={buildGeneralMskPayload(
+            draft,
+            patientAnsweredInArabic ? "ar" : undefined,
+          )}
+          patientId={patientId}
         />
 
         <ProgramRecommendationSection
