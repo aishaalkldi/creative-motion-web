@@ -1,9 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { getClinician } from "@/app/lib/auth";
-import { hasDevAuthSession } from "@/app/lib/dev-auth";
 import { getCvReadyExercises } from "@/app/lib/cv/cv-ready-exercises";
 import { CvLabSession } from "@/app/components/clinician/cv/CvLabSession";
 
@@ -48,7 +45,6 @@ function formatSource(source: string): string {
 }
 
 export default function CvLabPage() {
-  const router = useRouter();
   const cvReadyExercises = getCvReadyExercises();
   const exerciseNameById = Object.fromEntries(
     cvReadyExercises.map((exercise) => [exercise.exerciseId, exercise.nameEn]),
@@ -79,12 +75,8 @@ export default function CvLabPage() {
   }, []);
 
   useEffect(() => {
-    if (!getClinician() && !hasDevAuthSession()) {
-      router.replace("/login");
-      return;
-    }
     void fetchHistory();
-  }, [router, fetchHistory]);
+  }, [fetchHistory]);
 
   return (
     <main className="min-h-screen bg-[#0B1220] px-6 py-8 text-[#F9FAFB]">
