@@ -3,6 +3,7 @@
 import type { ResolvedExerciseView } from "@/app/lib/exercise-resolve";
 import { getLibraryExerciseById } from "@/app/lib/exercise-library-v1";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
+import { ExerciseMediaArea } from "@/app/components/patient/ExerciseMediaArea";
 import {
   formatBodyRegionForPatient,
   formatExerciseProgress,
@@ -105,14 +106,15 @@ export function PatientExerciseSessionCard({
       </p>
 
       <div className="overflow-hidden rounded-[10px] border border-[#E2E8E5] bg-white">
-        <div
-          className="flex min-h-[140px] flex-col items-center justify-center border-b border-dashed border-[#D1E7DE] bg-[#F4F6F5] px-4 py-8"
-          aria-hidden={false}
-        >
-          <p className="text-[12px] font-medium text-[#6B7280]">
-            {flowUi.demoMediaPlaceholder}
-          </p>
-        </div>
+        <ExerciseMediaArea
+          exerciseId={view.exerciseId}
+          exerciseName={view.name}
+          bodyRegion={libraryEntry?.bodyRegion}
+          mediaUrl={null}
+          thumbnailUrl={null}
+          language={lang}
+          arClass={arClass}
+        />
 
         <div className="space-y-4 p-5">
           <div>

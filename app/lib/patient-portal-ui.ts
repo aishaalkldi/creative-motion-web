@@ -431,6 +431,34 @@ export function formatBodyRegionForPatient(
   return BODY_REGION_PATIENT[lang][region] ?? region;
 }
 
+/* ── Exercise media area (Sprint MEDIA-1) ─────────────────────────────────── */
+
+export type ExerciseMediaUi = {
+  movementGuideTitle: string;
+  demoMediaSubtitle: string;
+  followTherapistInstructions: string;
+  mediaAlt: (name: string) => string;
+};
+
+const EXERCISE_MEDIA_UI: Record<PatientPortalLanguage, ExerciseMediaUi> = {
+  en: {
+    movementGuideTitle: "Movement guide",
+    demoMediaSubtitle: "Demo media will appear here",
+    followTherapistInstructions: "Follow your therapist's instructions",
+    mediaAlt: (name) => (name.trim() ? `Exercise guide: ${name}` : "Exercise guide"),
+  },
+  ar: {
+    movementGuideTitle: "دليل الحركة",
+    demoMediaSubtitle: "سيظهر شرح التمرين هنا",
+    followTherapistInstructions: "اتبع تعليمات معالجك",
+    mediaAlt: (name) => (name.trim() ? `دليل التمرين: ${name}` : "دليل التمرين"),
+  },
+};
+
+export function exerciseMediaUi(lang: PatientPortalLanguage): ExerciseMediaUi {
+  return EXERCISE_MEDIA_UI[lang];
+}
+
 const SESSION_EXERCISE_UI: Record<PatientPortalLanguage, SessionExerciseUi> = {
   en: {
     exerciseOf: "Exercise {current} of {total}",
