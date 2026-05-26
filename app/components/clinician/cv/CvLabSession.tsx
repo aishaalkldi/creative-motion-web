@@ -10,6 +10,7 @@ const MODEL_URL =
 const CANVAS_WIDTH = 640;
 const CANVAS_HEIGHT = 480;
 const INIT_TIMEOUT_MS = 45_000;
+const UI_FRAME_UPDATE_INTERVAL = 15;
 
 const LOWER_BODY_LANDMARKS = [23, 24, 25, 26, 27, 28] as const;
 
@@ -90,6 +91,39 @@ function mapStartError(err: unknown): string {
   return "Movement tracking could not start. Please check camera permission and try again.";
 }
 
+async function waitForVideoReady(video: HTMLVideoElement): Promise<void> {
+  if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return;
+
+  await new Promise<void>((resolve, reject) => {
+    const onReady = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error("Camera video could not start."));
+    };
+    const cleanup = () => {
+      video.removeEventListener("loadedmetadata", onReady);
+      video.removeEventListener("canplay", onReady);
+      video.removeEventListener("error", onError);
+    };
+    video.addEventListener("loadedmetadata", onReady, { once: true });
+    video.addEventListener("canplay", onReady, { once: true });
+    video.addEventListener("error", onError, { once: true });
+  });
+}
+
+async function startVideoPlayback(video: HTMLVideoElement): Promise<void> {
+  await waitForVideoReady(video);
+  try {
+    await video.play();
+  } catch (err) {
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return;
+    throw err;
+  }
+}
+
 async function createPoseLandmarker(
   PoseLandmarker: Awaited<typeof import("@mediapipe/tasks-vision")>["PoseLandmarker"],
   fileset: Awaited<ReturnType<Awaited<typeof import("@mediapipe/tasks-vision")>["FilesetResolver"]["forVisionTasks"]>>,
@@ -121,10 +155,11 @@ export function CvLabSession({
   onSessionSaved,
 }: CvLabSessionProps = {}) {
   const [consented, setConsented] = useState(false);
-  const [cameraActive, setCameraActive] = useState(false);
+  const [previewActive, setPreviewActive] = useState(false);
   const [loading, setLoading] = useState(false);
   const [initPhase, setInitPhase] = useState<InitPhase>(null);
   const [error, setError] = useState<string | null>(null);
+  const [trackingError, setTrackingError] = useState<string | null>(null);
   const [repCount, setRepCount] = useState(0);
   const [trackingStatus, setTrackingStatus] = useState<TrackingStatus>("idle");
   const [trackingQuality, setTrackingQuality] = useState<TrackingQuality | null>(null);
@@ -142,7 +177,7 @@ export function CvLabSession({
   const streamRef = useRef<MediaStream | null>(null);
   const poseLandmarkerRef = useRef<PoseLandmarkerInstance | null>(null);
   const standPhaseRef = useRef<StandPhase>("down");
-  const cameraActiveRef = useRef(false);
+  const previewActiveRef = useRef(false);
   const repCountRef = useRef(0);
   const sessionSecondsRef = useRef(0);
   const trackingQualityRef = useRef<TrackingQuality | null>(null);
@@ -152,6 +187,13 @@ export function CvLabSession({
   const startInProgressRef = useRef(false);
   const saveInProgressRef = useRef(false);
   const stopInProgressRef = useRef(false);
+  const sessionEpochRef = useRef(0);
+  const detectTimestampRef = useRef(0);
+  const trackingStatusRef = useRef<TrackingStatus>("idle");
+  const onSessionSavedRef = useRef(onSessionSaved);
+  const videoPauseHandlerRef = useRef<(() => void) | null>(null);
+
+  onSessionSavedRef.current = onSessionSaved;
 
   const clearSaveStatusTimer = useCallback(() => {
     if (saveStatusTimerRef.current) {
@@ -167,14 +209,25 @@ export function CvLabSession({
     }, 4000);
   }, [clearSaveStatusTimer]);
 
+  const detachVideoPauseHandler = useCallback(() => {
+    const video = videoRef.current;
+    const handler = videoPauseHandlerRef.current;
+    if (video && handler) {
+      video.removeEventListener("pause", handler);
+    }
+    videoPauseHandlerRef.current = null;
+  }, []);
+
   const stopCamera = useCallback(() => {
-    cameraActiveRef.current = false;
+    sessionEpochRef.current += 1;
+    previewActiveRef.current = false;
     cancelAnimationFrame(animFrameRef.current);
     animFrameRef.current = 0;
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
+    detachVideoPauseHandler();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
     if (videoRef.current) {
@@ -182,12 +235,15 @@ export function CvLabSession({
     }
     poseLandmarkerRef.current?.close?.();
     poseLandmarkerRef.current = null;
-    setCameraActive(false);
+    detectTimestampRef.current = 0;
+    setPreviewActive(false);
     setTrackingStatus("idle");
+    trackingStatusRef.current = "idle";
     setTrackingQuality(null);
     setLoading(false);
     setInitPhase(null);
-  }, []);
+    setTrackingError(null);
+  }, [detachVideoPauseHandler]);
 
   const saveSessionMetrics = useCallback(async () => {
     if (saveInProgressRef.current) return;
@@ -227,17 +283,17 @@ export function CvLabSession({
 
       setSaveStatus("saved");
       scheduleSaveStatusClear();
-      onSessionSaved?.();
+      onSessionSavedRef.current?.();
     } catch {
       setSaveStatus("error");
       scheduleSaveStatusClear();
     } finally {
       saveInProgressRef.current = false;
     }
-  }, [patientId, planId, planSessionId, onSessionSaved, scheduleSaveStatusClear]);
+  }, [patientId, planId, planSessionId, scheduleSaveStatusClear]);
 
   const handleStopSession = useCallback(() => {
-    if (stopInProgressRef.current || !cameraActiveRef.current) return;
+    if (stopInProgressRef.current || !previewActiveRef.current) return;
 
     stopInProgressRef.current = true;
     stopCamera();
@@ -254,7 +310,7 @@ export function CvLabSession({
   }, [stopCamera, clearSaveStatusTimer]);
 
   const startSession = useCallback(async () => {
-    if (!consented || startInProgressRef.current || loading || cameraActiveRef.current) {
+    if (!consented || startInProgressRef.current || loading || previewActiveRef.current) {
       return;
     }
 
@@ -268,8 +324,11 @@ export function CvLabSession({
       return;
     }
 
+    const epoch = sessionEpochRef.current + 1;
+    sessionEpochRef.current = epoch;
     startInProgressRef.current = true;
     setError(null);
+    setTrackingError(null);
     setLoading(true);
     setInitPhase("import");
     setRepCount(0);
@@ -279,6 +338,7 @@ export function CvLabSession({
     sessionSecondsRef.current = 0;
     setSessionStarted(true);
     setTrackingStatus("detecting");
+    trackingStatusRef.current = "detecting";
     setMovementDetected(false);
     setFramesWithPose(0);
     setFramesTotal(0);
@@ -288,12 +348,15 @@ export function CvLabSession({
     setSaveStatus("idle");
     clearSaveStatusTimer();
 
+    const isCurrentSession = () => sessionEpochRef.current === epoch;
+
     try {
       const { PoseLandmarker, FilesetResolver } = await withTimeout(
         import("@mediapipe/tasks-vision"),
         INIT_TIMEOUT_MS,
         "Pose library load",
       );
+      if (!isCurrentSession()) return;
 
       setInitPhase("model");
       const filesetResolver = await withTimeout(
@@ -301,12 +364,21 @@ export function CvLabSession({
         INIT_TIMEOUT_MS,
         "Pose runtime load",
       );
+      if (!isCurrentSession()) return;
 
       const poseLandmarker = await createPoseLandmarker(PoseLandmarker, filesetResolver);
+      if (!isCurrentSession()) {
+        poseLandmarker.close?.();
+        return;
+      }
       poseLandmarkerRef.current = poseLandmarker;
 
       setInitPhase("camera");
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      if (!isCurrentSession()) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       streamRef.current = stream;
 
       const video = videoRef.current;
@@ -315,10 +387,22 @@ export function CvLabSession({
       }
 
       video.srcObject = stream;
-      await video.play();
+      detachVideoPauseHandler();
+      const onVideoPause = () => {
+        if (!previewActiveRef.current || video.paused) {
+          void video.play().catch(() => {
+            /* keep preview alive; detect loop surfaces tracking errors */
+          });
+        }
+      };
+      videoPauseHandlerRef.current = onVideoPause;
+      video.addEventListener("pause", onVideoPause);
 
-      cameraActiveRef.current = true;
-      setCameraActive(true);
+      await startVideoPlayback(video);
+      if (!isCurrentSession()) return;
+
+      previewActiveRef.current = true;
+      setPreviewActive(true);
       setLoading(false);
       setInitPhase(null);
 
@@ -327,59 +411,89 @@ export function CvLabSession({
         setSessionSeconds(sessionSecondsRef.current);
       }, 1000);
 
+      let consecutiveDetectErrors = 0;
+
       const detect = () => {
-        if (!cameraActiveRef.current || !videoRef.current || !canvasRef.current) return;
+        if (!previewActiveRef.current || !videoRef.current || !canvasRef.current) return;
 
         const canvas = canvasRef.current;
         const ctx = canvas.getContext("2d");
         if (!ctx || !poseLandmarkerRef.current) return;
 
         framesTotalRef.current += 1;
-        setFramesTotal(framesTotalRef.current);
 
-        const result = poseLandmarkerRef.current.detectForVideo(
-          videoRef.current,
-          performance.now(),
-        );
+        try {
+          if (videoRef.current.paused && previewActiveRef.current) {
+            void videoRef.current.play().catch(() => undefined);
+          }
 
-        ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-        ctx.drawImage(videoRef.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+          detectTimestampRef.current = Math.max(
+            detectTimestampRef.current + 1,
+            performance.now(),
+          );
 
-        if (result.landmarks && result.landmarks.length > 0) {
-          setTrackingStatus("pose-found");
-          framesWithPoseRef.current += 1;
+          const result = poseLandmarkerRef.current.detectForVideo(
+            videoRef.current,
+            detectTimestampRef.current,
+          );
+
+          ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+          ctx.drawImage(videoRef.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+          consecutiveDetectErrors = 0;
+
+          if (result.landmarks && result.landmarks.length > 0) {
+            if (trackingStatusRef.current !== "pose-found") {
+              trackingStatusRef.current = "pose-found";
+              setTrackingStatus("pose-found");
+            }
+            framesWithPoseRef.current += 1;
+            setMovementDetected(true);
+
+            const landmarks = result.landmarks[0];
+            const hipVis =
+              (landmarks[23]?.visibility ?? 0) + (landmarks[24]?.visibility ?? 0);
+            const quality: TrackingQuality =
+              hipVis > 1.4 ? "good" : hipVis > 0.8 ? "fair" : "poor";
+            trackingQualityRef.current = quality;
+            setTrackingQuality(quality);
+
+            const hipY = ((landmarks[23]?.y ?? 0) + (landmarks[24]?.y ?? 0)) / 2;
+
+            if (hipY < 0.42 && standPhaseRef.current === "down") {
+              standPhaseRef.current = "up";
+              repCountRef.current += 1;
+              setRepCount(repCountRef.current);
+            } else if (hipY > 0.58 && standPhaseRef.current === "up") {
+              standPhaseRef.current = "down";
+            }
+
+            for (const idx of LOWER_BODY_LANDMARKS) {
+              const lm = landmarks[idx];
+              if (!lm) continue;
+              ctx.beginPath();
+              ctx.arc(lm.x * CANVAS_WIDTH, lm.y * CANVAS_HEIGHT, 4, 0, 2 * Math.PI);
+              ctx.fillStyle = "#1D9E75";
+              ctx.fill();
+            }
+          } else if (trackingStatusRef.current !== "pose-lost") {
+            trackingStatusRef.current = "pose-lost";
+            setTrackingStatus("pose-lost");
+            setTrackingQuality(null);
+          }
+        } catch {
+          consecutiveDetectErrors += 1;
+          if (consecutiveDetectErrors >= 10) {
+            setTrackingError(
+              "Movement tracking could not continue. Please stop and try again.",
+            );
+            return;
+          }
+        }
+
+        if (framesTotalRef.current % UI_FRAME_UPDATE_INTERVAL === 0) {
+          setFramesTotal(framesTotalRef.current);
           setFramesWithPose(framesWithPoseRef.current);
-          setMovementDetected(true);
-
-          const landmarks = result.landmarks[0];
-          const hipVis =
-            (landmarks[23]?.visibility ?? 0) + (landmarks[24]?.visibility ?? 0);
-          const quality: TrackingQuality =
-            hipVis > 1.4 ? "good" : hipVis > 0.8 ? "fair" : "poor";
-          trackingQualityRef.current = quality;
-          setTrackingQuality(quality);
-
-          const hipY = ((landmarks[23]?.y ?? 0) + (landmarks[24]?.y ?? 0)) / 2;
-
-          if (hipY < 0.42 && standPhaseRef.current === "down") {
-            standPhaseRef.current = "up";
-            repCountRef.current += 1;
-            setRepCount(repCountRef.current);
-          } else if (hipY > 0.58 && standPhaseRef.current === "up") {
-            standPhaseRef.current = "down";
-          }
-
-          for (const idx of LOWER_BODY_LANDMARKS) {
-            const lm = landmarks[idx];
-            if (!lm) continue;
-            ctx.beginPath();
-            ctx.arc(lm.x * CANVAS_WIDTH, lm.y * CANVAS_HEIGHT, 4, 0, 2 * Math.PI);
-            ctx.fillStyle = "#1D9E75";
-            ctx.fill();
-          }
-        } else {
-          setTrackingStatus("pose-lost");
-          setTrackingQuality(null);
         }
 
         animFrameRef.current = requestAnimationFrame(detect);
@@ -387,12 +501,15 @@ export function CvLabSession({
 
       animFrameRef.current = requestAnimationFrame(detect);
     } catch (err) {
+      if (!isCurrentSession()) return;
       stopCamera();
       setError(mapStartError(err));
     } finally {
-      startInProgressRef.current = false;
+      if (sessionEpochRef.current === epoch) {
+        startInProgressRef.current = false;
+      }
     }
-  }, [consented, loading, stopCamera, clearSaveStatusTimer]);
+  }, [consented, loading, stopCamera, clearSaveStatusTimer, detachVideoPauseHandler]);
 
   const resetCounter = () => {
     repCountRef.current = 0;
@@ -408,6 +525,8 @@ export function CvLabSession({
         : initPhase === "camera"
           ? "Starting camera…"
           : "Starting session…";
+
+  const showPreview = previewActive || (loading && initPhase === "camera");
 
   if (!consented) {
     return (
@@ -457,7 +576,7 @@ export function CvLabSession({
       {error && (
         <div className="rounded-[8px] border border-rose-400/25 bg-rose-400/10 px-4 py-3 text-xs text-rose-200">
           <p>{error}</p>
-          {!cameraActive && !loading && (
+          {!previewActive && !loading && (
             <button
               type="button"
               onClick={() => {
@@ -472,7 +591,13 @@ export function CvLabSession({
         </div>
       )}
 
-      {!cameraActive && (
+      {trackingError && previewActive && (
+        <div className="rounded-[8px] border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-xs text-amber-100">
+          {trackingError}
+        </div>
+      )}
+
+      {!previewActive && (
         <button
           type="button"
           disabled={loading}
@@ -483,16 +608,23 @@ export function CvLabSession({
         </button>
       )}
 
-      <video ref={videoRef} autoPlay muted playsInline className="hidden" />
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        className="pointer-events-none fixed left-0 top-0 h-px w-px opacity-0"
+        aria-hidden
+      />
       <canvas
         ref={canvasRef}
         width={CANVAS_WIDTH}
         height={CANVAS_HEIGHT}
         className="w-full rounded-[8px] border border-[#1E2D42] bg-[#0B1220]"
-        style={{ display: cameraActive ? "block" : "none" }}
+        style={{ display: showPreview ? "block" : "none" }}
       />
 
-      {cameraActive && (
+      {previewActive && (
         <button
           type="button"
           disabled={stopInProgressRef.current || saveInProgressRef.current}
@@ -553,7 +685,7 @@ export function CvLabSession({
           <button
             type="button"
             onClick={resetCounter}
-            disabled={cameraActive && loading}
+            disabled={previewActive && loading}
             className="rounded-[7px] border border-[#1E2D42] bg-transparent px-3 py-1.5 text-xs font-semibold text-[#9CA3AF] transition hover:text-white disabled:opacity-50"
           >
             Reset counter
