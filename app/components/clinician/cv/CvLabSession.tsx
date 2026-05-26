@@ -15,6 +15,14 @@ const LOWER_BODY_LANDMARKS = [23, 24, 25, 26, 27, 28] as const;
 type TrackingStatus = "idle" | "detecting" | "pose-found" | "pose-lost";
 type TrackingQuality = "good" | "fair" | "poor";
 type StandPhase = "up" | "down";
+type SaveStatus = "idle" | "saving" | "saved" | "error";
+
+export type CvLabSessionProps = {
+  patientId?: string;
+  planId?: string;
+  planSessionId?: string;
+  onSessionSaved?: () => void;
+};
 
 function formatDuration(seconds: number): string {
   const mm = Math.floor(seconds / 60);
@@ -22,7 +30,12 @@ function formatDuration(seconds: number): string {
   return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
 }
 
-export function CvLabSession() {
+export function CvLabSession({
+  patientId,
+  planId,
+  planSessionId,
+  onSessionSaved,
+}: CvLabSessionProps = {}) {
   const [consented, setConsented] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -32,6 +45,10 @@ export function CvLabSession() {
   const [trackingQuality, setTrackingQuality] = useState<TrackingQuality | null>(null);
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [sessionStarted, setSessionStarted] = useState(false);
+  const [movementDetected, setMovementDetected] = useState(false);
+  const [framesWithPose, setFramesWithPose] = useState(0);
+  const [framesTotal, setFramesTotal] = useState(0);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -41,8 +58,28 @@ export function CvLabSession() {
   const poseLandmarkerRef = useRef<{ detectForVideo: (video: HTMLVideoElement, ts: number) => { landmarks?: Array<Array<{ x: number; y: number; visibility?: number }>> } } | null>(null);
   const standPhaseRef = useRef<StandPhase>("down");
   const cameraActiveRef = useRef(false);
+  const repCountRef = useRef(0);
+  const sessionSecondsRef = useRef(0);
+  const trackingQualityRef = useRef<TrackingQuality | null>(null);
+  const framesWithPoseRef = useRef(0);
+  const framesTotalRef = useRef(0);
+  const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const stopSession = useCallback(() => {
+  const clearSaveStatusTimer = useCallback(() => {
+    if (saveStatusTimerRef.current) {
+      clearTimeout(saveStatusTimerRef.current);
+      saveStatusTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleSaveStatusClear = useCallback(() => {
+    clearSaveStatusTimer();
+    saveStatusTimerRef.current = setTimeout(() => {
+      setSaveStatus("idle");
+    }, 4000);
+  }, [clearSaveStatusTimer]);
+
+  const stopCamera = useCallback(() => {
     cameraActiveRef.current = false;
     cancelAnimationFrame(animFrameRef.current);
     if (timerRef.current) {
@@ -61,11 +98,59 @@ export function CvLabSession() {
     setLoading(false);
   }, []);
 
+  const saveSessionMetrics = useCallback(async () => {
+    const duration = sessionSecondsRef.current;
+    if (duration < 3) return;
+
+    setSaveStatus("saving");
+
+    const payload = {
+      exerciseId: "sit-to-stand",
+      repCount: repCountRef.current,
+      sessionDurationS: duration,
+      trackingQuality: trackingQualityRef.current ?? "unknown",
+      movementDetected: framesWithPoseRef.current > 0,
+      framesWithPose: framesWithPoseRef.current,
+      framesTotal: framesTotalRef.current,
+      source: "cv_lab",
+      ...(patientId ? { patientId } : {}),
+      ...(planId ? { planId } : {}),
+      ...(planSessionId ? { planSessionId } : {}),
+    };
+
+    try {
+      const res = await fetch("/api/cv/session-metrics", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        setSaveStatus("error");
+        scheduleSaveStatusClear();
+        return;
+      }
+
+      setSaveStatus("saved");
+      scheduleSaveStatusClear();
+      onSessionSaved?.();
+    } catch {
+      setSaveStatus("error");
+      scheduleSaveStatusClear();
+    }
+  }, [patientId, planId, planSessionId, onSessionSaved, scheduleSaveStatusClear]);
+
+  const handleStopSession = useCallback(() => {
+    stopCamera();
+    void saveSessionMetrics();
+  }, [stopCamera, saveSessionMetrics]);
+
   useEffect(() => {
     return () => {
-      stopSession();
+      stopCamera();
+      clearSaveStatusTimer();
     };
-  }, [stopSession]);
+  }, [stopCamera, clearSaveStatusTimer]);
 
   const startSession = useCallback(async () => {
     if (!consented) return;
@@ -73,10 +158,20 @@ export function CvLabSession() {
     setError(null);
     setLoading(true);
     setRepCount(0);
+    repCountRef.current = 0;
     standPhaseRef.current = "down";
     setSessionSeconds(0);
+    sessionSecondsRef.current = 0;
     setSessionStarted(true);
     setTrackingStatus("detecting");
+    setMovementDetected(false);
+    setFramesWithPose(0);
+    setFramesTotal(0);
+    framesWithPoseRef.current = 0;
+    framesTotalRef.current = 0;
+    trackingQualityRef.current = null;
+    setSaveStatus("idle");
+    clearSaveStatusTimer();
 
     try {
       const { PoseLandmarker, FilesetResolver } = await import("@mediapipe/tasks-vision");
@@ -110,7 +205,8 @@ export function CvLabSession() {
       setLoading(false);
 
       timerRef.current = setInterval(() => {
-        setSessionSeconds((s) => s + 1);
+        sessionSecondsRef.current += 1;
+        setSessionSeconds(sessionSecondsRef.current);
       }, 1000);
 
       const detect = () => {
@@ -119,6 +215,9 @@ export function CvLabSession() {
         const canvas = canvasRef.current;
         const ctx = canvas.getContext("2d");
         if (!ctx || !poseLandmarkerRef.current) return;
+
+        framesTotalRef.current += 1;
+        setFramesTotal(framesTotalRef.current);
 
         const result = poseLandmarkerRef.current.detectForVideo(
           videoRef.current,
@@ -130,19 +229,24 @@ export function CvLabSession() {
 
         if (result.landmarks && result.landmarks.length > 0) {
           setTrackingStatus("pose-found");
+          framesWithPoseRef.current += 1;
+          setFramesWithPose(framesWithPoseRef.current);
+          setMovementDetected(true);
 
           const landmarks = result.landmarks[0];
           const hipVis =
             (landmarks[23]?.visibility ?? 0) + (landmarks[24]?.visibility ?? 0);
           const quality: TrackingQuality =
             hipVis > 1.4 ? "good" : hipVis > 0.8 ? "fair" : "poor";
+          trackingQualityRef.current = quality;
           setTrackingQuality(quality);
 
           const hipY = ((landmarks[23]?.y ?? 0) + (landmarks[24]?.y ?? 0)) / 2;
 
           if (hipY < 0.42 && standPhaseRef.current === "down") {
             standPhaseRef.current = "up";
-            setRepCount((c) => c + 1);
+            repCountRef.current += 1;
+            setRepCount(repCountRef.current);
           } else if (hipY > 0.58 && standPhaseRef.current === "up") {
             standPhaseRef.current = "down";
           }
@@ -165,16 +269,17 @@ export function CvLabSession() {
 
       animFrameRef.current = requestAnimationFrame(detect);
     } catch (err) {
-      stopSession();
+      stopCamera();
       setError(
         err instanceof Error
           ? err.message
           : "Could not start camera or pose detection.",
       );
     }
-  }, [consented, stopSession]);
+  }, [consented, stopCamera, clearSaveStatusTimer]);
 
   const resetCounter = () => {
+    repCountRef.current = 0;
     setRepCount(0);
     standPhaseRef.current = "down";
   };
@@ -192,11 +297,12 @@ export function CvLabSession() {
             <li>Detects body position using MediaPipe Pose</li>
             <li>Counts repetitions of Sit-to-Stand</li>
             <li>Shows pose tracking quality</li>
+            <li>Saves derived session metrics (reps, duration) when you stop a session</li>
           </ul>
           <p className="font-medium text-[#9CA3AF]">What this does NOT do:</p>
           <ul className="list-disc space-y-1 pl-4">
             <li>Record or store any video</li>
-            <li>Transmit data to any server</li>
+            <li>Upload body coordinates or pose landmarks</li>
             <li>Assess clinical movement quality</li>
             <li>Generate any clinical interpretation</li>
           </ul>
@@ -243,7 +349,7 @@ export function CvLabSession() {
       {cameraActive && (
         <button
           type="button"
-          onClick={stopSession}
+          onClick={handleStopSession}
           className="rounded-[7px] border border-[#1E2D42] bg-transparent px-4 py-2 text-sm font-semibold text-[#9CA3AF] transition hover:text-white"
         >
           Stop Session
@@ -277,6 +383,22 @@ export function CvLabSession() {
           <p className="text-sm text-[#9CA3AF]">
             Session duration: {formatDuration(sessionSeconds)}
           </p>
+
+          {movementDetected && (
+            <p className="text-[11px] text-[#6B7280]">
+              Frames with pose: {framesWithPose} / {framesTotal}
+            </p>
+          )}
+
+          {saveStatus === "saving" && (
+            <p className="text-xs text-[#9CA3AF]">Saving session…</p>
+          )}
+          {saveStatus === "saved" && (
+            <p className="text-xs text-[#1D9E75]">✓ Session saved</p>
+          )}
+          {saveStatus === "error" && (
+            <p className="text-xs text-rose-300">Session data could not be saved</p>
+          )}
 
           <button
             type="button"
