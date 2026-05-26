@@ -119,8 +119,9 @@ export default function CvLabPage() {
             - Substitute for clinical examination
             <br />
             <br />
-            Camera access is used only for real-time pose detection. No video is recorded, stored, or
-            transmitted at any time.
+            Camera access is used only for real-time pose detection on this device. No video is
+            recorded, stored, or transmitted. This prototype records derived movement metrics only.
+            This tool is not clinically validated and must not be used for treatment decisions.
           </p>
         </div>
 

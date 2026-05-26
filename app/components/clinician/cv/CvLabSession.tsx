@@ -9,6 +9,7 @@ const MODEL_URL =
 
 const CANVAS_WIDTH = 640;
 const CANVAS_HEIGHT = 480;
+const INIT_TIMEOUT_MS = 45_000;
 
 const LOWER_BODY_LANDMARKS = [23, 24, 25, 26, 27, 28] as const;
 
@@ -16,6 +17,15 @@ type TrackingStatus = "idle" | "detecting" | "pose-found" | "pose-lost";
 type TrackingQuality = "good" | "fair" | "poor";
 type StandPhase = "up" | "down";
 type SaveStatus = "idle" | "saving" | "saved" | "error";
+type InitPhase = null | "import" | "model" | "camera";
+
+type PoseLandmarkerInstance = {
+  detectForVideo: (
+    video: HTMLVideoElement,
+    ts: number,
+  ) => { landmarks?: Array<Array<{ x: number; y: number; visibility?: number }>> };
+  close?: () => void;
+};
 
 export type CvLabSessionProps = {
   patientId?: string;
@@ -30,6 +40,80 @@ function formatDuration(seconds: number): string {
   return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
 }
 
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const id = setTimeout(() => {
+      reject(new Error(`${label} timed out. Please check your connection and try again.`));
+    }, ms);
+    promise.then(
+      (value) => {
+        clearTimeout(id);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(id);
+        reject(error);
+      },
+    );
+  });
+}
+
+function getBrowserSupportError(): string | null {
+  if (typeof navigator === "undefined") return null;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    return "This browser does not support camera access. Try a current version of Chrome, Edge, or Safari.";
+  }
+  return null;
+}
+
+function needsSecureContextMessage(): boolean {
+  if (typeof window === "undefined") return false;
+  return !window.isSecureContext && !["localhost", "127.0.0.1"].includes(window.location.hostname);
+}
+
+function mapStartError(err: unknown): string {
+  if (err instanceof DOMException) {
+    if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+      return "Camera access was denied. Movement tracking could not start. Please check camera permission and try again.";
+    }
+    if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+      return "No camera was found on this device.";
+    }
+    if (err.name === "NotReadableError" || err.name === "TrackStartError") {
+      return "The camera is in use by another application. Close other apps and try again.";
+    }
+  }
+  if (err instanceof Error) {
+    if (err.message.includes("timed out")) return err.message;
+    return err.message;
+  }
+  return "Movement tracking could not start. Please check camera permission and try again.";
+}
+
+async function createPoseLandmarker(
+  PoseLandmarker: Awaited<typeof import("@mediapipe/tasks-vision")>["PoseLandmarker"],
+  fileset: Awaited<ReturnType<Awaited<typeof import("@mediapipe/tasks-vision")>["FilesetResolver"]["forVisionTasks"]>>,
+): Promise<PoseLandmarkerInstance> {
+  const baseOptions = { modelAssetPath: MODEL_URL, delegate: "GPU" as const };
+  const options = { baseOptions, runningMode: "VIDEO" as const, numPoses: 1 };
+  try {
+    return await withTimeout(
+      PoseLandmarker.createFromOptions(fileset, options),
+      INIT_TIMEOUT_MS,
+      "Pose model load",
+    );
+  } catch {
+    return await withTimeout(
+      PoseLandmarker.createFromOptions(fileset, {
+        ...options,
+        baseOptions: { ...baseOptions, delegate: "CPU" },
+      }),
+      INIT_TIMEOUT_MS,
+      "Pose model load",
+    );
+  }
+}
+
 export function CvLabSession({
   patientId,
   planId,
@@ -39,6 +123,7 @@ export function CvLabSession({
   const [consented, setConsented] = useState(false);
   const [cameraActive, setCameraActive] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [initPhase, setInitPhase] = useState<InitPhase>(null);
   const [error, setError] = useState<string | null>(null);
   const [repCount, setRepCount] = useState(0);
   const [trackingStatus, setTrackingStatus] = useState<TrackingStatus>("idle");
@@ -55,7 +140,7 @@ export function CvLabSession({
   const animFrameRef = useRef<number>(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const poseLandmarkerRef = useRef<{ detectForVideo: (video: HTMLVideoElement, ts: number) => { landmarks?: Array<Array<{ x: number; y: number; visibility?: number }>> } } | null>(null);
+  const poseLandmarkerRef = useRef<PoseLandmarkerInstance | null>(null);
   const standPhaseRef = useRef<StandPhase>("down");
   const cameraActiveRef = useRef(false);
   const repCountRef = useRef(0);
@@ -64,6 +149,9 @@ export function CvLabSession({
   const framesWithPoseRef = useRef(0);
   const framesTotalRef = useRef(0);
   const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startInProgressRef = useRef(false);
+  const saveInProgressRef = useRef(false);
+  const stopInProgressRef = useRef(false);
 
   const clearSaveStatusTimer = useCallback(() => {
     if (saveStatusTimerRef.current) {
@@ -82,6 +170,7 @@ export function CvLabSession({
   const stopCamera = useCallback(() => {
     cameraActiveRef.current = false;
     cancelAnimationFrame(animFrameRef.current);
+    animFrameRef.current = 0;
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -91,17 +180,22 @@ export function CvLabSession({
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
+    poseLandmarkerRef.current?.close?.();
     poseLandmarkerRef.current = null;
     setCameraActive(false);
     setTrackingStatus("idle");
     setTrackingQuality(null);
     setLoading(false);
+    setInitPhase(null);
   }, []);
 
   const saveSessionMetrics = useCallback(async () => {
+    if (saveInProgressRef.current) return;
+
     const duration = sessionSecondsRef.current;
     if (duration < 3) return;
 
+    saveInProgressRef.current = true;
     setSaveStatus("saving");
 
     const payload = {
@@ -137,12 +231,19 @@ export function CvLabSession({
     } catch {
       setSaveStatus("error");
       scheduleSaveStatusClear();
+    } finally {
+      saveInProgressRef.current = false;
     }
   }, [patientId, planId, planSessionId, onSessionSaved, scheduleSaveStatusClear]);
 
   const handleStopSession = useCallback(() => {
+    if (stopInProgressRef.current || !cameraActiveRef.current) return;
+
+    stopInProgressRef.current = true;
     stopCamera();
-    void saveSessionMetrics();
+    void saveSessionMetrics().finally(() => {
+      stopInProgressRef.current = false;
+    });
   }, [stopCamera, saveSessionMetrics]);
 
   useEffect(() => {
@@ -153,10 +254,24 @@ export function CvLabSession({
   }, [stopCamera, clearSaveStatusTimer]);
 
   const startSession = useCallback(async () => {
-    if (!consented) return;
+    if (!consented || startInProgressRef.current || loading || cameraActiveRef.current) {
+      return;
+    }
 
+    const browserError = getBrowserSupportError();
+    if (browserError) {
+      setError(browserError);
+      return;
+    }
+    if (needsSecureContextMessage()) {
+      setError("Camera access requires a secure connection (HTTPS). Open this page over HTTPS and try again.");
+      return;
+    }
+
+    startInProgressRef.current = true;
     setError(null);
     setLoading(true);
+    setInitPhase("import");
     setRepCount(0);
     repCountRef.current = 0;
     standPhaseRef.current = "down";
@@ -174,21 +289,23 @@ export function CvLabSession({
     clearSaveStatusTimer();
 
     try {
-      const { PoseLandmarker, FilesetResolver } = await import("@mediapipe/tasks-vision");
+      const { PoseLandmarker, FilesetResolver } = await withTimeout(
+        import("@mediapipe/tasks-vision"),
+        INIT_TIMEOUT_MS,
+        "Pose library load",
+      );
 
-      const filesetResolver = await FilesetResolver.forVisionTasks(WASM_URL);
+      setInitPhase("model");
+      const filesetResolver = await withTimeout(
+        FilesetResolver.forVisionTasks(WASM_URL),
+        INIT_TIMEOUT_MS,
+        "Pose runtime load",
+      );
 
-      const poseLandmarker = await PoseLandmarker.createFromOptions(filesetResolver, {
-        baseOptions: {
-          modelAssetPath: MODEL_URL,
-          delegate: "GPU",
-        },
-        runningMode: "VIDEO",
-        numPoses: 1,
-      });
-
+      const poseLandmarker = await createPoseLandmarker(PoseLandmarker, filesetResolver);
       poseLandmarkerRef.current = poseLandmarker;
 
+      setInitPhase("camera");
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
       streamRef.current = stream;
 
@@ -203,6 +320,7 @@ export function CvLabSession({
       cameraActiveRef.current = true;
       setCameraActive(true);
       setLoading(false);
+      setInitPhase(null);
 
       timerRef.current = setInterval(() => {
         sessionSecondsRef.current += 1;
@@ -270,19 +388,26 @@ export function CvLabSession({
       animFrameRef.current = requestAnimationFrame(detect);
     } catch (err) {
       stopCamera();
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Could not start camera or pose detection.",
-      );
+      setError(mapStartError(err));
+    } finally {
+      startInProgressRef.current = false;
     }
-  }, [consented, stopCamera, clearSaveStatusTimer]);
+  }, [consented, loading, stopCamera, clearSaveStatusTimer]);
 
   const resetCounter = () => {
     repCountRef.current = 0;
     setRepCount(0);
     standPhaseRef.current = "down";
   };
+
+  const loadingLabel =
+    initPhase === "import"
+      ? "Loading pose library…"
+      : initPhase === "model"
+        ? "Loading pose model…"
+        : initPhase === "camera"
+          ? "Starting camera…"
+          : "Starting session…";
 
   if (!consented) {
     return (
@@ -296,16 +421,25 @@ export function CvLabSession({
           <ul className="list-disc space-y-1 pl-4">
             <li>Detects body position using MediaPipe Pose</li>
             <li>Counts repetitions of Sit-to-Stand</li>
-            <li>Shows pose tracking quality</li>
+            <li>Shows pose tracking status during the session</li>
             <li>Saves derived session metrics (reps, duration) when you stop a session</li>
           </ul>
           <p className="font-medium text-[#9CA3AF]">What this does NOT do:</p>
           <ul className="list-disc space-y-1 pl-4">
             <li>Record or store any video</li>
             <li>Upload body coordinates or pose landmarks</li>
-            <li>Assess clinical movement quality</li>
             <li>Generate any clinical interpretation</li>
           </ul>
+          <p className="text-[#9CA3AF]">
+            Camera access is required for this internal CV lab. Use HTTPS in production environments.
+          </p>
+          <p className="text-[#9CA3AF]">
+            This prototype records derived movement metrics only. No video or body coordinates are
+            stored.
+          </p>
+          <p className="text-[#EF9F27]">
+            This tool is not clinically validated and must not be used for treatment decisions.
+          </p>
         </div>
         <button
           type="button"
@@ -322,7 +456,19 @@ export function CvLabSession({
     <div className="space-y-4">
       {error && (
         <div className="rounded-[8px] border border-rose-400/25 bg-rose-400/10 px-4 py-3 text-xs text-rose-200">
-          {error}
+          <p>{error}</p>
+          {!cameraActive && !loading && (
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                void startSession();
+              }}
+              className="mt-3 rounded-[7px] border border-rose-400/30 px-3 py-1.5 text-xs font-semibold text-rose-100 transition hover:bg-rose-400/10"
+            >
+              Retry
+            </button>
+          )}
         </div>
       )}
 
@@ -333,7 +479,7 @@ export function CvLabSession({
           onClick={() => void startSession()}
           className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#179165] disabled:opacity-50"
         >
-          {loading ? "Starting session…" : "Start Session"}
+          {loading ? loadingLabel : "Start Session"}
         </button>
       )}
 
@@ -349,8 +495,9 @@ export function CvLabSession({
       {cameraActive && (
         <button
           type="button"
+          disabled={stopInProgressRef.current || saveInProgressRef.current}
           onClick={handleStopSession}
-          className="rounded-[7px] border border-[#1E2D42] bg-transparent px-4 py-2 text-sm font-semibold text-[#9CA3AF] transition hover:text-white"
+          className="rounded-[7px] border border-[#1E2D42] bg-transparent px-4 py-2 text-sm font-semibold text-[#9CA3AF] transition hover:text-white disabled:opacity-50"
         >
           Stop Session
         </button>
@@ -359,10 +506,13 @@ export function CvLabSession({
       {sessionStarted && (
         <div className="space-y-2 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-4">
           <p className="text-xs text-[#F9FAFB]">
-            {trackingStatus === "idle" && "⏳ Ready"}
-            {trackingStatus === "detecting" && "⏳ Detecting pose…"}
-            {trackingStatus === "pose-found" && "🟢 Pose detected"}
-            {trackingStatus === "pose-lost" && "🔴 Pose not detected — check camera angle"}
+            {loading && initPhase === "import" && "⏳ Loading pose library…"}
+            {loading && initPhase === "model" && "⏳ Loading pose model…"}
+            {loading && initPhase === "camera" && "⏳ Starting camera…"}
+            {!loading && trackingStatus === "idle" && "⏳ Ready"}
+            {!loading && trackingStatus === "detecting" && "⏳ Detecting pose…"}
+            {!loading && trackingStatus === "pose-found" && "🟢 Pose detected"}
+            {!loading && trackingStatus === "pose-lost" && "🔴 Pose not detected — check camera angle"}
           </p>
 
           {trackingStatus === "pose-found" && trackingQuality && (
@@ -403,7 +553,8 @@ export function CvLabSession({
           <button
             type="button"
             onClick={resetCounter}
-            className="rounded-[7px] border border-[#1E2D42] bg-transparent px-3 py-1.5 text-xs font-semibold text-[#9CA3AF] transition hover:text-white"
+            disabled={cameraActive && loading}
+            className="rounded-[7px] border border-[#1E2D42] bg-transparent px-3 py-1.5 text-xs font-semibold text-[#9CA3AF] transition hover:text-white disabled:opacity-50"
           >
             Reset counter
           </button>

@@ -51,7 +51,7 @@ const nextConfig: NextConfig = {
       },
       {
         key: "Permissions-Policy",
-        value: "camera=(), microphone=(self), geolocation=(), payment=()",
+        value: "camera=(self), microphone=(self), geolocation=(), payment=()",
       },
       {
         key: "Cross-Origin-Opener-Policy",
@@ -65,11 +65,11 @@ const nextConfig: NextConfig = {
         key: "Content-Security-Policy",
         value: [
           "default-src 'self'",
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.sentry.io https://vercel.live",
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.sentry.io https://vercel.live https://cdn.jsdelivr.net",
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "font-src 'self' https://fonts.gstatic.com data:",
           "img-src 'self' data: blob: https:",
-          "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://vercel.live http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*",
+          "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.sentry.io https://vercel.live https://cdn.jsdelivr.net https://storage.googleapis.com http://127.0.0.1:* http://localhost:* ws://127.0.0.1:* ws://localhost:*",
           "frame-ancestors 'none'",
           "base-uri 'self'",
           "form-action 'self'",
