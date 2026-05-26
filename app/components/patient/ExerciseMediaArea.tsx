@@ -1,6 +1,8 @@
 "use client";
 
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
+import { PatientCvCapture } from "@/app/components/patient/cv/PatientCvCapture";
+import { isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
 import { exerciseMediaUi } from "@/app/lib/patient-portal-ui";
 
 export type ExerciseMediaAreaProps = {
@@ -11,6 +13,11 @@ export type ExerciseMediaAreaProps = {
   thumbnailUrl?: string | null;
   language: PatientExerciseLanguage;
   arClass?: string;
+  textDir?: "rtl" | "ltr";
+  /** W-0 exercise card step — CV capture only when "active". */
+  exerciseStep?: "preview" | "active" | "done";
+  patientToken?: string;
+  planSessionId?: string;
 };
 
 type VisualRegion =
@@ -383,18 +390,35 @@ export function ExerciseMediaArea({
   thumbnailUrl,
   language,
   arClass = "",
+  textDir = "ltr",
+  exerciseStep,
+  patientToken,
+  planSessionId,
 }: ExerciseMediaAreaProps) {
   const ui = exerciseMediaUi(language);
   const resolvedMedia = mediaUrl?.trim() || null;
   const poster = thumbnailUrl?.trim() || undefined;
+
+  const showPatientCv =
+    exerciseStep === "active" &&
+    isCvEnabledExercise(exerciseId) &&
+    Boolean(patientToken?.trim()) &&
+    Boolean(planSessionId?.trim());
 
   return (
     <div
       className="relative overflow-hidden border-b border-[#D1E7DE] bg-gradient-to-b from-[#E8F5F1] via-[#F0FAF6] to-[#F4F6F5]"
       data-exercise-id={exerciseId ?? undefined}
     >
-      {/* future: camera consent slot */}
-      {/* future: camera preview slot */}
+      {showPatientCv && (
+        <PatientCvCapture
+          token={patientToken!.trim()}
+          sessionId={planSessionId!.trim()}
+          language={language}
+          arClass={arClass}
+          textDir={textDir}
+        />
+      )}
 
       <div className="relative">
         {resolvedMedia ? (

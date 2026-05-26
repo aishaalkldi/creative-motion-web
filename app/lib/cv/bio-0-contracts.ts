@@ -92,12 +92,18 @@ export type PatientCvCopy = {
   trackingPoor: string;
   sessionDuration: (formatted: string) => string;
   savedTherapistReview: string;
+  savingMetrics: string;
   saveError: string;
   loadingPoseLibrary: string;
   loadingPoseModel: string;
   startingCamera: string;
   prototypeNotice: string;
   therapistReviewOnly: string;
+  optionalCameraNote: string;
+  continueWithoutCamera: string;
+  moveComfortably: string;
+  trackingStatusReady: string;
+  trackingStatusDetecting: string;
 };
 
 const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
@@ -132,6 +138,7 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     trackingPoor: "Tracking signal: Poor — adjust camera or lighting",
     sessionDuration: (formatted) => `Session duration: ${formatted}`,
     savedTherapistReview: "Saved — your therapist can review this session",
+    savingMetrics: "Saving session…",
     saveError: "Session data could not be saved. You can continue your exercise.",
     loadingPoseLibrary: "Loading pose library…",
     loadingPoseModel: "Loading pose model…",
@@ -139,6 +146,11 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     prototypeNotice:
       "Movement counting is assistive only. It is not clinically validated and does not replace your therapist's guidance.",
     therapistReviewOnly: "For therapist review only — not a clinical assessment.",
+    optionalCameraNote: "Camera guidance is optional. You can continue your exercise without it.",
+    continueWithoutCamera: "Continue without camera",
+    moveComfortably: "Take your time and move comfortably.",
+    trackingStatusReady: "Ready",
+    trackingStatusDetecting: "Detecting movement…",
   },
   ar: {
     consentTitle: "الكاميرا لعدّ الحركة",
@@ -170,6 +182,7 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     trackingPoor: "إشارة التتبّع: ضعيفة — عدّل الكاميرا أو الإضاءة",
     sessionDuration: (formatted) => `مدة الجلسة: ${formatted}`,
     savedTherapistReview: "تم الحفظ — يمكن لمعالجك مراجعة هذه الجلسة",
+    savingMetrics: "جاري حفظ الجلسة…",
     saveError: "تعذّر حفظ بيانات الجلسة. يمكنك متابعة التمرين.",
     loadingPoseLibrary: "جاري تحميل مكتبة الوضعية…",
     loadingPoseModel: "جاري تحميل نموذج الوضعية…",
@@ -177,8 +190,16 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     prototypeNotice:
       "عدّ الحركة مساعد فقط. غير مُتحقّق سريرياً ولا يُغني عن إرشاد معالجك.",
     therapistReviewOnly: "لمراجعة المعالج فقط — وليس تقييماً سريرياً.",
+    optionalCameraNote: "إرشاد الكاميرا اختياري. يمكنك متابعة التمرين دونه.",
+    continueWithoutCamera: "المتابعة دون كاميرا",
+    moveComfortably: "خذ وقتك وتحرّك براحة.",
+    trackingStatusReady: "جاهز",
+    trackingStatusDetecting: "جاري اكتشاف الحركة…",
   },
 };
+
+/** Server-side prototype_version for patient_session CV saves (CV-Y1B). */
+export const CV_Y1B_PATIENT_PROTOTYPE_VERSION = "cv-y1b-sit-to-stand";
 
 export function patientCvCopy(lang: PatientExerciseLanguage): PatientCvCopy {
   return PATIENT_CV_COPY[lang];

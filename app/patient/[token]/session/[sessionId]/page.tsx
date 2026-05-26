@@ -709,6 +709,8 @@ export default function SessionPlayerPage() {
         onStartExercise={handleStartExercise}
         onCompleteSet={handleCompleteSet}
         onCompleteExercise={handleCompleteExercise}
+        patientToken={token}
+        planSessionId={sessionId}
       />
 
       {exerciseStep === "done" && (

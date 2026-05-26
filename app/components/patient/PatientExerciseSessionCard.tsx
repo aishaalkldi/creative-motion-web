@@ -26,6 +26,8 @@ type PatientExerciseSessionCardProps = {
   onStartExercise: () => void;
   onCompleteSet: () => void;
   onCompleteExercise: () => void;
+  patientToken?: string;
+  planSessionId?: string;
 };
 
 function DoseTile({
@@ -69,6 +71,8 @@ export function PatientExerciseSessionCard({
   onStartExercise,
   onCompleteSet,
   onCompleteExercise,
+  patientToken,
+  planSessionId,
 }: PatientExerciseSessionCardProps) {
   const flowUi = sessionExerciseFlowUi(lang);
   const cardUi = sessionExerciseUi(lang);
@@ -114,6 +118,10 @@ export function PatientExerciseSessionCard({
           thumbnailUrl={null}
           language={lang}
           arClass={arClass}
+          textDir={textDir}
+          exerciseStep={step}
+          patientToken={patientToken}
+          planSessionId={planSessionId}
         />
 
         <div className="space-y-4 p-5">
