@@ -287,6 +287,150 @@ export type SessionExerciseUi = {
   exerciseFallback: string;
 };
 
+/* ── Exercise session flow (Sprint W-0) ───────────────────────────────────── */
+
+export type SessionExerciseFlowUi = {
+  sessionOverviewTitle: string;
+  sessionOverviewBody: string;
+  exercisesInSession: (count: number) => string;
+  beginExercises: string;
+  demoMediaPlaceholder: string;
+  bodyRegionLabel: string;
+  doseSets: string;
+  doseReps: string;
+  doseDuration: string;
+  doseRest: string;
+  doseNotSet: string;
+  durationSeconds: (sec: number) => string;
+  restSeconds: (sec: number) => string;
+  startThisExercise: string;
+  completeSet: string;
+  setProgress: (done: number, total: number) => string;
+  completeExercise: string;
+  exerciseCompleteTitle: string;
+  exerciseCompleteBody: string;
+  nextExercise: string;
+  takeYourTime: string;
+  restBetweenSets: string;
+  followTherapistPlan: string;
+  stopSharpPain: string;
+  therapistCanReview: string;
+  sessionProgressLabel: string;
+  inProgressLabel: string;
+  sessionWrapUpTitle: string;
+  continueToFinish: string;
+};
+
+const BODY_REGION_PATIENT: Record<
+  PatientPortalLanguage,
+  Record<string, string>
+> = {
+  en: {
+    knee: "Knee",
+    lumbar: "Lower back",
+    shoulder: "Shoulder",
+    cervical: "Neck",
+    ankle: "Ankle",
+    hip: "Hip",
+    general: "General",
+  },
+  ar: {
+    knee: "الركبة",
+    lumbar: "أسفل الظهر",
+    shoulder: "الكتف",
+    cervical: "الرقبة",
+    ankle: "الكاحل",
+    hip: "الورك",
+    general: "عام",
+  },
+};
+
+const SESSION_EXERCISE_FLOW_UI: Record<
+  PatientPortalLanguage,
+  SessionExerciseFlowUi
+> = {
+  en: {
+    sessionOverviewTitle: "Session overview",
+    sessionOverviewBody:
+      "You will move through each exercise one at a time. Take your time and follow your therapist's plan.",
+    exercisesInSession: (count) =>
+      `${count} exercise${count === 1 ? "" : "s"} in this session`,
+    beginExercises: "Begin exercises",
+    demoMediaPlaceholder: "Demo media placeholder",
+    bodyRegionLabel: "Body region",
+    doseSets: "Sets",
+    doseReps: "Reps",
+    doseDuration: "Duration",
+    doseRest: "Rest",
+    doseNotSet: "—",
+    durationSeconds: (sec) => `${sec}s`,
+    restSeconds: (sec) => `${sec}s rest`,
+    startThisExercise: "Start this exercise",
+    completeSet: "Complete set",
+    setProgress: (done, total) => `Set ${done} of ${total}`,
+    completeExercise: "Complete exercise",
+    exerciseCompleteTitle: "Exercise complete",
+    exerciseCompleteBody: "Take a short rest before the next exercise when you are ready.",
+    nextExercise: "Next exercise",
+    takeYourTime: "Take your time",
+    restBetweenSets: "Rest between sets",
+    followTherapistPlan: "Follow your therapist's plan",
+    stopSharpPain: "Stop if you feel sharp or unusual pain",
+    therapistCanReview: "Your therapist can review your progress",
+    sessionProgressLabel: "Session progress",
+    inProgressLabel: "In progress",
+    sessionWrapUpTitle: "Finish your session",
+    continueToFinish: "Continue to finish session",
+  },
+  ar: {
+    sessionOverviewTitle: "نظرة على الجلسة",
+    sessionOverviewBody:
+      "ستنتقل من تمرين إلى آخر. خذ وقتك واتبع خطة معالجك.",
+    exercisesInSession: (count) =>
+      count === 1 ? "تمرين واحد في هذه الجلسة" : `${count} تمارين في هذه الجلسة`,
+    beginExercises: "بدء التمارين",
+    demoMediaPlaceholder: "عنصر توضيحي للعرض التجريبي",
+    bodyRegionLabel: "منطقة الجسم",
+    doseSets: "مجموعات",
+    doseReps: "تكرارات",
+    doseDuration: "المدة",
+    doseRest: "راحة",
+    doseNotSet: "—",
+    durationSeconds: (sec) => `${sec} ث`,
+    restSeconds: (sec) => `راحة ${sec} ث`,
+    startThisExercise: "بدء هذا التمرين",
+    completeSet: "إكمال المجموعة",
+    setProgress: (done, total) => `المجموعة ${done} من ${total}`,
+    completeExercise: "إكمال التمرين",
+    exerciseCompleteTitle: "اكتمل التمرين",
+    exerciseCompleteBody: "خذ راحة قصيرة قبل التمرين التالي عندما تكون مستعداً.",
+    nextExercise: "التمرين التالي",
+    takeYourTime: "خذ وقتك",
+    restBetweenSets: "راحة بين المجموعات",
+    followTherapistPlan: "اتبع خطة معالجك",
+    stopSharpPain: "توقّف عند الشعور بألم حاد أو غير معتاد",
+    therapistCanReview: "يمكن لمعالجك مراجعة تقدّمك",
+    sessionProgressLabel: "تقدّم الجلسة",
+    inProgressLabel: "قيد التنفيذ",
+    sessionWrapUpTitle: "إنهاء الجلسة",
+    continueToFinish: "متابعة لإنهاء الجلسة",
+  },
+};
+
+export function sessionExerciseFlowUi(
+  lang: PatientPortalLanguage,
+): SessionExerciseFlowUi {
+  return SESSION_EXERCISE_FLOW_UI[lang];
+}
+
+export function formatBodyRegionForPatient(
+  lang: PatientPortalLanguage,
+  region: string | undefined,
+): string | null {
+  if (!region?.trim()) return null;
+  return BODY_REGION_PATIENT[lang][region] ?? region;
+}
+
 const SESSION_EXERCISE_UI: Record<PatientPortalLanguage, SessionExerciseUi> = {
   en: {
     exerciseOf: "Exercise {current} of {total}",
