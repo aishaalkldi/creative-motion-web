@@ -53,171 +53,225 @@ function isVideoUrl(url: string): boolean {
   return /\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(url);
 }
 
-const STROKE = "#1D9E75";
-const STROKE_SOFT = "#9ECDB8";
-const STROKE_MUTED = "#C5D9D0";
+const TEAL = "#1D9E75";
+const TEAL_LIGHT = "#9ECDB8";
+const TEAL_MIST = "#D1E7DE";
+const TEAL_GLOW = "rgba(29, 158, 117, 0.12)";
 
-function RegionVisual({ region }: { region: VisualRegion }) {
-  const motionClass = "rasq-media-motion";
+function FlowMarkers({ rtl }: { rtl: boolean }) {
+  const startX = rtl ? 172 : 28;
+  const endX = rtl ? 28 : 172;
+  return (
+    <g aria-hidden>
+      <circle cx={startX} cy="118" r="4" fill={TEAL} opacity="0.35" />
+      <circle cx={endX} cy="118" r="4" fill={TEAL} opacity="0.85" />
+      <path
+        d={rtl ? "M 158 118 L 172 118 L 166 114" : "M 42 118 L 28 118 L 34 114"}
+        fill="none"
+        stroke={TEAL_LIGHT}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity="0.7"
+      />
+      <path
+        className="rasq-flow-arrow"
+        d={rtl ? "M 48 118 L 32 118 L 38 114" : "M 158 118 L 172 118 L 166 114"}
+        fill="none"
+        stroke={TEAL}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity="0.85"
+      />
+    </g>
+  );
+}
+
+function RegionVisual({ region, rtl }: { region: VisualRegion; rtl: boolean }) {
+  const pathClass = "rasq-motion-path";
+  const glowClass = "rasq-motion-glow";
 
   switch (region) {
     case "knee":
       return (
-        <svg
-          viewBox="0 0 120 100"
-          className="h-[88px] w-[110px]"
-          aria-hidden
-        >
-          <line x1="58" y1="18" x2="58" y2="42" stroke={STROKE_MUTED} strokeWidth="2.5" strokeLinecap="round" />
+        <svg viewBox="0 0 200 130" className="h-[120px] w-full max-w-[200px]" aria-hidden>
+          <line x1="70" y1="95" x2="130" y2="95" stroke={TEAL_MIST} strokeWidth="2" strokeLinecap="round" />
+          <line x1="100" y1="38" x2="100" y2="62" stroke={TEAL_LIGHT} strokeWidth="2.5" strokeLinecap="round" />
           <path
-            className={motionClass}
-            d="M58 42 Q72 58 58 78 L58 88"
+            className={pathClass}
+            d="M100 62 L100 78 Q118 88 100 98"
             fill="none"
-            stroke={STROKE}
-            strokeWidth="3"
+            stroke={TEAL}
+            strokeWidth="3.5"
             strokeLinecap="round"
           />
-          <circle cx="58" cy="58" r="6" fill="none" stroke={STROKE_SOFT} strokeWidth="2" className={motionClass} style={{ animationDelay: "0.4s" }} />
+          <path
+            className={glowClass}
+            d="M100 78 Q112 82 100 88"
+            fill="none"
+            stroke={TEAL_LIGHT}
+            strokeWidth="2"
+            strokeLinecap="round"
+            style={{ animationDelay: "0.5s" }}
+          />
+          <FlowMarkers rtl={rtl} />
         </svg>
       );
     case "hip":
       return (
-        <svg viewBox="0 0 120 100" className="h-[88px] w-[110px]" aria-hidden>
-          <line x1="60" y1="16" x2="60" y2="38" stroke={STROKE_MUTED} strokeWidth="2.5" strokeLinecap="round" />
+        <svg viewBox="0 0 200 130" className="h-[120px] w-full max-w-[200px]" aria-hidden>
+          <line x1="100" y1="32" x2="100" y2="52" stroke={TEAL_LIGHT} strokeWidth="2.5" strokeLinecap="round" />
           <path
-            className={motionClass}
-            d="M60 38 Q44 52 48 78 L48 90"
+            className={pathClass}
+            d="M100 52 Q78 68 82 98 L82 108"
             fill="none"
-            stroke={STROKE}
-            strokeWidth="3"
+            stroke={TEAL}
+            strokeWidth="3.5"
             strokeLinecap="round"
           />
           <path
-            className={motionClass}
-            d="M48 52 Q68 48 72 62"
+            className={glowClass}
+            d="M82 72 Q100 66 108 78"
             fill="none"
-            stroke={STROKE_SOFT}
+            stroke={TEAL_LIGHT}
             strokeWidth="2"
             strokeLinecap="round"
-            style={{ animationDelay: "0.35s" }}
           />
+          <FlowMarkers rtl={rtl} />
         </svg>
       );
     case "shoulder":
       return (
-        <svg viewBox="0 0 120 100" className="h-[88px] w-[110px]" aria-hidden>
-          <line x1="52" y1="28" x2="52" y2="78" stroke={STROKE_MUTED} strokeWidth="2.5" strokeLinecap="round" />
+        <svg viewBox="0 0 200 130" className="h-[120px] w-full max-w-[200px]" aria-hidden>
+          <line x1="88" y1="42" x2="88" y2="100" stroke={TEAL_LIGHT} strokeWidth="2.5" strokeLinecap="round" />
           <path
-            className={motionClass}
-            d="M52 32 Q78 36 84 56 Q80 72 58 68"
+            className={pathClass}
+            d="M88 46 Q128 50 138 72 Q132 92 102 88"
             fill="none"
-            stroke={STROKE}
-            strokeWidth="3"
+            stroke={TEAL}
+            strokeWidth="3.5"
             strokeLinecap="round"
           />
+          <circle cx="138" cy="72" r="5" fill="none" stroke={TEAL_LIGHT} strokeWidth="2" className={glowClass} />
+          <FlowMarkers rtl={rtl} />
         </svg>
       );
     case "cervical":
       return (
-        <svg viewBox="0 0 120 100" className="h-[88px] w-[110px]" aria-hidden>
-          <circle cx="60" cy="24" r="12" fill="none" stroke={STROKE_MUTED} strokeWidth="2" />
+        <svg viewBox="0 0 200 130" className="h-[120px] w-full max-w-[200px]" aria-hidden>
+          <circle cx="100" cy="36" r="14" fill="none" stroke={TEAL_LIGHT} strokeWidth="2" />
           <path
-            className={motionClass}
-            d="M60 36 L60 52 Q54 58 60 64"
+            className={pathClass}
+            d="M100 50 L100 68 Q92 76 100 84"
             fill="none"
-            stroke={STROKE}
-            strokeWidth="3"
+            stroke={TEAL}
+            strokeWidth="3.5"
             strokeLinecap="round"
           />
-          <line x1="60" y1="64" x2="60" y2="82" stroke={STROKE_SOFT} strokeWidth="2" strokeLinecap="round" />
+          <line x1="100" y1="84" x2="100" y2="102" stroke={TEAL_LIGHT} strokeWidth="2" strokeLinecap="round" />
+          <FlowMarkers rtl={rtl} />
         </svg>
       );
     case "lumbar":
       return (
-        <svg viewBox="0 0 120 100" className="h-[88px] w-[110px]" aria-hidden>
+        <svg viewBox="0 0 200 130" className="h-[120px] w-full max-w-[200px]" aria-hidden>
           <path
-            className={motionClass}
-            d="M60 18 Q68 34 60 50 Q52 66 60 82"
+            className={pathClass}
+            d="M100 28 Q112 48 100 68 Q88 88 100 102"
             fill="none"
-            stroke={STROKE}
-            strokeWidth="3"
+            stroke={TEAL}
+            strokeWidth="3.5"
             strokeLinecap="round"
           />
           <path
-            d="M48 30 L72 30 M46 50 L74 50 M48 70 L72 70"
+            className={glowClass}
+            d="M82 48 Q100 44 118 48 M80 68 Q100 64 120 68"
             fill="none"
-            stroke={STROKE_SOFT}
+            stroke={TEAL_LIGHT}
             strokeWidth="1.5"
             strokeLinecap="round"
-            opacity="0.7"
+            opacity="0.75"
           />
+          <FlowMarkers rtl={rtl} />
         </svg>
       );
     case "ankle":
       return (
-        <svg viewBox="0 0 120 100" className="h-[88px] w-[110px]" aria-hidden>
-          <line x1="58" y1="14" x2="58" y2="58" stroke={STROKE_MUTED} strokeWidth="2.5" strokeLinecap="round" />
+        <svg viewBox="0 0 200 130" className="h-[120px] w-full max-w-[200px]" aria-hidden>
+          <line x1="100" y1="28" x2="100" y2="72" stroke={TEAL_LIGHT} strokeWidth="2.5" strokeLinecap="round" />
           <path
-            className={motionClass}
-            d="M58 58 L42 78 L58 88 L74 78 Z"
+            className={pathClass}
+            d="M100 72 L78 98 L100 108 L122 98 Z"
             fill="none"
-            stroke={STROKE}
-            strokeWidth="3"
+            stroke={TEAL}
+            strokeWidth="3.5"
             strokeLinejoin="round"
           />
           <path
-            className={motionClass}
-            d="M42 78 Q58 72 74 78"
+            className={glowClass}
+            d="M78 98 Q100 90 122 98"
             fill="none"
-            stroke={STROKE_SOFT}
+            stroke={TEAL_LIGHT}
             strokeWidth="2"
-            style={{ animationDelay: "0.3s" }}
           />
+          <FlowMarkers rtl={rtl} />
         </svg>
       );
     case "balance":
       return (
-        <svg viewBox="0 0 120 100" className="h-[88px] w-[110px]" aria-hidden>
-          <line x1="60" y1="22" x2="60" y2="42" stroke={STROKE_MUTED} strokeWidth="2.5" strokeLinecap="round" />
-          <line x1="60" y1="42" x2="60" y2="72" stroke={STROKE} strokeWidth="3" strokeLinecap="round" />
-          <line x1="60" y1="72" x2="48" y2="88" stroke={STROKE} strokeWidth="3" strokeLinecap="round" />
-          <line x1="60" y1="72" x2="72" y2="88" stroke={STROKE_SOFT} strokeWidth="2.5" strokeLinecap="round" className={motionClass} />
+        <svg viewBox="0 0 200 130" className="h-[120px] w-full max-w-[200px]" aria-hidden>
+          <line x1="100" y1="30" x2="100" y2="48" stroke={TEAL_LIGHT} strokeWidth="2.5" strokeLinecap="round" />
+          <line x1="100" y1="48" x2="100" y2="82" stroke={TEAL} strokeWidth="3.5" strokeLinecap="round" />
+          <line x1="100" y1="82" x2="86" y2="102" stroke={TEAL} strokeWidth="3" strokeLinecap="round" />
+          <line
+            x1="100"
+            y1="82"
+            x2="114"
+            y2="102"
+            stroke={TEAL_LIGHT}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            className={glowClass}
+          />
           <path
-            className={motionClass}
-            d="M36 88 Q60 76 84 88"
+            className={pathClass}
+            d="M68 102 Q100 92 132 102"
             fill="none"
-            stroke={STROKE_SOFT}
+            stroke={TEAL_LIGHT}
             strokeWidth="2"
             strokeLinecap="round"
           />
+          <FlowMarkers rtl={rtl} />
         </svg>
       );
     default:
       return (
-        <svg viewBox="0 0 120 100" className="h-[88px] w-[110px]" aria-hidden>
+        <svg viewBox="0 0 200 130" className="h-[120px] w-full max-w-[200px]" aria-hidden>
           <path
-            className={motionClass}
-            d="M20 50 Q40 32 60 50 T100 50"
+            className={pathClass}
+            d="M36 68 Q68 48 100 68 T164 68"
             fill="none"
-            stroke={STROKE}
-            strokeWidth="3"
+            stroke={TEAL}
+            strokeWidth="3.5"
             strokeLinecap="round"
           />
           <path
-            className={motionClass}
-            d="M20 62 Q40 44 60 62 T100 62"
+            className={glowClass}
+            d="M36 82 Q68 62 100 82 T164 82"
             fill="none"
-            stroke={STROKE_SOFT}
+            stroke={TEAL_LIGHT}
             strokeWidth="2"
             strokeLinecap="round"
-            style={{ animationDelay: "0.45s" }}
+            style={{ animationDelay: "0.4s" }}
           />
+          <FlowMarkers rtl={rtl} />
         </svg>
       );
   }
 }
 
-function PlaceholderGuide({
+function MovementPreviewPanel({
   language,
   exerciseId,
   bodyRegion,
@@ -234,29 +288,76 @@ function PlaceholderGuide({
 
   return (
     <div
-      className={`flex min-h-[180px] flex-col items-center justify-center gap-3 px-5 py-6 ${arClass}`}
+      className={`relative min-h-[220px] overflow-hidden ${arClass}`}
       dir={isArabic ? "rtl" : "ltr"}
       lang={language}
     >
-      <div className="flex items-center justify-center rounded-full bg-white/70 p-4 shadow-sm ring-1 ring-[#D1E7DE]/80">
-        <RegionVisual region={visual} />
-      </div>
-      <div className="max-w-[260px] text-center">
-        <p className="text-[13px] font-semibold tracking-wide text-[#0A0F1A]">
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{
+          background: `radial-gradient(ellipse 80% 70% at 50% 40%, ${TEAL_GLOW} 0%, transparent 70%)`,
+        }}
+        aria-hidden
+      />
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.35]"
+        style={{
+          backgroundImage: `linear-gradient(${TEAL_MIST} 1px, transparent 1px), linear-gradient(90deg, ${TEAL_MIST} 1px, transparent 1px)`,
+          backgroundSize: "24px 24px",
+        }}
+        aria-hidden
+      />
+
+      <div className="relative flex flex-col items-center px-5 pb-6 pt-5">
+        <p
+          className="mb-4 text-[10px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]"
+          style={{ letterSpacing: "0.12em" }}
+        >
           {ui.movementGuideTitle}
         </p>
-        <p className="mt-1 text-[12px] text-[#6B7280]">{ui.demoMediaSubtitle}</p>
-        <p className="mt-2 text-[11px] text-[#1D9E75]">
+
+        <div
+          className="relative w-full max-w-[300px] rounded-[14px] bg-white/75 px-6 py-7 shadow-[0_10px_32px_-12px_rgba(29,158,117,0.28)] ring-1 ring-[#D1E7DE]"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(240,250,246,0.85) 100%)",
+          }}
+        >
+          <div className="flex items-center justify-center">
+            <RegionVisual region={visual} rtl={isArabic} />
+          </div>
+        </div>
+
+        <p className="mt-4 max-w-[280px] text-center text-[13px] font-medium leading-snug text-[#374151]">
+          {ui.movementGuideSubtitle}
+        </p>
+        <p className="mt-2 text-center text-[11px] font-medium text-[#1D9E75]">
           {ui.followTherapistInstructions}
         </p>
       </div>
+
       <style>{`
-        .rasq-media-motion {
-          animation: rasqGuidePulse 4s ease-in-out infinite;
+        .rasq-motion-path {
+          stroke-dasharray: 10 8;
+          animation: rasqMotionFlow 3.2s ease-in-out infinite;
         }
-        @keyframes rasqGuidePulse {
-          0%, 100% { opacity: 0.55; }
-          50% { opacity: 1; }
+        .rasq-motion-glow {
+          animation: rasqMotionGlow 3.2s ease-in-out infinite;
+        }
+        .rasq-flow-arrow {
+          animation: rasqFlowArrow 3.2s ease-in-out infinite;
+        }
+        @keyframes rasqMotionFlow {
+          0%, 100% { stroke-dashoffset: 18; opacity: 0.55; }
+          50% { stroke-dashoffset: 0; opacity: 1; }
+        }
+        @keyframes rasqMotionGlow {
+          0%, 100% { opacity: 0.4; }
+          50% { opacity: 0.95; }
+        }
+        @keyframes rasqFlowArrow {
+          0%, 100% { opacity: 0.45; transform: translateX(0); }
+          50% { opacity: 1; transform: translateX(${isArabic ? "-3px" : "3px"}); }
         }
       `}</style>
     </div>
@@ -265,7 +366,7 @@ function PlaceholderGuide({
 
 /**
  * Exercise media container for patient session cards.
- * MVP: illustrated movement guide or optional static media URL.
+ * Illustrated movement preview or optional static media URL.
  *
  * Future extension points (not implemented):
  * - camera consent slot
@@ -284,13 +385,12 @@ export function ExerciseMediaArea({
   arClass = "",
 }: ExerciseMediaAreaProps) {
   const ui = exerciseMediaUi(language);
-  const isArabic = language === "ar";
   const resolvedMedia = mediaUrl?.trim() || null;
   const poster = thumbnailUrl?.trim() || undefined;
 
   return (
     <div
-      className="relative overflow-hidden border-b border-[#D1E7DE] bg-gradient-to-b from-[#F0FAF6] to-[#F4F6F5]"
+      className="relative overflow-hidden border-b border-[#D1E7DE] bg-gradient-to-b from-[#E8F5F1] via-[#F0FAF6] to-[#F4F6F5]"
       data-exercise-id={exerciseId ?? undefined}
     >
       {/* future: camera consent slot */}
@@ -298,10 +398,10 @@ export function ExerciseMediaArea({
 
       <div className="relative">
         {resolvedMedia ? (
-          <div className="relative min-h-[180px] w-full bg-[#0A0F1A]/5">
+          <div className="relative min-h-[220px] w-full bg-[#0A0F1A]/5">
             {isVideoUrl(resolvedMedia) ? (
               <video
-                className="max-h-[220px] w-full object-contain"
+                className="max-h-[240px] w-full object-contain"
                 src={resolvedMedia}
                 poster={poster}
                 controls
@@ -314,14 +414,14 @@ export function ExerciseMediaArea({
               <img
                 src={resolvedMedia}
                 alt={ui.mediaAlt(exerciseName)}
-                className="max-h-[220px] w-full object-contain"
+                className="max-h-[240px] w-full object-contain"
               />
             )}
             {/* future: CV overlay slot */}
             {/* future: rep / timer overlay slot */}
           </div>
         ) : (
-          <PlaceholderGuide
+          <MovementPreviewPanel
             language={language}
             exerciseId={exerciseId}
             bodyRegion={bodyRegion}

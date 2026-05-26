@@ -435,7 +435,7 @@ export function formatBodyRegionForPatient(
 
 export type ExerciseMediaUi = {
   movementGuideTitle: string;
-  demoMediaSubtitle: string;
+  movementGuideSubtitle: string;
   followTherapistInstructions: string;
   mediaAlt: (name: string) => string;
 };
@@ -443,13 +443,13 @@ export type ExerciseMediaUi = {
 const EXERCISE_MEDIA_UI: Record<PatientPortalLanguage, ExerciseMediaUi> = {
   en: {
     movementGuideTitle: "Movement guide",
-    demoMediaSubtitle: "Demo media will appear here",
+    movementGuideSubtitle: "Review the movement before you start",
     followTherapistInstructions: "Follow your therapist's instructions",
     mediaAlt: (name) => (name.trim() ? `Exercise guide: ${name}` : "Exercise guide"),
   },
   ar: {
     movementGuideTitle: "دليل الحركة",
-    demoMediaSubtitle: "سيظهر شرح التمرين هنا",
+    movementGuideSubtitle: "راجع الحركة قبل بدء التمرين",
     followTherapistInstructions: "اتبع تعليمات معالجك",
     mediaAlt: (name) => (name.trim() ? `دليل التمرين: ${name}` : "دليل التمرين"),
   },
