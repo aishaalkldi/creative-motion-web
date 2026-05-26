@@ -677,6 +677,127 @@ export function sessionFocusUi(lang: PatientPortalLanguage): SessionFocusUi {
   return SESSION_FOCUS[lang];
 }
 
+/* ── Motivation layer (Sprint V) ─────────────────────────────────────────────── */
+
+export type MotivationUi = {
+  todaysSessionStatus: string;
+  todayReady: string;
+  todayCompleted: string;
+  allSessionsCompleteShort: string;
+  completedSessionsCount: (completed: number, total: number) => string;
+  remainingSessions: (remaining: number) => string;
+  gentleEncouragementTitle: string;
+  gentleEncouragementBody: string;
+  followTherapistPlan: string;
+  safetyReminderShort: string;
+  preSessionComfort: string;
+  greatEffort: string;
+  youShowedUpToday: string;
+  therapistCanReviewProgress: string;
+  smallStepsConsistency: string;
+  consistencyActiveDays: (days: number) => string;
+  progressRemainingLabel: string;
+};
+
+const MOTIVATION: Record<PatientPortalLanguage, MotivationUi> = {
+  en: {
+    todaysSessionStatus: "Today's session",
+    todayReady: "Your next session is ready when you are.",
+    todayCompleted: "You completed a session today. Well done.",
+    allSessionsCompleteShort: "You have completed all sessions in your current plan.",
+    completedSessionsCount: (completed, total) =>
+      `${completed} of ${total} session${total === 1 ? "" : "s"} completed`,
+    remainingSessions: (remaining) =>
+      `${remaining} session${remaining === 1 ? "" : "s"} remaining in your plan`,
+    gentleEncouragementTitle: "Keep going at your pace",
+    gentleEncouragementBody: "Small steps build consistency. Follow your therapist's instructions.",
+    followTherapistPlan: "Follow your therapist's plan",
+    safetyReminderShort:
+      "Stop and contact your therapist if symptoms feel unusual.",
+    preSessionComfort:
+      "Move comfortably and stop if you feel unusual pain.",
+    greatEffort: "Great effort",
+    youShowedUpToday: "You showed up today",
+    therapistCanReviewProgress: "Your therapist can review your progress",
+    smallStepsConsistency: "Small steps build consistency",
+    consistencyActiveDays: (days) =>
+      days === 0
+        ? "Complete a session to start building your routine."
+        : days === 1
+          ? "You were active on 1 day in the last 7 days."
+          : `You were active on ${days} days in the last 7 days.`,
+    progressRemainingLabel: "Sessions remaining",
+  },
+  ar: {
+    todaysSessionStatus: "جلسة اليوم",
+    todayReady: "جلستك التالية جاهزة عندما تكون مستعداً.",
+    todayCompleted: "أكملت جلسة اليوم. أحسنت.",
+    allSessionsCompleteShort: "أكملت جميع جلسات خطتك الحالية.",
+    completedSessionsCount: (completed, total) => `${completed} من ${total} جلسات مكتملة`,
+    remainingSessions: (remaining) =>
+      remaining === 1
+        ? "جلسة واحدة متبقية في خطتك"
+        : `${remaining} جلسات متبقية في خطتك`,
+    gentleEncouragementTitle: "واصل على وتيرتك",
+    gentleEncouragementBody: "الخطوات الصغيرة تبني الاستمرارية. اتبع تعليمات معالجك.",
+    followTherapistPlan: "اتبع خطة معالجك",
+    safetyReminderShort: "توقّف وتواصل مع معالجك إذا شعرت بأعراض غير معتادة.",
+    preSessionComfort: "تحرّك براحة وتوقّف إذا شعرت بألم غير معتاد.",
+    greatEffort: "جهد رائع",
+    youShowedUpToday: "حضرت اليوم",
+    therapistCanReviewProgress: "يمكن لمعالجك مراجعة تقدّمك",
+    smallStepsConsistency: "الخطوات الصغيرة تبني الاستمرارية",
+    consistencyActiveDays: (days) =>
+      days === 0
+        ? "أكمل جلسة لبدء روتينك."
+        : days === 1
+          ? "كنت نشطاً يوماً واحداً خلال الأيام السبعة الماضية."
+          : `كنت نشطاً ${days} أيام خلال الأيام السبعة الماضية.`,
+    progressRemainingLabel: "الجلسات المتبقية",
+  },
+};
+
+export function motivationUi(lang: PatientPortalLanguage): MotivationUi {
+  return MOTIVATION[lang];
+}
+
+/* ── Clinician adherence summary (Sprint V) ──────────────────────────────────── */
+
+export type ClinicianAdherenceSummaryUi = {
+  title: string;
+  forClinicianReview: string;
+  completedSessions: string;
+  notCompletedSessions: string;
+  lastPatientActivity: string;
+  noActivityYet: string;
+  derivedFromSessionsOnly: string;
+};
+
+const CLINICIAN_ADHERENCE_SUMMARY: Record<PatientPortalLanguage, ClinicianAdherenceSummaryUi> = {
+  en: {
+    title: "Session activity summary",
+    forClinicianReview: "For clinician review",
+    completedSessions: "Completed sessions",
+    notCompletedSessions: "Not completed",
+    lastPatientActivity: "Last patient activity",
+    noActivityYet: "No session activity recorded yet",
+    derivedFromSessionsOnly: "Counts are based on plan session status only. Not a clinical assessment.",
+  },
+  ar: {
+    title: "ملخص نشاط الجلسات",
+    forClinicianReview: "لمراجعة المعالج",
+    completedSessions: "الجلسات المكتملة",
+    notCompletedSessions: "غير مكتملة",
+    lastPatientActivity: "آخر نشاط للمريض",
+    noActivityYet: "لا يوجد نشاط جلسات مسجّل بعد",
+    derivedFromSessionsOnly: "الأرقام مبنية على حالة جلسات الخطة فقط. ليست تقييماً سريرياً.",
+  },
+};
+
+export function clinicianAdherenceSummaryUi(lang: PatientPortalLanguage): ClinicianAdherenceSummaryUi {
+  return CLINICIAN_ADHERENCE_SUMMARY[lang];
+}
+
 export function isDescriptiveSessionTitle(title: string): boolean {
   const t = title.trim();
   if (!t) return false;

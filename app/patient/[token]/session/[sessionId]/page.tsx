@@ -11,6 +11,10 @@ import {
   resolveExerciseView,
 } from "@/app/lib/exercise-resolve";
 import {
+  PatientPreSessionMotivation,
+  PatientSessionCompletionMotivation,
+} from "@/app/components/patient/PatientMotivationCards";
+import {
   formatExerciseProgress,
   planHomeUi,
   resolveSessionFocusPurpose,
@@ -289,7 +293,14 @@ export default function SessionPlayerPage() {
             {shellUi.sessionComplete}
           </h2>
           <p className="mt-2 text-[15px] font-semibold text-[#374151]">{session.title}</p>
-          <p className="mt-2 text-[14px] text-[#374151]">
+          <div className="mt-3">
+            <PatientSessionCompletionMotivation
+              lang={patientLanguage}
+              arClass={arClass}
+              textDir={textDir}
+            />
+          </div>
+          <p className="mt-3 text-[14px] text-[#374151]">
             {shellUi.exercisesCompleted(completionSummary.exercisesCompleted)}
           </p>
           <div className={`mx-auto mt-4 grid max-w-xs grid-cols-2 gap-2 ${isArabic ? "text-right" : "text-left"}`}>
@@ -379,6 +390,12 @@ export default function SessionPlayerPage() {
           </p>
           <p className="mt-2 text-[14px] leading-relaxed text-[#374151]">{todaysGoal}</p>
         </div>
+
+        <PatientPreSessionMotivation
+          lang={patientLanguage}
+          arClass={arClass}
+          textDir={textDir}
+        />
 
         <PainScale
           label={shellUi.painBefore}

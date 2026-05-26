@@ -7,6 +7,12 @@ import type { SessionLogEntry } from "@/app/api/patient/logs/route";
 import { usePatientLanguage, usePatientPlan } from "@/app/components/patient/PatientLanguageProvider";
 import { SessionScheduleView } from "@/app/components/SessionScheduleView";
 import {
+  PatientGentleEncouragementCard,
+  PatientMotivationSafetyStrip,
+  PatientTodaySessionCard,
+} from "@/app/components/patient/PatientMotivationCards";
+import { computeMotivationStats } from "@/app/lib/patient-motivation";
+import {
   getLatestReportedScores,
   getPortalGreeting,
   journeyContextUi,
@@ -79,6 +85,7 @@ export default function PatientDashboard() {
   const patientFriendlyGoal = plan.patientFriendlyGoal?.trim() || null;
   const latestReported = getLatestReportedScores(logs);
   const clinicianNote = plan.clinicianNotes?.trim() || null;
+  const motivationStats = computeMotivationStats(plan.sessions, logs);
 
   if (!hasSessions) {
     return (
@@ -258,6 +265,18 @@ export default function PatientDashboard() {
           <span>{journeyUi.therapistVisibility}</span>
         </p>
       </div>
+
+      <PatientTodaySessionCard
+        lang={lang}
+        arClass={arClass}
+        textDir={textDir}
+        stats={motivationStats}
+        patientToken={token}
+      />
+
+      <PatientGentleEncouragementCard lang={lang} arClass={arClass} textDir={textDir} />
+
+      <PatientMotivationSafetyStrip lang={lang} arClass={arClass} textDir={textDir} />
 
       <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
         <div className="flex items-center justify-between gap-3">

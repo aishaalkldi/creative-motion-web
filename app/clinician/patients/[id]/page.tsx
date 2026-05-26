@@ -67,6 +67,7 @@ import { SessionScheduleView } from "../../../components/SessionScheduleView";
 import { ClinicalActionCard } from "../../../components/clinician/ClinicalActionCard";
 import { PatientJourneyTimeline } from "../../../components/clinician/PatientJourneyTimeline";
 import { CvPatientCvMetricsSection } from "../../../components/clinician/cv/CvPatientCvMetricsSection";
+import { PatientAdherenceSummary } from "../../../components/clinician/PatientAdherenceSummary";
 import type { PatientProgressSummary, PatientTimelineBundle } from "../../../api/clinician/patient-progress/route";
 import { buildPatientTimeline } from "../../../lib/clinician/patient-timeline";
 import {
@@ -1187,6 +1188,18 @@ export default function PatientProfilePage() {
                 );
               }}
             />
+
+            {(planProgress || adherence) && treatmentPlan ? (
+              <PatientAdherenceSummary
+                sessionsCompleted={
+                  planProgress?.sessionsCompleted ?? adherence?.sessionsCompleted ?? 0
+                }
+                totalSessions={planProgress?.totalSessions ?? adherence?.totalSessions ?? 0}
+                lastActivityAt={
+                  planProgress?.lastCompletedAt ?? adherence?.lastActiveAt ?? null
+                }
+              />
+            ) : null}
 
             <PatientJourneyTimeline
               events={rehabilitationTimelineEvents}

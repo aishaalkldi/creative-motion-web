@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import type { SessionLogEntry } from "@/app/api/patient/logs/route";
 import { usePatientLanguage, usePatientPlan } from "@/app/components/patient/PatientLanguageProvider";
+import { PatientProgressMotivationCard } from "@/app/components/patient/PatientMotivationCards";
+import { computeMotivationStats } from "@/app/lib/patient-motivation";
 import {
   formatPortalDate,
   getLatestReportedScores,
@@ -76,6 +78,7 @@ export default function PatientProgressPage() {
   const totalSessions = plan.sessions.length;
 
   const latestReported = getLatestReportedScores(logs);
+  const motivationStats = computeMotivationStats(plan.sessions, logs);
 
   const sortedSessions = [...plan.sessions].sort(
     (a, b) => a.sessionNumber - b.sessionNumber,
@@ -123,6 +126,13 @@ export default function PatientProgressPage() {
         </p>
         <p className={`text-[10px] text-[#9CA3AF] ${arClass}`}>{ui.inYourPlan}</p>
       </div>
+
+      <PatientProgressMotivationCard
+        lang={lang}
+        arClass={arClass}
+        textDir={textDir}
+        stats={motivationStats}
+      />
 
       {latestReported && (latestReported.painScore != null || latestReported.effortScore != null) && (
         <div className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
