@@ -2,47 +2,15 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { getCvReadyExercises } from "@/app/lib/cv/cv-ready-exercises";
+import {
+  formatCvDuration,
+  formatCvRecordedAt,
+  formatCvSource,
+  formatCvTrackingQuality,
+  type CvSessionMetricPublic,
+} from "@/app/lib/cv/cv-metrics-display";
 import { CvLabSession } from "@/app/components/clinician/cv/CvLabSession";
-
-type CvSessionMetric = {
-  id: string;
-  exerciseId: string;
-  repCount: number | null;
-  sessionDurationS: number | null;
-  trackingQuality: string | null;
-  source: string;
-  recordedAt: string;
-};
-
-function formatRecordedAt(iso: string): string {
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(iso));
-  } catch {
-    return iso;
-  }
-}
-
-function formatDuration(seconds: number | null): string {
-  if (seconds == null) return "—";
-  const mm = Math.floor(seconds / 60);
-  const ss = seconds % 60;
-  return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
-}
-
-function formatQuality(quality: string | null): string {
-  if (!quality) return "—";
-  return quality.charAt(0).toUpperCase() + quality.slice(1);
-}
-
-function formatSource(source: string): string {
-  if (source === "cv_lab") return "CV Lab";
-  if (source === "patient_session") return "Patient Session";
-  if (source === "assessment_movement") return "Assessment";
-  return source;
-}
+import { CvReviewSummary } from "@/app/components/clinician/cv/CvReviewSummary";
 
 export default function CvLabPage() {
   const cvReadyExercises = getCvReadyExercises();
@@ -50,7 +18,7 @@ export default function CvLabPage() {
     cvReadyExercises.map((exercise) => [exercise.exerciseId, exercise.nameEn]),
   );
 
-  const [history, setHistory] = useState<CvSessionMetric[]>([]);
+  const [history, setHistory] = useState<CvSessionMetricPublic[]>([]);
   const [historyLoading, setHistoryLoading] = useState(true);
   const [historyError, setHistoryError] = useState(false);
 
@@ -64,7 +32,7 @@ export default function CvLabPage() {
         setHistory([]);
         return;
       }
-      const data = (await res.json()) as { metrics?: CvSessionMetric[] };
+      const data = (await res.json()) as { metrics?: CvSessionMetricPublic[] };
       setHistory(data.metrics ?? []);
     } catch {
       setHistoryError(true);
@@ -77,6 +45,8 @@ export default function CvLabPage() {
   useEffect(() => {
     void fetchHistory();
   }, [fetchHistory]);
+
+  const hasPatientLinkedSessions = history.some((row) => Boolean(row.patientId));
 
   return (
     <main className="min-h-screen bg-[#0B1220] px-6 py-8 text-[#F9FAFB]">
@@ -154,6 +124,15 @@ export default function CvLabPage() {
           <CvLabSession onSessionSaved={() => void fetchHistory()} />
         </section>
 
+        <CvReviewSummary
+          metrics={history}
+          exerciseNameById={exerciseNameById}
+          loading={historyLoading}
+          error={historyError}
+          showPatientLinks={hasPatientLinkedSessions}
+          maxSessions={5}
+        />
+
         <section className="mt-8">
           <p className="text-[10px] uppercase tracking-[0.06em] text-[#9CA3AF]">
             Recent CV Lab Sessions
@@ -173,14 +152,15 @@ export default function CvLabPage() {
             </p>
           ) : (
             <div className="overflow-x-auto rounded-[8px] border border-[#1E2D42] bg-[#0F1825]">
-              <table className="w-full min-w-[640px] text-left text-xs">
+              <table className="w-full min-w-[720px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-[#1E2D42] text-[10px] uppercase tracking-[0.06em] text-[#6B7280]">
                     <th className="px-3 py-2.5 font-medium">Date/time</th>
                     <th className="px-3 py-2.5 font-medium">Exercise</th>
                     <th className="px-3 py-2.5 font-medium">Reps</th>
                     <th className="px-3 py-2.5 font-medium">Duration</th>
-                    <th className="px-3 py-2.5 font-medium">Quality</th>
+                    <th className="px-3 py-2.5 font-medium">Tracking quality</th>
+                    <th className="px-3 py-2.5 font-medium">Movement detected</th>
                     <th className="px-3 py-2.5 font-medium">Source</th>
                   </tr>
                 </thead>
@@ -188,19 +168,22 @@ export default function CvLabPage() {
                   {history.map((row) => (
                     <tr key={row.id} className="border-b border-[#1E2D42]/60 last:border-b-0">
                       <td className="px-3 py-2.5 text-[#9CA3AF]">
-                        {formatRecordedAt(row.recordedAt)}
+                        {formatCvRecordedAt(row.recordedAt)}
                       </td>
                       <td className="px-3 py-2.5 text-[#F9FAFB]">
                         {exerciseNameById[row.exerciseId] ?? row.exerciseId}
                       </td>
                       <td className="px-3 py-2.5 text-[#F9FAFB]">{row.repCount ?? "—"}</td>
                       <td className="px-3 py-2.5 text-[#F9FAFB]">
-                        {formatDuration(row.sessionDurationS)}
+                        {formatCvDuration(row.sessionDurationS)}
                       </td>
                       <td className="px-3 py-2.5 text-[#F9FAFB]">
-                        {formatQuality(row.trackingQuality)}
+                        {formatCvTrackingQuality(row.trackingQuality)}
                       </td>
-                      <td className="px-3 py-2.5 text-[#9CA3AF]">{formatSource(row.source)}</td>
+                      <td className="px-3 py-2.5 text-[#F9FAFB]">
+                        {row.movementDetected ? "Yes" : "No"}
+                      </td>
+                      <td className="px-3 py-2.5 text-[#9CA3AF]">{formatCvSource(row.source)}</td>
                     </tr>
                   ))}
                 </tbody>

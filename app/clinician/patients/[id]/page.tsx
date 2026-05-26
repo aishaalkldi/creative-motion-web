@@ -66,6 +66,7 @@ import { SendAssessmentModal } from "./SendAssessmentModal";
 import { SessionScheduleView } from "../../../components/SessionScheduleView";
 import { ClinicalActionCard } from "../../../components/clinician/ClinicalActionCard";
 import { PatientJourneyTimeline } from "../../../components/clinician/PatientJourneyTimeline";
+import { CvPatientCvMetricsSection } from "../../../components/clinician/cv/CvPatientCvMetricsSection";
 import type { PatientProgressSummary, PatientTimelineBundle } from "../../../api/clinician/patient-progress/route";
 import { buildPatientTimeline } from "../../../lib/clinician/patient-timeline";
 import {
@@ -1191,6 +1192,8 @@ export default function PatientProfilePage() {
               events={rehabilitationTimelineEvents}
               patientName={patient.full_name}
             />
+
+            <CvPatientCvMetricsSection patientId={patient.id} />
 
             {/* Patient access link */}
             {treatmentPlan?.patientToken && (
