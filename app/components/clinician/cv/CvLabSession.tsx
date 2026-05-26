@@ -1,32 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { DEFAULT_STS_CONFIG } from "@/app/lib/cv/bio-0-contracts";
+import {
+  formatSitToStandDuration,
+  mapSitToStandStartError,
+  SitToStandDetector,
+  type SitToStandDetectorSnapshot,
+  type SitToStandInitPhase,
+  type SitToStandTrackingQuality,
+  type SitToStandTrackingStatus,
+} from "@/app/lib/cv/sit-to-stand-detector";
 
-const WASM_URL =
-  "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.34/wasm";
-const MODEL_URL =
-  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+const { canvasWidth: CANVAS_WIDTH, canvasHeight: CANVAS_HEIGHT } = DEFAULT_STS_CONFIG;
 
-const CANVAS_WIDTH = 640;
-const CANVAS_HEIGHT = 480;
-const INIT_TIMEOUT_MS = 45_000;
-const UI_FRAME_UPDATE_INTERVAL = 15;
-
-const LOWER_BODY_LANDMARKS = [23, 24, 25, 26, 27, 28] as const;
-
-type TrackingStatus = "idle" | "detecting" | "pose-found" | "pose-lost";
-type TrackingQuality = "good" | "fair" | "poor";
-type StandPhase = "up" | "down";
 type SaveStatus = "idle" | "saving" | "saved" | "error";
-type InitPhase = null | "import" | "model" | "camera";
-
-type PoseLandmarkerInstance = {
-  detectForVideo: (
-    video: HTMLVideoElement,
-    ts: number,
-  ) => { landmarks?: Array<Array<{ x: number; y: number; visibility?: number }>> };
-  close?: () => void;
-};
 
 export type CvLabSessionProps = {
   patientId?: string;
@@ -35,117 +23,33 @@ export type CvLabSessionProps = {
   onSessionSaved?: () => void;
 };
 
-function formatDuration(seconds: number): string {
-  const mm = Math.floor(seconds / 60);
-  const ss = seconds % 60;
-  return `${String(mm).padStart(2, "0")}:${String(ss).padStart(2, "0")}`;
-}
-
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const id = setTimeout(() => {
-      reject(new Error(`${label} timed out. Please check your connection and try again.`));
-    }, ms);
-    promise.then(
-      (value) => {
-        clearTimeout(id);
-        resolve(value);
-      },
-      (error) => {
-        clearTimeout(id);
-        reject(error);
-      },
-    );
-  });
-}
-
-function getBrowserSupportError(): string | null {
-  if (typeof navigator === "undefined") return null;
-  if (!navigator.mediaDevices?.getUserMedia) {
-    return "This browser does not support camera access. Try a current version of Chrome, Edge, or Safari.";
-  }
-  return null;
-}
-
-function needsSecureContextMessage(): boolean {
-  if (typeof window === "undefined") return false;
-  return !window.isSecureContext && !["localhost", "127.0.0.1"].includes(window.location.hostname);
-}
-
-function mapStartError(err: unknown): string {
-  if (err instanceof DOMException) {
-    if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
-      return "Camera access was denied. Movement tracking could not start. Please check camera permission and try again.";
-    }
-    if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
-      return "No camera was found on this device.";
-    }
-    if (err.name === "NotReadableError" || err.name === "TrackStartError") {
-      return "The camera is in use by another application. Close other apps and try again.";
-    }
-  }
-  if (err instanceof Error) {
-    if (err.message.includes("timed out")) return err.message;
-    return err.message;
-  }
-  return "Movement tracking could not start. Please check camera permission and try again.";
-}
-
-async function waitForVideoReady(video: HTMLVideoElement): Promise<void> {
-  if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return;
-
-  await new Promise<void>((resolve, reject) => {
-    const onReady = () => {
-      cleanup();
-      resolve();
-    };
-    const onError = () => {
-      cleanup();
-      reject(new Error("Camera video could not start."));
-    };
-    const cleanup = () => {
-      video.removeEventListener("loadedmetadata", onReady);
-      video.removeEventListener("canplay", onReady);
-      video.removeEventListener("error", onError);
-    };
-    video.addEventListener("loadedmetadata", onReady, { once: true });
-    video.addEventListener("canplay", onReady, { once: true });
-    video.addEventListener("error", onError, { once: true });
-  });
-}
-
-async function startVideoPlayback(video: HTMLVideoElement): Promise<void> {
-  await waitForVideoReady(video);
-  try {
-    await video.play();
-  } catch (err) {
-    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return;
-    throw err;
-  }
-}
-
-async function createPoseLandmarker(
-  PoseLandmarker: Awaited<typeof import("@mediapipe/tasks-vision")>["PoseLandmarker"],
-  fileset: Awaited<ReturnType<Awaited<typeof import("@mediapipe/tasks-vision")>["FilesetResolver"]["forVisionTasks"]>>,
-): Promise<PoseLandmarkerInstance> {
-  const baseOptions = { modelAssetPath: MODEL_URL, delegate: "GPU" as const };
-  const options = { baseOptions, runningMode: "VIDEO" as const, numPoses: 1 };
-  try {
-    return await withTimeout(
-      PoseLandmarker.createFromOptions(fileset, options),
-      INIT_TIMEOUT_MS,
-      "Pose model load",
-    );
-  } catch {
-    return await withTimeout(
-      PoseLandmarker.createFromOptions(fileset, {
-        ...options,
-        baseOptions: { ...baseOptions, delegate: "CPU" },
-      }),
-      INIT_TIMEOUT_MS,
-      "Pose model load",
-    );
-  }
+function applySnapshot(
+  snapshot: SitToStandDetectorSnapshot,
+  setters: {
+    setPreviewActive: (v: boolean) => void;
+    setLoading: (v: boolean) => void;
+    setInitPhase: (v: SitToStandInitPhase) => void;
+    setTrackingError: (v: string | null) => void;
+    setRepCount: (v: number) => void;
+    setTrackingStatus: (v: SitToStandTrackingStatus) => void;
+    setTrackingQuality: (v: SitToStandTrackingQuality | null) => void;
+    setSessionSeconds: (v: number) => void;
+    setMovementDetected: (v: boolean) => void;
+    setFramesWithPose: (v: number) => void;
+    setFramesTotal: (v: number) => void;
+  },
+): void {
+  setters.setPreviewActive(snapshot.previewActive);
+  setters.setInitPhase(snapshot.initPhase);
+  setters.setTrackingError(snapshot.trackingError);
+  setters.setRepCount(snapshot.repCount);
+  setters.setTrackingStatus(snapshot.trackingStatus);
+  setters.setTrackingQuality(snapshot.trackingQuality);
+  setters.setSessionSeconds(snapshot.sessionSeconds);
+  setters.setMovementDetected(snapshot.movementDetected);
+  setters.setFramesWithPose(snapshot.framesWithPose);
+  setters.setFramesTotal(snapshot.framesTotal);
+  setters.setLoading(snapshot.initPhase !== null);
 }
 
 export function CvLabSession({
@@ -157,12 +61,12 @@ export function CvLabSession({
   const [consented, setConsented] = useState(false);
   const [previewActive, setPreviewActive] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [initPhase, setInitPhase] = useState<InitPhase>(null);
+  const [initPhase, setInitPhase] = useState<SitToStandInitPhase>(null);
   const [error, setError] = useState<string | null>(null);
   const [trackingError, setTrackingError] = useState<string | null>(null);
   const [repCount, setRepCount] = useState(0);
-  const [trackingStatus, setTrackingStatus] = useState<TrackingStatus>("idle");
-  const [trackingQuality, setTrackingQuality] = useState<TrackingQuality | null>(null);
+  const [trackingStatus, setTrackingStatus] = useState<SitToStandTrackingStatus>("idle");
+  const [trackingQuality, setTrackingQuality] = useState<SitToStandTrackingQuality | null>(null);
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [movementDetected, setMovementDetected] = useState(false);
@@ -172,28 +76,39 @@ export function CvLabSession({
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const animFrameRef = useRef<number>(0);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const poseLandmarkerRef = useRef<PoseLandmarkerInstance | null>(null);
-  const standPhaseRef = useRef<StandPhase>("down");
-  const previewActiveRef = useRef(false);
-  const repCountRef = useRef(0);
-  const sessionSecondsRef = useRef(0);
-  const trackingQualityRef = useRef<TrackingQuality | null>(null);
-  const framesWithPoseRef = useRef(0);
-  const framesTotalRef = useRef(0);
+  const detectorRef = useRef<SitToStandDetector | null>(null);
   const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startInProgressRef = useRef(false);
   const saveInProgressRef = useRef(false);
   const stopInProgressRef = useRef(false);
-  const sessionEpochRef = useRef(0);
-  const detectTimestampRef = useRef(0);
-  const trackingStatusRef = useRef<TrackingStatus>("idle");
   const onSessionSavedRef = useRef(onSessionSaved);
-  const videoPauseHandlerRef = useRef<(() => void) | null>(null);
 
   onSessionSavedRef.current = onSessionSaved;
+
+  const syncFromDetector = useCallback((snapshot: SitToStandDetectorSnapshot) => {
+    applySnapshot(snapshot, {
+      setPreviewActive,
+      setLoading,
+      setInitPhase,
+      setTrackingError,
+      setRepCount,
+      setTrackingStatus,
+      setTrackingQuality,
+      setSessionSeconds,
+      setMovementDetected,
+      setFramesWithPose,
+      setFramesTotal,
+    });
+  }, []);
+
+  useEffect(() => {
+    const detector = new SitToStandDetector({ onSnapshot: syncFromDetector });
+    detectorRef.current = detector;
+    return () => {
+      detector.stop();
+      detectorRef.current = null;
+    };
+  }, [syncFromDetector]);
 
   const clearSaveStatusTimer = useCallback(() => {
     if (saveStatusTimerRef.current) {
@@ -209,59 +124,25 @@ export function CvLabSession({
     }, 4000);
   }, [clearSaveStatusTimer]);
 
-  const detachVideoPauseHandler = useCallback(() => {
-    const video = videoRef.current;
-    const handler = videoPauseHandlerRef.current;
-    if (video && handler) {
-      video.removeEventListener("pause", handler);
-    }
-    videoPauseHandlerRef.current = null;
-  }, []);
-
-  const stopCamera = useCallback(() => {
-    sessionEpochRef.current += 1;
-    previewActiveRef.current = false;
-    cancelAnimationFrame(animFrameRef.current);
-    animFrameRef.current = 0;
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-    detachVideoPauseHandler();
-    streamRef.current?.getTracks().forEach((track) => track.stop());
-    streamRef.current = null;
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    poseLandmarkerRef.current?.close?.();
-    poseLandmarkerRef.current = null;
-    detectTimestampRef.current = 0;
-    setPreviewActive(false);
-    setTrackingStatus("idle");
-    trackingStatusRef.current = "idle";
-    setTrackingQuality(null);
-    setLoading(false);
-    setInitPhase(null);
-    setTrackingError(null);
-  }, [detachVideoPauseHandler]);
-
   const saveSessionMetrics = useCallback(async () => {
     if (saveInProgressRef.current) return;
 
-    const duration = sessionSecondsRef.current;
-    if (duration < 3) return;
+    const detector = detectorRef.current;
+    if (!detector?.canSaveMetrics()) return;
+
+    const metrics = detector.getDerivedMetrics();
 
     saveInProgressRef.current = true;
     setSaveStatus("saving");
 
     const payload = {
-      exerciseId: "sit-to-stand",
-      repCount: repCountRef.current,
-      sessionDurationS: duration,
-      trackingQuality: trackingQualityRef.current ?? "unknown",
-      movementDetected: framesWithPoseRef.current > 0,
-      framesWithPose: framesWithPoseRef.current,
-      framesTotal: framesTotalRef.current,
+      exerciseId: metrics.exerciseId,
+      repCount: metrics.repCount,
+      sessionDurationS: metrics.sessionDurationS,
+      trackingQuality: metrics.trackingQuality,
+      movementDetected: metrics.movementDetected,
+      framesWithPose: metrics.framesWithPose,
+      framesTotal: metrics.framesTotal,
       source: "cv_lab",
       ...(patientId ? { patientId } : {}),
       ...(planId ? { planId } : {}),
@@ -293,228 +174,57 @@ export function CvLabSession({
   }, [patientId, planId, planSessionId, scheduleSaveStatusClear]);
 
   const handleStopSession = useCallback(() => {
-    if (stopInProgressRef.current || !previewActiveRef.current) return;
+    const detector = detectorRef.current;
+    if (stopInProgressRef.current || !detector?.isPreviewActive()) return;
 
     stopInProgressRef.current = true;
-    stopCamera();
+    detector.stop();
+    syncFromDetector(detector.getSnapshot());
     void saveSessionMetrics().finally(() => {
       stopInProgressRef.current = false;
     });
-  }, [stopCamera, saveSessionMetrics]);
+  }, [saveSessionMetrics, syncFromDetector]);
 
   useEffect(() => {
     return () => {
-      stopCamera();
+      detectorRef.current?.stop();
       clearSaveStatusTimer();
     };
-  }, [stopCamera, clearSaveStatusTimer]);
+  }, [clearSaveStatusTimer]);
 
   const startSession = useCallback(async () => {
-    if (!consented || startInProgressRef.current || loading || previewActiveRef.current) {
+    const detector = detectorRef.current;
+    if (!consented || !detector || startInProgressRef.current || loading || detector.isPreviewActive()) {
       return;
     }
 
-    const browserError = getBrowserSupportError();
-    if (browserError) {
-      setError(browserError);
-      return;
-    }
-    if (needsSecureContextMessage()) {
-      setError("Camera access requires a secure connection (HTTPS). Open this page over HTTPS and try again.");
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) {
+      setError("Video element not available.");
       return;
     }
 
-    const epoch = sessionEpochRef.current + 1;
-    sessionEpochRef.current = epoch;
     startInProgressRef.current = true;
     setError(null);
     setTrackingError(null);
-    setLoading(true);
-    setInitPhase("import");
-    setRepCount(0);
-    repCountRef.current = 0;
-    standPhaseRef.current = "down";
-    setSessionSeconds(0);
-    sessionSecondsRef.current = 0;
     setSessionStarted(true);
-    setTrackingStatus("detecting");
-    trackingStatusRef.current = "detecting";
-    setMovementDetected(false);
-    setFramesWithPose(0);
-    setFramesTotal(0);
-    framesWithPoseRef.current = 0;
-    framesTotalRef.current = 0;
-    trackingQualityRef.current = null;
     setSaveStatus("idle");
     clearSaveStatusTimer();
 
-    const isCurrentSession = () => sessionEpochRef.current === epoch;
-
     try {
-      const { PoseLandmarker, FilesetResolver } = await withTimeout(
-        import("@mediapipe/tasks-vision"),
-        INIT_TIMEOUT_MS,
-        "Pose library load",
-      );
-      if (!isCurrentSession()) return;
-
-      setInitPhase("model");
-      const filesetResolver = await withTimeout(
-        FilesetResolver.forVisionTasks(WASM_URL),
-        INIT_TIMEOUT_MS,
-        "Pose runtime load",
-      );
-      if (!isCurrentSession()) return;
-
-      const poseLandmarker = await createPoseLandmarker(PoseLandmarker, filesetResolver);
-      if (!isCurrentSession()) {
-        poseLandmarker.close?.();
-        return;
-      }
-      poseLandmarkerRef.current = poseLandmarker;
-
-      setInitPhase("camera");
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-      if (!isCurrentSession()) {
-        stream.getTracks().forEach((track) => track.stop());
-        return;
-      }
-      streamRef.current = stream;
-
-      const video = videoRef.current;
-      if (!video) {
-        throw new Error("Video element not available.");
-      }
-
-      video.srcObject = stream;
-      detachVideoPauseHandler();
-      const onVideoPause = () => {
-        if (!previewActiveRef.current || video.paused) {
-          void video.play().catch(() => {
-            /* keep preview alive; detect loop surfaces tracking errors */
-          });
-        }
-      };
-      videoPauseHandlerRef.current = onVideoPause;
-      video.addEventListener("pause", onVideoPause);
-
-      await startVideoPlayback(video);
-      if (!isCurrentSession()) return;
-
-      previewActiveRef.current = true;
-      setPreviewActive(true);
-      setLoading(false);
-      setInitPhase(null);
-
-      timerRef.current = setInterval(() => {
-        sessionSecondsRef.current += 1;
-        setSessionSeconds(sessionSecondsRef.current);
-      }, 1000);
-
-      let consecutiveDetectErrors = 0;
-
-      const detect = () => {
-        if (!previewActiveRef.current || !videoRef.current || !canvasRef.current) return;
-
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext("2d");
-        if (!ctx || !poseLandmarkerRef.current) return;
-
-        framesTotalRef.current += 1;
-
-        try {
-          if (videoRef.current.paused && previewActiveRef.current) {
-            void videoRef.current.play().catch(() => undefined);
-          }
-
-          detectTimestampRef.current = Math.max(
-            detectTimestampRef.current + 1,
-            performance.now(),
-          );
-
-          const result = poseLandmarkerRef.current.detectForVideo(
-            videoRef.current,
-            detectTimestampRef.current,
-          );
-
-          ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-          ctx.drawImage(videoRef.current, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-          consecutiveDetectErrors = 0;
-
-          if (result.landmarks && result.landmarks.length > 0) {
-            if (trackingStatusRef.current !== "pose-found") {
-              trackingStatusRef.current = "pose-found";
-              setTrackingStatus("pose-found");
-            }
-            framesWithPoseRef.current += 1;
-            setMovementDetected(true);
-
-            const landmarks = result.landmarks[0];
-            const hipVis =
-              (landmarks[23]?.visibility ?? 0) + (landmarks[24]?.visibility ?? 0);
-            const quality: TrackingQuality =
-              hipVis > 1.4 ? "good" : hipVis > 0.8 ? "fair" : "poor";
-            trackingQualityRef.current = quality;
-            setTrackingQuality(quality);
-
-            const hipY = ((landmarks[23]?.y ?? 0) + (landmarks[24]?.y ?? 0)) / 2;
-
-            if (hipY < 0.42 && standPhaseRef.current === "down") {
-              standPhaseRef.current = "up";
-              repCountRef.current += 1;
-              setRepCount(repCountRef.current);
-            } else if (hipY > 0.58 && standPhaseRef.current === "up") {
-              standPhaseRef.current = "down";
-            }
-
-            for (const idx of LOWER_BODY_LANDMARKS) {
-              const lm = landmarks[idx];
-              if (!lm) continue;
-              ctx.beginPath();
-              ctx.arc(lm.x * CANVAS_WIDTH, lm.y * CANVAS_HEIGHT, 4, 0, 2 * Math.PI);
-              ctx.fillStyle = "#1D9E75";
-              ctx.fill();
-            }
-          } else if (trackingStatusRef.current !== "pose-lost") {
-            trackingStatusRef.current = "pose-lost";
-            setTrackingStatus("pose-lost");
-            setTrackingQuality(null);
-          }
-        } catch {
-          consecutiveDetectErrors += 1;
-          if (consecutiveDetectErrors >= 10) {
-            setTrackingError(
-              "Movement tracking could not continue. Please stop and try again.",
-            );
-            return;
-          }
-        }
-
-        if (framesTotalRef.current % UI_FRAME_UPDATE_INTERVAL === 0) {
-          setFramesTotal(framesTotalRef.current);
-          setFramesWithPose(framesWithPoseRef.current);
-        }
-
-        animFrameRef.current = requestAnimationFrame(detect);
-      };
-
-      animFrameRef.current = requestAnimationFrame(detect);
+      await detector.start(video, canvas);
     } catch (err) {
-      if (!isCurrentSession()) return;
-      stopCamera();
-      setError(mapStartError(err));
+      detector.stop();
+      syncFromDetector(detector.getSnapshot());
+      setError(mapSitToStandStartError(err));
     } finally {
-      if (sessionEpochRef.current === epoch) {
-        startInProgressRef.current = false;
-      }
+      startInProgressRef.current = false;
     }
-  }, [consented, loading, stopCamera, clearSaveStatusTimer, detachVideoPauseHandler]);
+  }, [consented, loading, clearSaveStatusTimer, syncFromDetector]);
 
   const resetCounter = () => {
-    repCountRef.current = 0;
-    setRepCount(0);
-    standPhaseRef.current = "down";
+    detectorRef.current?.resetReps();
   };
 
   const loadingLabel =
@@ -663,7 +373,7 @@ export function CvLabSession({
           </p>
 
           <p className="text-sm text-[#9CA3AF]">
-            Session duration: {formatDuration(sessionSeconds)}
+            Session duration: {formatSitToStandDuration(sessionSeconds)}
           </p>
 
           {movementDetected && (

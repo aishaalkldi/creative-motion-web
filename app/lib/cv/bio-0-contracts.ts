@@ -1,0 +1,198 @@
+/**
+ * Sprint CV-Y1A — BIO-0 thin contracts (types, config, copy).
+ * No biomechanics agent runtime. No clinical scoring. No AI.
+ */
+
+import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
+
+/* ── Metrics payload (future patient API) ─────────────────────────────────── */
+
+export type CvTrackingQuality = "good" | "fair" | "poor" | "unknown";
+
+/** Client → server body for POST /api/patient/cv-session-metrics (future). */
+export type PatientCvMetricsPayload = {
+  token: string;
+  sessionId: string;
+  exerciseId: "sit-to-stand";
+  repCount?: number;
+  sessionDurationS?: number;
+  trackingQuality?: CvTrackingQuality;
+  movementDetected?: boolean;
+  framesWithPose?: number;
+  framesTotal?: number;
+};
+
+/** Snapshot produced on-device after a tracking session stops. */
+export type SitToStandDerivedMetrics = {
+  exerciseId: "sit-to-stand";
+  repCount: number;
+  sessionDurationS: number;
+  trackingQuality: CvTrackingQuality;
+  movementDetected: boolean;
+  framesWithPose: number;
+  framesTotal: number;
+};
+
+/* ── Sit-to-Stand detector config ─────────────────────────────────────────── */
+
+export type SitToStandCvConfig = {
+  wasmUrl: string;
+  modelUrl: string;
+  canvasWidth: number;
+  canvasHeight: number;
+  initTimeoutMs: number;
+  uiFrameUpdateInterval: number;
+  hipUpThreshold: number;
+  hipDownThreshold: number;
+  visibilityGood: number;
+  visibilityFair: number;
+  minSaveDurationS: number;
+  prototypeVersion: string;
+  landmarkDotColor: string;
+  lowerBodyLandmarkIndices: readonly number[];
+};
+
+export const DEFAULT_STS_CONFIG: SitToStandCvConfig = {
+  wasmUrl: "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.34/wasm",
+  modelUrl:
+    "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+  canvasWidth: 640,
+  canvasHeight: 480,
+  initTimeoutMs: 45_000,
+  uiFrameUpdateInterval: 15,
+  hipUpThreshold: 0.42,
+  hipDownThreshold: 0.58,
+  visibilityGood: 1.4,
+  visibilityFair: 0.8,
+  minSaveDurationS: 3,
+  prototypeVersion: "y1",
+  landmarkDotColor: "#1D9E75",
+  lowerBodyLandmarkIndices: [23, 24, 25, 26, 27, 28],
+};
+
+/* ── Patient-safe CV copy (EN/AR) — for future PatientCvCapture ───────────── */
+
+export type PatientCvCopy = {
+  consentTitle: string;
+  consentDoIntro: string;
+  consentDoBullets: string[];
+  consentDontIntro: string;
+  consentDontBullets: string[];
+  consentSecureNote: string;
+  consentDerivedNote: string;
+  consentAccept: string;
+  startTracking: string;
+  stopTracking: string;
+  repsCounted: (n: number) => string;
+  movementDetectedYes: string;
+  movementDetectedNo: string;
+  trackingSignalLabel: string;
+  trackingGood: string;
+  trackingFair: string;
+  trackingPoor: string;
+  sessionDuration: (formatted: string) => string;
+  savedTherapistReview: string;
+  saveError: string;
+  loadingPoseLibrary: string;
+  loadingPoseModel: string;
+  startingCamera: string;
+  prototypeNotice: string;
+  therapistReviewOnly: string;
+};
+
+const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
+  en: {
+    consentTitle: "Camera for movement counting",
+    consentDoIntro: "What this does:",
+    consentDoBullets: [
+      "Uses your camera on this device to detect body position",
+      "Counts sit-to-stand movements during your exercise",
+      "Shows whether movement is being detected",
+      "Saves derived counts and duration for your therapist to review",
+    ],
+    consentDontIntro: "What this does not do:",
+    consentDontBullets: [
+      "Record or upload video",
+      "Store body coordinates or pose landmarks",
+      "Judge whether your movement is correct or wrong",
+      "Give a diagnosis, score, or treatment recommendation",
+    ],
+    consentSecureNote: "Camera access requires a secure connection (HTTPS).",
+    consentDerivedNote:
+      "Only derived session metrics are saved. No video or body coordinates are stored.",
+    consentAccept: "I understand — enable camera",
+    startTracking: "Start movement tracking",
+    stopTracking: "Stop tracking",
+    repsCounted: (n) => `Reps counted: ${n}`,
+    movementDetectedYes: "Movement detected",
+    movementDetectedNo: "Movement not detected — adjust camera angle",
+    trackingSignalLabel: "Tracking signal",
+    trackingGood: "Tracking signal: Good",
+    trackingFair: "Tracking signal: Fair — results may vary",
+    trackingPoor: "Tracking signal: Poor — adjust camera or lighting",
+    sessionDuration: (formatted) => `Session duration: ${formatted}`,
+    savedTherapistReview: "Saved — your therapist can review this session",
+    saveError: "Session data could not be saved. You can continue your exercise.",
+    loadingPoseLibrary: "Loading pose library…",
+    loadingPoseModel: "Loading pose model…",
+    startingCamera: "Starting camera…",
+    prototypeNotice:
+      "Movement counting is assistive only. It is not clinically validated and does not replace your therapist's guidance.",
+    therapistReviewOnly: "For therapist review only — not a clinical assessment.",
+  },
+  ar: {
+    consentTitle: "الكاميرا لعدّ الحركة",
+    consentDoIntro: "ماذا يفعل هذا:",
+    consentDoBullets: [
+      "يستخدم كاميرتك على هذا الجهاز لاكتشاف وضع الجسم",
+      "يعدّ حركات الجلوس والوقوف أثناء التمرين",
+      "يُظهر ما إذا كانت الحركة تُكتشف",
+      "يحفظ العدّ والمدة المشتقة لمراجعة معالجك",
+    ],
+    consentDontIntro: "ماذا لا يفعل هذا:",
+    consentDontBullets: [
+      "لا يسجّل أو يرفع فيديو",
+      "لا يخزّن إحداثيات الجسم أو معالم الوضعية",
+      "لا يحكم على صحة أو خطأ حركتك",
+      "لا يقدّم تشخيصاً أو درجة أو توصية علاجية",
+    ],
+    consentSecureNote: "يتطلب الوصول للكاميرا اتصالاً آمناً (HTTPS).",
+    consentDerivedNote: "تُحفظ مقاييس الجلسة المشتقة فقط. لا يُخزَّن فيديو أو إحداثيات جسم.",
+    consentAccept: "أفهم — تفعيل الكاميرا",
+    startTracking: "بدء تتبّع الحركة",
+    stopTracking: "إيقاف التتبّع",
+    repsCounted: (n) => `التكرارات المحسوبة: ${n}`,
+    movementDetectedYes: "تم اكتشاف الحركة",
+    movementDetectedNo: "لم تُكتشف الحركة — عدّل زاوية الكاميرا",
+    trackingSignalLabel: "إشارة التتبّع",
+    trackingGood: "إشارة التتبّع: جيدة",
+    trackingFair: "إشارة التتبّع: متوسطة — قد تختلف النتائج",
+    trackingPoor: "إشارة التتبّع: ضعيفة — عدّل الكاميرا أو الإضاءة",
+    sessionDuration: (formatted) => `مدة الجلسة: ${formatted}`,
+    savedTherapistReview: "تم الحفظ — يمكن لمعالجك مراجعة هذه الجلسة",
+    saveError: "تعذّر حفظ بيانات الجلسة. يمكنك متابعة التمرين.",
+    loadingPoseLibrary: "جاري تحميل مكتبة الوضعية…",
+    loadingPoseModel: "جاري تحميل نموذج الوضعية…",
+    startingCamera: "جاري تشغيل الكاميرا…",
+    prototypeNotice:
+      "عدّ الحركة مساعد فقط. غير مُتحقّق سريرياً ولا يُغني عن إرشاد معالجك.",
+    therapistReviewOnly: "لمراجعة المعالج فقط — وليس تقييماً سريرياً.",
+  },
+};
+
+export function patientCvCopy(lang: PatientExerciseLanguage): PatientCvCopy {
+  return PATIENT_CV_COPY[lang];
+}
+
+/** Shared prototype / clinician disclaimer strings (CV Lab + future patient). */
+export const CV_PROTOTYPE_NOTICE_EN =
+  "Prototype-level detection. Not clinically validated. Derived metrics only — not for treatment decisions.";
+
+export const CV_PROTOTYPE_NOTICE_AR =
+  "كشف تجريبي. غير مُتحقّق سريرياً. مقاييس مشتقة فقط — لا تُستخدم لقرارات العلاج.";
+
+export const CV_CLINICIAN_REVIEW_DISCLAIMER_EN =
+  "Derived movement metrics only. Not clinically validated. No video or body coordinates stored. Not a clinical assessment.";
+
+export const CV_CLINICIAN_REVIEW_DISCLAIMER_AR =
+  "مقاييس حركة مشتقة فقط. غير مُتحقّق سريرياً. لا يُخزَّن فيديو أو إحداثيات. ليست تقييماً سريرياً.";
