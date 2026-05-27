@@ -1,6 +1,8 @@
 # RASQ Clinic Pilot — Known Limitations
 
-This document states platform limitations for **controlled clinic pilots**. Share with clinicians before demo and reference in consent / clinic communications as appropriate.
+This document states platform limitations for **controlled clinic pilots** and **workflow validation**. Share with clinicians before demo and reference in consent / clinic communications as appropriate.
+
+**Production build:** Through Sprint W (clinician operational adherence readiness on patient list and profile). Patient portal, assessment, and review flows unchanged in scope for this pilot pack.
 
 ---
 
@@ -30,15 +32,21 @@ Remote assessment and the patient portal support rehabilitation workflow; they *
 
 The current pilot build does **not** include AI-generated clinical recommendations, AI triage, or AI interpretation of patient data for treatment decisions.
 
-### No computer vision (CV) in pilot
+### No patient-facing computer vision (CV) in pilot
 
-The current pilot build does **not** include camera-based movement analysis, pose estimation, or automated form checking.
+The current pilot build does **not** include camera-based movement analysis, pose estimation, or automated form checking **for patients**.
+
+**CV Lab is internal only:** `/clinician/cv-lab` exists for clinician-side review tooling and is **not** part of the patient pilot path. Do not tell patients that RASQ watches their movement with a camera at home.
 
 ### No voice input in pilot
 
-The current pilot build does **not** rely on voice dictation or speech recognition for patient or clinician workflows in the pilot scope.
+The current pilot build does **not** rely on voice dictation or speech recognition for patient or clinician workflows in the **supported pilot feature set**.
 
-*(If experimental voice-related code exists in the repository, it is **not** part of the supported pilot feature set unless explicitly enabled and approved.)*
+*(Experimental voice-related code may exist in the repository; it is **not** approved for controlled clinic pilots unless explicitly enabled and documented by the product team.)*
+
+### No clinical scoring or automatic progression
+
+RASQ does **not** compute clinical scores, recovery grades, or “ready to progress” decisions for treatment. Session activity on the clinician **Patients** list and profile (e.g. `Sessions: N of M`, **Last session**, **No recent session**) is **operational readiness** only — labeled **Operational status only** — and requires **clinician review**, not autonomous action.
 
 ---
 
@@ -122,9 +130,14 @@ Arabic safety messaging is also shown in the patient portal (`PatientSafetyNotic
 
 ## Related documents
 
+- `clinician-onboarding-guide.md` — First-time clinician steps  
+- `pilot-workflow.md` — End-to-end flow (Sprint V/W operational layer)  
+- `patient-guide-ar.md` — Arabic patient handout  
 - `clinic-pilot-script.md` — Live demo steps  
 - `demo-scenarios.md` — Knee, lumbar, shoulder scenarios  
 - `pilot-checklist.md` — Before / during / after checklist  
-- `success-metrics.md` — How to measure pilot success  
+- `pilot-success-metrics.md` — Required pilot metrics  
+- `success-metrics.md` — Extended metrics rubrics  
+- `pilot-feedback-questions.md` — Clinician and patient questions  
 
 Trust pages in app: https://creative-motion-web.vercel.app/intended-use
