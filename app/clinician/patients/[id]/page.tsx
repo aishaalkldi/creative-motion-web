@@ -68,6 +68,11 @@ import { ClinicalActionCard } from "../../../components/clinician/ClinicalAction
 import { PatientJourneyTimeline } from "../../../components/clinician/PatientJourneyTimeline";
 import { CvPatientCvMetricsSection } from "../../../components/clinician/cv/CvPatientCvMetricsSection";
 import { PatientAdherenceSummary } from "../../../components/clinician/PatientAdherenceSummary";
+import {
+  formatLastSessionCompletedLine,
+  formatSessionsCompletedLine,
+  OPERATIONAL_STATUS_ONLY,
+} from "@/app/lib/clinician/adherence-display";
 import type { PatientProgressSummary, PatientTimelineBundle } from "../../../api/clinician/patient-progress/route";
 import { buildPatientTimeline } from "../../../lib/clinician/patient-timeline";
 import {
@@ -671,6 +676,21 @@ export default function PatientProfilePage() {
     : adherence
       ? `${adherence.sessionsCompleted}/${adherence.totalSessions} sessions · ${adherence.adherenceRatePct}%`
       : "—";
+  const adherenceSessionsCompleted =
+    planProgress?.sessionsCompleted ?? adherence?.sessionsCompleted ?? 0;
+  const adherenceTotalSessions =
+    planProgress?.totalSessions ?? adherence?.totalSessions ?? 0;
+  const adherenceLastSessionAt =
+    planProgress?.lastCompletedAt ?? adherence?.lastActiveAt ?? null;
+  const adherenceSessionsLine = formatSessionsCompletedLine(
+    adherenceSessionsCompleted,
+    adherenceTotalSessions,
+  );
+  const adherenceLastSessionLine = treatmentPlan
+    ? formatLastSessionCompletedLine(adherenceLastSessionAt)
+    : null;
+  const showAdherenceQuickSummary =
+    Boolean(treatmentPlan) && adherenceTotalSessions > 0;
   const hasAnyAssessment =
     supabaseAssessmentRows.length > 0 || submittedRemote.length > 0 || backendAssessmentHistory.length > 0;
 
@@ -881,6 +901,16 @@ export default function PatientProfilePage() {
                 <InfoCard label="Current Plan" value={overviewCurrentPlan} />
                 <InfoCard label="Progress Snapshot" value={overviewProgressSnapshot} />
               </div>
+              {showAdherenceQuickSummary && adherenceSessionsLine && adherenceLastSessionLine && (
+                <div className="mt-4 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+                    Session activity
+                  </p>
+                  <p className="mt-2 text-sm text-white/75">{adherenceSessionsLine}</p>
+                  <p className="mt-1 text-sm text-white/60">{adherenceLastSessionLine}</p>
+                  <p className="mt-2 text-[10px] italic text-white/30">{OPERATIONAL_STATUS_ONLY}</p>
+                </div>
+              )}
             </section>
 
             {/* Quick actions */}

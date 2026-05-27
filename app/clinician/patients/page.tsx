@@ -4,8 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ClinicianResultsResponse } from "@/app/api/clinician/results/route";
 import {
+  formatLastSessionLine,
+  formatSessionsLine,
+  OPERATIONAL_STATUS_ONLY,
+  shouldShowNoRecentSessionBadge,
+} from "@/app/lib/clinician/adherence-display";
+import {
   buildPatientOperationalSummaries,
-  formatLastActivity,
   type PatientOperationalBadge,
 } from "@/app/lib/clinician/pilot-attention-queue";
 import type { PatientRow } from "../../lib/validate-patient-ownership";
@@ -27,6 +32,14 @@ function OperationalBadge({ badge }: { badge: PatientOperationalBadge }) {
   return (
     <span className={`rounded-[5px] border px-2 py-0.5 text-[10px] font-semibold ${cls}`}>
       {badge.label}
+    </span>
+  );
+}
+
+function NoRecentSessionBadge() {
+  return (
+    <span className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2 py-0.5 text-[10px] font-semibold text-white/45">
+      No recent session
     </span>
   );
 }
@@ -232,6 +245,22 @@ export default function PatientsPage() {
                 ) : (
                   filtered.map((patient) => {
                     const operational = operationalByPatient.get(patient.id);
+                    const sessionsLine =
+                      operational && operational.totalSessions > 0
+                        ? formatSessionsLine(
+                            operational.sessionsCompleted,
+                            operational.totalSessions,
+                          )
+                        : null;
+                    const lastSessionLine = operational?.hasPlan
+                      ? formatLastSessionLine(operational.lastSessionAt)
+                      : null;
+                    const showNoRecent =
+                      operational &&
+                      shouldShowNoRecentSessionBadge({
+                        totalSessions: operational.totalSessions,
+                        lastSessionAt: operational.lastSessionAt,
+                      });
                     return (
                     <tr
                       key={patient.id}
@@ -253,11 +282,23 @@ export default function PatientsPage() {
                                 {operational.badges.map((badge) => (
                                   <OperationalBadge key={badge.label} badge={badge} />
                                 ))}
+                                {showNoRecent && <NoRecentSessionBadge />}
                               </div>
                             )}
-                            {operational?.lastActivityAt && (
-                              <p className="mt-1 text-[10px] text-white/30">
-                                Last activity {formatLastActivity(operational.lastActivityAt)}
+                            {showNoRecent && operational && operational.badges.length === 0 && (
+                              <div className="mt-1.5">
+                                <NoRecentSessionBadge />
+                              </div>
+                            )}
+                            {sessionsLine && (
+                              <p className="mt-1 text-[10px] text-white/40">{sessionsLine}</p>
+                            )}
+                            {lastSessionLine && (
+                              <p className="mt-0.5 text-[10px] text-white/30">{lastSessionLine}</p>
+                            )}
+                            {operational?.hasPlan && operational.totalSessions > 0 && (
+                              <p className="mt-0.5 text-[9px] italic text-white/20">
+                                {OPERATIONAL_STATUS_ONLY}
                               </p>
                             )}
                           </div>

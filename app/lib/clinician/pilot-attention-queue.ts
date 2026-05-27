@@ -26,6 +26,11 @@ export type PatientOperationalBadge = {
 export type PatientOperationalSummary = {
   badges: PatientOperationalBadge[];
   lastActivityAt: string | null;
+  hasPlan: boolean;
+  sessionsCompleted: number;
+  totalSessions: number;
+  /** Latest session log completion on primary plan (not assessment dates). */
+  lastSessionAt: string | null;
 };
 
 const PRIORITY_RANK: Record<PilotAttentionPriority, number> = {
@@ -268,12 +273,26 @@ export function buildPatientOperationalSummaries(
     const lastActivityAt =
       plan?.lastCompletedAt ?? ctx.assessment?.submittedAt ?? null;
 
-    map.set(ctx.patientId, { badges, lastActivityAt });
+    map.set(ctx.patientId, {
+      badges,
+      lastActivityAt,
+      hasPlan: Boolean(plan),
+      sessionsCompleted: plan?.sessionsCompleted ?? 0,
+      totalSessions: plan?.totalSessions ?? 0,
+      lastSessionAt: plan?.lastCompletedAt ?? null,
+    });
   }
 
   for (const patient of patients) {
     if (!map.has(patient.id)) {
-      map.set(patient.id, { badges: [], lastActivityAt: null });
+      map.set(patient.id, {
+        badges: [],
+        lastActivityAt: null,
+        hasPlan: false,
+        sessionsCompleted: 0,
+        totalSessions: 0,
+        lastSessionAt: null,
+      });
     }
   }
 
