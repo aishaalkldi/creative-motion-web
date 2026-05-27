@@ -340,7 +340,7 @@ export default function UnifiedResultsPage() {
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/45">
               {reviewQueue.length > 0
                 ? `Start with ${reviewQueue.length} patient${reviewQueue.length > 1 ? "s" : ""} in the review queue below, then browse the full pipeline.`
-                : "One card per patient — assessment status, rehab progress, and recommended next action."}
+                : "One card per patient — assessment status, rehab progress, and suggested clinician follow-up."}
             </p>
           </div>
           <Link

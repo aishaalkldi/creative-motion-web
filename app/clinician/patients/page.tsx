@@ -1,11 +1,35 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { ClinicianResultsResponse } from "@/app/api/clinician/results/route";
+import {
+  buildPatientOperationalSummaries,
+  formatLastActivity,
+  type PatientOperationalBadge,
+} from "@/app/lib/clinician/pilot-attention-queue";
 import type { PatientRow } from "../../lib/validate-patient-ownership";
 import ConfirmModal from "../../components/ConfirmModal";
 
 /* ─── Badge helpers ──────────────────────────────────────────────────────── */
+
+function OperationalBadge({ badge }: { badge: PatientOperationalBadge }) {
+  const cls =
+    badge.tone === "review"
+      ? "border-amber-400/25 bg-amber-400/10 text-amber-200"
+      : badge.tone === "rehab"
+        ? "border-[#1D9E75]/25 bg-[#1D9E75]/10 text-[#5DCAA5]"
+        : badge.tone === "assessment"
+          ? "border-sky-400/25 bg-sky-400/10 text-sky-200"
+          : badge.tone === "plan"
+            ? "border-[#1E2D42] bg-[#0B1220] text-white/50"
+            : "border-[#1E2D42] bg-[#0B1220] text-white/35";
+  return (
+    <span className={`rounded-[5px] border px-2 py-0.5 text-[10px] font-semibold ${cls}`}>
+      {badge.label}
+    </span>
+  );
+}
 
 function StatusBadge({ status }: { status: string | null }) {
   const s = status ?? "";
@@ -26,6 +50,7 @@ function StatusBadge({ status }: { status: string | null }) {
 
 export default function PatientsPage() {
   const [patients, setPatients]     = useState<PatientRow[]>([]);
+  const [results, setResults]       = useState<ClinicianResultsResponse | null>(null);
   const [search, setSearch]         = useState("");
   const [isLoading, setIsLoading]   = useState(true);
   const [error, setError]           = useState("");
@@ -35,15 +60,25 @@ export default function PatientsPage() {
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
-    fetch("/api/patients")
-      .then(async (res) => {
+    Promise.all([
+      fetch("/api/patients").then(async (res) => {
         if (!res.ok) {
           const body = await res.json().catch(() => ({})) as { error?: string };
           throw new Error(body.error ?? `Request failed (${res.status})`);
         }
         return res.json() as Promise<PatientRow[]>;
+      }),
+      fetch("/api/clinician/results")
+        .then(async (res) =>
+          res.ok ? (res.json() as Promise<ClinicianResultsResponse>) : null,
+        )
+        .catch(() => null),
+    ])
+      .then(([patientsData, resultsData]) => {
+        if (!isMounted) return;
+        setPatients(patientsData);
+        setResults(resultsData);
       })
-      .then((data) => { if (isMounted) setPatients(data); })
       .catch((err: unknown) => {
         if (!isMounted) return;
         setError(err instanceof Error ? err.message : "Could not load patients.");
@@ -51,6 +86,11 @@ export default function PatientsPage() {
       .finally(() => { if (isMounted) setIsLoading(false); });
     return () => { isMounted = false; };
   }, []);
+
+  const operationalByPatient = useMemo(
+    () => buildPatientOperationalSummaries(patients, results),
+    [patients, results],
+  );
 
   async function handleConfirmDelete() {
     if (!confirmTarget) return;
@@ -190,7 +230,9 @@ export default function PatientsPage() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((patient) => (
+                  filtered.map((patient) => {
+                    const operational = operationalByPatient.get(patient.id);
+                    return (
                     <tr
                       key={patient.id}
                       className="group transition hover:bg-[#0B1220]"
@@ -201,10 +243,22 @@ export default function PatientsPage() {
                           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[6px] bg-[#1D9E75]/10 text-[11px] font-bold text-[#5DCAA5]">
                             {patient.full_name.split(" ").map((n) => n[0]).join("").slice(0, 2)}
                           </span>
-                          <div>
+                          <div className="min-w-0">
                             <p className="text-sm font-semibold text-white">{patient.full_name}</p>
                             {patient.phone && (
                               <p className="text-[11px] text-white/35">{patient.phone}</p>
+                            )}
+                            {operational && operational.badges.length > 0 && (
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {operational.badges.map((badge) => (
+                                  <OperationalBadge key={badge.label} badge={badge} />
+                                ))}
+                              </div>
+                            )}
+                            {operational?.lastActivityAt && (
+                              <p className="mt-1 text-[10px] text-white/30">
+                                Last activity {formatLastActivity(operational.lastActivityAt)}
+                              </p>
                             )}
                           </div>
                         </div>
@@ -254,7 +308,8 @@ export default function PatientsPage() {
                         </div>
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

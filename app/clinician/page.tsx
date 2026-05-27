@@ -1,8 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { ClinicianResultsResponse } from "@/app/api/clinician/results/route";
+import { PilotChecklistCard } from "@/app/components/clinician/PilotChecklistCard";
 import { getDashboardStats, type DashboardStats } from "@/app/lib/api";
+import {
+  buildPilotAttentionQueue,
+  type PilotAttentionItem,
+  type PilotAttentionPriority,
+} from "@/app/lib/clinician/pilot-attention-queue";
+import type { PatientRow } from "@/app/lib/validate-patient-ownership";
 
 // ── Static data ────────────────────────────────────────────────────────────────
 
@@ -26,6 +34,40 @@ const WORKFLOW_STEPS = [
 ];
 
 // ── Components ─────────────────────────────────────────────────────────────────
+
+function priorityBadgeClass(priority: PilotAttentionPriority): string {
+  if (priority === "high") {
+    return "border-rose-400/30 bg-rose-400/10 text-rose-200";
+  }
+  if (priority === "medium") {
+    return "border-amber-400/30 bg-amber-400/10 text-amber-200";
+  }
+  return "border-[#1E2D42] bg-[#0B1220] text-white/45";
+}
+
+function PilotAttentionQueueRow({ item }: { item: PilotAttentionItem }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-sm font-semibold text-white">{item.patientName}</p>
+          <span
+            className={`rounded-[5px] border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${priorityBadgeClass(item.priority)}`}
+          >
+            {item.priority}
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-white/45">{item.reason}</p>
+      </div>
+      <Link
+        href={item.href}
+        className="shrink-0 rounded-[6px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3 py-1.5 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
+      >
+        {item.actionLabel}
+      </Link>
+    </div>
+  );
+}
 
 function MetricCard({ title, value, subtitle, attention = false }: {
   title: string; value: string; subtitle: string; attention?: boolean;
@@ -100,14 +142,37 @@ function buildPilotSummaryText(stats: DashboardStats | null, loading: boolean): 
 
 export default function ClinicianDashboardPage() {
   const [stats, setStats]   = useState<DashboardStats | null>(null);
+  const [patients, setPatients] = useState<PatientRow[]>([]);
+  const [results, setResults] = useState<ClinicianResultsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [copyFeedback, setCopyFeedback] = useState<"idle" | "copied" | "unavailable">("idle");
 
   useEffect(() => {
-    getDashboardStats()
-      .then(setStats)
-      .catch(() => setStats(null))
-      .finally(() => setLoading(false));
+    let isMounted = true;
+    setLoading(true);
+    Promise.all([
+      getDashboardStats().catch(() => null),
+      fetch("/api/patients")
+        .then(async (res) => (res.ok ? (res.json() as Promise<PatientRow[]>) : []))
+        .catch(() => [] as PatientRow[]),
+      fetch("/api/clinician/results")
+        .then(async (res) =>
+          res.ok ? (res.json() as Promise<ClinicianResultsResponse>) : null,
+        )
+        .catch(() => null),
+    ])
+      .then(([statsData, patientsData, resultsData]) => {
+        if (!isMounted) return;
+        setStats(statsData);
+        setPatients(patientsData);
+        setResults(resultsData);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -147,24 +212,16 @@ export default function ClinicianDashboardPage() {
 
   const statsUpdatedAt = formatStatsTime(stats?.generatedAt);
 
-  const activityQueue =
-    !loading && stats
-      ? [
-          stats.pendingReviews === null
-            ? "Review queue unavailable"
-            : stats.pendingReviews === 0
-              ? "No unreviewed clinical flags"
-              : `${stats.pendingReviews} unreviewed clinical flag${stats.pendingReviews > 1 ? "s" : ""}`,
-          stats.remoteAssessmentsPending === null
-            ? "Remote assessment count unavailable"
-            : stats.remoteAssessmentsPending === 0
-              ? "No remote assessments pending"
-              : `${stats.remoteAssessmentsPending} remote assessment${stats.remoteAssessmentsPending > 1 ? "s" : ""} pending`,
-          stats.pendingReviews != null && stats.pendingReviews > 0
-            ? "Open Results to review flagged patients"
-            : "Review queue is clear",
-        ]
-      : ["Loading activity…", "Loading activity…", "Loading activity…"];
+  const attentionQueue = useMemo(
+    () =>
+      buildPilotAttentionQueue({
+        patients,
+        stats,
+        results,
+        limit: 8,
+      }),
+    [patients, stats, results],
+  );
 
   return (
     <div className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
@@ -288,15 +345,37 @@ export default function ClinicianDashboardPage() {
             </div>
 
             <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <h2 className="text-base font-bold text-white">Clinical Activity</h2>
-              <p className="mt-1 text-sm text-white/35">Pending review and follow-up queue.</p>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-bold text-white">Pilot Attention Queue</h2>
+                  <p className="mt-1 text-sm text-white/35">
+                    Actionable follow-up from assessments, plans, and session activity.
+                  </p>
+                </div>
+                <Link
+                  href="/clinician/results"
+                  className="shrink-0 text-xs font-semibold text-[#5DCAA5] transition hover:text-[#1D9E75]"
+                >
+                  View full results queue →
+                </Link>
+              </div>
               <div className="mt-4 space-y-2">
-                {activityQueue.map((item) => (
-                  <div key={item} className="flex items-center gap-3 rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3 text-sm text-white/50">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#1E2D42]" />
-                    {item}
-                  </div>
-                ))}
+                {loading ? (
+                  <p className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3 text-sm text-white/40">
+                    Loading follow-up queue…
+                  </p>
+                ) : attentionQueue.length === 0 ? (
+                  <p className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3 text-sm leading-relaxed text-white/45">
+                    No active follow-up items. Continue monitoring patient activity and submitted assessments.
+                  </p>
+                ) : (
+                  attentionQueue.map((item) => (
+                    <PilotAttentionQueueRow
+                      key={`${item.patientId || "aggregate"}-${item.source}-${item.reason}`}
+                      item={item}
+                    />
+                  ))
+                )}
               </div>
             </div>
           </div>
