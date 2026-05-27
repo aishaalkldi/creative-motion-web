@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DEFAULT_STS_CONFIG, patientCvCopy } from "@/app/lib/cv/bio-0-contracts";
+import { patientCvCopy } from "@/app/lib/cv/bio-0-contracts";
+import { PATIENT_STS_CONFIG } from "@/app/lib/cv/cv-patient-config";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import {
   formatSitToStandDuration,
@@ -12,7 +13,7 @@ import {
   type SitToStandTrackingStatus,
 } from "@/app/lib/cv/sit-to-stand-detector";
 
-const { canvasWidth: CANVAS_WIDTH, canvasHeight: CANVAS_HEIGHT } = DEFAULT_STS_CONFIG;
+const { canvasWidth: CANVAS_WIDTH, canvasHeight: CANVAS_HEIGHT } = PATIENT_STS_CONFIG;
 
 type SaveStatus = "idle" | "saving" | "saved" | "error";
 
@@ -35,6 +36,7 @@ function applySnapshot(
     setTrackingStatus: (v: SitToStandTrackingStatus) => void;
     setSessionSeconds: (v: number) => void;
     setMovementDetected: (v: boolean) => void;
+    setBaselineCalibrating: (v: boolean) => void;
   },
 ): void {
   setters.setPreviewActive(snapshot.previewActive);
@@ -44,6 +46,7 @@ function applySnapshot(
   setters.setTrackingStatus(snapshot.trackingStatus);
   setters.setSessionSeconds(snapshot.sessionSeconds);
   setters.setMovementDetected(snapshot.movementDetected);
+  setters.setBaselineCalibrating(snapshot.isBaselineCalibrating);
   setters.setLoading(snapshot.initPhase !== null);
 }
 
@@ -68,6 +71,7 @@ export function PatientCvCapture({
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [movementDetected, setMovementDetected] = useState(false);
+  const [baselineCalibrating, setBaselineCalibrating] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -88,11 +92,12 @@ export function PatientCvCapture({
       setTrackingStatus,
       setSessionSeconds,
       setMovementDetected,
+      setBaselineCalibrating,
     });
   }, []);
 
   useEffect(() => {
-    const detector = new SitToStandDetector({ onSnapshot: syncFromDetector });
+    const detector = new SitToStandDetector({ onSnapshot: syncFromDetector }, PATIENT_STS_CONFIG);
     detectorRef.current = detector;
     return () => {
       detector.stop();
@@ -359,6 +364,10 @@ export function PatientCvCapture({
         >
           {copy.stopTracking}
         </button>
+      )}
+
+      {sessionStarted && baselineCalibrating && (
+        <p className="mt-3 text-[12px] text-[#6B7280]">{copy.startSeatedHint}</p>
       )}
 
       {sessionStarted && (

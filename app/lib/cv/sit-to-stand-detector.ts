@@ -26,6 +26,8 @@ export type SitToStandDetectorSnapshot = {
   initPhase: SitToStandInitPhase;
   previewActive: boolean;
   trackingError: string | null;
+  /** True while collecting seated hip baseline (patient baseline mode only) */
+  isBaselineCalibrating: boolean;
 };
 
 type PoseLandmarkerInstance = {
@@ -164,6 +166,16 @@ export type SitToStandDetectorCallbacks = {
   onSnapshot: (snapshot: SitToStandDetectorSnapshot) => void;
 };
 
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    return (sorted[mid - 1]! + sorted[mid]!) / 2;
+  }
+  return sorted[mid]!;
+}
+
 const IDLE_SNAPSHOT: SitToStandDetectorSnapshot = {
   trackingStatus: "idle",
   trackingQuality: null,
@@ -175,6 +187,7 @@ const IDLE_SNAPSHOT: SitToStandDetectorSnapshot = {
   initPhase: null,
   previewActive: false,
   trackingError: null,
+  isBaselineCalibrating: false,
 };
 
 /**
@@ -204,6 +217,12 @@ export class SitToStandDetector {
   private videoPauseHandler: (() => void) | null = null;
   private videoEl: HTMLVideoElement | null = null;
   private canvasEl: HTMLCanvasElement | null = null;
+  private baselineSamples: number[] = [];
+  private baselineHipY: number | null = null;
+  private baselineWindowEndMs = 0;
+  private trackingStartedAtMs = 0;
+  private lastRepAtMs = 0;
+  private isBaselineCalibrating = false;
 
   constructor(
     callbacks: SitToStandDetectorCallbacks,
@@ -225,7 +244,67 @@ export class SitToStandDetector {
       initPhase: this.initPhase,
       previewActive: this.previewActive,
       trackingError: this.trackingError,
+      isBaselineCalibrating: this.isBaselineCalibrating,
     };
+  }
+
+  private usesBaselineRepCounting(): boolean {
+    return this.config.repCountingMode === "baseline";
+  }
+
+  private resetBaselineState(): void {
+    this.baselineSamples = [];
+    this.baselineHipY = null;
+    this.baselineWindowEndMs = 0;
+    this.trackingStartedAtMs = 0;
+    this.lastRepAtMs = 0;
+    this.isBaselineCalibrating = false;
+  }
+
+  private maybeFinalizeBaseline(nowMs: number): void {
+    if (!this.usesBaselineRepCounting() || this.baselineHipY !== null) return;
+    if (nowMs < this.baselineWindowEndMs) return;
+
+    const medianY = median(this.baselineSamples);
+    this.baselineHipY =
+      medianY ?? this.config.fallbackSeatedHipY ?? this.config.hipDownThreshold;
+    this.isBaselineCalibrating = false;
+  }
+
+  private updateRepCountFromHipY(hipY: number, nowMs: number): void {
+    if (this.usesBaselineRepCounting()) {
+      this.maybeFinalizeBaseline(nowMs);
+      if (this.baselineHipY === null) {
+        this.baselineSamples.push(hipY);
+        return;
+      }
+
+      const standDelta = this.config.baselineStandDelta ?? 0.09;
+      const resetDelta = this.config.baselineResetDelta ?? 0.04;
+      const minMs = this.config.minMsBetweenReps ?? 900;
+      const standThreshold = this.baselineHipY - standDelta;
+      const seatedThreshold = this.baselineHipY - resetDelta;
+
+      if (
+        hipY < standThreshold &&
+        this.standPhase === "down" &&
+        nowMs - this.lastRepAtMs >= minMs
+      ) {
+        this.standPhase = "up";
+        this.repCount += 1;
+        this.lastRepAtMs = nowMs;
+      } else if (hipY > seatedThreshold && this.standPhase === "up") {
+        this.standPhase = "down";
+      }
+      return;
+    }
+
+    if (hipY < this.config.hipUpThreshold && this.standPhase === "down") {
+      this.standPhase = "up";
+      this.repCount += 1;
+    } else if (hipY > this.config.hipDownThreshold && this.standPhase === "up") {
+      this.standPhase = "down";
+    }
   }
 
   getDerivedMetrics(): SitToStandDerivedMetrics {
@@ -252,6 +331,7 @@ export class SitToStandDetector {
   resetReps(): void {
     this.repCount = 0;
     this.standPhase = "down";
+    this.lastRepAtMs = 0;
     this.emit();
   }
 
@@ -290,6 +370,7 @@ export class SitToStandDetector {
     this.trackingQuality = null;
     this.initPhase = null;
     this.trackingError = null;
+    this.resetBaselineState();
     this.emit();
   }
 
@@ -320,6 +401,7 @@ export class SitToStandDetector {
     this.trackingStatus = "detecting";
     this.initPhase = "import";
     this.previewActive = false;
+    this.resetBaselineState();
     this.emit();
 
     const isCurrent = () => this.sessionEpoch === epoch;
@@ -374,6 +456,12 @@ export class SitToStandDetector {
 
       this.previewActive = true;
       this.initPhase = null;
+      this.trackingStartedAtMs = performance.now();
+      if (this.usesBaselineRepCounting()) {
+        const durationMs = this.config.baselineDurationMs ?? 2_000;
+        this.baselineWindowEndMs = this.trackingStartedAtMs + durationMs;
+        this.isBaselineCalibrating = true;
+      }
       this.emit();
 
       this.timerId = setInterval(() => {
@@ -428,13 +516,8 @@ export class SitToStandDetector {
             this.trackingQuality = quality;
 
             const hipY = ((landmarks[23]?.y ?? 0) + (landmarks[24]?.y ?? 0)) / 2;
-
-            if (hipY < this.config.hipUpThreshold && this.standPhase === "down") {
-              this.standPhase = "up";
-              this.repCount += 1;
-            } else if (hipY > this.config.hipDownThreshold && this.standPhase === "up") {
-              this.standPhase = "down";
-            }
+            const nowMs = performance.now();
+            this.updateRepCountFromHipY(hipY, nowMs);
 
             for (const idx of this.config.lowerBodyLandmarkIndices) {
               const lm = landmarks[idx];

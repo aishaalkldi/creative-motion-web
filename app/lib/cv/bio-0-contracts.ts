@@ -35,6 +35,9 @@ export type SitToStandDerivedMetrics = {
 
 /* ── Sit-to-Stand detector config ─────────────────────────────────────────── */
 
+/** absolute = CV Lab fixed hip-Y thresholds; baseline = patient seated hip calibration */
+export type SitToStandRepCountingMode = "absolute" | "baseline";
+
 export type SitToStandCvConfig = {
   wasmUrl: string;
   modelUrl: string;
@@ -50,6 +53,16 @@ export type SitToStandCvConfig = {
   prototypeVersion: string;
   landmarkDotColor: string;
   lowerBodyLandmarkIndices: readonly number[];
+  /** Patient portal: relative hip-Y rep counting from seated baseline */
+  repCountingMode?: SitToStandRepCountingMode;
+  baselineDurationMs?: number;
+  /** Standing: hipY must fall at least this far below seated baseline (normalized 0–1) */
+  baselineStandDelta?: number;
+  /** Seated reset: hipY must rise to at least baseline minus this delta */
+  baselineResetDelta?: number;
+  minMsBetweenReps?: number;
+  /** Used when baseline window has no pose samples */
+  fallbackSeatedHipY?: number;
 };
 
 export const DEFAULT_STS_CONFIG: SitToStandCvConfig = {
@@ -104,6 +117,7 @@ export type PatientCvCopy = {
   moveComfortably: string;
   trackingStatusReady: string;
   trackingStatusDetecting: string;
+  startSeatedHint: string;
 };
 
 const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
@@ -151,6 +165,7 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     moveComfortably: "Take your time and move comfortably.",
     trackingStatusReady: "Ready",
     trackingStatusDetecting: "Detecting movement…",
+    startSeatedHint: "Start seated, then stand when ready.",
   },
   ar: {
     consentTitle: "الكاميرا لعدّ الحركة",
@@ -195,6 +210,7 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     moveComfortably: "خذ وقتك وتحرّك براحة.",
     trackingStatusReady: "جاهز",
     trackingStatusDetecting: "جاري اكتشاف الحركة…",
+    startSeatedHint: "ابدأ جالساً، ثم قف عندما تكون مستعداً.",
   },
 };
 
