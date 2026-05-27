@@ -734,6 +734,9 @@ export default function PatientProfilePage() {
               <a href="#progress-snapshot" className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
                 Progress
               </a>
+              <a href="#movement-tracking-sessions" className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
+                Movement tracking
+              </a>
               <Link href="/clinician/results" className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
                 Results
               </Link>
@@ -1189,6 +1192,8 @@ export default function PatientProfilePage() {
               }}
             />
 
+            <CvPatientCvMetricsSection patientId={patient.id} />
+
             {(planProgress || adherence) && treatmentPlan ? (
               <PatientAdherenceSummary
                 sessionsCompleted={
@@ -1205,8 +1210,6 @@ export default function PatientProfilePage() {
               events={rehabilitationTimelineEvents}
               patientName={patient.full_name}
             />
-
-            <CvPatientCvMetricsSection patientId={patient.id} />
 
             {/* Patient access link */}
             {treatmentPlan?.patientToken && (

@@ -1,12 +1,21 @@
 import Link from "next/link";
 import {
+  CV_CLINICIAN_DISCLAIMER,
+  CV_REP_COUNT_FOOTER,
   formatCvDuration,
   formatCvMovementDetected,
+  formatCvPrototypeLabel,
   formatCvRecordedAt,
   formatCvSource,
   formatCvTrackingQuality,
+  formatCvTrackingSignal,
+  sortCvMetricsForPatientProfile,
+  summarizeCvSources,
+  totalCvRepsRecorded,
   type CvSessionMetricPublic,
 } from "@/app/lib/cv/cv-metrics-display";
+
+type CvReviewVariant = "lab" | "patient-profile";
 
 type CvReviewSummaryProps = {
   metrics: CvSessionMetricPublic[];
@@ -15,6 +24,7 @@ type CvReviewSummaryProps = {
   error?: boolean;
   showPatientLinks?: boolean;
   maxSessions?: number;
+  variant?: CvReviewVariant;
 };
 
 function MetricRow({ label, value }: { label: string; value: string }) {
@@ -26,31 +36,87 @@ function MetricRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function SourceBadge({ source }: { source: string }) {
+  const label = formatCvSource(source);
+  const isPatientSession = source === "patient_session";
+  return (
+    <span
+      className={`rounded-[5px] border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+        isPatientSession
+          ? "border-[#1D9E75]/35 bg-[#1D9E75]/12 text-[#5DCAA5]"
+          : "border-[#1E2D42] bg-[#0F1825] text-[#9CA3AF]"
+      }`}
+    >
+      {label}
+    </span>
+  );
+}
+
+function PrototypeLabel({ version }: { version: string | null | undefined }) {
+  return (
+    <span className="rounded-[4px] border border-[#1E2D42] bg-[#0B1220] px-2 py-0.5 text-[10px] text-[#6B7280]">
+      {formatCvPrototypeLabel(version)}
+    </span>
+  );
+}
+
 function SessionReviewCard({
   row,
   exerciseName,
   showPatientLink,
+  profileMode,
 }: {
   row: CvSessionMetricPublic;
   exerciseName: string;
   showPatientLink: boolean;
+  profileMode: boolean;
 }) {
+  const highlightPatient = profileMode && row.source === "patient_session";
+
   return (
     <article
-      className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4"
+      className={`rounded-[8px] border bg-[#0B1220] p-4 ${
+        highlightPatient ? "border-[#1D9E75]/30" : "border-[#1E2D42]"
+      }`}
       style={{ borderWidth: "0.5px" }}
     >
+      {profileMode ? (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <SourceBadge source={row.source} />
+          <PrototypeLabel version={row.prototypeVersion} />
+          {highlightPatient ? (
+            <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#5DCAA5]">
+              Portal capture
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
       <dl className="space-y-2.5">
+        {profileMode ? (
+          <MetricRow label="Date/time" value={formatCvRecordedAt(row.recordedAt)} />
+        ) : null}
         <MetricRow label="Exercise" value={exerciseName} />
         <MetricRow label="Reps" value={row.repCount != null ? String(row.repCount) : "—"} />
         <MetricRow label="Duration" value={formatCvDuration(row.sessionDurationS)} />
-        <MetricRow label="Tracking quality" value={formatCvTrackingQuality(row.trackingQuality)} />
+        <MetricRow
+          label={profileMode ? "Tracking signal" : "Tracking quality"}
+          value={
+            profileMode
+              ? formatCvTrackingSignal(row.trackingQuality)
+              : formatCvTrackingQuality(row.trackingQuality)
+          }
+        />
         <MetricRow
           label="Movement detected"
           value={formatCvMovementDetected(row.movementDetected)}
         />
-        <MetricRow label="Recorded" value={formatCvRecordedAt(row.recordedAt)} />
-        <MetricRow label="Source" value={formatCvSource(row.source)} />
+        {!profileMode ? (
+          <>
+            <MetricRow label="Recorded" value={formatCvRecordedAt(row.recordedAt)} />
+            <MetricRow label="Source" value={formatCvSource(row.source)} />
+          </>
+        ) : null}
       </dl>
       {showPatientLink && row.patientId ? (
         <Link
@@ -64,15 +130,52 @@ function SessionReviewCard({
   );
 }
 
-export function CvReviewSummary({
+function PatientProfileSummaryCard({ metrics }: { metrics: CvSessionMetricPublic[] }) {
+  const mostRecent = metrics.reduce<string | null>((latest, row) => {
+    if (!latest) return row.recordedAt;
+    return new Date(row.recordedAt) > new Date(latest) ? row.recordedAt : latest;
+  }, null);
+
+  return (
+    <div
+      className="mb-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+    >
+      {[
+        { label: "Total CV sessions", value: String(metrics.length) },
+        { label: "Total reps recorded", value: String(totalCvRepsRecorded(metrics)) },
+        {
+          label: "Most recent session",
+          value: mostRecent ? formatCvRecordedAt(mostRecent) : "—",
+        },
+        { label: "Sources in list", value: summarizeCvSources(metrics) },
+      ].map(({ label, value }) => (
+        <div
+          key={label}
+          className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5"
+          style={{ borderWidth: "0.5px" }}
+        >
+          <p className="text-[10px] uppercase tracking-[0.06em] text-[#6B7280]">{label}</p>
+          <p
+            className="mt-1 text-sm font-semibold text-[#F9FAFB]"
+            style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+          >
+            {value}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function LabCvReviewSummary({
   metrics,
   exerciseNameById,
-  loading = false,
-  error = false,
-  showPatientLinks = false,
-  maxSessions = 5,
+  loading,
+  error,
+  showPatientLinks,
+  maxSessions,
 }: CvReviewSummaryProps) {
-  const reviewMetrics = metrics.slice(0, maxSessions);
+  const reviewMetrics = metrics.slice(0, maxSessions ?? 5);
 
   return (
     <section className="mt-8">
@@ -114,18 +217,120 @@ export function CvReviewSummary({
               <SessionReviewCard
                 row={row}
                 exerciseName={exerciseNameById[row.exerciseId] ?? row.exerciseId}
-                showPatientLink={showPatientLinks}
+                showPatientLink={showPatientLinks ?? false}
+                profileMode={false}
               />
             </div>
           ))}
-          {metrics.length > maxSessions ? (
+          {metrics.length > (maxSessions ?? 5) ? (
             <p className="text-[11px] text-[#6B7280]">
-              Showing {maxSessions} of {metrics.length} recent sessions. See the table below for the
-              full list.
+              Showing {maxSessions ?? 5} of {metrics.length} recent sessions. See the table below for
+              the full list.
             </p>
           ) : null}
         </div>
       )}
     </section>
+  );
+}
+
+function PatientProfileCvReview({
+  metrics,
+  exerciseNameById,
+  maxSessions,
+}: {
+  metrics: CvSessionMetricPublic[];
+  exerciseNameById: Record<string, string>;
+  maxSessions: number;
+}) {
+  const sorted = sortCvMetricsForPatientProfile(metrics);
+  const patientSessionRows = sorted.filter((r) => r.source === "patient_session");
+  const displayMetrics = sorted.slice(0, maxSessions);
+  const hasPatientSessions = patientSessionRows.length > 0;
+
+  return (
+    <section
+      id="movement-tracking-sessions"
+      className="scroll-mt-6 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6"
+    >
+      <h2 className="text-lg font-bold text-white">Movement tracking sessions</h2>
+      <p className="mt-2 text-[11px] leading-relaxed text-[#9CA3AF]">{CV_CLINICIAN_DISCLAIMER}</p>
+
+      <PatientProfileSummaryCard metrics={metrics} />
+
+      {hasPatientSessions ? (
+        <p className="mb-3 text-[11px] font-medium text-[#5DCAA5]">
+          {patientSessionRows.length} patient portal session
+          {patientSessionRows.length === 1 ? "" : "s"} listed first for review.
+        </p>
+      ) : null}
+
+      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
+        Recent sessions
+      </p>
+
+      <div className="space-y-3">
+        {displayMetrics.map((row, index) => (
+          <div key={row.id}>
+            {index === 0 ? (
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.06em] text-[#1D9E75]">
+                Latest in list
+              </p>
+            ) : null}
+            <SessionReviewCard
+              row={row}
+              exerciseName={exerciseNameById[row.exerciseId] ?? row.exerciseId}
+              showPatientLink={false}
+              profileMode
+            />
+          </div>
+        ))}
+      </div>
+
+      {metrics.length > maxSessions ? (
+        <p className="mt-3 text-[11px] text-[#6B7280]">
+          Showing {maxSessions} of {metrics.length} saved sessions for this patient.
+        </p>
+      ) : null}
+
+      <p className="mt-4 border-t border-[#1E2D42] pt-3 text-[11px] leading-relaxed text-[#6B7280]">
+        {CV_REP_COUNT_FOOTER}
+      </p>
+    </section>
+  );
+}
+
+export function CvReviewSummary({
+  metrics,
+  exerciseNameById,
+  loading = false,
+  error = false,
+  showPatientLinks = false,
+  maxSessions = 5,
+  variant = "lab",
+}: CvReviewSummaryProps) {
+  if (variant === "patient-profile") {
+    if (loading || error || metrics.length === 0) {
+      return null;
+    }
+    return (
+      <PatientProfileCvReview
+        metrics={metrics}
+        exerciseNameById={exerciseNameById}
+        maxSessions={maxSessions}
+      />
+    );
+  }
+
+  return (
+    <LabCvReviewSummary
+      metrics={metrics}
+      exerciseNameById={exerciseNameById}
+      loading={loading}
+      error={error}
+      showPatientLinks={showPatientLinks}
+      maxSessions={maxSessions}
+      variant="lab"
+    />
   );
 }

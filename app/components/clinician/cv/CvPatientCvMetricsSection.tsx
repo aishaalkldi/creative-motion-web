@@ -5,6 +5,9 @@ import { getCvReadyExercises } from "@/app/lib/cv/cv-ready-exercises";
 import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
 import { CvReviewSummary } from "@/app/components/clinician/cv/CvReviewSummary";
 
+const PATIENT_CV_FETCH_LIMIT = 20;
+const PATIENT_CV_DISPLAY_MAX = 10;
+
 type CvPatientCvMetricsSectionProps = {
   patientId: string;
 };
@@ -23,7 +26,7 @@ export function CvPatientCvMetricsSection({ patientId }: CvPatientCvMetricsSecti
     setError(false);
     try {
       const res = await fetch(
-        `/api/cv/session-metrics?patientId=${encodeURIComponent(patientId)}&limit=5`,
+        `/api/cv/session-metrics?patientId=${encodeURIComponent(patientId)}&limit=${PATIENT_CV_FETCH_LIMIT}`,
       );
       if (!res.ok) {
         setError(true);
@@ -44,7 +47,17 @@ export function CvPatientCvMetricsSection({ patientId }: CvPatientCvMetricsSecti
     void fetchMetrics();
   }, [fetchMetrics]);
 
-  if (!loading && !error && metrics.length === 0) {
+  useEffect(() => {
+    const refresh = () => void fetchMetrics();
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [fetchMetrics]);
+
+  if (loading || error || metrics.length === 0) {
     return null;
   }
 
@@ -52,9 +65,8 @@ export function CvPatientCvMetricsSection({ patientId }: CvPatientCvMetricsSecti
     <CvReviewSummary
       metrics={metrics}
       exerciseNameById={exerciseNameById}
-      loading={loading}
-      error={error}
-      maxSessions={5}
+      variant="patient-profile"
+      maxSessions={PATIENT_CV_DISPLAY_MAX}
     />
   );
 }
