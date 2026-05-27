@@ -254,6 +254,8 @@ export default function ClinicianDashboardPage() {
           </div>
         </div>
 
+        <PilotChecklistCard />
+
         {/* ── Clinical pathway hint ── */}
         <div className="mb-6 rounded-[8px] border border-[#1E2D42] bg-[#0F1825] px-5 py-3.5 text-sm text-white/40">
           <span className="font-semibold text-white/65">Clinical pathway:</span>{" "}
