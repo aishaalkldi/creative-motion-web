@@ -15,7 +15,7 @@ export type SitToStandTrackingStatus = "idle" | "detecting" | "pose-found" | "po
 export type SitToStandTrackingQuality = "good" | "fair" | "poor";
 export type SitToStandInitPhase = null | "import" | "model" | "camera";
 /** Patient portal pose readiness (CV Lab leaves this as ready). */
-export type PoseReadiness = "checking" | "ready" | "adjust_camera";
+export type PoseReadiness = "checking" | "ready" | "partial" | "not_ready";
 
 export type SitToStandDetectorSnapshot = {
   trackingStatus: SitToStandTrackingStatus;
@@ -86,6 +86,26 @@ export function evaluateHipTrackingQuality(
   if (hipVis > visibilityGood) return "good";
   if (hipVis > visibilityFair) return "fair";
   return "poor";
+}
+
+/** Classify a single pose frame for mobile readiness (not persisted). */
+export function evaluatePoseFrameReadiness(
+  landmarks: PoseLandmark[],
+  trackingQuality: SitToStandTrackingQuality,
+  config: SitToStandCvConfig,
+): Exclude<PoseReadiness, "checking"> {
+  const minHip = config.minHipVisibility ?? 0.35;
+  if (!hipsMeetMinVisibility(landmarks, minHip) || trackingQuality === "poor") {
+    return "not_ready";
+  }
+
+  const torsoSpan = computeTorsoSpan(landmarks);
+  if (torsoSpan === null) {
+    return "partial";
+  }
+
+  if (trackingQuality === "good") return "ready";
+  return "partial";
 }
 
 export function formatSitToStandDuration(seconds: number): string {
@@ -241,8 +261,8 @@ const IDLE_SNAPSHOT: SitToStandDetectorSnapshot = {
 
 const READINESS_COLORS = {
   readyGood: "#1D9E75",
-  readyFair: "#F59E0B",
-  adjust: "#9CA3AF",
+  readyPartial: "#F59E0B",
+  notReady: "#9CA3AF",
 } as const;
 
 /**
@@ -328,15 +348,34 @@ export class SitToStandDetector {
   private canCollectBaseline(): boolean {
     if (!this.usesBaselineRepCounting() || this.baselineHipY !== null) return false;
     if (!this.usesReadiness()) return true;
-    return this.poseReadiness === "ready" && this.baselineWindowEndMs > 0;
+    return (
+      (this.poseReadiness === "ready" || this.poseReadiness === "partial") &&
+      this.baselineWindowEndMs > 0
+    );
   }
 
   private canIncrementReps(): boolean {
     if (!this.usesReadiness()) return true;
-    if (this.poseReadiness !== "ready") return false;
-    if (this.trackingQuality === "poor") return false;
+    if (this.poseReadiness === "checking" || this.poseReadiness === "not_ready") {
+      return false;
+    }
     if (this.usesBaselineRepCounting() && this.baselineHipY === null) return false;
     return true;
+  }
+
+  private maybeStartBaselineWindow(nowMs: number): void {
+    if (
+      !this.usesBaselineRepCounting() ||
+      this.baselineHipY !== null ||
+      this.baselineWindowEndMs > 0
+    ) {
+      return;
+    }
+    if (this.poseReadiness !== "ready" && this.poseReadiness !== "partial") return;
+
+    const durationMs = this.config.baselineDurationMs ?? 3_000;
+    this.baselineWindowEndMs = nowMs + durationMs;
+    this.isBaselineCalibrating = true;
   }
 
   private updatePoseReadiness(nowMs: number, landmarks: PoseLandmark[]): void {
@@ -350,35 +389,21 @@ export class SitToStandDetector {
       return;
     }
 
-    const minHip = this.config.minHipVisibility ?? 0.35;
-    const hipsOk = hipsMeetMinVisibility(landmarks, minHip);
-    const quality = this.trackingQuality;
+    const quality = this.trackingQuality ?? "poor";
+    const wasCountingReady =
+      this.poseReadiness === "ready" || this.poseReadiness === "partial";
+    this.poseReadiness = evaluatePoseFrameReadiness(landmarks, quality, this.config);
 
-    if (!hipsOk || quality === "poor") {
-      this.poseReadiness = "adjust_camera";
-      return;
-    }
-
-    const wasNotReady = this.poseReadiness !== "ready";
-    this.poseReadiness = "ready";
-
-    if (
-      wasNotReady &&
-      this.usesBaselineRepCounting() &&
-      this.baselineHipY === null &&
-      this.baselineWindowEndMs === 0
-    ) {
-      const durationMs = this.config.baselineDurationMs ?? 3_000;
-      this.baselineWindowEndMs = nowMs + durationMs;
-      this.isBaselineCalibrating = true;
+    if (!wasCountingReady && (this.poseReadiness === "ready" || this.poseReadiness === "partial")) {
+      this.maybeStartBaselineWindow(nowMs);
     }
   }
 
   private readinessOverlayColor(): string {
-    if (this.poseReadiness === "adjust_camera" || this.poseReadiness === "checking") {
-      return READINESS_COLORS.adjust;
+    if (this.poseReadiness === "checking" || this.poseReadiness === "not_ready") {
+      return READINESS_COLORS.notReady;
     }
-    if (this.trackingQuality === "fair") return READINESS_COLORS.readyFair;
+    if (this.poseReadiness === "partial") return READINESS_COLORS.readyPartial;
     return READINESS_COLORS.readyGood;
   }
 
@@ -619,7 +644,16 @@ export class SitToStandDetector {
       this.initPhase = "camera";
       this.emit();
 
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: this.usesReadiness()
+          ? {
+              facingMode: { ideal: "user" },
+              width: { ideal: this.config.canvasWidth },
+              height: { ideal: this.config.canvasHeight },
+            }
+          : true,
+        audio: false,
+      });
       if (!isCurrent()) {
         stream.getTracks().forEach((track) => track.stop());
         return;
@@ -722,7 +756,7 @@ export class SitToStandDetector {
             this.trackingStatus = "pose-lost";
             this.trackingQuality = null;
             if (this.usesReadiness()) {
-              this.poseReadiness = "adjust_camera";
+              this.poseReadiness = "not_ready";
             }
           }
         } catch {

@@ -40,6 +40,7 @@ export const PATIENT_STS_CONFIG: SitToStandCvConfig = {
   baselineResetDeltaRatio: 0.08,
   baselineStandDeltaMin: 0.03,
   baselineResetDeltaMin: 0.015,
+  /** MQ-READY-0: mobile-first readiness gate before rep counting (not persisted). */
   readinessEnabled: true,
   readinessCheckMs: 2_000,
   minHipVisibility: 0.35,
