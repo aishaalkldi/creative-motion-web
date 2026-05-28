@@ -136,6 +136,7 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
       "Store body coordinates or pose landmarks",
       "Judge whether your movement is correct or wrong",
       "Give a diagnosis, score, or treatment recommendation",
+      "Make an automatic progression or treatment decision",
     ],
     consentSecureNote: "Camera access requires a secure connection (HTTPS).",
     consentDerivedNote:
@@ -160,7 +161,8 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     prototypeNotice:
       "Movement counting is assistive only. It is not clinically validated and does not replace your therapist's guidance.",
     therapistReviewOnly: "For therapist review only — not a clinical assessment.",
-    optionalCameraNote: "Camera guidance is optional. You can continue your exercise without it.",
+    optionalCameraNote:
+      "Optional camera assist · therapist review only · not clinically validated. Sit-to-stand only (experimental). The pilot workflow does not depend on camera tracking.",
     continueWithoutCamera: "Continue without camera",
     moveComfortably: "Take your time and move comfortably.",
     trackingStatusReady: "Ready",
@@ -182,6 +184,7 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
       "لا يخزّن إحداثيات الجسم أو معالم الوضعية",
       "لا يحكم على صحة أو خطأ حركتك",
       "لا يقدّم تشخيصاً أو درجة أو توصية علاجية",
+      "لا يتخذ قرار تقدّم أو علاج تلقائياً",
     ],
     consentSecureNote: "يتطلب الوصول للكاميرا اتصالاً آمناً (HTTPS).",
     consentDerivedNote: "تُحفظ مقاييس الجلسة المشتقة فقط. لا يُخزَّن فيديو أو إحداثيات جسم.",
@@ -205,7 +208,8 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     prototypeNotice:
       "عدّ الحركة مساعد فقط. غير مُتحقّق سريرياً ولا يُغني عن إرشاد معالجك.",
     therapistReviewOnly: "لمراجعة المعالج فقط — وليس تقييماً سريرياً.",
-    optionalCameraNote: "إرشاد الكاميرا اختياري. يمكنك متابعة التمرين دونه.",
+    optionalCameraNote:
+      "مساعدة كاميرا اختيارية · لمراجعة المعالج فقط · غير مُتحقّق سريرياً. تمرين الجلوس والوقوف فقط (تجريبي). مسار التجربة لا يعتمد على تتبّع الكاميرا.",
     continueWithoutCamera: "المتابعة دون كاميرا",
     moveComfortably: "خذ وقتك وتحرّك براحة.",
     trackingStatusReady: "جاهز",

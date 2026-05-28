@@ -32,11 +32,17 @@ Remote assessment and the patient portal support rehabilitation workflow; they *
 
 The current pilot build does **not** include AI-generated clinical recommendations, AI triage, or AI interpretation of patient data for treatment decisions.
 
-### No patient-facing computer vision (CV) in pilot
+### Optional patient computer vision (CV) — experimental, not pilot-critical
 
-The current pilot build does **not** include camera-based movement analysis, pose estimation, or automated form checking **for patients**.
+The pilot build includes **optional, experimental** camera assist for **sit-to-stand only** during an active patient portal exercise (`PatientCvCapture`). It is **not clinically validated** and is **for therapist review only**.
 
-**CV Lab is internal only:** `/clinician/cv-lab` exists for clinician-side review tooling and is **not** part of the patient pilot path. Do not tell patients that RASQ watches their movement with a camera at home.
+- **The pilot workflow does not depend on CV.** Assessment, plan assignment, session completion, pain/effort reporting, and clinician review work without camera use.
+- **Patient choice:** Patients can select **Continue without camera** and complete the session manually.
+- **If camera tracking fails:** Poor signal or a metrics save error does **not** block exercise completion.
+- **CV-derived metrics** (e.g. rep count, duration, tracking signal) are **therapist-review only** — assistive, not a clinical assessment.
+- **What CV does not do:** No diagnosis, no clinical score, no automatic treatment recommendation, and no automatic progression decision. It does not judge whether movement is correct or wrong.
+
+**CV Lab** (`/clinician/cv-lab`) is **internal clinician tooling** for experimentation and review — separate from the **required** patient pilot path. Do not position optional home camera assist as proof of form quality or clinical outcome in pilot communications.
 
 ### No voice input in pilot
 
@@ -116,7 +122,7 @@ Sprint E adds **documentation only**. The following are explicitly **out of scop
 
 ## What to tell patients (short script)
 
-> “This program supports exercises your physiotherapist assigned. It does not diagnose you or change your treatment on its own. Stop if you feel sharp pain or unwell, and contact your therapist or emergency services as your clinic advises.”
+> “This program supports exercises your physiotherapist assigned. It does not diagnose you or change your treatment on its own. If you see an optional camera for sit-to-stand, it only helps count movement for your therapist to review — you can skip it and continue manually. Stop if you feel sharp pain or unwell, and contact your therapist or emergency services as your clinic advises.”
 
 Arabic safety messaging is also shown in the patient portal (`PatientSafetyNotice`).
 
@@ -124,7 +130,7 @@ Arabic safety messaging is also shown in the patient portal (`PatientSafetyNotic
 
 ## What to tell clinicians (short script)
 
-> “RASQ organizes remote intake, plans, and home sessions under your license. You review all assessments and flags. The pilot has no AI, computer vision, or voice. Legal pages are for pilot use — get counsel sign-off before commercial rollout.”
+> “RASQ organizes remote intake, plans, and home sessions under your license. You review all assessments and flags. The pilot has no AI and no voice in the supported workflow. Optional sit-to-stand camera assist is experimental, therapist-review only, and not clinically validated — the pilot does not depend on it. Legal pages are for pilot use — get counsel sign-off before commercial rollout.”
 
 ---
 

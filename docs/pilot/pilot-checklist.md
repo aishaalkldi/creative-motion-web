@@ -24,7 +24,7 @@ Use this checklist before, during, and after a controlled clinic pilot demo.
 ### Clinical & legal framing
 
 - [ ] Team aligned: RASQ **does not diagnose** or **prescribe autonomously**
-- [ ] **No AI / CV / voice** features active in this pilot — state explicitly
+- [ ] **No AI / voice** in the supported pilot workflow; **optional experimental CV** (sit-to-stand only) is **not pilot-critical** — state explicitly
 - [ ] Legal pages reviewed at high level; counsel review planned before paid contracts
 - [ ] Informed consent / clinic policy for demo patients confirmed
 
@@ -70,7 +70,7 @@ Use this checklist before, during, and after a controlled clinic pilot demo.
 ### Known limitations to mention
 
 - [ ] No autonomous diagnosis or prescription
-- [ ] No AI, computer vision, or voice input in current pilot build
+- [ ] No AI or voice input in the supported pilot workflow; optional sit-to-stand CV is experimental, therapist-review only, not clinically validated, and not required for session completion
 - [ ] Clinician review required for flagged items
 - [ ] Rate limits are in-memory (may reset on deploy)
 - [ ] Legal pages not final counsel-reviewed

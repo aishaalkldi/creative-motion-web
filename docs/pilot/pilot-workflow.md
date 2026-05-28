@@ -76,15 +76,22 @@ Acknowledgment and documentation remain with the **licensed clinician**.
 
 ---
 
+## Optional experimental path (not required)
+
+- **Sit-to-stand camera assist only** — optional, experimental, not clinically validated; derived metrics for **therapist review only**
+- Patient may **continue without camera**; session completion does not depend on CV
+- If tracking fails, the patient completes the exercise manually
+
 ## What is explicitly out of this pilot flow
 
-- Patient-facing camera / CV analysis
+- CV as a **pilot-critical** requirement or success criterion
+- Automated form judgment, clinical scoring, or movement quality decisions for patients
 - AI-generated recommendations or triage
 - Autonomous diagnosis or prescription
 - Automatic progression to the next program phase
 - Clinical scoring engines driving treatment
 
-**CV Lab** (`/clinician/cv-lab`) is **internal clinician tooling only** — not part of the patient pilot path.
+**CV Lab** (`/clinician/cv-lab`) is **internal clinician tooling** for experimentation — separate from the required patient workflow above.
 
 ---
 

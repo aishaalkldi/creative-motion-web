@@ -144,7 +144,7 @@ Verdict: Proceed / Iterate / Pause
 
 - Proof of clinical improvement or recovery
 - Diagnostic accuracy of RASQ
-- AI or CV performance (not in patient pilot)
+- AI performance or optional experimental CV accuracy (CV is not a pilot success criterion; core workflow does not depend on camera)
 - Automatic treatment recommendations or progression
 - Legal finalization (counsel review still required)
 

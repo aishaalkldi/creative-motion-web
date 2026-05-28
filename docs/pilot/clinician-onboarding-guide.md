@@ -10,7 +10,7 @@
 
 - Confirm your **provider account** is active (clinic admin or RASQ team).
 - Use a **demo or consented patient** per clinic policy.
-- Read `known-limitations.md` — no AI, no patient-facing camera, no autonomous diagnosis.
+- Read `known-limitations.md` — no AI, no autonomous diagnosis; optional experimental sit-to-stand camera assist only (not pilot-critical, therapist review only, not clinically validated).
 - Legal pages (`/privacy`, `/terms`, `/intended-use`, `/clinical-safety`) are pilot-ready; counsel review is required before commercial contracts.
 
 ---

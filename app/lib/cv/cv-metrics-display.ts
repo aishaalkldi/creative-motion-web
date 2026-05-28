@@ -16,7 +16,7 @@ export type CvSessionMetricPublic = {
 };
 
 export const CV_CLINICIAN_DISCLAIMER =
-  "For clinician review — derived movement metrics only — not clinically validated. No video or body coordinates are stored.";
+  "Optional experimental assist — therapist review only — not clinically validated. Derived movement metrics only. No diagnosis, score, automatic recommendation, or progression decision. No video or body coordinates stored.";
 
 export const CV_REP_COUNT_FOOTER =
   "Rep count is an assistive movement metric and must be reviewed with the patient's clinical context.";
