@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import { patientCvCopy, type SitToStandDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import { PATIENT_STS_CONFIG } from "@/app/lib/cv/cv-patient-config";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
@@ -25,6 +32,11 @@ export type PatientCvCaptureProps = {
   language: PatientExerciseLanguage;
   arClass?: string;
   textDir?: "rtl" | "ltr";
+};
+
+/** Parent calls before exercise step leaves "active" (e.g. Complete exercise). */
+export type PatientCvCaptureHandle = {
+  saveBeforeExerciseComplete: () => Promise<void>;
 };
 
 function applySnapshot(
@@ -56,13 +68,11 @@ function applySnapshot(
   setters.setLoading(snapshot.initPhase !== null);
 }
 
-export function PatientCvCapture({
-  token,
-  sessionId,
-  language,
-  arClass = "",
-  textDir = "ltr",
-}: PatientCvCaptureProps) {
+export const PatientCvCapture = forwardRef<PatientCvCaptureHandle, PatientCvCaptureProps>(
+  function PatientCvCapture(
+    { token, sessionId, language, arClass = "", textDir = "ltr" },
+    ref,
+  ) {
   const copy = patientCvCopy(language);
 
   const [skipped, setSkipped] = useState(false);
@@ -133,47 +143,59 @@ export function PatientCvCapture({
     }, 5000);
   }, [clearSaveStatusTimer]);
 
+  const saveFlightRef = useRef<Promise<void> | null>(null);
+
   const saveSessionMetrics = useCallback(async (metricsSnapshot: SitToStandDerivedMetrics) => {
-    if (saveInProgressRef.current) return;
+    if (hasSavedRef.current) return;
+    if (saveFlightRef.current) return saveFlightRef.current;
 
     const metrics = metricsSnapshot;
 
-    saveInProgressRef.current = true;
-    setSaveStatus("saving");
+    const run = async () => {
+      saveInProgressRef.current = true;
+      setSaveStatus("saving");
 
-    const payload = {
-      token,
-      sessionId,
-      exerciseId: metrics.exerciseId,
-      repCount: metrics.repCount,
-      sessionDurationS: metrics.sessionDurationS,
-      trackingQuality: metrics.trackingQuality,
-      movementDetected: metrics.movementDetected,
-      framesWithPose: metrics.framesWithPose,
-      framesTotal: metrics.framesTotal,
-    };
+      const payload = {
+        token,
+        sessionId,
+        exerciseId: metrics.exerciseId,
+        repCount: metrics.repCount,
+        sessionDurationS: metrics.sessionDurationS,
+        trackingQuality: metrics.trackingQuality,
+        movementDetected: metrics.movementDetected,
+        framesWithPose: metrics.framesWithPose,
+        framesTotal: metrics.framesTotal,
+      };
 
-    try {
-      const res = await fetch("/api/patient/cv-session-metrics", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+      try {
+        const res = await fetch("/api/patient/cv-session-metrics", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
 
-      if (!res.ok) {
+        if (!res.ok) {
+          setSaveStatus("error");
+          scheduleSaveStatusClear();
+          return;
+        }
+
+        hasSavedRef.current = true;
+        setSaveStatus("saved");
+        scheduleSaveStatusClear();
+      } catch {
         setSaveStatus("error");
         scheduleSaveStatusClear();
-        return;
+      } finally {
+        saveInProgressRef.current = false;
       }
+    };
 
-      hasSavedRef.current = true;
-      setSaveStatus("saved");
-      scheduleSaveStatusClear();
-    } catch {
-      setSaveStatus("error");
-      scheduleSaveStatusClear();
+    saveFlightRef.current = run();
+    try {
+      await saveFlightRef.current;
     } finally {
-      saveInProgressRef.current = false;
+      saveFlightRef.current = null;
     }
   }, [token, sessionId, scheduleSaveStatusClear]);
 
@@ -185,69 +207,70 @@ export function PatientCvCapture({
     setSkipped(true);
   }, [syncFromDetector]);
 
-  /** Snapshot + stop + POST when tracking qualifies; shared by Stop and unmount. */
-  const saveActiveMetricsBeforeExit = useCallback(
-    (opts?: { onComplete?: () => void }) => {
-      const detector = detectorRef.current;
-      if (!detector) {
-        opts?.onComplete?.();
-        return;
-      }
+  /** Snapshot + stop + POST when tracking qualifies; shared by Stop, Complete exercise, unmount. */
+  const saveActiveMetricsBeforeExit = useCallback(async (): Promise<void> => {
+    const detector = detectorRef.current;
+    if (!detector) return;
 
-      if (skipSaveOnExitRef.current) {
-        if (detector.isPreviewActive()) {
-          detector.stop();
-          syncFromDetector(detector.getSnapshot());
-        }
-        opts?.onComplete?.();
-        return;
-      }
-
-      if (hasSavedRef.current || saveInProgressRef.current) {
-        if (detector.isPreviewActive()) {
-          detector.stop();
-          syncFromDetector(detector.getSnapshot());
-        }
-        opts?.onComplete?.();
-        return;
-      }
-
-      if (!detector.isPreviewActive()) {
-        opts?.onComplete?.();
-        return;
-      }
-
-      if (!detector.canSaveMetrics()) {
+    if (skipSaveOnExitRef.current) {
+      if (detector.isPreviewActive()) {
         detector.stop();
         syncFromDetector(detector.getSnapshot());
-        opts?.onComplete?.();
-        return;
       }
+      return;
+    }
 
-      const metricsSnapshot = detector.getDerivedMetrics();
+    if (hasSavedRef.current) {
+      if (detector.isPreviewActive()) {
+        detector.stop();
+        syncFromDetector(detector.getSnapshot());
+      }
+      return;
+    }
+
+    if (saveFlightRef.current) {
+      await saveFlightRef.current;
+      if (detector.isPreviewActive()) {
+        detector.stop();
+        syncFromDetector(detector.getSnapshot());
+      }
+      return;
+    }
+
+    if (!detector.isPreviewActive()) return;
+
+    if (!detector.canSaveMetrics()) {
       detector.stop();
       syncFromDetector(detector.getSnapshot());
-      void saveSessionMetrics(metricsSnapshot).finally(() => {
-        opts?.onComplete?.();
-      });
-    },
-    [saveSessionMetrics, syncFromDetector],
+      return;
+    }
+
+    const metricsSnapshot = detector.getDerivedMetrics();
+    detector.stop();
+    syncFromDetector(detector.getSnapshot());
+    await saveSessionMetrics(metricsSnapshot);
+  }, [saveSessionMetrics, syncFromDetector]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      saveBeforeExerciseComplete: () => saveActiveMetricsBeforeExit(),
+    }),
+    [saveActiveMetricsBeforeExit],
   );
 
   const handleStopSession = useCallback(() => {
     if (stopInProgressRef.current || !detectorRef.current?.isPreviewActive()) return;
 
     stopInProgressRef.current = true;
-    saveActiveMetricsBeforeExit({
-      onComplete: () => {
-        stopInProgressRef.current = false;
-      },
+    void saveActiveMetricsBeforeExit().finally(() => {
+      stopInProgressRef.current = false;
     });
   }, [saveActiveMetricsBeforeExit]);
 
   useEffect(() => {
     return () => {
-      saveActiveMetricsBeforeExit();
+      void saveActiveMetricsBeforeExit();
       clearSaveStatusTimer();
     };
   }, [saveActiveMetricsBeforeExit, clearSaveStatusTimer]);
@@ -521,4 +544,5 @@ export function PatientCvCapture({
       )}
     </div>
   );
-}
+},
+);

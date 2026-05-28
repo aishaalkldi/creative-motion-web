@@ -1,7 +1,11 @@
 "use client";
 
+import { forwardRef, useImperativeHandle, useRef } from "react";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
-import { PatientCvCapture } from "@/app/components/patient/cv/PatientCvCapture";
+import {
+  PatientCvCapture,
+  type PatientCvCaptureHandle,
+} from "@/app/components/patient/cv/PatientCvCapture";
 import { isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
 import { exerciseMediaUi } from "@/app/lib/patient-portal-ui";
 
@@ -18,6 +22,11 @@ export type ExerciseMediaAreaProps = {
   exerciseStep?: "preview" | "active" | "done";
   patientToken?: string;
   planSessionId?: string;
+};
+
+/** Await before leaving active exercise step when sit-to-stand CV may be running. */
+export type ExerciseMediaAreaHandle = {
+  saveCvMetricsBeforeExerciseComplete: () => Promise<void>;
 };
 
 type VisualRegion =
@@ -382,28 +391,45 @@ function MovementPreviewPanel({
  * - rep / timer overlay slot
  * - side-by-side video + CV layout
  */
-export function ExerciseMediaArea({
-  exerciseId,
-  exerciseName = "",
-  bodyRegion,
-  mediaUrl,
-  thumbnailUrl,
-  language,
-  arClass = "",
-  textDir = "ltr",
-  exerciseStep,
-  patientToken,
-  planSessionId,
-}: ExerciseMediaAreaProps) {
+export const ExerciseMediaArea = forwardRef<ExerciseMediaAreaHandle, ExerciseMediaAreaProps>(
+  function ExerciseMediaArea(
+    {
+      exerciseId,
+      exerciseName = "",
+      bodyRegion,
+      mediaUrl,
+      thumbnailUrl,
+      language,
+      arClass = "",
+      textDir = "ltr",
+      exerciseStep,
+      patientToken,
+      planSessionId,
+    },
+    ref,
+  ) {
   const ui = exerciseMediaUi(language);
   const resolvedMedia = mediaUrl?.trim() || null;
   const poster = thumbnailUrl?.trim() || undefined;
+
+  const cvCaptureRef = useRef<PatientCvCaptureHandle>(null);
 
   const showPatientCv =
     exerciseStep === "active" &&
     isCvEnabledExercise(exerciseId) &&
     Boolean(patientToken?.trim()) &&
     Boolean(planSessionId?.trim());
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      saveCvMetricsBeforeExerciseComplete: async () => {
+        if (!showPatientCv) return;
+        await cvCaptureRef.current?.saveBeforeExerciseComplete();
+      },
+    }),
+    [showPatientCv],
+  );
 
   return (
     <div
@@ -457,4 +483,5 @@ export function ExerciseMediaArea({
       {/* future: side-by-side video + CV layout wrapper */}
     </div>
   );
-}
+},
+);

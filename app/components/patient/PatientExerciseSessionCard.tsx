@@ -1,9 +1,13 @@
 "use client";
 
+import type { Ref } from "react";
 import type { ResolvedExerciseView } from "@/app/lib/exercise-resolve";
 import { getLibraryExerciseById } from "@/app/lib/exercise-library-v1";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
-import { ExerciseMediaArea } from "@/app/components/patient/ExerciseMediaArea";
+import {
+  ExerciseMediaArea,
+  type ExerciseMediaAreaHandle,
+} from "@/app/components/patient/ExerciseMediaArea";
 import {
   formatBodyRegionForPatient,
   formatExerciseProgress,
@@ -25,9 +29,10 @@ type PatientExerciseSessionCardProps = {
   setsCompleted: number;
   onStartExercise: () => void;
   onCompleteSet: () => void;
-  onCompleteExercise: () => void;
+  onCompleteExercise: () => void | Promise<void>;
   patientToken?: string;
   planSessionId?: string;
+  exerciseMediaRef?: Ref<ExerciseMediaAreaHandle>;
 };
 
 function DoseTile({
@@ -73,6 +78,7 @@ export function PatientExerciseSessionCard({
   onCompleteExercise,
   patientToken,
   planSessionId,
+  exerciseMediaRef,
 }: PatientExerciseSessionCardProps) {
   const flowUi = sessionExerciseFlowUi(lang);
   const cardUi = sessionExerciseUi(lang);
@@ -111,6 +117,7 @@ export function PatientExerciseSessionCard({
 
       <div className="overflow-hidden rounded-[10px] border border-[#E2E8E5] bg-white">
         <ExerciseMediaArea
+          ref={exerciseMediaRef}
           exerciseId={view.exerciseId}
           exerciseName={view.name}
           bodyRegion={libraryEntry?.bodyRegion}
@@ -244,7 +251,7 @@ export function PatientExerciseSessionCard({
             )}
             <button
               type="button"
-              onClick={onCompleteExercise}
+              onClick={() => void onCompleteExercise()}
               disabled={!allSetsDone}
               className="flex min-h-[48px] flex-1 items-center justify-center rounded-[7px] bg-[#1D9E75] text-[15px] font-bold text-white transition hover:bg-[#179165] disabled:cursor-not-allowed disabled:opacity-40"
             >
