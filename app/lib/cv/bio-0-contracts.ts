@@ -134,11 +134,12 @@ export type PatientCvCopy = {
   startSeatedHint: string;
   framingInstruction: string;
   movementInstruction: string;
-  trackingReadyLabel: string;
-  trackingMovementDetectedLabel: string;
-  adjustCameraLabel: string;
   checkingCameraPosition: string;
-  trackingFairMoveSlowly: string;
+  cameraReadyLabel: string;
+  almostReadyLabel: string;
+  adjustPhoneBodyChairLabel: string;
+  poseNotDetectedLabel: string;
+  tryAgainLabel: string;
   hipLandmarksHint: string;
 };
 
@@ -172,7 +173,7 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     trackingSignalLabel: "Tracking signal",
     trackingGood: "Tracking signal: Good",
     trackingFair: "Tracking signal: Fair — results may vary",
-    trackingPoor: "Tracking signal: Poor — adjust camera or lighting",
+    trackingPoor: "Tracking signal: Weak — adjust phone or lighting",
     sessionDuration: (formatted) => `Session duration: ${formatted}`,
     savedTherapistReview: "Saved — your therapist can review this session",
     savingMetrics: "Saving session…",
@@ -191,13 +192,15 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     trackingStatusDetecting: "Detecting movement…",
     startSeatedHint: "Start seated, then stand when ready.",
     framingInstruction:
-      "Place the camera so your upper body and chair are visible.",
+      "Prop your phone so your upper body and chair are visible in the frame.",
     movementInstruction: "Sit, stand fully, then sit again slowly.",
-    trackingReadyLabel: "Tracking ready",
-    trackingMovementDetectedLabel: "Movement detected",
-    adjustCameraLabel: "Adjust camera position",
     checkingCameraPosition: "Checking camera position…",
-    trackingFairMoveSlowly: "Tracking signal: Fair — move slowly",
+    cameraReadyLabel: "Camera ready ✓",
+    almostReadyLabel: "Almost ready — adjust your phone slightly",
+    adjustPhoneBodyChairLabel:
+      "Adjust phone position so your body and chair are visible",
+    poseNotDetectedLabel: "Pose not detected — adjust your phone",
+    tryAgainLabel: "Try again",
     hipLandmarksHint:
       "Wait until the points appear on your shoulders and hips before standing.",
   },
@@ -229,7 +232,7 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     trackingSignalLabel: "إشارة التتبّع",
     trackingGood: "إشارة التتبّع: جيدة",
     trackingFair: "إشارة التتبّع: متوسطة — قد تختلف النتائج",
-    trackingPoor: "إشارة التتبّع: ضعيفة — عدّل الكاميرا أو الإضاءة",
+    trackingPoor: "إشارة التتبّع: ضعيفة — عدّل الهاتف أو الإضاءة",
     sessionDuration: (formatted) => `مدة الجلسة: ${formatted}`,
     savedTherapistReview: "تم الحفظ — يمكن لمعالجك مراجعة هذه الجلسة",
     savingMetrics: "جاري حفظ الجلسة…",
@@ -247,13 +250,14 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     trackingStatusReady: "جاهز",
     trackingStatusDetecting: "جاري اكتشاف الحركة…",
     startSeatedHint: "ابدأ جالساً، ثم قف عندما تكون مستعداً.",
-    framingInstruction: "ضع الكاميرا بحيث يظهر الجزء العلوي من جسمك والكرسي.",
+    framingInstruction: "ثبّت هاتفك بحيث يظهر الجزء العلوي من جسمك والكرسي في الإطار.",
     movementInstruction: "اجلس، قف بالكامل، ثم اجلس مرة أخرى ببطء.",
-    trackingReadyLabel: "التتبّع جاهز",
-    trackingMovementDetectedLabel: "تم اكتشاف الحركة",
-    adjustCameraLabel: "عدّل موضع الكاميرا",
     checkingCameraPosition: "جاري فحص موضع الكاميرا…",
-    trackingFairMoveSlowly: "إشارة التتبّع: متوسطة — تحرّك ببطء",
+    cameraReadyLabel: "الكاميرا جاهزة ✓",
+    almostReadyLabel: "يكاد يكون جاهزاً — عدّل الهاتف قليلاً",
+    adjustPhoneBodyChairLabel: "عدّل موضع الهاتف حتى يظهر جسمك والكرسي",
+    poseNotDetectedLabel: "لم تُكتشف الوضعية — عدّل الهاتف",
+    tryAgainLabel: "حاول مرة أخرى",
     hipLandmarksHint: "انتظر حتى تظهر النقاط على الكتفين والوركين قبل الوقوف.",
   },
 };

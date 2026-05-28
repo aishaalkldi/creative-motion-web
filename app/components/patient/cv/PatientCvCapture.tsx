@@ -244,21 +244,36 @@ export function PatientCvCapture({
 
   const showPreview = previewActive || (loading && initPhase === "camera");
 
+  const handleTryAgain = useCallback(() => {
+    const detector = detectorRef.current;
+    detector?.stop();
+    if (detector) syncFromDetector(detector.getSnapshot());
+    setSessionStarted(false);
+    setError(null);
+    setTrackingError(null);
+    setSaveStatus("idle");
+    clearSaveStatusTimer();
+    stopInProgressRef.current = false;
+    startInProgressRef.current = false;
+  }, [clearSaveStatusTimer, syncFromDetector]);
+
   const trackingStatusLabel = (() => {
     if (loading && initPhase === "import") return copy.loadingPoseLibrary;
     if (loading && initPhase === "model") return copy.loadingPoseModel;
     if (loading && initPhase === "camera") return copy.startingCamera;
     if (poseReadiness === "checking") return copy.checkingCameraPosition;
-    if (poseReadiness === "adjust_camera" || trackingStatus === "pose-lost") {
-      return copy.adjustCameraLabel;
+    if (poseReadiness === "not_ready" || trackingStatus === "pose-lost") {
+      return trackingStatus === "pose-lost"
+        ? copy.poseNotDetectedLabel
+        : copy.adjustPhoneBodyChairLabel;
     }
-    if (poseReadiness === "ready" && trackingQuality === "good") return copy.trackingGood;
-    if (poseReadiness === "ready" && trackingQuality === "fair") {
-      return copy.trackingFairMoveSlowly;
-    }
-    if (poseReadiness === "ready") return copy.trackingReadyLabel;
-    return copy.trackingReadyLabel;
+    if (poseReadiness === "partial") return copy.almostReadyLabel;
+    if (poseReadiness === "ready") return copy.cameraReadyLabel;
+    return copy.checkingCameraPosition;
   })();
+
+  const showReadinessActions =
+    previewActive && (poseReadiness === "not_ready" || trackingStatus === "pose-lost");
 
   if (skipped) {
     return null;
@@ -386,7 +401,26 @@ export function PatientCvCapture({
         </button>
       )}
 
-      {sessionStarted && baselineCalibrating && poseReadiness === "ready" && (
+      {showReadinessActions && (
+        <div className="mt-3 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => handleTryAgain()}
+            className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] bg-[#1D9E75] text-[14px] font-bold text-white transition hover:bg-[#179165]"
+          >
+            {copy.tryAgainLabel}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSkipped(true)}
+            className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-[#F9FAFB] text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40"
+          >
+            {copy.continueWithoutCamera}
+          </button>
+        </div>
+      )}
+
+      {sessionStarted && baselineCalibrating && (poseReadiness === "ready" || poseReadiness === "partial") && (
         <p className="mt-3 text-[12px] font-medium text-[#1D9E75]">{copy.startSeatedHint}</p>
       )}
 
