@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { DEFAULT_STS_CONFIG } from "@/app/lib/cv/bio-0-contracts";
+import { DEFAULT_STS_CONFIG, type SitToStandDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import {
   formatSitToStandDuration,
   mapSitToStandStartError,
@@ -124,13 +124,10 @@ export function CvLabSession({
     }, 4000);
   }, [clearSaveStatusTimer]);
 
-  const saveSessionMetrics = useCallback(async () => {
+  const saveSessionMetrics = useCallback(async (metricsSnapshot: SitToStandDerivedMetrics) => {
     if (saveInProgressRef.current) return;
 
-    const detector = detectorRef.current;
-    if (!detector?.canSaveMetrics()) return;
-
-    const metrics = detector.getDerivedMetrics();
+    const metrics = metricsSnapshot;
 
     saveInProgressRef.current = true;
     setSaveStatus("saving");
@@ -178,11 +175,16 @@ export function CvLabSession({
     if (stopInProgressRef.current || !detector?.isPreviewActive()) return;
 
     stopInProgressRef.current = true;
+    const metricsSnapshot = detector.canSaveMetrics() ? detector.getDerivedMetrics() : null;
     detector.stop();
     syncFromDetector(detector.getSnapshot());
-    void saveSessionMetrics().finally(() => {
+    if (metricsSnapshot) {
+      void saveSessionMetrics(metricsSnapshot).finally(() => {
+        stopInProgressRef.current = false;
+      });
+    } else {
       stopInProgressRef.current = false;
-    });
+    }
   }, [saveSessionMetrics, syncFromDetector]);
 
   useEffect(() => {

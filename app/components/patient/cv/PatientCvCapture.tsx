@@ -1,15 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { patientCvCopy } from "@/app/lib/cv/bio-0-contracts";
+import { patientCvCopy, type SitToStandDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import { PATIENT_STS_CONFIG } from "@/app/lib/cv/cv-patient-config";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import {
   formatSitToStandDuration,
   mapSitToStandStartError,
   SitToStandDetector,
+  type PoseReadiness,
   type SitToStandDetectorSnapshot,
   type SitToStandInitPhase,
+  type SitToStandTrackingQuality,
   type SitToStandTrackingStatus,
 } from "@/app/lib/cv/sit-to-stand-detector";
 
@@ -34,6 +36,8 @@ function applySnapshot(
     setTrackingError: (v: string | null) => void;
     setRepCount: (v: number) => void;
     setTrackingStatus: (v: SitToStandTrackingStatus) => void;
+    setTrackingQuality: (v: SitToStandTrackingQuality | null) => void;
+    setPoseReadiness: (v: PoseReadiness) => void;
     setSessionSeconds: (v: number) => void;
     setMovementDetected: (v: boolean) => void;
     setBaselineCalibrating: (v: boolean) => void;
@@ -44,6 +48,8 @@ function applySnapshot(
   setters.setTrackingError(snapshot.trackingError);
   setters.setRepCount(snapshot.repCount);
   setters.setTrackingStatus(snapshot.trackingStatus);
+  setters.setTrackingQuality(snapshot.trackingQuality);
+  setters.setPoseReadiness(snapshot.poseReadiness);
   setters.setSessionSeconds(snapshot.sessionSeconds);
   setters.setMovementDetected(snapshot.movementDetected);
   setters.setBaselineCalibrating(snapshot.isBaselineCalibrating);
@@ -68,6 +74,8 @@ export function PatientCvCapture({
   const [trackingError, setTrackingError] = useState<string | null>(null);
   const [repCount, setRepCount] = useState(0);
   const [trackingStatus, setTrackingStatus] = useState<SitToStandTrackingStatus>("idle");
+  const [trackingQuality, setTrackingQuality] = useState<SitToStandTrackingQuality | null>(null);
+  const [poseReadiness, setPoseReadiness] = useState<PoseReadiness>("checking");
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [movementDetected, setMovementDetected] = useState(false);
@@ -90,6 +98,8 @@ export function PatientCvCapture({
       setTrackingError,
       setRepCount,
       setTrackingStatus,
+      setTrackingQuality,
+      setPoseReadiness,
       setSessionSeconds,
       setMovementDetected,
       setBaselineCalibrating,
@@ -119,13 +129,10 @@ export function PatientCvCapture({
     }, 5000);
   }, [clearSaveStatusTimer]);
 
-  const saveSessionMetrics = useCallback(async () => {
+  const saveSessionMetrics = useCallback(async (metricsSnapshot: SitToStandDerivedMetrics) => {
     if (saveInProgressRef.current) return;
 
-    const detector = detectorRef.current;
-    if (!detector?.canSaveMetrics()) return;
-
-    const metrics = detector.getDerivedMetrics();
+    const metrics = metricsSnapshot;
 
     saveInProgressRef.current = true;
     setSaveStatus("saving");
@@ -170,11 +177,16 @@ export function PatientCvCapture({
     if (stopInProgressRef.current || !detector?.isPreviewActive()) return;
 
     stopInProgressRef.current = true;
+    const metricsSnapshot = detector.canSaveMetrics() ? detector.getDerivedMetrics() : null;
     detector.stop();
     syncFromDetector(detector.getSnapshot());
-    void saveSessionMetrics().finally(() => {
+    if (metricsSnapshot) {
+      void saveSessionMetrics(metricsSnapshot).finally(() => {
+        stopInProgressRef.current = false;
+      });
+    } else {
       stopInProgressRef.current = false;
-    });
+    }
   }, [saveSessionMetrics, syncFromDetector]);
 
   useEffect(() => {
@@ -236,11 +248,16 @@ export function PatientCvCapture({
     if (loading && initPhase === "import") return copy.loadingPoseLibrary;
     if (loading && initPhase === "model") return copy.loadingPoseModel;
     if (loading && initPhase === "camera") return copy.startingCamera;
-    if (trackingStatus === "idle") return copy.trackingStatusReady;
-    if (trackingStatus === "detecting") return copy.trackingStatusDetecting;
-    if (trackingStatus === "pose-found") return copy.movementDetectedYes;
-    if (trackingStatus === "pose-lost") return copy.movementDetectedNo;
-    return copy.trackingStatusReady;
+    if (poseReadiness === "checking") return copy.checkingCameraPosition;
+    if (poseReadiness === "adjust_camera" || trackingStatus === "pose-lost") {
+      return copy.adjustCameraLabel;
+    }
+    if (poseReadiness === "ready" && trackingQuality === "good") return copy.trackingGood;
+    if (poseReadiness === "ready" && trackingQuality === "fair") {
+      return copy.trackingFairMoveSlowly;
+    }
+    if (poseReadiness === "ready") return copy.trackingReadyLabel;
+    return copy.trackingReadyLabel;
   })();
 
   if (skipped) {
@@ -302,6 +319,9 @@ export function PatientCvCapture({
       lang={language}
     >
       <p className="text-[11px] text-[#6B7280]">{copy.moveComfortably}</p>
+      <p className="mt-2 text-[12px] leading-relaxed text-[#374151]">{copy.framingInstruction}</p>
+      <p className="mt-1 text-[12px] leading-relaxed text-[#374151]">{copy.movementInstruction}</p>
+      <p className="mt-1 text-[11px] text-[#6B7280]">{copy.hipLandmarksHint}</p>
 
       {error && (
         <div className="mt-3 rounded-[8px] border border-rose-200 bg-rose-50 px-3.5 py-3 text-[12px] text-rose-800">
@@ -366,8 +386,8 @@ export function PatientCvCapture({
         </button>
       )}
 
-      {sessionStarted && baselineCalibrating && (
-        <p className="mt-3 text-[12px] text-[#6B7280]">{copy.startSeatedHint}</p>
+      {sessionStarted && baselineCalibrating && poseReadiness === "ready" && (
+        <p className="mt-3 text-[12px] font-medium text-[#1D9E75]">{copy.startSeatedHint}</p>
       )}
 
       {sessionStarted && (
