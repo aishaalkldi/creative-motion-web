@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import type { PatientSession } from "@/app/api/patient/plan/route";
@@ -19,6 +19,7 @@ import {
   PatientSessionProgressStrip,
   type ExerciseCardStep,
 } from "@/app/components/patient/PatientExerciseSessionCard";
+import type { ExerciseMediaAreaHandle } from "@/app/components/patient/ExerciseMediaArea";
 import {
   planHomeUi,
   resolveSessionFocusPurpose,
@@ -95,6 +96,8 @@ export default function SessionPlayerPage() {
     painAfter: number;
     exercisesCompleted: number;
   } | null>(null);
+
+  const exerciseMediaRef = useRef<ExerciseMediaAreaHandle>(null);
 
   useEffect(() => {
     setPhase("precheck");
@@ -197,7 +200,8 @@ export default function SessionPlayerPage() {
     }
   }
 
-  function handleCompleteExercise() {
+  async function handleCompleteExercise() {
+    await exerciseMediaRef.current?.saveCvMetricsBeforeExerciseComplete();
     setExerciseStep("done");
   }
 
@@ -709,6 +713,7 @@ export default function SessionPlayerPage() {
         onStartExercise={handleStartExercise}
         onCompleteSet={handleCompleteSet}
         onCompleteExercise={handleCompleteExercise}
+        exerciseMediaRef={exerciseMediaRef}
         patientToken={token}
         planSessionId={sessionId}
       />
