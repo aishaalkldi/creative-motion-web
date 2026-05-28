@@ -7,9 +7,18 @@
 import {
   DEFAULT_STS_CONFIG,
   type CvTrackingQuality,
+  type SessionMotionSummary,
   type SitToStandCvConfig,
   type SitToStandDerivedMetrics,
 } from "@/app/lib/cv/bio-0-contracts";
+import {
+  MotionWindowAccumulator,
+  type MotionFrameData,
+} from "@/app/lib/cv/motion-window-accumulator";
+import {
+  buildSessionMotionSummary,
+  logSessionMotionSummary,
+} from "@/app/lib/cv/session-summary-builder";
 
 export type SitToStandTrackingStatus = "idle" | "detecting" | "pose-found" | "pose-lost";
 export type SitToStandTrackingQuality = "good" | "fair" | "poor";
@@ -66,6 +75,46 @@ export function computeTorsoSpan(landmarks: PoseLandmark[]): number | null {
 
 export function computeHipMidY(landmarks: PoseLandmark[]): number {
   return ((landmarks[23]?.y ?? 0) + (landmarks[24]?.y ?? 0)) / 2;
+}
+
+function avgLandmarkVisibility(landmarks: PoseLandmark[], indices: number[]): number | null {
+  const values = indices
+    .map((i) => landmarks[i]?.visibility)
+    .filter((v): v is number => v != null);
+  if (values.length === 0) return null;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+function buildMotionFrameData(
+  timestampMs: number,
+  hasPose: boolean,
+  landmarks: PoseLandmark[] | null,
+  trackingQuality: SitToStandTrackingQuality | null,
+  standPhase: StandPhase,
+  baselineHipY: number | null,
+): MotionFrameData {
+  if (!hasPose || !landmarks) {
+    return {
+      timestampMs,
+      hasPose: false,
+      trackingQuality: null,
+      hipY: null,
+      hipVisibilityAvg: null,
+      kneeVisibilityAvg: null,
+      standPhase,
+      baselineHipY,
+    };
+  }
+  return {
+    timestampMs,
+    hasPose: true,
+    trackingQuality: trackingQuality ?? "unknown",
+    hipY: computeHipMidY(landmarks),
+    hipVisibilityAvg: avgLandmarkVisibility(landmarks, [23, 24]),
+    kneeVisibilityAvg: avgLandmarkVisibility(landmarks, [25, 26]),
+    standPhase,
+    baselineHipY,
+  };
 }
 
 export function hipsMeetMinVisibility(
@@ -300,6 +349,8 @@ export class SitToStandDetector {
   private isBaselineCalibrating = false;
   private poseReadiness: PoseReadiness = "ready";
   private readinessCheckEndMs = 0;
+  private readonly motionAccumulator = new MotionWindowAccumulator();
+  private lastSessionMotionSummary: SessionMotionSummary | null = null;
 
   constructor(
     callbacks: SitToStandDetectorCallbacks,
@@ -503,6 +554,7 @@ export class SitToStandDetector {
         this.standPhase = "up";
         this.repCount += 1;
         this.lastRepAtMs = nowMs;
+        this.motionAccumulator.recordRepCompleted(nowMs);
       } else if (hipY > seatedThreshold && this.standPhase === "up") {
         this.standPhase = "down";
       }
@@ -512,6 +564,7 @@ export class SitToStandDetector {
     if (hipY < this.config.hipUpThreshold && this.standPhase === "down") {
       this.standPhase = "up";
       this.repCount += 1;
+      this.motionAccumulator.recordRepCompleted(nowMs);
     } else if (hipY > this.config.hipDownThreshold && this.standPhase === "up") {
       this.standPhase = "down";
     }
@@ -528,6 +581,11 @@ export class SitToStandDetector {
       framesWithPose: this.framesWithPose,
       framesTotal: this.framesTotal,
     };
+  }
+
+  /** MOTION-WIN-0: last in-memory summary (not persisted). */
+  getLastSessionMotionSummary(): SessionMotionSummary | null {
+    return this.lastSessionMotionSummary;
   }
 
   isPreviewActive(): boolean {
@@ -558,7 +616,25 @@ export class SitToStandDetector {
     this.videoPauseHandler = null;
   }
 
+  private finalizeMotionSummary(): void {
+    const windows = this.motionAccumulator.flush();
+    const summary = buildSessionMotionSummary({
+      windows,
+      repCompletedAtMs: this.motionAccumulator.getRepCompletedAtMs(),
+      repCountDetector: this.repCount,
+      sessionDurationMs: this.sessionSeconds * 1000,
+      framesTotal: this.framesTotal,
+      framesWithPose: this.framesWithPose,
+    });
+    this.lastSessionMotionSummary = summary;
+    logSessionMotionSummary(summary);
+    this.motionAccumulator.reset();
+  }
+
   stop(): void {
+    if (this.previewActive || this.framesTotal > 0) {
+      this.finalizeMotionSummary();
+    }
     this.sessionEpoch += 1;
     this.previewActive = false;
     cancelAnimationFrame(this.animFrameId);
@@ -611,6 +687,8 @@ export class SitToStandDetector {
     this.trackingStatus = "detecting";
     this.initPhase = "import";
     this.previewActive = false;
+    this.lastSessionMotionSummary = null;
+    this.motionAccumulator.reset();
     this.resetBaselineState();
     this.emit();
 
@@ -702,13 +780,22 @@ export class SitToStandDetector {
         if (!ctx || !this.poseLandmarker) return;
 
         this.framesTotal += 1;
+        const frameNowMs = performance.now();
+        let motionFrame = buildMotionFrameData(
+          frameNowMs,
+          false,
+          null,
+          this.trackingQuality,
+          this.standPhase,
+          this.baselineHipY,
+        );
 
         try {
           if (this.videoEl.paused && this.previewActive) {
             void this.videoEl.play().catch(() => undefined);
           }
 
-          this.detectTimestamp = Math.max(this.detectTimestamp + 1, performance.now());
+          this.detectTimestamp = Math.max(this.detectTimestamp + 1, frameNowMs);
 
           const result = this.poseLandmarker.detectForVideo(
             this.videoEl,
@@ -740,6 +827,15 @@ export class SitToStandDetector {
             this.updatePoseReadiness(nowMs, landmarks);
             this.updateRepCountFromHipY(hipY, nowMs, torsoSpan);
 
+            motionFrame = buildMotionFrameData(
+              nowMs,
+              true,
+              landmarks,
+              this.trackingQuality,
+              this.standPhase,
+              this.baselineHipY,
+            );
+
             if (this.config.readinessEnabled) {
               this.drawReadinessSkeleton(ctx, landmarks, canvasWidth, canvasHeight);
             } else {
@@ -758,7 +854,17 @@ export class SitToStandDetector {
             if (this.usesReadiness()) {
               this.poseReadiness = "not_ready";
             }
+            motionFrame = buildMotionFrameData(
+              frameNowMs,
+              false,
+              null,
+              null,
+              this.standPhase,
+              this.baselineHipY,
+            );
           }
+
+          this.motionAccumulator.pushFrame(motionFrame);
         } catch {
           consecutiveDetectErrors += 1;
           if (consecutiveDetectErrors >= 10) {

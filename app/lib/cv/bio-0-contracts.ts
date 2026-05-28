@@ -33,6 +33,56 @@ export type SitToStandDerivedMetrics = {
   framesTotal: number;
 };
 
+/* ── MOTION-WIN-0: in-memory motion windows (never persisted / never API) ─── */
+
+export type MovementPhase =
+  | "seated"
+  | "rising"
+  | "standing"
+  | "returning"
+  | "unclear";
+
+/** Aggregated 500ms window — derived metrics only, no landmarks or video. */
+export type MotionWindow = {
+  index: number;
+  startMs: number;
+  endMs: number;
+  durationMs: number;
+  framesTotal: number;
+  framesWithPose: number;
+  trackingQuality: CvTrackingQuality;
+  hipYMin: number | null;
+  hipYMax: number | null;
+  hipYMean: number | null;
+  hipYTrend: "rising" | "falling" | "flat" | "unknown";
+  hipVisibilityAvg: number | null;
+  kneeVisibilityAvg: number | null;
+  phase: MovementPhase;
+};
+
+/** Per-rep derived summary from windows (in-memory QA / future MQE). */
+export type RepQualitySummary = {
+  repIndex: number;
+  completedAtMs: number;
+  trackingQuality: CvTrackingQuality;
+  phase: MovementPhase;
+  windowCount: number;
+};
+
+/** Session-level motion analysis — console / dev QA only, not stored or sent. */
+export type SessionMotionSummary = {
+  exerciseId: "sit-to-stand";
+  sessionDurationMs: number;
+  repCountDetector: number;
+  framesTotal: number;
+  framesWithPose: number;
+  windowCount: number;
+  windows: MotionWindow[];
+  repSummaries: RepQualitySummary[];
+  dominantTrackingQuality: CvTrackingQuality;
+  phaseCounts: Record<MovementPhase, number>;
+};
+
 /* ── Sit-to-Stand detector config ─────────────────────────────────────────── */
 
 /** absolute = CV Lab fixed hip-Y thresholds; baseline = patient seated hip calibration */
