@@ -89,6 +89,10 @@ export function PatientCvCapture({
   const startInProgressRef = useRef(false);
   const saveInProgressRef = useRef(false);
   const stopInProgressRef = useRef(false);
+  /** True after a successful POST; prevents duplicate save on Stop + unmount. */
+  const hasSavedRef = useRef(false);
+  /** Patient chose Continue without camera — never auto-save on exit. */
+  const skipSaveOnExitRef = useRef(false);
 
   const syncFromDetector = useCallback((snapshot: SitToStandDetectorSnapshot) => {
     applySnapshot(snapshot, {
@@ -162,6 +166,7 @@ export function PatientCvCapture({
         return;
       }
 
+      hasSavedRef.current = true;
       setSaveStatus("saved");
       scheduleSaveStatusClear();
     } catch {
@@ -172,29 +177,80 @@ export function PatientCvCapture({
     }
   }, [token, sessionId, scheduleSaveStatusClear]);
 
-  const handleStopSession = useCallback(() => {
+  const skipCameraWithoutSave = useCallback(() => {
+    skipSaveOnExitRef.current = true;
     const detector = detectorRef.current;
-    if (stopInProgressRef.current || !detector?.isPreviewActive()) return;
+    detector?.stop();
+    if (detector) syncFromDetector(detector.getSnapshot());
+    setSkipped(true);
+  }, [syncFromDetector]);
+
+  /** Snapshot + stop + POST when tracking qualifies; shared by Stop and unmount. */
+  const saveActiveMetricsBeforeExit = useCallback(
+    (opts?: { onComplete?: () => void }) => {
+      const detector = detectorRef.current;
+      if (!detector) {
+        opts?.onComplete?.();
+        return;
+      }
+
+      if (skipSaveOnExitRef.current) {
+        if (detector.isPreviewActive()) {
+          detector.stop();
+          syncFromDetector(detector.getSnapshot());
+        }
+        opts?.onComplete?.();
+        return;
+      }
+
+      if (hasSavedRef.current || saveInProgressRef.current) {
+        if (detector.isPreviewActive()) {
+          detector.stop();
+          syncFromDetector(detector.getSnapshot());
+        }
+        opts?.onComplete?.();
+        return;
+      }
+
+      if (!detector.isPreviewActive()) {
+        opts?.onComplete?.();
+        return;
+      }
+
+      if (!detector.canSaveMetrics()) {
+        detector.stop();
+        syncFromDetector(detector.getSnapshot());
+        opts?.onComplete?.();
+        return;
+      }
+
+      const metricsSnapshot = detector.getDerivedMetrics();
+      detector.stop();
+      syncFromDetector(detector.getSnapshot());
+      void saveSessionMetrics(metricsSnapshot).finally(() => {
+        opts?.onComplete?.();
+      });
+    },
+    [saveSessionMetrics, syncFromDetector],
+  );
+
+  const handleStopSession = useCallback(() => {
+    if (stopInProgressRef.current || !detectorRef.current?.isPreviewActive()) return;
 
     stopInProgressRef.current = true;
-    const metricsSnapshot = detector.canSaveMetrics() ? detector.getDerivedMetrics() : null;
-    detector.stop();
-    syncFromDetector(detector.getSnapshot());
-    if (metricsSnapshot) {
-      void saveSessionMetrics(metricsSnapshot).finally(() => {
+    saveActiveMetricsBeforeExit({
+      onComplete: () => {
         stopInProgressRef.current = false;
-      });
-    } else {
-      stopInProgressRef.current = false;
-    }
-  }, [saveSessionMetrics, syncFromDetector]);
+      },
+    });
+  }, [saveActiveMetricsBeforeExit]);
 
   useEffect(() => {
     return () => {
-      detectorRef.current?.stop();
+      saveActiveMetricsBeforeExit();
       clearSaveStatusTimer();
     };
-  }, [clearSaveStatusTimer]);
+  }, [saveActiveMetricsBeforeExit, clearSaveStatusTimer]);
 
   const startSession = useCallback(async () => {
     const detector = detectorRef.current;
@@ -220,6 +276,8 @@ export function PatientCvCapture({
     setTrackingError(null);
     setSessionStarted(true);
     setSaveStatus("idle");
+    hasSavedRef.current = false;
+    skipSaveOnExitRef.current = false;
     clearSaveStatusTimer();
 
     try {
@@ -252,6 +310,8 @@ export function PatientCvCapture({
     setError(null);
     setTrackingError(null);
     setSaveStatus("idle");
+    hasSavedRef.current = false;
+    skipSaveOnExitRef.current = false;
     clearSaveStatusTimer();
     stopInProgressRef.current = false;
     startInProgressRef.current = false;
@@ -317,7 +377,7 @@ export function PatientCvCapture({
           </button>
           <button
             type="button"
-            onClick={() => setSkipped(true)}
+            onClick={() => skipCameraWithoutSave()}
             className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-[#F9FAFB] text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40"
           >
             {copy.continueWithoutCamera}
@@ -412,7 +472,7 @@ export function PatientCvCapture({
           </button>
           <button
             type="button"
-            onClick={() => setSkipped(true)}
+            onClick={() => skipCameraWithoutSave()}
             className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-[#F9FAFB] text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40"
           >
             {copy.continueWithoutCamera}
