@@ -63,6 +63,20 @@ export type SitToStandCvConfig = {
   minMsBetweenReps?: number;
   /** Used when baseline window has no pose samples */
   fallbackSeatedHipY?: number;
+  /** Patient baseline: scale stand/reset deltas by shoulder–hip span (normalized frame) */
+  baselineScaleByTorso?: boolean;
+  /** Fraction of torso span required to count a stand (when baselineScaleByTorso) */
+  baselineStandDeltaRatio?: number;
+  /** Fraction of torso span to reset seated phase */
+  baselineResetDeltaRatio?: number;
+  /** Floors when torso span is small or shoulders are occluded */
+  baselineStandDeltaMin?: number;
+  baselineResetDeltaMin?: number;
+  /** Patient portal: pose readiness gate before rep counting */
+  readinessEnabled?: boolean;
+  readinessCheckMs?: number;
+  /** Minimum per-hip landmark visibility (0–1) to count reps */
+  minHipVisibility?: number;
 };
 
 export const DEFAULT_STS_CONFIG: SitToStandCvConfig = {
@@ -83,7 +97,7 @@ export const DEFAULT_STS_CONFIG: SitToStandCvConfig = {
   lowerBodyLandmarkIndices: [23, 24, 25, 26, 27, 28],
 };
 
-/* ── Patient-safe CV copy (EN/AR) — for future PatientCvCapture ───────────── */
+/* ── Patient-safe CV copy (EN/AR) — PatientCvCapture (sit-to-stand only) ─── */
 
 export type PatientCvCopy = {
   consentTitle: string;
@@ -118,6 +132,14 @@ export type PatientCvCopy = {
   trackingStatusReady: string;
   trackingStatusDetecting: string;
   startSeatedHint: string;
+  framingInstruction: string;
+  movementInstruction: string;
+  trackingReadyLabel: string;
+  trackingMovementDetectedLabel: string;
+  adjustCameraLabel: string;
+  checkingCameraPosition: string;
+  trackingFairMoveSlowly: string;
+  hipLandmarksHint: string;
 };
 
 const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
@@ -168,6 +190,16 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     trackingStatusReady: "Ready",
     trackingStatusDetecting: "Detecting movement…",
     startSeatedHint: "Start seated, then stand when ready.",
+    framingInstruction:
+      "Place the camera so your upper body and chair are visible.",
+    movementInstruction: "Sit, stand fully, then sit again slowly.",
+    trackingReadyLabel: "Tracking ready",
+    trackingMovementDetectedLabel: "Movement detected",
+    adjustCameraLabel: "Adjust camera position",
+    checkingCameraPosition: "Checking camera position…",
+    trackingFairMoveSlowly: "Tracking signal: Fair — move slowly",
+    hipLandmarksHint:
+      "Wait until the points appear on your shoulders and hips before standing.",
   },
   ar: {
     consentTitle: "الكاميرا لعدّ الحركة",
@@ -215,6 +247,14 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     trackingStatusReady: "جاهز",
     trackingStatusDetecting: "جاري اكتشاف الحركة…",
     startSeatedHint: "ابدأ جالساً، ثم قف عندما تكون مستعداً.",
+    framingInstruction: "ضع الكاميرا بحيث يظهر الجزء العلوي من جسمك والكرسي.",
+    movementInstruction: "اجلس، قف بالكامل، ثم اجلس مرة أخرى ببطء.",
+    trackingReadyLabel: "التتبّع جاهز",
+    trackingMovementDetectedLabel: "تم اكتشاف الحركة",
+    adjustCameraLabel: "عدّل موضع الكاميرا",
+    checkingCameraPosition: "جاري فحص موضع الكاميرا…",
+    trackingFairMoveSlowly: "إشارة التتبّع: متوسطة — تحرّك ببطء",
+    hipLandmarksHint: "انتظر حتى تظهر النقاط على الكتفين والوركين قبل الوقوف.",
   },
 };
 
