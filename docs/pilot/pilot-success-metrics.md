@@ -3,7 +3,27 @@
 **Purpose:** Define what to measure during a **controlled pilot** for **workflow validation**.  
 **Method:** Manual counts and feedback forms — no in-app analytics required for the pilot pack.
 
-**Aligns with:** Production build through Sprint W (operational adherence readiness on clinician patients list and profile).
+**Aligns with:** Production through MQ-READY, MQ-SIGNAL-1A/1B, MQ-REP-1 SHADOW-0 (optional Sit-to-Stand CV; shadow rep flags internal only).
+
+---
+
+## CV optional assist metrics (Sit-to-Stand pilot)
+
+Record per session when testing optional camera assist. Use `pilot-feedback-form.md`.
+
+| Metric | Definition | Target (pilot) |
+|--------|------------|----------------|
+| **Camera opt-in rate** | Sessions with camera enabled ÷ Sit-to-Stand sessions attempted | Track; no fixed target |
+| **Save success rate** | CV saves succeeded ÷ camera sessions ≥ min duration | ≥ 90% |
+| **Rep count agreement (±1)** | Saved reps within ±1 of manual observer count | ≥ 80% of camera sessions |
+| **Clinician trust rating** | Q5 on feedback form (1–5) | Mean ≥ 3.5 to proceed |
+| **Patient confusion notes** | Any Y on confusion questions + free text | Zero unaddressed safety confusion |
+| **Clinician review time** | Seconds from opening profile to locating Movement tracking row | Median < 30 s |
+
+### CV data boundary (reminder for roll-up)
+
+**Saved:** reps, duration, tracking signal, movement detected, frame counts.  
+**Not saved:** video, landmarks, hipY, per-rep capture flags.
 
 ---
 
@@ -64,11 +84,21 @@ Also track: **sessions completed ÷ sessions available** on assigned plan (sessi
 
 ### 5. Clinician feedback
 
-Collect via `pilot-feedback-questions.md` (clinician section) within 24–48 hours.
+Collect via `pilot-feedback-form.md` (clinician section) within 24–48 hours.
+
+**CV pilot questions (required when camera tested):**
+
+- Is this useful?
+- Is it understandable?
+- Does Limited camera visibility read as technical, not clinical?
+- Would you use this with patients?
 
 | Signal | Minimum |
 |--------|---------|
 | Usefulness (1–5) | Record every session |
+| Trust in CV metrics (1–5) | Record every camera session |
+| Limited visibility = technical read | Y / Partial / N |
+| Would use with patients | Y / Some / N |
 | Would use with another patient next week | Y / Maybe / N |
 | NPS (0–10) | Optional weekly |
 | Open: biggest friction | Required one line |
@@ -144,14 +174,34 @@ Verdict: Proceed / Iterate / Pause
 
 - Proof of clinical improvement or recovery
 - Diagnostic accuracy of RASQ
-- AI performance or optional experimental CV accuracy (CV is not a pilot success criterion; core workflow does not depend on camera)
-- Automatic treatment recommendations or progression
+- **Movement quality validation** or form assessment
+- **Clinical-grade** or regulated-device claims
+- **AI-powered rehab** or MQE performance
+- Optional experimental CV accuracy as sole success criterion (core workflow does not depend on camera)
+- **Automatic treatment recommendations** or **automatic progression**
+- **All-exercise CV support** (Sit-to-Stand only)
 - Legal finalization (counsel review still required)
+
+---
+
+## What not to claim (pilot communications)
+
+| Do not claim | Say instead |
+|--------------|-------------|
+| Movement quality validation | Rep counting assist for therapist review |
+| Clinical grade / FDA cleared | Prototype; not clinically validated |
+| AI-powered rehab | Rule-based on-device CV; no AI in production |
+| Automatic progression | Therapist assigns and reviews plans |
+| All exercises supported | Sit-to-Stand only for optional CV |
 
 ---
 
 ## Related documents
 
+- `pilot-protocol.md` — Supervised clinic protocol
+- `clinician-one-pager.md` — Clinician briefing
+- `patient-camera-framing-card-ar.md` — Arabic camera framing card
+- `pilot-feedback-form.md` — Session feedback form
 - `success-metrics.md` — Extended rubrics and thresholds
 - `pilot-metrics-manual-tracker.md` — Weekly table
 - `pilot-feedback-questions.md` — Question bank
