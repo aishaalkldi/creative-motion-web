@@ -12,6 +12,10 @@ import { patientCvCopy, type SitToStandDerivedMetrics } from "@/app/lib/cv/bio-0
 import { PATIENT_STS_CONFIG } from "@/app/lib/cv/cv-patient-config";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import {
+  type CvSaveOutcome,
+  logCvSaveAttempt,
+} from "@/app/lib/cv/cv-save-outcome";
+import {
   formatSitToStandDuration,
   mapSitToStandStartError,
   SitToStandDetector,
@@ -36,7 +40,7 @@ export type PatientCvCaptureProps = {
 
 /** Parent calls before exercise step leaves "active" (e.g. Complete exercise). */
 export type PatientCvCaptureHandle = {
-  saveBeforeExerciseComplete: () => Promise<void>;
+  saveBeforeExerciseComplete: () => Promise<CvSaveOutcome>;
 };
 
 function applySnapshot(
@@ -143,61 +147,66 @@ export const PatientCvCapture = forwardRef<PatientCvCaptureHandle, PatientCvCapt
     }, 5000);
   }, [clearSaveStatusTimer]);
 
-  const saveFlightRef = useRef<Promise<void> | null>(null);
+  const saveFlightRef = useRef<Promise<"saved" | "post_error"> | null>(null);
 
-  const saveSessionMetrics = useCallback(async (metricsSnapshot: SitToStandDerivedMetrics) => {
-    if (hasSavedRef.current) return;
-    if (saveFlightRef.current) return saveFlightRef.current;
+  const saveSessionMetrics = useCallback(
+    async (metricsSnapshot: SitToStandDerivedMetrics): Promise<"saved" | "post_error"> => {
+      if (hasSavedRef.current) return "saved";
+      if (saveFlightRef.current) return saveFlightRef.current;
 
-    const metrics = metricsSnapshot;
+      const metrics = metricsSnapshot;
 
-    const run = async () => {
-      saveInProgressRef.current = true;
-      setSaveStatus("saving");
+      const run = async (): Promise<"saved" | "post_error"> => {
+        saveInProgressRef.current = true;
+        setSaveStatus("saving");
 
-      const payload = {
-        token,
-        sessionId,
-        exerciseId: metrics.exerciseId,
-        repCount: metrics.repCount,
-        sessionDurationS: metrics.sessionDurationS,
-        trackingQuality: metrics.trackingQuality,
-        movementDetected: metrics.movementDetected,
-        framesWithPose: metrics.framesWithPose,
-        framesTotal: metrics.framesTotal,
-      };
+        const payload = {
+          token,
+          sessionId,
+          exerciseId: metrics.exerciseId,
+          repCount: metrics.repCount,
+          sessionDurationS: metrics.sessionDurationS,
+          trackingQuality: metrics.trackingQuality,
+          movementDetected: metrics.movementDetected,
+          framesWithPose: metrics.framesWithPose,
+          framesTotal: metrics.framesTotal,
+        };
 
-      try {
-        const res = await fetch("/api/patient/cv-session-metrics", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        });
+        try {
+          const res = await fetch("/api/patient/cv-session-metrics", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
 
-        if (!res.ok) {
+          if (!res.ok) {
+            setSaveStatus("error");
+            scheduleSaveStatusClear();
+            return "post_error";
+          }
+
+          hasSavedRef.current = true;
+          setSaveStatus("saved");
+          scheduleSaveStatusClear();
+          return "saved";
+        } catch {
           setSaveStatus("error");
           scheduleSaveStatusClear();
-          return;
+          return "post_error";
+        } finally {
+          saveInProgressRef.current = false;
         }
+      };
 
-        hasSavedRef.current = true;
-        setSaveStatus("saved");
-        scheduleSaveStatusClear();
-      } catch {
-        setSaveStatus("error");
-        scheduleSaveStatusClear();
+      saveFlightRef.current = run();
+      try {
+        return await saveFlightRef.current;
       } finally {
-        saveInProgressRef.current = false;
+        saveFlightRef.current = null;
       }
-    };
-
-    saveFlightRef.current = run();
-    try {
-      await saveFlightRef.current;
-    } finally {
-      saveFlightRef.current = null;
-    }
-  }, [token, sessionId, scheduleSaveStatusClear]);
+    },
+    [token, sessionId, scheduleSaveStatusClear],
+  );
 
   const skipCameraWithoutSave = useCallback(() => {
     skipSaveOnExitRef.current = true;
@@ -207,54 +216,114 @@ export const PatientCvCapture = forwardRef<PatientCvCaptureHandle, PatientCvCapt
     setSkipped(true);
   }, [syncFromDetector]);
 
+  const logSaveOutcome = useCallback(
+    (
+      detector: SitToStandDetector | null,
+      result: CvSaveOutcome,
+      capture?: {
+        isPreviewActive: boolean;
+        canSaveMetrics: boolean;
+        sessionDurationS: number;
+        repCount: number;
+        exerciseId: string;
+      },
+    ) => {
+      const snap = detector?.getSnapshot();
+      const derived = detector?.getDerivedMetrics();
+      logCvSaveAttempt({
+        planSessionId: sessionId,
+        exerciseId: capture?.exerciseId ?? derived?.exerciseId ?? "sit-to-stand",
+        isPreviewActive: capture?.isPreviewActive ?? detector?.isPreviewActive() ?? false,
+        canSaveMetrics: capture?.canSaveMetrics ?? detector?.canSaveMetrics() ?? false,
+        sessionDurationS:
+          capture?.sessionDurationS ?? derived?.sessionDurationS ?? snap?.sessionSeconds ?? 0,
+        repCount: capture?.repCount ?? snap?.repCount ?? derived?.repCount ?? 0,
+        result,
+      });
+    },
+    [sessionId],
+  );
+
+  const captureSaveDebug = useCallback((detector: SitToStandDetector) => {
+    const derived = detector.getDerivedMetrics();
+    const snap = detector.getSnapshot();
+    return {
+      isPreviewActive: detector.isPreviewActive(),
+      canSaveMetrics: detector.canSaveMetrics(),
+      sessionDurationS: derived.sessionDurationS,
+      repCount: snap.repCount,
+      exerciseId: derived.exerciseId,
+    };
+  }, []);
+
   /** Snapshot + stop + POST when tracking qualifies; shared by Stop, Complete exercise, unmount. */
-  const saveActiveMetricsBeforeExit = useCallback(async (): Promise<void> => {
-    const detector = detectorRef.current;
-    if (!detector) return;
+  const saveActiveMetricsBeforeExit = useCallback(
+    async (emitOutcome = false): Promise<CvSaveOutcome> => {
+      const detector = detectorRef.current;
+      if (!detector) {
+        if (emitOutcome) logSaveOutcome(null, "no_detector");
+        return "no_detector";
+      }
 
-    if (skipSaveOnExitRef.current) {
-      if (detector.isPreviewActive()) {
+      if (skipSaveOnExitRef.current) {
+        if (detector.isPreviewActive()) {
+          detector.stop();
+          syncFromDetector(detector.getSnapshot());
+        }
+        if (emitOutcome) logSaveOutcome(detector, "skipped_camera");
+        return "skipped_camera";
+      }
+
+      if (hasSavedRef.current) {
+        if (detector.isPreviewActive()) {
+          detector.stop();
+          syncFromDetector(detector.getSnapshot());
+        }
+        if (emitOutcome) logSaveOutcome(detector, "already_saved");
+        return "already_saved";
+      }
+
+      if (saveFlightRef.current) {
+        const postResult = await saveFlightRef.current;
+        if (detector.isPreviewActive()) {
+          detector.stop();
+          syncFromDetector(detector.getSnapshot());
+        }
+        const result: CvSaveOutcome =
+          postResult === "saved" || hasSavedRef.current ? "saved" : "post_error";
+        if (emitOutcome) logSaveOutcome(detector, result);
+        return result;
+      }
+
+      if (!detector.isPreviewActive()) {
+        if (emitOutcome) logSaveOutcome(detector, "not_active");
+        return "not_active";
+      }
+
+      if (!detector.canSaveMetrics()) {
+        const debug = captureSaveDebug(detector);
         detector.stop();
         syncFromDetector(detector.getSnapshot());
+        if (emitOutcome) logSaveOutcome(detector, "too_short", debug);
+        return "too_short";
       }
-      return;
-    }
 
-    if (hasSavedRef.current) {
-      if (detector.isPreviewActive()) {
-        detector.stop();
-        syncFromDetector(detector.getSnapshot());
-      }
-      return;
-    }
-
-    if (saveFlightRef.current) {
-      await saveFlightRef.current;
-      if (detector.isPreviewActive()) {
-        detector.stop();
-        syncFromDetector(detector.getSnapshot());
-      }
-      return;
-    }
-
-    if (!detector.isPreviewActive()) return;
-
-    if (!detector.canSaveMetrics()) {
+      const metricsSnapshot = detector.getDerivedMetrics();
+      const debug = captureSaveDebug(detector);
       detector.stop();
       syncFromDetector(detector.getSnapshot());
-      return;
-    }
-
-    const metricsSnapshot = detector.getDerivedMetrics();
-    detector.stop();
-    syncFromDetector(detector.getSnapshot());
-    await saveSessionMetrics(metricsSnapshot);
-  }, [saveSessionMetrics, syncFromDetector]);
+      const postResult = await saveSessionMetrics(metricsSnapshot);
+      const result: CvSaveOutcome = postResult === "saved" ? "saved" : "post_error";
+      if (emitOutcome) logSaveOutcome(detector, result, debug);
+      return result;
+    },
+    [saveSessionMetrics, syncFromDetector, logSaveOutcome, captureSaveDebug],
+  );
 
   useImperativeHandle(
     ref,
     () => ({
-      saveBeforeExerciseComplete: () => saveActiveMetricsBeforeExit(),
+      saveBeforeExerciseComplete: () => saveActiveMetricsBeforeExit(true),
     }),
     [saveActiveMetricsBeforeExit],
   );

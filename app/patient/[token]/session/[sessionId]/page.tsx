@@ -23,6 +23,7 @@ import type { ExerciseMediaAreaHandle } from "@/app/components/patient/ExerciseM
 import {
   planHomeUi,
   resolveSessionFocusPurpose,
+  cvSaveOutcomePatientMessage,
   sessionExerciseFlowUi,
   sessionExerciseUi,
   sessionFocusUi,
@@ -98,6 +99,7 @@ export default function SessionPlayerPage() {
   } | null>(null);
 
   const exerciseMediaRef = useRef<ExerciseMediaAreaHandle>(null);
+  const [cvSaveNotice, setCvSaveNotice] = useState<string | null>(null);
 
   useEffect(() => {
     setPhase("precheck");
@@ -114,6 +116,7 @@ export default function SessionPlayerPage() {
     setCompletionSummary(null);
     setCompleteError("");
     setCompleting(false);
+    setCvSaveNotice(null);
   }, [token, sessionId]);
 
   useEffect(() => {
@@ -189,6 +192,7 @@ export default function SessionPlayerPage() {
   }
 
   function handleStartExercise() {
+    setCvSaveNotice(null);
     setExerciseStep("active");
     setSetsCompleted(0);
   }
@@ -201,11 +205,15 @@ export default function SessionPlayerPage() {
   }
 
   async function handleCompleteExercise() {
-    await exerciseMediaRef.current?.saveCvMetricsBeforeExerciseComplete();
+    const outcome =
+      (await exerciseMediaRef.current?.saveCvMetricsBeforeExerciseComplete()) ??
+      "not_applicable";
+    setCvSaveNotice(cvSaveOutcomePatientMessage(patientLanguage, outcome));
     setExerciseStep("done");
   }
 
   function handleNextExercise() {
+    setCvSaveNotice(null);
     if (!isLast) {
       setExerciseIndex((i) => i + 1);
       setExerciseStep("preview");
@@ -717,6 +725,15 @@ export default function SessionPlayerPage() {
         patientToken={token}
         planSessionId={sessionId}
       />
+
+      {exerciseStep === "done" && cvSaveNotice && (
+        <p
+          className={`rounded-[8px] border border-[#D1E7DE] bg-[#F0FAF6] px-4 py-3 text-center text-[13px] leading-relaxed text-[#374151] ${arClass}`}
+          role="status"
+        >
+          {cvSaveNotice}
+        </p>
+      )}
 
       {exerciseStep === "done" && (
         <button

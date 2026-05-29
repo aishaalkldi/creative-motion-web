@@ -1,6 +1,8 @@
 import type { ClinicalActionStatus } from "@/app/lib/clinical-action-engine";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 
+import type { CvSaveOutcome } from "@/app/lib/cv/cv-save-outcome";
+
 export type PatientPortalLanguage = PatientExerciseLanguage;
 
 /* ── Plan home ─────────────────────────────────────────────────────────────── */
@@ -319,6 +321,9 @@ export type SessionExerciseFlowUi = {
   inProgressLabel: string;
   sessionWrapUpTitle: string;
   continueToFinish: string;
+  cvSavedForReview: string;
+  cvNotSavedManual: string;
+  cvPostErrorContinue: string;
 };
 
 const BODY_REGION_PATIENT: Record<
@@ -381,6 +386,9 @@ const SESSION_EXERCISE_FLOW_UI: Record<
     inProgressLabel: "In progress",
     sessionWrapUpTitle: "Finish your session",
     continueToFinish: "Continue to finish session",
+    cvSavedForReview: "Camera result saved for therapist review.",
+    cvNotSavedManual: "Camera result not saved — session completed manually.",
+    cvPostErrorContinue: "Could not save camera result — you can continue.",
   },
   ar: {
     sessionOverviewTitle: "نظرة على الجلسة",
@@ -414,8 +422,26 @@ const SESSION_EXERCISE_FLOW_UI: Record<
     inProgressLabel: "قيد التنفيذ",
     sessionWrapUpTitle: "إنهاء الجلسة",
     continueToFinish: "متابعة لإنهاء الجلسة",
+    cvSavedForReview: "تم حفظ نتيجة الكاميرا لمراجعة المعالج.",
+    cvNotSavedManual: "لم يتم حفظ نتيجة الكاميرا — تم إكمال الجلسة يدويًا.",
+    cvPostErrorContinue: "تعذر حفظ نتيجة الكاميرا — يمكنك المتابعة.",
   },
 };
+
+/** Patient notice after Complete exercise when optional CV ran or was eligible. */
+export function cvSaveOutcomePatientMessage(
+  lang: PatientPortalLanguage,
+  outcome: CvSaveOutcome,
+): string | null {
+  if (outcome === "not_applicable") return null;
+  if (outcome === "saved" || outcome === "already_saved") {
+    return sessionExerciseFlowUi(lang).cvSavedForReview;
+  }
+  if (outcome === "post_error") {
+    return sessionExerciseFlowUi(lang).cvPostErrorContinue;
+  }
+  return sessionExerciseFlowUi(lang).cvNotSavedManual;
+}
 
 export function sessionExerciseFlowUi(
   lang: PatientPortalLanguage,
