@@ -77,6 +77,14 @@ export type SitToStandCvConfig = {
   readinessCheckMs?: number;
   /** Minimum per-hip landmark visibility (0–1) to count reps */
   minHipVisibility?: number;
+  /** MQ-REP-1 shadow: enable in-memory RepQualityFsm (default off in production). */
+  repQualityEnabled?: boolean;
+  /** MQ-REP-1 shadow: run FSM in parallel without affecting repCount or save payload. */
+  repQualityShadowMode?: boolean;
+  /** MQ-REP-1 shadow: minimum full-cycle duration before complete_rep flag. */
+  minRepDurationMs?: number;
+  /** MQ-REP-1 shadow: per-rep timeout before incomplete flags. */
+  repTimeoutMs?: number;
 };
 
 export const DEFAULT_STS_CONFIG: SitToStandCvConfig = {
