@@ -10,6 +10,11 @@ import {
   type SitToStandDerivedMetrics,
 } from "@/app/lib/cv/bio-0-contracts";
 import {
+  DEFAULT_REP_QUALITY_FSM_CONFIG,
+  RepQualityFsm,
+  type SessionMotionSummary,
+} from "@/app/lib/cv/rep-quality-fsm";
+import {
   emptyVisibilityLabelCounts,
   evaluateTrackingQualityFromHipVisSum,
   summarizeSessionVisibility,
@@ -306,6 +311,10 @@ export class SitToStandDetector {
   /** MQ-SIGNAL-1B: in-memory session visibility (saved summary only; not persisted). */
   private hipVisSamples: number[] = [];
   private visibilityLabelCounts: VisibilityLabelCounts = emptyVisibilityLabelCounts();
+  /** MQ-REP-1 shadow: in-memory per-rep capture flags (never persisted or POSTed). */
+  private repQualityFsm: RepQualityFsm | null = null;
+  private repQualitySessionStartedMs = 0;
+  private repQualityLastSummary: SessionMotionSummary | null = null;
 
   constructor(
     callbacks: SitToStandDetectorCallbacks,
@@ -484,6 +493,147 @@ export class SitToStandDetector {
     };
   }
 
+  private repQualityActive(): boolean {
+    return Boolean(this.config.repQualityEnabled && this.config.repQualityShadowMode);
+  }
+
+  private syncRepQualityFsm(): void {
+    if (!this.repQualityActive()) {
+      this.repQualityFsm = null;
+      return;
+    }
+    if (!this.repQualityFsm) {
+      this.repQualityFsm = new RepQualityFsm({
+        ...DEFAULT_REP_QUALITY_FSM_CONFIG,
+        minRepDurationMs:
+          this.config.minRepDurationMs ?? DEFAULT_REP_QUALITY_FSM_CONFIG.minRepDurationMs,
+        repTimeoutMs: this.config.repTimeoutMs ?? DEFAULT_REP_QUALITY_FSM_CONFIG.repTimeoutMs,
+        visibilityFairSum: this.config.visibilityFair,
+      });
+    }
+  }
+
+  private repQualityNowMs(nowMs: number): number {
+    if (this.repQualitySessionStartedMs === 0) {
+      this.repQualitySessionStartedMs = nowMs;
+    }
+    return nowMs - this.repQualitySessionStartedMs;
+  }
+
+  private resolveRepQualityThresholds(torsoSpan: number | null): {
+    standThreshold: number;
+    seatedThreshold: number;
+    standDelta: number;
+    returnDelta: number;
+  } | null {
+    if (this.usesBaselineRepCounting()) {
+      if (this.baselineHipY === null) return null;
+      const { standDelta, resetDelta } = this.resolveBaselineDeltas(torsoSpan);
+      return {
+        standThreshold: this.baselineHipY - standDelta,
+        seatedThreshold: this.baselineHipY - resetDelta,
+        standDelta,
+        returnDelta: resetDelta,
+      };
+    }
+
+    return {
+      standThreshold: this.config.hipUpThreshold,
+      seatedThreshold: this.config.hipDownThreshold,
+      standDelta: this.config.hipDownThreshold - this.config.hipUpThreshold,
+      returnDelta: Math.max(
+        0.03,
+        (this.config.hipDownThreshold - this.config.hipUpThreshold) * 0.5,
+      ),
+    };
+  }
+
+  private tickRepQualityFsm(
+    landmarks: PoseLandmark[],
+    hipY: number,
+    nowMs: number,
+    torsoSpan: number | null,
+  ): void {
+    if (!this.repQualityActive()) return;
+
+    this.syncRepQualityFsm();
+    const fsm = this.repQualityFsm;
+    if (!fsm) return;
+
+    const sessionNow = this.repQualityNowMs(nowMs);
+    const hipVisibilitySum = (landmarks[23]?.visibility ?? 0) + (landmarks[24]?.visibility ?? 0);
+    const thresholds = this.resolveRepQualityThresholds(torsoSpan);
+
+    if (!thresholds) {
+      fsm.tick({
+        hipY,
+        nowMs: sessionNow,
+        standThreshold: 0,
+        seatedThreshold: 1,
+        standDelta: 0,
+        returnDelta: 0,
+        hipVisibilitySum,
+        posePresent: true,
+        canCount: false,
+      });
+      return;
+    }
+
+    fsm.tick({
+      hipY,
+      nowMs: sessionNow,
+      standThreshold: thresholds.standThreshold,
+      seatedThreshold: thresholds.seatedThreshold,
+      standDelta: thresholds.standDelta,
+      returnDelta: thresholds.returnDelta,
+      hipVisibilitySum,
+      posePresent: true,
+      canCount: this.canIncrementReps(),
+    });
+  }
+
+  private finalizeRepQualitySession(nowMs?: number): void {
+    if (!this.repQualityActive() || !this.repQualityFsm) return;
+
+    const sessionNow =
+      nowMs !== undefined
+        ? this.repQualityNowMs(nowMs)
+        : this.repQualitySessionStartedMs > 0
+          ? performance.now() - this.repQualitySessionStartedMs
+          : 0;
+
+    this.repQualityFsm.finalizeSession(sessionNow);
+    this.repQualityLastSummary = this.repQualityFsm.buildSessionSummary({
+      legacyRepCount: this.repCount,
+      sessionDurationS: this.sessionSeconds,
+      framesWithPose: this.framesWithPose,
+      framesTotal: this.framesTotal,
+      trackingQualityLast: this.trackingQuality ?? "unknown",
+    });
+  }
+
+  private resetRepQualityState(): void {
+    this.repQualityFsm?.reset();
+    this.repQualityFsm = null;
+    this.repQualitySessionStartedMs = 0;
+    this.repQualityLastSummary = null;
+  }
+
+  /** Dev/internal only — in-memory capture summary; never included in save payload. */
+  getRepQualitySession(): SessionMotionSummary | null {
+    if (!this.repQualityActive()) return null;
+    if (this.repQualityLastSummary) return this.repQualityLastSummary;
+    if (!this.repQualityFsm) return null;
+
+    return this.repQualityFsm.buildSessionSummary({
+      legacyRepCount: this.repCount,
+      sessionDurationS: this.sessionSeconds,
+      framesWithPose: this.framesWithPose,
+      framesTotal: this.framesTotal,
+      trackingQualityLast: this.trackingQuality ?? "unknown",
+    });
+  }
+
   private updateRepCountFromHipY(hipY: number, nowMs: number, torsoSpan: number | null): void {
     if (this.usesBaselineRepCounting()) {
       this.maybeFinalizeBaseline(nowMs);
@@ -608,6 +758,7 @@ export class SitToStandDetector {
     this.trackingQuality = null;
     this.initPhase = null;
     this.trackingError = null;
+    this.finalizeRepQualitySession();
     this.resetBaselineState();
     this.emit();
   }
@@ -640,6 +791,7 @@ export class SitToStandDetector {
     this.initPhase = "import";
     this.previewActive = false;
     this.resetVisibilityAccumulators();
+    this.resetRepQualityState();
     this.resetBaselineState();
     this.emit();
 
@@ -769,6 +921,7 @@ export class SitToStandDetector {
             const nowMs = performance.now();
             this.updatePoseReadiness(nowMs, landmarks);
             this.updateRepCountFromHipY(hipY, nowMs, torsoSpan);
+            this.tickRepQualityFsm(landmarks, hipY, nowMs, torsoSpan);
 
             if (this.config.readinessEnabled) {
               this.drawReadinessSkeleton(ctx, landmarks, canvasWidth, canvasHeight);
@@ -787,6 +940,13 @@ export class SitToStandDetector {
             this.trackingQuality = null;
             if (this.usesReadiness()) {
               this.poseReadiness = "not_ready";
+            }
+            if (this.repQualityActive() && this.repQualityFsm) {
+              const sessionNow =
+                this.repQualitySessionStartedMs > 0
+                  ? performance.now() - this.repQualitySessionStartedMs
+                  : 0;
+              this.repQualityFsm.handlePoseLost(sessionNow);
             }
           }
         } catch {
