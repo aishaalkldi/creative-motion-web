@@ -6,6 +6,7 @@ import {
   PatientCvCapture,
   type PatientCvCaptureHandle,
 } from "@/app/components/patient/cv/PatientCvCapture";
+import type { CvSaveOutcome } from "@/app/lib/cv/cv-save-outcome";
 import { isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
 import { exerciseMediaUi } from "@/app/lib/patient-portal-ui";
 
@@ -26,7 +27,7 @@ export type ExerciseMediaAreaProps = {
 
 /** Await before leaving active exercise step when sit-to-stand CV may be running. */
 export type ExerciseMediaAreaHandle = {
-  saveCvMetricsBeforeExerciseComplete: () => Promise<void>;
+  saveCvMetricsBeforeExerciseComplete: () => Promise<CvSaveOutcome>;
 };
 
 type VisualRegion =
@@ -423,9 +424,10 @@ export const ExerciseMediaArea = forwardRef<ExerciseMediaAreaHandle, ExerciseMed
   useImperativeHandle(
     ref,
     () => ({
-      saveCvMetricsBeforeExerciseComplete: async () => {
-        if (!showPatientCv) return;
-        await cvCaptureRef.current?.saveBeforeExerciseComplete();
+      saveCvMetricsBeforeExerciseComplete: async (): Promise<CvSaveOutcome> => {
+        if (!showPatientCv) return "not_applicable";
+        if (!cvCaptureRef.current) return "no_detector";
+        return cvCaptureRef.current.saveBeforeExerciseComplete();
       },
     }),
     [showPatientCv],
