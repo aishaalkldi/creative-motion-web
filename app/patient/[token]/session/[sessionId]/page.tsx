@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import type { PatientSession } from "@/app/api/patient/plan/route";
@@ -19,11 +19,12 @@ import {
   PatientSessionProgressStrip,
   type ExerciseCardStep,
 } from "@/app/components/patient/PatientExerciseSessionCard";
-import type { ExerciseMediaAreaHandle } from "@/app/components/patient/ExerciseMediaArea";
+import { useCvSessionCapture } from "@/app/hooks/useCvSessionCapture";
 import {
   planHomeUi,
   resolveSessionFocusPurpose,
-  cvSaveOutcomePatientMessage,
+  cvSessionCapturePatientMessage,
+  cvSessionCaptureSavingMessage,
   sessionExerciseFlowUi,
   sessionExerciseUi,
   sessionFocusUi,
@@ -98,8 +99,29 @@ export default function SessionPlayerPage() {
     exercisesCompleted: number;
   } | null>(null);
 
-  const exerciseMediaRef = useRef<ExerciseMediaAreaHandle>(null);
   const [cvSaveNotice, setCvSaveNotice] = useState<string | null>(null);
+
+  const {
+    isCvEligible,
+    onMetricsUpdate,
+    markSkipped,
+    registerMetricsFlush,
+    saveCvMetrics,
+    resetCapture,
+  } = useCvSessionCapture({
+    token,
+    planSessionId: sessionId,
+    exerciseId: session?.exercises[exerciseIndex]
+      ? resolveExerciseView(session.exercises[exerciseIndex], {
+          language: patientLanguage,
+        }).exerciseId
+      : undefined,
+  });
+
+  useEffect(() => {
+    resetCapture();
+    setCvSaveNotice(null);
+  }, [exerciseIndex, resetCapture]);
 
   useEffect(() => {
     setPhase("precheck");
@@ -117,7 +139,8 @@ export default function SessionPlayerPage() {
     setCompleteError("");
     setCompleting(false);
     setCvSaveNotice(null);
-  }, [token, sessionId]);
+    resetCapture();
+  }, [token, sessionId, resetCapture]);
 
   useEffect(() => {
     if (!token || isPlanLoading) return;
@@ -205,10 +228,13 @@ export default function SessionPlayerPage() {
   }
 
   async function handleCompleteExercise() {
-    const outcome =
-      (await exerciseMediaRef.current?.saveCvMetricsBeforeExerciseComplete()) ??
-      "not_applicable";
-    setCvSaveNotice(cvSaveOutcomePatientMessage(patientLanguage, outcome));
+    if (isCvEligible) {
+      setCvSaveNotice(cvSessionCaptureSavingMessage(patientLanguage));
+      const result = await saveCvMetrics();
+      setCvSaveNotice(cvSessionCapturePatientMessage(patientLanguage, result));
+    } else {
+      setCvSaveNotice(null);
+    }
     setExerciseStep("done");
   }
 
@@ -721,9 +747,9 @@ export default function SessionPlayerPage() {
         onStartExercise={handleStartExercise}
         onCompleteSet={handleCompleteSet}
         onCompleteExercise={handleCompleteExercise}
-        exerciseMediaRef={exerciseMediaRef}
-        patientToken={token}
-        planSessionId={sessionId}
+        onCvMetricsUpdate={onMetricsUpdate}
+        onCvSkipped={markSkipped}
+        onRegisterCvMetricsFlush={registerMetricsFlush}
       />
 
       {exerciseStep === "done" && cvSaveNotice && (

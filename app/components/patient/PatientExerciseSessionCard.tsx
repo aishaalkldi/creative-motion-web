@@ -1,13 +1,10 @@
 "use client";
 
-import type { Ref } from "react";
+import type { SitToStandDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import type { ResolvedExerciseView } from "@/app/lib/exercise-resolve";
 import { getLibraryExerciseById } from "@/app/lib/exercise-library-v1";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
-import {
-  ExerciseMediaArea,
-  type ExerciseMediaAreaHandle,
-} from "@/app/components/patient/ExerciseMediaArea";
+import { ExerciseMediaArea } from "@/app/components/patient/ExerciseMediaArea";
 import {
   formatBodyRegionForPatient,
   formatExerciseProgress,
@@ -30,9 +27,9 @@ type PatientExerciseSessionCardProps = {
   onStartExercise: () => void;
   onCompleteSet: () => void;
   onCompleteExercise: () => void | Promise<void>;
-  patientToken?: string;
-  planSessionId?: string;
-  exerciseMediaRef?: Ref<ExerciseMediaAreaHandle>;
+  onCvMetricsUpdate?: (metrics: SitToStandDerivedMetrics) => void;
+  onCvSkipped?: () => void;
+  onRegisterCvMetricsFlush?: (flush: () => void) => void;
 };
 
 function DoseTile({
@@ -76,9 +73,9 @@ export function PatientExerciseSessionCard({
   onStartExercise,
   onCompleteSet,
   onCompleteExercise,
-  patientToken,
-  planSessionId,
-  exerciseMediaRef,
+  onCvMetricsUpdate,
+  onCvSkipped,
+  onRegisterCvMetricsFlush,
 }: PatientExerciseSessionCardProps) {
   const flowUi = sessionExerciseFlowUi(lang);
   const cardUi = sessionExerciseUi(lang);
@@ -117,7 +114,6 @@ export function PatientExerciseSessionCard({
 
       <div className="overflow-hidden rounded-[10px] border border-[#E2E8E5] bg-white">
         <ExerciseMediaArea
-          ref={exerciseMediaRef}
           exerciseId={view.exerciseId}
           exerciseName={view.name}
           bodyRegion={libraryEntry?.bodyRegion}
@@ -127,8 +123,9 @@ export function PatientExerciseSessionCard({
           arClass={arClass}
           textDir={textDir}
           exerciseStep={step}
-          patientToken={patientToken}
-          planSessionId={planSessionId}
+          onCvMetricsUpdate={onCvMetricsUpdate}
+          onCvSkipped={onCvSkipped}
+          onRegisterCvMetricsFlush={onRegisterCvMetricsFlush}
         />
 
         <div className="space-y-4 p-5">

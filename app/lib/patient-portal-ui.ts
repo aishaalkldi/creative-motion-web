@@ -2,6 +2,7 @@ import type { ClinicalActionStatus } from "@/app/lib/clinical-action-engine";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 
 import type { CvSaveOutcome } from "@/app/lib/cv/cv-save-outcome";
+import type { CvSaveResult } from "@/app/hooks/useCvSessionCapture";
 
 export type PatientPortalLanguage = PatientExerciseLanguage;
 
@@ -324,6 +325,9 @@ export type SessionExerciseFlowUi = {
   cvSavedForReview: string;
   cvNotSavedManual: string;
   cvPostErrorContinue: string;
+  cvSaving: string;
+  cvSavedCheck: string;
+  cvSaveFailedSessionRecorded: string;
 };
 
 const BODY_REGION_PATIENT: Record<
@@ -389,6 +393,10 @@ const SESSION_EXERCISE_FLOW_UI: Record<
     cvSavedForReview: "Camera result saved for therapist review.",
     cvNotSavedManual: "Camera result not saved — session completed manually.",
     cvPostErrorContinue: "Could not save camera result — you can continue.",
+    cvSaving: "Saving camera result…",
+    cvSavedCheck: "Camera result saved ✓",
+    cvSaveFailedSessionRecorded:
+      "Camera data could not be saved — your session is still recorded",
   },
   ar: {
     sessionOverviewTitle: "نظرة على الجلسة",
@@ -425,8 +433,27 @@ const SESSION_EXERCISE_FLOW_UI: Record<
     cvSavedForReview: "تم حفظ نتيجة الكاميرا لمراجعة المعالج.",
     cvNotSavedManual: "لم يتم حفظ نتيجة الكاميرا — تم إكمال الجلسة يدويًا.",
     cvPostErrorContinue: "تعذر حفظ نتيجة الكاميرا — يمكنك المتابعة.",
+    cvSaving: "جاري حفظ نتيجة الكاميرا…",
+    cvSavedCheck: "تم حفظ نتيجة الكاميرا ✓",
+    cvSaveFailedSessionRecorded: "تعذر حفظ بيانات الكاميرا — تم تسجيل جلستك",
   },
 };
+
+/** Patient notice after parent-owned CV save on exercise completion. */
+export function cvSessionCapturePatientMessage(
+  lang: PatientPortalLanguage,
+  result: CvSaveResult,
+): string | null {
+  if (result === "not_applicable") return null;
+  const ui = sessionExerciseFlowUi(lang);
+  if (result === "saved" || result === "already_saved") return ui.cvSavedCheck;
+  if (result === "post_error") return ui.cvSaveFailedSessionRecorded;
+  return ui.cvNotSavedManual;
+}
+
+export function cvSessionCaptureSavingMessage(lang: PatientPortalLanguage): string {
+  return sessionExerciseFlowUi(lang).cvSaving;
+}
 
 /** Patient notice after Complete exercise when optional CV ran or was eligible. */
 export function cvSaveOutcomePatientMessage(
