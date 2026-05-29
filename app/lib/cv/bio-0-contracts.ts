@@ -33,6 +33,56 @@ export type SitToStandDerivedMetrics = {
   framesTotal: number;
 };
 
+/* ── MOTION-WIN-0: in-memory motion windows (never persisted / never API) ─── */
+
+export type MovementPhase =
+  | "seated"
+  | "rising"
+  | "standing"
+  | "returning"
+  | "unclear";
+
+/** Aggregated 500ms window — derived metrics only, no landmarks or video. */
+export type MotionWindow = {
+  index: number;
+  startMs: number;
+  endMs: number;
+  durationMs: number;
+  framesTotal: number;
+  framesWithPose: number;
+  trackingQuality: CvTrackingQuality;
+  hipYMin: number | null;
+  hipYMax: number | null;
+  hipYMean: number | null;
+  hipYTrend: "rising" | "falling" | "flat" | "unknown";
+  hipVisibilityAvg: number | null;
+  kneeVisibilityAvg: number | null;
+  phase: MovementPhase;
+};
+
+/** Per-rep derived summary from windows (in-memory QA / future MQE). */
+export type RepQualitySummary = {
+  repIndex: number;
+  completedAtMs: number;
+  trackingQuality: CvTrackingQuality;
+  phase: MovementPhase;
+  windowCount: number;
+};
+
+/** Session-level motion analysis — console / dev QA only, not stored or sent. */
+export type SessionMotionSummary = {
+  exerciseId: "sit-to-stand";
+  sessionDurationMs: number;
+  repCountDetector: number;
+  framesTotal: number;
+  framesWithPose: number;
+  windowCount: number;
+  windows: MotionWindow[];
+  repSummaries: RepQualitySummary[];
+  dominantTrackingQuality: CvTrackingQuality;
+  phaseCounts: Record<MovementPhase, number>;
+};
+
 /* ── Sit-to-Stand detector config ─────────────────────────────────────────── */
 
 /** absolute = CV Lab fixed hip-Y thresholds; baseline = patient seated hip calibration */
@@ -63,6 +113,20 @@ export type SitToStandCvConfig = {
   minMsBetweenReps?: number;
   /** Used when baseline window has no pose samples */
   fallbackSeatedHipY?: number;
+  /** Patient baseline: scale stand/reset deltas by shoulder–hip span (normalized frame) */
+  baselineScaleByTorso?: boolean;
+  /** Fraction of torso span required to count a stand (when baselineScaleByTorso) */
+  baselineStandDeltaRatio?: number;
+  /** Fraction of torso span to reset seated phase */
+  baselineResetDeltaRatio?: number;
+  /** Floors when torso span is small or shoulders are occluded */
+  baselineStandDeltaMin?: number;
+  baselineResetDeltaMin?: number;
+  /** Patient portal: pose readiness gate before rep counting */
+  readinessEnabled?: boolean;
+  readinessCheckMs?: number;
+  /** Minimum per-hip landmark visibility (0–1) to count reps */
+  minHipVisibility?: number;
 };
 
 export const DEFAULT_STS_CONFIG: SitToStandCvConfig = {
@@ -83,7 +147,7 @@ export const DEFAULT_STS_CONFIG: SitToStandCvConfig = {
   lowerBodyLandmarkIndices: [23, 24, 25, 26, 27, 28],
 };
 
-/* ── Patient-safe CV copy (EN/AR) — for future PatientCvCapture ───────────── */
+/* ── Patient-safe CV copy (EN/AR) — PatientCvCapture (sit-to-stand only) ─── */
 
 export type PatientCvCopy = {
   consentTitle: string;
@@ -118,6 +182,15 @@ export type PatientCvCopy = {
   trackingStatusReady: string;
   trackingStatusDetecting: string;
   startSeatedHint: string;
+  framingInstruction: string;
+  movementInstruction: string;
+  checkingCameraPosition: string;
+  cameraReadyLabel: string;
+  almostReadyLabel: string;
+  adjustPhoneBodyChairLabel: string;
+  poseNotDetectedLabel: string;
+  tryAgainLabel: string;
+  hipLandmarksHint: string;
 };
 
 const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
@@ -150,7 +223,7 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     trackingSignalLabel: "Tracking signal",
     trackingGood: "Tracking signal: Good",
     trackingFair: "Tracking signal: Fair — results may vary",
-    trackingPoor: "Tracking signal: Poor — adjust camera or lighting",
+    trackingPoor: "Tracking signal: Weak — adjust phone or lighting",
     sessionDuration: (formatted) => `Session duration: ${formatted}`,
     savedTherapistReview: "Saved — your therapist can review this session",
     savingMetrics: "Saving session…",
@@ -168,6 +241,18 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     trackingStatusReady: "Ready",
     trackingStatusDetecting: "Detecting movement…",
     startSeatedHint: "Start seated, then stand when ready.",
+    framingInstruction:
+      "Prop your phone so your upper body and chair are visible in the frame.",
+    movementInstruction: "Sit, stand fully, then sit again slowly.",
+    checkingCameraPosition: "Checking camera position…",
+    cameraReadyLabel: "Camera ready ✓",
+    almostReadyLabel: "Almost ready — adjust your phone slightly",
+    adjustPhoneBodyChairLabel:
+      "Adjust phone position so your body and chair are visible",
+    poseNotDetectedLabel: "Pose not detected — adjust your phone",
+    tryAgainLabel: "Try again",
+    hipLandmarksHint:
+      "Wait until the points appear on your shoulders and hips before standing.",
   },
   ar: {
     consentTitle: "الكاميرا لعدّ الحركة",
@@ -197,7 +282,7 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     trackingSignalLabel: "إشارة التتبّع",
     trackingGood: "إشارة التتبّع: جيدة",
     trackingFair: "إشارة التتبّع: متوسطة — قد تختلف النتائج",
-    trackingPoor: "إشارة التتبّع: ضعيفة — عدّل الكاميرا أو الإضاءة",
+    trackingPoor: "إشارة التتبّع: ضعيفة — عدّل الهاتف أو الإضاءة",
     sessionDuration: (formatted) => `مدة الجلسة: ${formatted}`,
     savedTherapistReview: "تم الحفظ — يمكن لمعالجك مراجعة هذه الجلسة",
     savingMetrics: "جاري حفظ الجلسة…",
@@ -215,6 +300,15 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     trackingStatusReady: "جاهز",
     trackingStatusDetecting: "جاري اكتشاف الحركة…",
     startSeatedHint: "ابدأ جالساً، ثم قف عندما تكون مستعداً.",
+    framingInstruction: "ثبّت هاتفك بحيث يظهر الجزء العلوي من جسمك والكرسي في الإطار.",
+    movementInstruction: "اجلس، قف بالكامل، ثم اجلس مرة أخرى ببطء.",
+    checkingCameraPosition: "جاري فحص موضع الكاميرا…",
+    cameraReadyLabel: "الكاميرا جاهزة ✓",
+    almostReadyLabel: "يكاد يكون جاهزاً — عدّل الهاتف قليلاً",
+    adjustPhoneBodyChairLabel: "عدّل موضع الهاتف حتى يظهر جسمك والكرسي",
+    poseNotDetectedLabel: "لم تُكتشف الوضعية — عدّل الهاتف",
+    tryAgainLabel: "حاول مرة أخرى",
+    hipLandmarksHint: "انتظر حتى تظهر النقاط على الكتفين والوركين قبل الوقوف.",
   },
 };
 
