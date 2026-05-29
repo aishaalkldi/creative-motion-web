@@ -1,20 +1,9 @@
 "use client";
 
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useImperativeHandle,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { patientCvCopy, type SitToStandDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import { PATIENT_STS_CONFIG } from "@/app/lib/cv/cv-patient-config";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
-import {
-  type CvSaveOutcome,
-  logCvSaveAttempt,
-} from "@/app/lib/cv/cv-save-outcome";
 import {
   formatSitToStandDuration,
   mapSitToStandStartError,
@@ -28,19 +17,15 @@ import {
 
 const { canvasWidth: CANVAS_WIDTH, canvasHeight: CANVAS_HEIGHT } = PATIENT_STS_CONFIG;
 
-type SaveStatus = "idle" | "saving" | "saved" | "error";
+const METRICS_REPORT_INTERVAL_MS = 3_000;
 
 export type PatientCvCaptureProps = {
-  token: string;
-  sessionId: string;
   language: PatientExerciseLanguage;
   arClass?: string;
   textDir?: "rtl" | "ltr";
-};
-
-/** Parent calls before exercise step leaves "active" (e.g. Complete exercise). */
-export type PatientCvCaptureHandle = {
-  saveBeforeExerciseComplete: () => Promise<CvSaveOutcome>;
+  onMetricsUpdate?: (metrics: SitToStandDerivedMetrics) => void;
+  onSkipped?: () => void;
+  onRegisterMetricsFlush?: (flush: () => void) => void;
 };
 
 function applySnapshot(
@@ -72,11 +57,14 @@ function applySnapshot(
   setters.setLoading(snapshot.initPhase !== null);
 }
 
-export const PatientCvCapture = forwardRef<PatientCvCaptureHandle, PatientCvCaptureProps>(
-  function PatientCvCapture(
-    { token, sessionId, language, arClass = "", textDir = "ltr" },
-    ref,
-  ) {
+export function PatientCvCapture({
+  language,
+  arClass = "",
+  textDir = "ltr",
+  onMetricsUpdate,
+  onSkipped,
+  onRegisterMetricsFlush,
+}: PatientCvCaptureProps) {
   const copy = patientCvCopy(language);
 
   const [skipped, setSkipped] = useState(false);
@@ -94,255 +82,93 @@ export const PatientCvCapture = forwardRef<PatientCvCaptureHandle, PatientCvCapt
   const [sessionStarted, setSessionStarted] = useState(false);
   const [movementDetected, setMovementDetected] = useState(false);
   const [baselineCalibrating, setBaselineCalibrating] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const detectorRef = useRef<SitToStandDetector | null>(null);
-  const saveStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startInProgressRef = useRef(false);
-  const saveInProgressRef = useRef(false);
   const stopInProgressRef = useRef(false);
-  /** True after a successful POST; prevents duplicate save on Stop + unmount. */
-  const hasSavedRef = useRef(false);
-  /** Patient chose Continue without camera — never auto-save on exit. */
-  const skipSaveOnExitRef = useRef(false);
+  const skipReportRef = useRef(false);
+  const lastReportedRepRef = useRef(-1);
+  const onMetricsUpdateRef = useRef(onMetricsUpdate);
 
-  const syncFromDetector = useCallback((snapshot: SitToStandDetectorSnapshot) => {
-    applySnapshot(snapshot, {
-      setPreviewActive,
-      setLoading,
-      setInitPhase,
-      setTrackingError,
-      setRepCount,
-      setTrackingStatus,
-      setTrackingQuality,
-      setPoseReadiness,
-      setSessionSeconds,
-      setMovementDetected,
-      setBaselineCalibrating,
-    });
+  useEffect(() => {
+    onMetricsUpdateRef.current = onMetricsUpdate;
+  }, [onMetricsUpdate]);
+
+  const reportMetrics = useCallback(() => {
+    if (skipReportRef.current) return;
+    const detector = detectorRef.current;
+    if (!detector?.isPreviewActive()) return;
+    onMetricsUpdateRef.current?.(detector.getDerivedMetrics());
   }, []);
+
+  const syncFromDetector = useCallback(
+    (snapshot: SitToStandDetectorSnapshot) => {
+      const prevRep = lastReportedRepRef.current;
+      applySnapshot(snapshot, {
+        setPreviewActive,
+        setLoading,
+        setInitPhase,
+        setTrackingError,
+        setRepCount,
+        setTrackingStatus,
+        setTrackingQuality,
+        setPoseReadiness,
+        setSessionSeconds,
+        setMovementDetected,
+        setBaselineCalibrating,
+      });
+      if (snapshot.previewActive && snapshot.repCount !== prevRep) {
+        lastReportedRepRef.current = snapshot.repCount;
+        reportMetrics();
+      }
+    },
+    [reportMetrics],
+  );
 
   useEffect(() => {
     const detector = new SitToStandDetector({ onSnapshot: syncFromDetector }, PATIENT_STS_CONFIG);
     detectorRef.current = detector;
     return () => {
+      reportMetrics();
       detector.stop();
       detectorRef.current = null;
     };
-  }, [syncFromDetector]);
+  }, [syncFromDetector, reportMetrics]);
 
-  const clearSaveStatusTimer = useCallback(() => {
-    if (saveStatusTimerRef.current) {
-      clearTimeout(saveStatusTimerRef.current);
-      saveStatusTimerRef.current = null;
-    }
-  }, []);
+  useEffect(() => {
+    if (!onRegisterMetricsFlush) return;
+    onRegisterMetricsFlush(reportMetrics);
+    return () => onRegisterMetricsFlush(() => {});
+  }, [onRegisterMetricsFlush, reportMetrics]);
 
-  const scheduleSaveStatusClear = useCallback(() => {
-    clearSaveStatusTimer();
-    saveStatusTimerRef.current = setTimeout(() => {
-      setSaveStatus("idle");
-    }, 5000);
-  }, [clearSaveStatusTimer]);
-
-  const saveFlightRef = useRef<Promise<"saved" | "post_error"> | null>(null);
-
-  const saveSessionMetrics = useCallback(
-    async (metricsSnapshot: SitToStandDerivedMetrics): Promise<"saved" | "post_error"> => {
-      if (hasSavedRef.current) return "saved";
-      if (saveFlightRef.current) return saveFlightRef.current;
-
-      const metrics = metricsSnapshot;
-
-      const run = async (): Promise<"saved" | "post_error"> => {
-        saveInProgressRef.current = true;
-        setSaveStatus("saving");
-
-        const payload = {
-          token,
-          sessionId,
-          exerciseId: metrics.exerciseId,
-          repCount: metrics.repCount,
-          sessionDurationS: metrics.sessionDurationS,
-          trackingQuality: metrics.trackingQuality,
-          movementDetected: metrics.movementDetected,
-          framesWithPose: metrics.framesWithPose,
-          framesTotal: metrics.framesTotal,
-        };
-
-        try {
-          const res = await fetch("/api/patient/cv-session-metrics", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-
-          if (!res.ok) {
-            setSaveStatus("error");
-            scheduleSaveStatusClear();
-            return "post_error";
-          }
-
-          hasSavedRef.current = true;
-          setSaveStatus("saved");
-          scheduleSaveStatusClear();
-          return "saved";
-        } catch {
-          setSaveStatus("error");
-          scheduleSaveStatusClear();
-          return "post_error";
-        } finally {
-          saveInProgressRef.current = false;
-        }
-      };
-
-      saveFlightRef.current = run();
-      try {
-        return await saveFlightRef.current;
-      } finally {
-        saveFlightRef.current = null;
-      }
-    },
-    [token, sessionId, scheduleSaveStatusClear],
-  );
+  useEffect(() => {
+    if (!previewActive) return;
+    reportMetrics();
+    const id = setInterval(reportMetrics, METRICS_REPORT_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [previewActive, reportMetrics]);
 
   const skipCameraWithoutSave = useCallback(() => {
-    skipSaveOnExitRef.current = true;
+    skipReportRef.current = true;
     const detector = detectorRef.current;
     detector?.stop();
     if (detector) syncFromDetector(detector.getSnapshot());
     setSkipped(true);
-  }, [syncFromDetector]);
-
-  const logSaveOutcome = useCallback(
-    (
-      detector: SitToStandDetector | null,
-      result: CvSaveOutcome,
-      capture?: {
-        isPreviewActive: boolean;
-        canSaveMetrics: boolean;
-        sessionDurationS: number;
-        repCount: number;
-        exerciseId: string;
-      },
-    ) => {
-      const snap = detector?.getSnapshot();
-      const derived = detector?.getDerivedMetrics();
-      logCvSaveAttempt({
-        planSessionId: sessionId,
-        exerciseId: capture?.exerciseId ?? derived?.exerciseId ?? "sit-to-stand",
-        isPreviewActive: capture?.isPreviewActive ?? detector?.isPreviewActive() ?? false,
-        canSaveMetrics: capture?.canSaveMetrics ?? detector?.canSaveMetrics() ?? false,
-        sessionDurationS:
-          capture?.sessionDurationS ?? derived?.sessionDurationS ?? snap?.sessionSeconds ?? 0,
-        repCount: capture?.repCount ?? snap?.repCount ?? derived?.repCount ?? 0,
-        result,
-      });
-    },
-    [sessionId],
-  );
-
-  const captureSaveDebug = useCallback((detector: SitToStandDetector) => {
-    const derived = detector.getDerivedMetrics();
-    const snap = detector.getSnapshot();
-    return {
-      isPreviewActive: detector.isPreviewActive(),
-      canSaveMetrics: detector.canSaveMetrics(),
-      sessionDurationS: derived.sessionDurationS,
-      repCount: snap.repCount,
-      exerciseId: derived.exerciseId,
-    };
-  }, []);
-
-  /** Snapshot + stop + POST when tracking qualifies; shared by Stop, Complete exercise, unmount. */
-  const saveActiveMetricsBeforeExit = useCallback(
-    async (emitOutcome = false): Promise<CvSaveOutcome> => {
-      const detector = detectorRef.current;
-      if (!detector) {
-        if (emitOutcome) logSaveOutcome(null, "no_detector");
-        return "no_detector";
-      }
-
-      if (skipSaveOnExitRef.current) {
-        if (detector.isPreviewActive()) {
-          detector.stop();
-          syncFromDetector(detector.getSnapshot());
-        }
-        if (emitOutcome) logSaveOutcome(detector, "skipped_camera");
-        return "skipped_camera";
-      }
-
-      if (hasSavedRef.current) {
-        if (detector.isPreviewActive()) {
-          detector.stop();
-          syncFromDetector(detector.getSnapshot());
-        }
-        if (emitOutcome) logSaveOutcome(detector, "already_saved");
-        return "already_saved";
-      }
-
-      if (saveFlightRef.current) {
-        const postResult = await saveFlightRef.current;
-        if (detector.isPreviewActive()) {
-          detector.stop();
-          syncFromDetector(detector.getSnapshot());
-        }
-        const result: CvSaveOutcome =
-          postResult === "saved" || hasSavedRef.current ? "saved" : "post_error";
-        if (emitOutcome) logSaveOutcome(detector, result);
-        return result;
-      }
-
-      if (!detector.isPreviewActive()) {
-        if (emitOutcome) logSaveOutcome(detector, "not_active");
-        return "not_active";
-      }
-
-      if (!detector.canSaveMetrics()) {
-        const debug = captureSaveDebug(detector);
-        detector.stop();
-        syncFromDetector(detector.getSnapshot());
-        if (emitOutcome) logSaveOutcome(detector, "too_short", debug);
-        return "too_short";
-      }
-
-      const metricsSnapshot = detector.getDerivedMetrics();
-      const debug = captureSaveDebug(detector);
-      detector.stop();
-      syncFromDetector(detector.getSnapshot());
-      const postResult = await saveSessionMetrics(metricsSnapshot);
-      const result: CvSaveOutcome = postResult === "saved" ? "saved" : "post_error";
-      if (emitOutcome) logSaveOutcome(detector, result, debug);
-      return result;
-    },
-    [saveSessionMetrics, syncFromDetector, logSaveOutcome, captureSaveDebug],
-  );
-
-  useImperativeHandle(
-    ref,
-    () => ({
-      saveBeforeExerciseComplete: () => saveActiveMetricsBeforeExit(true),
-    }),
-    [saveActiveMetricsBeforeExit],
-  );
+    onSkipped?.();
+  }, [syncFromDetector, onSkipped]);
 
   const handleStopSession = useCallback(() => {
     if (stopInProgressRef.current || !detectorRef.current?.isPreviewActive()) return;
 
     stopInProgressRef.current = true;
-    void saveActiveMetricsBeforeExit().finally(() => {
-      stopInProgressRef.current = false;
-    });
-  }, [saveActiveMetricsBeforeExit]);
-
-  useEffect(() => {
-    return () => {
-      void saveActiveMetricsBeforeExit();
-      clearSaveStatusTimer();
-    };
-  }, [saveActiveMetricsBeforeExit, clearSaveStatusTimer]);
+    reportMetrics();
+    const detector = detectorRef.current;
+    detector?.stop();
+    if (detector) syncFromDetector(detector.getSnapshot());
+    stopInProgressRef.current = false;
+  }, [reportMetrics, syncFromDetector]);
 
   const startSession = useCallback(async () => {
     const detector = detectorRef.current;
@@ -367,13 +193,12 @@ export const PatientCvCapture = forwardRef<PatientCvCaptureHandle, PatientCvCapt
     setError(null);
     setTrackingError(null);
     setSessionStarted(true);
-    setSaveStatus("idle");
-    hasSavedRef.current = false;
-    skipSaveOnExitRef.current = false;
-    clearSaveStatusTimer();
+    skipReportRef.current = false;
+    lastReportedRepRef.current = -1;
 
     try {
       await detector.start(video, canvas);
+      reportMetrics();
     } catch (err) {
       detector.stop();
       syncFromDetector(detector.getSnapshot());
@@ -381,7 +206,7 @@ export const PatientCvCapture = forwardRef<PatientCvCaptureHandle, PatientCvCapt
     } finally {
       startInProgressRef.current = false;
     }
-  }, [consented, loading, clearSaveStatusTimer, syncFromDetector]);
+  }, [consented, loading, syncFromDetector, reportMetrics]);
 
   const loadingLabel =
     initPhase === "import"
@@ -401,13 +226,11 @@ export const PatientCvCapture = forwardRef<PatientCvCaptureHandle, PatientCvCapt
     setSessionStarted(false);
     setError(null);
     setTrackingError(null);
-    setSaveStatus("idle");
-    hasSavedRef.current = false;
-    skipSaveOnExitRef.current = false;
-    clearSaveStatusTimer();
+    skipReportRef.current = false;
+    lastReportedRepRef.current = -1;
     stopInProgressRef.current = false;
     startInProgressRef.current = false;
-  }, [clearSaveStatusTimer, syncFromDetector]);
+  }, [syncFromDetector]);
 
   const trackingStatusLabel = (() => {
     if (loading && initPhase === "import") return copy.loadingPoseLibrary;
@@ -545,7 +368,7 @@ export const PatientCvCapture = forwardRef<PatientCvCaptureHandle, PatientCvCapt
       {previewActive && (
         <button
           type="button"
-          disabled={stopInProgressRef.current || saveInProgressRef.current}
+          disabled={stopInProgressRef.current}
           onClick={handleStopSession}
           className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-white text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40 disabled:opacity-50"
         >
@@ -598,20 +421,9 @@ export const PatientCvCapture = forwardRef<PatientCvCaptureHandle, PatientCvCapt
             {movementDetected ? copy.movementDetectedYes : copy.movementDetectedNo}
           </p>
 
-          {saveStatus === "saving" && (
-            <p className="text-[12px] text-[#6B7280]">{copy.savingMetrics}</p>
-          )}
-          {saveStatus === "saved" && (
-            <p className="text-[12px] font-semibold text-[#1D9E75]">{copy.savedTherapistReview}</p>
-          )}
-          {saveStatus === "error" && (
-            <p className="text-[12px] text-rose-700">{copy.saveError}</p>
-          )}
-
           <p className="text-[10px] leading-relaxed text-[#9CA3AF]">{copy.prototypeNotice}</p>
         </div>
       )}
     </div>
   );
-},
-);
+}
