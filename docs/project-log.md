@@ -1,5 +1,66 @@
 # Project log
 
+## 2026-05-30 — MQ-SIGNAL-1B session-level visibility summary merged to production
+
+### Summary
+
+PR #6 was merged into main and deployed to production. This release summarizes saved CV tracking visibility across the whole session instead of using only the last pose frame at save time.
+
+Previously, `trackingQuality` could show **Limited camera visibility** if the final frame was weak, even when most of the session had fair or good hip landmark visibility and reps were counted correctly.
+
+### Production status
+
+- Production URL: https://creative-motion-web.vercel.app
+- Merge commit: `5b9db24`
+- PR: #6 — CV: summarize tracking visibility by session
+- Deployment status: Ready
+- Production QA: Passed
+
+### What shipped
+
+- Session-level visibility summary helper (`session-visibility-summary.ts`)
+- Unit tests for median hip visibility and conservative downgrade gates
+- Sit-to-Stand detector accumulators for in-memory session visibility (not persisted)
+- Saved `trackingQuality` in `getDerivedMetrics()` uses session summary; live patient UI still uses last-frame value
+
+### Validated QA
+
+- Unit tests: `npx tsx --test app/lib/cv/session-visibility-summary.test.ts` — 10/10 pass
+- Build: `npm run build` — pass
+- Production `/clinician` loads
+- Movement tracking sessions display correctly on patient profile
+- MQ-SIGNAL-1A clinician copy unchanged (`poor` → **Limited camera visibility**)
+
+### Known note
+
+Existing CV rows saved before this deploy keep prior last-frame visibility semantics. **New saves** after production deploy use the session-level summary.
+
+### Safety boundaries
+
+- No rep counting changes
+- No readiness changes
+- No threshold changes (uses existing `visibilityGood` / `visibilityFair`)
+- No API changes
+- No schema changes
+- No diagnosis
+- No clinical scoring
+- No automatic treatment recommendation
+- No automatic progression
+- No patient-facing movement judgment
+- No video storage
+- No landmark persistence
+- No AI
+- No MQE
+- CV remains optional and experimental
+- Therapist review only
+
+### Next recommended step
+
+1. Post-deploy fresh Sit-to-Stand CV session on production to confirm saved visibility reflects session quality (not last frame).
+2. MQ-REP-1 audit only (per-rep capture FSM — no implementation yet).
+
+---
+
 ## 2026-05-29 — MQ-SIGNAL-1A tracking visibility copy merged to production
 
 ### Summary
