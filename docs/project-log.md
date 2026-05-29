@@ -1,5 +1,72 @@
 # Project log
 
+## 2026-05-30 — MQ-REP-1 SHADOW-0 shadow-only rep quality FSM merged to production
+
+### Summary
+
+PR #8 was merged into main and deployed to production. This release adds shadow-only RepQualityFSM infrastructure for Sit-to-Stand — in-memory per-rep capture flags for future internal comparison, without affecting production patient or clinician behavior.
+
+The FSM tracks start/peak/end timing, duration, hip-Y phases, and visibility min/avg, and outputs capture metadata flags only. It runs parallel to the legacy hip-Y rep counter and does not replace `repCount`.
+
+Shadow mode is **off by default** (`repQualityEnabled` and `repQualityShadowMode` unset in `PATIENT_STS_CONFIG`). Production behavior is unchanged until both flags are explicitly enabled in a non-patient config.
+
+### Production status
+
+- Production URL: https://creative-motion-web.vercel.app
+- Merge commit: `a6b9539`
+- Feature commit: `d7476be`
+- PR: #8 — CV: add shadow-only rep quality FSM
+- Deployment status: Ready
+- Production QA: Passed
+
+### What shipped
+
+- `RepQualityFsm` — per-rep capture FSM (in-memory only)
+- Optional detector config: `repQualityEnabled`, `repQualityShadowMode`, `minRepDurationMs`, `repTimeoutMs`
+- Shadow wiring in `sit-to-stand-detector.ts` after legacy `updateRepCountFromHipY()`
+- Dev/internal getter: `getRepQualitySession()` — not included in save payload
+- Unit tests: `rep-quality-fsm.test.ts` (7 cases)
+- Integration tests: `sit-to-stand-detector-shadow.test.ts` (10 cases)
+
+### Validated QA
+
+- Unit + integration tests: 17/17 pass
+  - `npx tsx --test app/lib/cv/rep-quality-fsm.test.ts`
+  - `npx tsx --test app/lib/cv/sit-to-stand-detector-shadow.test.ts`
+- Build: `npm run build` — pass
+- Production `/clinician` loads
+- Production patient session page loads
+
+### Safety boundaries
+
+- Shadow mode off by default in production patient config
+- No patient UI changes
+- No clinician production UI changes
+- No save payload changes
+- No rep flags persisted
+- No hipY, landmarks, or video persistence
+- No API changes
+- No schema changes
+- Legacy `repCount` unchanged
+- Readiness unchanged
+- TrackingQuality / session visibility summary unchanged
+- Capture flags only (`complete_rep`, `incomplete_stand`, `incomplete_return`, `too_fast`, `unclear_visibility`)
+- No diagnosis
+- No clinical scoring
+- No automatic treatment recommendation
+- No automatic progression
+- No patient-facing movement judgment
+- No AI
+- No MQE
+- CV remains optional and experimental
+- Therapist review only
+
+### Next recommended step
+
+Pilot readiness / clinician validation plan before persisting or displaying rep flags. Do not expose shadow capture metadata to patients or wire flags into save/API until validation is complete.
+
+---
+
 ## 2026-05-30 — MQ-SIGNAL-1B session-level visibility summary merged to production
 
 ### Summary
