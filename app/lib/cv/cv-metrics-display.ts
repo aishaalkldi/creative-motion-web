@@ -21,6 +21,10 @@ export const CV_CLINICIAN_DISCLAIMER =
 export const CV_REP_COUNT_FOOTER =
   "Rep count is an assistive movement metric and must be reviewed with the patient's clinical context.";
 
+/** Clinician helper — visibility label is not movement quality assessment. */
+export const CV_CAMERA_VISIBILITY_HELPER =
+  "Camera signal reflects landmark visibility only. It does not assess movement quality.";
+
 export function formatCvRecordedAt(iso: string): string {
   try {
     return new Intl.DateTimeFormat(undefined, {
@@ -45,7 +49,7 @@ export function formatCvTrackingSignal(quality: string | null): string {
   const normalized = quality.trim().toLowerCase();
   if (normalized === "good") return "Good signal";
   if (normalized === "fair") return "Fair signal";
-  if (normalized === "poor") return "Poor signal";
+  if (normalized === "poor") return "Limited camera visibility";
   if (normalized === "unknown") return "Unknown signal";
   return quality.charAt(0).toUpperCase() + quality.slice(1);
 }
@@ -56,7 +60,7 @@ export function formatCvTrackingQuality(quality: string | null): string {
   const normalized = quality.trim().toLowerCase();
   if (normalized === "good") return "Good";
   if (normalized === "fair") return "Fair";
-  if (normalized === "poor") return "Poor";
+  if (normalized === "poor") return "Limited visibility";
   if (normalized === "unknown") return "Unknown";
   return quality.charAt(0).toUpperCase() + quality.slice(1);
 }

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import {
+  CV_CAMERA_VISIBILITY_HELPER,
   CV_CLINICIAN_DISCLAIMER,
   CV_REP_COUNT_FOOTER,
   formatCvDuration,
@@ -255,6 +256,9 @@ function PatientProfileCvReview({
     >
       <h2 className="text-lg font-bold text-white">Movement tracking sessions</h2>
       <p className="mt-2 text-[11px] leading-relaxed text-[#9CA3AF]">{CV_CLINICIAN_DISCLAIMER}</p>
+      <p className="mt-1.5 text-[11px] leading-relaxed text-[#6B7280]">
+        {CV_CAMERA_VISIBILITY_HELPER}
+      </p>
 
       <PatientProfileSummaryCard metrics={metrics} />
 
