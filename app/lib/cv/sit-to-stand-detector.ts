@@ -6,10 +6,15 @@
 
 import {
   DEFAULT_STS_CONFIG,
-  type CvTrackingQuality,
   type SitToStandCvConfig,
   type SitToStandDerivedMetrics,
 } from "@/app/lib/cv/bio-0-contracts";
+import {
+  emptyVisibilityLabelCounts,
+  evaluateTrackingQualityFromHipVisSum,
+  summarizeSessionVisibility,
+  type VisibilityLabelCounts,
+} from "@/app/lib/cv/session-visibility-summary";
 
 export type SitToStandTrackingStatus = "idle" | "detecting" | "pose-found" | "pose-lost";
 export type SitToStandTrackingQuality = "good" | "fair" | "poor";
@@ -83,9 +88,7 @@ export function evaluateHipTrackingQuality(
   visibilityFair: number,
 ): SitToStandTrackingQuality {
   const hipVis = (landmarks[23]?.visibility ?? 0) + (landmarks[24]?.visibility ?? 0);
-  if (hipVis > visibilityGood) return "good";
-  if (hipVis > visibilityFair) return "fair";
-  return "poor";
+  return evaluateTrackingQualityFromHipVisSum(hipVis, visibilityGood, visibilityFair);
 }
 
 /** Classify a single pose frame for mobile readiness (not persisted). */
@@ -300,6 +303,9 @@ export class SitToStandDetector {
   private isBaselineCalibrating = false;
   private poseReadiness: PoseReadiness = "ready";
   private readinessCheckEndMs = 0;
+  /** MQ-SIGNAL-1B: in-memory session visibility (saved summary only; not persisted). */
+  private hipVisSamples: number[] = [];
+  private visibilityLabelCounts: VisibilityLabelCounts = emptyVisibilityLabelCounts();
 
   constructor(
     callbacks: SitToStandDetectorCallbacks,
@@ -518,7 +524,13 @@ export class SitToStandDetector {
   }
 
   getDerivedMetrics(): SitToStandDerivedMetrics {
-    const quality: CvTrackingQuality = this.trackingQuality ?? "unknown";
+    const quality = summarizeSessionVisibility({
+      hipVisSamples: this.hipVisSamples,
+      labelCounts: this.visibilityLabelCounts,
+      framesWithPose: this.framesWithPose,
+      visibilityGood: this.config.visibilityGood,
+      visibilityFair: this.config.visibilityFair,
+    });
     return {
       exerciseId: "sit-to-stand",
       repCount: this.repCount,
@@ -543,6 +555,22 @@ export class SitToStandDetector {
     this.standPhase = "down";
     this.lastRepAtMs = 0;
     this.emit();
+  }
+
+  private resetVisibilityAccumulators(): void {
+    this.hipVisSamples = [];
+    this.visibilityLabelCounts = emptyVisibilityLabelCounts();
+  }
+
+  private recordVisibilityFrame(landmarks: PoseLandmark[]): void {
+    const hipVisSum = (landmarks[23]?.visibility ?? 0) + (landmarks[24]?.visibility ?? 0);
+    const frameLabel = evaluateHipTrackingQuality(
+      landmarks,
+      this.config.visibilityGood,
+      this.config.visibilityFair,
+    );
+    this.hipVisSamples.push(hipVisSum);
+    this.visibilityLabelCounts[frameLabel] += 1;
   }
 
   private emit(): void {
@@ -611,6 +639,7 @@ export class SitToStandDetector {
     this.trackingStatus = "detecting";
     this.initPhase = "import";
     this.previewActive = false;
+    this.resetVisibilityAccumulators();
     this.resetBaselineState();
     this.emit();
 
@@ -733,6 +762,7 @@ export class SitToStandDetector {
               this.config.visibilityGood,
               this.config.visibilityFair,
             );
+            this.recordVisibilityFrame(landmarks);
 
             const hipY = computeHipMidY(landmarks);
             const torsoSpan = computeTorsoSpan(landmarks);
