@@ -14,10 +14,13 @@ import {
 export type SitToStandTrackingStatus = "idle" | "detecting" | "pose-found" | "pose-lost";
 export type SitToStandTrackingQuality = "good" | "fair" | "poor";
 export type SitToStandInitPhase = null | "import" | "model" | "camera";
+/** Patient portal pose readiness (CV Lab leaves this as ready). */
+export type PoseReadiness = "checking" | "ready" | "partial" | "not_ready";
 
 export type SitToStandDetectorSnapshot = {
   trackingStatus: SitToStandTrackingStatus;
   trackingQuality: SitToStandTrackingQuality | null;
+  poseReadiness: PoseReadiness;
   repCount: number;
   sessionSeconds: number;
   movementDetected: boolean;
@@ -39,6 +42,71 @@ type PoseLandmarkerInstance = {
 };
 
 type StandPhase = "up" | "down";
+
+type PoseLandmark = { x: number; y: number; visibility?: number };
+
+/** Shoulder–hip span in normalized frame coords (adapts to camera distance). */
+export function computeTorsoSpan(landmarks: PoseLandmark[]): number | null {
+  const ls = landmarks[11];
+  const rs = landmarks[12];
+  const lh = landmarks[23];
+  const rh = landmarks[24];
+  if (!ls || !rs || !lh || !rh) return null;
+
+  const shoulderVis = (ls.visibility ?? 0) + (rs.visibility ?? 0);
+  const hipVis = (lh.visibility ?? 0) + (rh.visibility ?? 0);
+  if (shoulderVis < 0.6 || hipVis < 0.6) return null;
+
+  const shoulderY = (ls.y + rs.y) / 2;
+  const hipY = (lh.y + rh.y) / 2;
+  const span = Math.abs(hipY - shoulderY);
+  if (span < 0.08 || span > 0.9) return null;
+  return span;
+}
+
+export function computeHipMidY(landmarks: PoseLandmark[]): number {
+  return ((landmarks[23]?.y ?? 0) + (landmarks[24]?.y ?? 0)) / 2;
+}
+
+export function hipsMeetMinVisibility(
+  landmarks: PoseLandmark[],
+  minPerHip: number,
+): boolean {
+  const left = landmarks[23]?.visibility ?? 0;
+  const right = landmarks[24]?.visibility ?? 0;
+  return left >= minPerHip && right >= minPerHip;
+}
+
+export function evaluateHipTrackingQuality(
+  landmarks: PoseLandmark[],
+  visibilityGood: number,
+  visibilityFair: number,
+): SitToStandTrackingQuality {
+  const hipVis = (landmarks[23]?.visibility ?? 0) + (landmarks[24]?.visibility ?? 0);
+  if (hipVis > visibilityGood) return "good";
+  if (hipVis > visibilityFair) return "fair";
+  return "poor";
+}
+
+/** Classify a single pose frame for mobile readiness (not persisted). */
+export function evaluatePoseFrameReadiness(
+  landmarks: PoseLandmark[],
+  trackingQuality: SitToStandTrackingQuality,
+  config: SitToStandCvConfig,
+): Exclude<PoseReadiness, "checking"> {
+  const minHip = config.minHipVisibility ?? 0.35;
+  if (!hipsMeetMinVisibility(landmarks, minHip) || trackingQuality === "poor") {
+    return "not_ready";
+  }
+
+  const torsoSpan = computeTorsoSpan(landmarks);
+  if (torsoSpan === null) {
+    return "partial";
+  }
+
+  if (trackingQuality === "good") return "ready";
+  return "partial";
+}
 
 export function formatSitToStandDuration(seconds: number): string {
   const mm = Math.floor(seconds / 60);
@@ -179,6 +247,7 @@ function median(values: number[]): number | null {
 const IDLE_SNAPSHOT: SitToStandDetectorSnapshot = {
   trackingStatus: "idle",
   trackingQuality: null,
+  poseReadiness: "ready",
   repCount: 0,
   sessionSeconds: 0,
   movementDetected: false,
@@ -189,6 +258,12 @@ const IDLE_SNAPSHOT: SitToStandDetectorSnapshot = {
   trackingError: null,
   isBaselineCalibrating: false,
 };
+
+const READINESS_COLORS = {
+  readyGood: "#1D9E75",
+  readyPartial: "#F59E0B",
+  notReady: "#9CA3AF",
+} as const;
 
 /**
  * Manages MediaPipe pose detection, rep counting, timer, and canvas overlay for Sit-to-Stand.
@@ -223,6 +298,8 @@ export class SitToStandDetector {
   private trackingStartedAtMs = 0;
   private lastRepAtMs = 0;
   private isBaselineCalibrating = false;
+  private poseReadiness: PoseReadiness = "ready";
+  private readinessCheckEndMs = 0;
 
   constructor(
     callbacks: SitToStandDetectorCallbacks,
@@ -236,6 +313,7 @@ export class SitToStandDetector {
     return {
       trackingStatus: this.trackingStatus,
       trackingQuality: this.trackingQuality,
+      poseReadiness: this.poseReadiness,
       repCount: this.repCount,
       sessionSeconds: this.sessionSeconds,
       movementDetected: this.movementDetected,
@@ -252,6 +330,10 @@ export class SitToStandDetector {
     return this.config.repCountingMode === "baseline";
   }
 
+  private usesReadiness(): boolean {
+    return Boolean(this.config.readinessEnabled);
+  }
+
   private resetBaselineState(): void {
     this.baselineSamples = [];
     this.baselineHipY = null;
@@ -259,11 +341,113 @@ export class SitToStandDetector {
     this.trackingStartedAtMs = 0;
     this.lastRepAtMs = 0;
     this.isBaselineCalibrating = false;
+    this.readinessCheckEndMs = 0;
+    this.poseReadiness = this.usesReadiness() ? "checking" : "ready";
+  }
+
+  private canCollectBaseline(): boolean {
+    if (!this.usesBaselineRepCounting() || this.baselineHipY !== null) return false;
+    if (!this.usesReadiness()) return true;
+    return (
+      (this.poseReadiness === "ready" || this.poseReadiness === "partial") &&
+      this.baselineWindowEndMs > 0
+    );
+  }
+
+  private canIncrementReps(): boolean {
+    if (!this.usesReadiness()) return true;
+    if (this.poseReadiness === "checking" || this.poseReadiness === "not_ready") {
+      return false;
+    }
+    if (this.usesBaselineRepCounting() && this.baselineHipY === null) return false;
+    return true;
+  }
+
+  private maybeStartBaselineWindow(nowMs: number): void {
+    if (
+      !this.usesBaselineRepCounting() ||
+      this.baselineHipY !== null ||
+      this.baselineWindowEndMs > 0
+    ) {
+      return;
+    }
+    if (this.poseReadiness !== "ready" && this.poseReadiness !== "partial") return;
+
+    const durationMs = this.config.baselineDurationMs ?? 3_000;
+    this.baselineWindowEndMs = nowMs + durationMs;
+    this.isBaselineCalibrating = true;
+  }
+
+  private updatePoseReadiness(nowMs: number, landmarks: PoseLandmark[]): void {
+    if (!this.usesReadiness()) {
+      this.poseReadiness = "ready";
+      return;
+    }
+
+    if (nowMs < this.readinessCheckEndMs) {
+      this.poseReadiness = "checking";
+      return;
+    }
+
+    const quality = this.trackingQuality ?? "poor";
+    const wasCountingReady =
+      this.poseReadiness === "ready" || this.poseReadiness === "partial";
+    this.poseReadiness = evaluatePoseFrameReadiness(landmarks, quality, this.config);
+
+    if (!wasCountingReady && (this.poseReadiness === "ready" || this.poseReadiness === "partial")) {
+      this.maybeStartBaselineWindow(nowMs);
+    }
+  }
+
+  private readinessOverlayColor(): string {
+    if (this.poseReadiness === "checking" || this.poseReadiness === "not_ready") {
+      return READINESS_COLORS.notReady;
+    }
+    if (this.poseReadiness === "partial") return READINESS_COLORS.readyPartial;
+    return READINESS_COLORS.readyGood;
+  }
+
+  private drawReadinessSkeleton(
+    ctx: CanvasRenderingContext2D,
+    landmarks: PoseLandmark[],
+    width: number,
+    height: number,
+  ): void {
+    const ls = landmarks[11];
+    const rs = landmarks[12];
+    const lh = landmarks[23];
+    const rh = landmarks[24];
+    if (!ls || !rs || !lh || !rh) return;
+
+    const color = this.readinessOverlayColor();
+    const shoulderX = ((ls.x + rs.x) / 2) * width;
+    const shoulderY = ((ls.y + rs.y) / 2) * height;
+    const hipX = ((lh.x + rh.x) / 2) * width;
+    const hipY = ((lh.y + rh.y) / 2) * height;
+
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(shoulderX, shoulderY);
+    ctx.lineTo(hipX, hipY);
+    ctx.stroke();
+
+    const dot = (x: number, y: number) => {
+      ctx.beginPath();
+      ctx.arc(x, y, 6, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.fill();
+    };
+
+    dot(ls.x * width, ls.y * height);
+    dot(rs.x * width, rs.y * height);
+    dot(lh.x * width, lh.y * height);
+    dot(rh.x * width, rh.y * height);
   }
 
   private maybeFinalizeBaseline(nowMs: number): void {
     if (!this.usesBaselineRepCounting() || this.baselineHipY !== null) return;
-    if (nowMs < this.baselineWindowEndMs) return;
+    if (this.baselineWindowEndMs <= 0 || nowMs < this.baselineWindowEndMs) return;
 
     const medianY = median(this.baselineSamples);
     this.baselineHipY =
@@ -271,16 +455,42 @@ export class SitToStandDetector {
     this.isBaselineCalibrating = false;
   }
 
-  private updateRepCountFromHipY(hipY: number, nowMs: number): void {
+  private resolveBaselineDeltas(torsoSpan: number | null): { standDelta: number; resetDelta: number } {
+    const fixedStand = this.config.baselineStandDelta ?? 0.09;
+    const fixedReset = this.config.baselineResetDelta ?? 0.04;
+
+    if (!this.config.baselineScaleByTorso || torsoSpan === null) {
+      return { standDelta: fixedStand, resetDelta: fixedReset };
+    }
+
+    const ratioStand = this.config.baselineStandDeltaRatio ?? 0.18;
+    const ratioReset = this.config.baselineResetDeltaRatio ?? 0.08;
+    const minStand = this.config.baselineStandDeltaMin ?? 0.035;
+    const minReset = this.config.baselineResetDeltaMin ?? 0.02;
+    const scaledStand = ratioStand * torsoSpan;
+    const scaledReset = ratioReset * torsoSpan;
+
+    // Cap at fixed deltas: full-body framing has larger span but smaller absolute hip rise.
+    // Without cap, ratio×span can exceed fixedStand and make far framing stricter than close.
+    return {
+      standDelta: Math.max(minStand, Math.min(fixedStand, scaledStand)),
+      resetDelta: Math.max(minReset, Math.min(fixedReset, scaledReset)),
+    };
+  }
+
+  private updateRepCountFromHipY(hipY: number, nowMs: number, torsoSpan: number | null): void {
     if (this.usesBaselineRepCounting()) {
       this.maybeFinalizeBaseline(nowMs);
       if (this.baselineHipY === null) {
-        this.baselineSamples.push(hipY);
+        if (this.canCollectBaseline()) {
+          this.baselineSamples.push(hipY);
+        }
         return;
       }
 
-      const standDelta = this.config.baselineStandDelta ?? 0.09;
-      const resetDelta = this.config.baselineResetDelta ?? 0.04;
+      if (!this.canIncrementReps()) return;
+
+      const { standDelta, resetDelta } = this.resolveBaselineDeltas(torsoSpan);
       const minMs = this.config.minMsBetweenReps ?? 900;
       const standThreshold = this.baselineHipY - standDelta;
       const seatedThreshold = this.baselineHipY - resetDelta;
@@ -434,7 +644,16 @@ export class SitToStandDetector {
       this.initPhase = "camera";
       this.emit();
 
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: this.usesReadiness()
+          ? {
+              facingMode: { ideal: "user" },
+              width: { ideal: this.config.canvasWidth },
+              height: { ideal: this.config.canvasHeight },
+            }
+          : true,
+        audio: false,
+      });
       if (!isCurrent()) {
         stream.getTracks().forEach((track) => track.stop());
         return;
@@ -457,7 +676,11 @@ export class SitToStandDetector {
       this.previewActive = true;
       this.initPhase = null;
       this.trackingStartedAtMs = performance.now();
-      if (this.usesBaselineRepCounting()) {
+      if (this.usesReadiness()) {
+        const checkMs = this.config.readinessCheckMs ?? 2_000;
+        this.readinessCheckEndMs = this.trackingStartedAtMs + checkMs;
+        this.poseReadiness = "checking";
+      } else if (this.usesBaselineRepCounting()) {
         const durationMs = this.config.baselineDurationMs ?? 2_000;
         this.baselineWindowEndMs = this.trackingStartedAtMs + durationMs;
         this.isBaselineCalibrating = true;
@@ -505,31 +728,36 @@ export class SitToStandDetector {
             this.movementDetected = true;
 
             const landmarks = result.landmarks[0];
-            const hipVis =
-              (landmarks[23]?.visibility ?? 0) + (landmarks[24]?.visibility ?? 0);
-            const quality: SitToStandTrackingQuality =
-              hipVis > this.config.visibilityGood
-                ? "good"
-                : hipVis > this.config.visibilityFair
-                  ? "fair"
-                  : "poor";
-            this.trackingQuality = quality;
+            this.trackingQuality = evaluateHipTrackingQuality(
+              landmarks,
+              this.config.visibilityGood,
+              this.config.visibilityFair,
+            );
 
-            const hipY = ((landmarks[23]?.y ?? 0) + (landmarks[24]?.y ?? 0)) / 2;
+            const hipY = computeHipMidY(landmarks);
+            const torsoSpan = computeTorsoSpan(landmarks);
             const nowMs = performance.now();
-            this.updateRepCountFromHipY(hipY, nowMs);
+            this.updatePoseReadiness(nowMs, landmarks);
+            this.updateRepCountFromHipY(hipY, nowMs, torsoSpan);
 
-            for (const idx of this.config.lowerBodyLandmarkIndices) {
-              const lm = landmarks[idx];
-              if (!lm) continue;
-              ctx.beginPath();
-              ctx.arc(lm.x * canvasWidth, lm.y * canvasHeight, 4, 0, 2 * Math.PI);
-              ctx.fillStyle = this.config.landmarkDotColor;
-              ctx.fill();
+            if (this.config.readinessEnabled) {
+              this.drawReadinessSkeleton(ctx, landmarks, canvasWidth, canvasHeight);
+            } else {
+              for (const idx of this.config.lowerBodyLandmarkIndices) {
+                const lm = landmarks[idx];
+                if (!lm) continue;
+                ctx.beginPath();
+                ctx.arc(lm.x * canvasWidth, lm.y * canvasHeight, 4, 0, 2 * Math.PI);
+                ctx.fillStyle = this.config.landmarkDotColor;
+                ctx.fill();
+              }
             }
           } else if (this.trackingStatus !== "pose-lost") {
             this.trackingStatus = "pose-lost";
             this.trackingQuality = null;
+            if (this.usesReadiness()) {
+              this.poseReadiness = "not_ready";
+            }
           }
         } catch {
           consecutiveDetectErrors += 1;

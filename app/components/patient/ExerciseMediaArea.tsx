@@ -1,5 +1,6 @@
 "use client";
 
+import type { SitToStandDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import { PatientCvCapture } from "@/app/components/patient/cv/PatientCvCapture";
 import { isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
@@ -16,8 +17,9 @@ export type ExerciseMediaAreaProps = {
   textDir?: "rtl" | "ltr";
   /** W-0 exercise card step — CV capture only when "active". */
   exerciseStep?: "preview" | "active" | "done";
-  patientToken?: string;
-  planSessionId?: string;
+  onCvMetricsUpdate?: (metrics: SitToStandDerivedMetrics) => void;
+  onCvSkipped?: () => void;
+  onRegisterCvMetricsFlush?: (flush: () => void) => void;
 };
 
 type VisualRegion =
@@ -392,18 +394,15 @@ export function ExerciseMediaArea({
   arClass = "",
   textDir = "ltr",
   exerciseStep,
-  patientToken,
-  planSessionId,
+  onCvMetricsUpdate,
+  onCvSkipped,
+  onRegisterCvMetricsFlush,
 }: ExerciseMediaAreaProps) {
   const ui = exerciseMediaUi(language);
   const resolvedMedia = mediaUrl?.trim() || null;
   const poster = thumbnailUrl?.trim() || undefined;
 
-  const showPatientCv =
-    exerciseStep === "active" &&
-    isCvEnabledExercise(exerciseId) &&
-    Boolean(patientToken?.trim()) &&
-    Boolean(planSessionId?.trim());
+  const showPatientCv = exerciseStep === "active" && isCvEnabledExercise(exerciseId);
 
   return (
     <div
@@ -412,11 +411,12 @@ export function ExerciseMediaArea({
     >
       {showPatientCv && (
         <PatientCvCapture
-          token={patientToken!.trim()}
-          sessionId={planSessionId!.trim()}
           language={language}
           arClass={arClass}
           textDir={textDir}
+          onMetricsUpdate={onCvMetricsUpdate}
+          onSkipped={onCvSkipped}
+          onRegisterMetricsFlush={onRegisterCvMetricsFlush}
         />
       )}
 

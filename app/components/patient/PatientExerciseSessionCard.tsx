@@ -1,5 +1,6 @@
 "use client";
 
+import type { SitToStandDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import type { ResolvedExerciseView } from "@/app/lib/exercise-resolve";
 import { getLibraryExerciseById } from "@/app/lib/exercise-library-v1";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
@@ -25,9 +26,10 @@ type PatientExerciseSessionCardProps = {
   setsCompleted: number;
   onStartExercise: () => void;
   onCompleteSet: () => void;
-  onCompleteExercise: () => void;
-  patientToken?: string;
-  planSessionId?: string;
+  onCompleteExercise: () => void | Promise<void>;
+  onCvMetricsUpdate?: (metrics: SitToStandDerivedMetrics) => void;
+  onCvSkipped?: () => void;
+  onRegisterCvMetricsFlush?: (flush: () => void) => void;
 };
 
 function DoseTile({
@@ -71,8 +73,9 @@ export function PatientExerciseSessionCard({
   onStartExercise,
   onCompleteSet,
   onCompleteExercise,
-  patientToken,
-  planSessionId,
+  onCvMetricsUpdate,
+  onCvSkipped,
+  onRegisterCvMetricsFlush,
 }: PatientExerciseSessionCardProps) {
   const flowUi = sessionExerciseFlowUi(lang);
   const cardUi = sessionExerciseUi(lang);
@@ -120,8 +123,9 @@ export function PatientExerciseSessionCard({
           arClass={arClass}
           textDir={textDir}
           exerciseStep={step}
-          patientToken={patientToken}
-          planSessionId={planSessionId}
+          onCvMetricsUpdate={onCvMetricsUpdate}
+          onCvSkipped={onCvSkipped}
+          onRegisterCvMetricsFlush={onRegisterCvMetricsFlush}
         />
 
         <div className="space-y-4 p-5">
@@ -244,7 +248,7 @@ export function PatientExerciseSessionCard({
             )}
             <button
               type="button"
-              onClick={onCompleteExercise}
+              onClick={() => void onCompleteExercise()}
               disabled={!allSetsDone}
               className="flex min-h-[48px] flex-1 items-center justify-center rounded-[7px] bg-[#1D9E75] text-[15px] font-bold text-white transition hover:bg-[#179165] disabled:cursor-not-allowed disabled:opacity-40"
             >

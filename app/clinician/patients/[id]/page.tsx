@@ -67,6 +67,8 @@ import { SessionScheduleView } from "../../../components/SessionScheduleView";
 import { ClinicalActionCard } from "../../../components/clinician/ClinicalActionCard";
 import { PatientJourneyTimeline } from "../../../components/clinician/PatientJourneyTimeline";
 import { CvPatientCvMetricsSection } from "../../../components/clinician/cv/CvPatientCvMetricsSection";
+import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
+import { indexCvMetricsByPlanSessionId } from "@/app/lib/cv/clinician-session-camera-status";
 import { PatientAdherenceSummary } from "../../../components/clinician/PatientAdherenceSummary";
 import {
   formatLastSessionCompletedLine,
@@ -1921,6 +1923,31 @@ function TreatmentPlanSection({
   loading,
 }: TreatmentPlanSectionProps) {
   const structuredPlanHref = `/clinician/plans/new?patientId=${encodeURIComponent(patientId)}`;
+  const [cvMetrics, setCvMetrics] = useState<CvSessionMetricPublic[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/cv/session-metrics?patientId=${encodeURIComponent(patientId)}&limit=50`,
+        );
+        if (!res.ok || cancelled) return;
+        const data = (await res.json()) as { metrics?: CvSessionMetricPublic[] };
+        if (!cancelled) setCvMetrics(data.metrics ?? []);
+      } catch {
+        if (!cancelled) setCvMetrics([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [patientId]);
+
+  const cvMetricsByPlanSessionId = useMemo(
+    () => indexCvMetricsByPlanSessionId(cvMetrics),
+    [cvMetrics],
+  );
 
   if (loading) {
     return (
@@ -1994,7 +2021,12 @@ function TreatmentPlanSection({
               sessionsPerWeek={plan.sessionsPerWeek}
               variant="clinician"
               getDisplayStatus={clinicianSessionDisplayStatus}
+              cvMetricsByPlanSessionId={cvMetricsByPlanSessionId}
             />
+            <p className="mt-3 text-[10px] leading-relaxed text-white/30">
+              Camera status uses saved assistive metrics per session. Therapist review only · not
+              clinically validated · reps are assistive only.
+            </p>
           </div>
         </div>
       )}

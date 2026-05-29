@@ -19,9 +19,12 @@ import {
   PatientSessionProgressStrip,
   type ExerciseCardStep,
 } from "@/app/components/patient/PatientExerciseSessionCard";
+import { useCvSessionCapture } from "@/app/hooks/useCvSessionCapture";
 import {
   planHomeUi,
   resolveSessionFocusPurpose,
+  cvSessionCapturePatientMessage,
+  cvSessionCaptureSavingMessage,
   sessionExerciseFlowUi,
   sessionExerciseUi,
   sessionFocusUi,
@@ -96,6 +99,30 @@ export default function SessionPlayerPage() {
     exercisesCompleted: number;
   } | null>(null);
 
+  const [cvSaveNotice, setCvSaveNotice] = useState<string | null>(null);
+
+  const {
+    isCvEligible,
+    onMetricsUpdate,
+    markSkipped,
+    registerMetricsFlush,
+    saveCvMetrics,
+    resetCapture,
+  } = useCvSessionCapture({
+    token,
+    planSessionId: sessionId,
+    exerciseId: session?.exercises[exerciseIndex]
+      ? resolveExerciseView(session.exercises[exerciseIndex], {
+          language: patientLanguage,
+        }).exerciseId
+      : undefined,
+  });
+
+  useEffect(() => {
+    resetCapture();
+    setCvSaveNotice(null);
+  }, [exerciseIndex, resetCapture]);
+
   useEffect(() => {
     setPhase("precheck");
     setExerciseStep("preview");
@@ -111,7 +138,9 @@ export default function SessionPlayerPage() {
     setCompletionSummary(null);
     setCompleteError("");
     setCompleting(false);
-  }, [token, sessionId]);
+    setCvSaveNotice(null);
+    resetCapture();
+  }, [token, sessionId, resetCapture]);
 
   useEffect(() => {
     if (!token || isPlanLoading) return;
@@ -186,6 +215,7 @@ export default function SessionPlayerPage() {
   }
 
   function handleStartExercise() {
+    setCvSaveNotice(null);
     setExerciseStep("active");
     setSetsCompleted(0);
   }
@@ -197,11 +227,19 @@ export default function SessionPlayerPage() {
     }
   }
 
-  function handleCompleteExercise() {
+  async function handleCompleteExercise() {
+    if (isCvEligible) {
+      setCvSaveNotice(cvSessionCaptureSavingMessage(patientLanguage));
+      const result = await saveCvMetrics();
+      setCvSaveNotice(cvSessionCapturePatientMessage(patientLanguage, result));
+    } else {
+      setCvSaveNotice(null);
+    }
     setExerciseStep("done");
   }
 
   function handleNextExercise() {
+    setCvSaveNotice(null);
     if (!isLast) {
       setExerciseIndex((i) => i + 1);
       setExerciseStep("preview");
@@ -709,9 +747,19 @@ export default function SessionPlayerPage() {
         onStartExercise={handleStartExercise}
         onCompleteSet={handleCompleteSet}
         onCompleteExercise={handleCompleteExercise}
-        patientToken={token}
-        planSessionId={sessionId}
+        onCvMetricsUpdate={onMetricsUpdate}
+        onCvSkipped={markSkipped}
+        onRegisterCvMetricsFlush={registerMetricsFlush}
       />
+
+      {exerciseStep === "done" && cvSaveNotice && (
+        <p
+          className={`rounded-[8px] border border-[#D1E7DE] bg-[#F0FAF6] px-4 py-3 text-center text-[13px] leading-relaxed text-[#374151] ${arClass}`}
+          role="status"
+        >
+          {cvSaveNotice}
+        </p>
+      )}
 
       {exerciseStep === "done" && (
         <button

@@ -12,6 +12,8 @@ import {
   localizeScheduleLabel,
   planHomeUi,
 } from "@/app/lib/patient-portal-ui";
+import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
+import { deriveClinicianSessionCameraLine } from "@/app/lib/cv/clinician-session-camera-status";
 
 type Props = {
   sessions: SchedulableSession[];
@@ -26,6 +28,8 @@ type Props = {
     sessions: SchedulableSession[],
     session: SchedulableSession,
   ) => "done" | "today" | "upcoming" | "completed" | "ready" | "in-progress";
+  /** Clinician profile: CV rows keyed by plan_session_id for camera status lines */
+  cvMetricsByPlanSessionId?: Map<string, CvSessionMetricPublic>;
 };
 
 function formatClinicianExerciseSummary(exercises: SchedulableSession["exercises"]): string {
@@ -80,6 +84,7 @@ export function SessionScheduleView({
   variant = "patient",
   language = "en",
   getDisplayStatus,
+  cvMetricsByPlanSessionId,
 }: Props) {
   const weeks = groupSessionsBySchedule(sessions, sessionsPerWeek);
   const resolveStatus = getDisplayStatus ?? defaultPatientStatus;
@@ -136,6 +141,15 @@ export function SessionScheduleView({
                           : `Session ${session.sessionNumber} — ${session.title}`;
                     const exerciseCount = session.exercises?.length ?? 0;
                     const estimatedMinutes = Math.max(10, (session.exercises?.length ?? 3) * 4);
+                    const cameraLine =
+                      variant === "clinician" && cvMetricsByPlanSessionId
+                        ? deriveClinicianSessionCameraLine({
+                            planSessionId: session.id,
+                            sessionStatus: session.status,
+                            exercises: session.exercises,
+                            cvMetric: cvMetricsByPlanSessionId.get(session.id),
+                          })
+                        : null;
                     const row = (
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
@@ -145,6 +159,11 @@ export function SessionScheduleView({
                               {variant === "patient"
                                 ? homeUi.exercisesMinutes(exerciseCount, estimatedMinutes)
                                 : formatClinicianExerciseSummary(session.exercises)}
+                            </p>
+                          )}
+                          {cameraLine && (
+                            <p className="mt-1.5 text-[11px] font-medium text-[#5DCAA5]/90">
+                              {cameraLine}
                             </p>
                           )}
                         </div>
