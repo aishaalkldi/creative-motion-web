@@ -1,5 +1,55 @@
 # Project log
 
+## 2026-05-29 — MQ-SIGNAL-1A tracking visibility copy merged to production
+
+### Summary
+
+PR #4 was merged into main and deployed to production. This release clarifies tracking visibility wording for clinicians and patients without changing CV counting, thresholds, or stored metrics.
+
+### Production status
+
+- Production URL: https://creative-motion-web.vercel.app
+- Merge commit: `ec7615a`
+- PR: #4 — CV: clarify tracking visibility labels
+- Deployment status: Ready
+- Production QA: Passed
+
+### What shipped
+
+- Clinician label: **Poor signal** → **Limited camera visibility**
+- Plan session row: **signal: poor** → **visibility: limited**
+- Clinician helper: camera signal reflects landmark visibility only; it does not assess movement quality
+- Patient EN/AR setup guidance (hips, upper body, chair visible; start after camera shows ready)
+
+### Validated QA
+
+- Production clinician Movement tracking shows **Limited camera visibility**
+- Plan rows show **visibility: limited**
+- Helper copy visible under Movement tracking sessions
+- Patient setup strings deployed (EN/AR)
+- Copy/UI only — no detector, API, or schema changes
+
+### Safety boundaries
+
+- No diagnosis
+- No clinical scoring
+- No automatic treatment recommendation
+- No automatic progression
+- No patient-facing movement judgment
+- No video storage
+- No schema changes
+- No new API routes
+- No AI
+- No MQE
+- CV remains optional and experimental
+- Therapist review only
+
+### Next recommended step
+
+MQ-SIGNAL-1B: session-level visibility summary (not biomechanics yet).
+
+---
+
 ## 2026-05-29 — MQ-READY-0 CV readiness merged to production
 
 ### Summary
