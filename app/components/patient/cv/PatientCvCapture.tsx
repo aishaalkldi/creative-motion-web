@@ -310,6 +310,7 @@ export function PatientCvCapture({
     >
       <p className="text-[11px] text-[#6B7280]">{copy.moveComfortably}</p>
       <p className="mt-2 text-[12px] leading-relaxed text-[#374151]">{copy.framingInstruction}</p>
+      <p className="mt-1 text-[12px] leading-relaxed text-[#374151]">{copy.startWhenReadyHint}</p>
       <p className="mt-1 text-[12px] leading-relaxed text-[#374151]">{copy.movementInstruction}</p>
       <p className="mt-1 text-[11px] text-[#6B7280]">{copy.hipLandmarksHint}</p>
 

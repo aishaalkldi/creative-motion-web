@@ -33,9 +33,11 @@ export function indexCvMetricsByPlanSessionId(
   return map;
 }
 
-function formatTrackingSignalShort(quality: string | null): string {
+function formatCameraVisibilityShort(quality: string | null): string {
   const q = (quality ?? "unknown").trim().toLowerCase();
-  if (q === "good" || q === "fair" || q === "poor") return q;
+  if (q === "good") return "good";
+  if (q === "fair") return "fair";
+  if (q === "poor") return "limited";
   return "unknown";
 }
 
@@ -60,8 +62,8 @@ export function deriveClinicianSessionCameraLine(input: {
 
   if (input.cvMetric) {
     const reps = input.cvMetric.repCount ?? 0;
-    const signal = formatTrackingSignalShort(input.cvMetric.trackingQuality);
-    return `Camera used · reps: ${reps} · signal: ${signal}`;
+    const visibility = formatCameraVisibilityShort(input.cvMetric.trackingQuality);
+    return `Camera used · reps: ${reps} · visibility: ${visibility}`;
   }
 
   return "Manual completion · camera not saved";

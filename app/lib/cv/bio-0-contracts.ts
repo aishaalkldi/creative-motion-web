@@ -133,6 +133,7 @@ export type PatientCvCopy = {
   trackingStatusDetecting: string;
   startSeatedHint: string;
   framingInstruction: string;
+  startWhenReadyHint: string;
   movementInstruction: string;
   checkingCameraPosition: string;
   cameraReadyLabel: string;
@@ -192,7 +193,8 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     trackingStatusDetecting: "Detecting movement…",
     startSeatedHint: "Start seated, then stand when ready.",
     framingInstruction:
-      "Prop your phone so your upper body and chair are visible in the frame.",
+      "Place your phone so your hips, upper body, and chair are visible.",
+    startWhenReadyHint: "Start after the camera shows ready.",
     movementInstruction: "Sit, stand fully, then sit again slowly.",
     checkingCameraPosition: "Checking camera position…",
     cameraReadyLabel: "Camera ready ✓",
@@ -250,7 +252,8 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     trackingStatusReady: "جاهز",
     trackingStatusDetecting: "جاري اكتشاف الحركة…",
     startSeatedHint: "ابدأ جالساً، ثم قف عندما تكون مستعداً.",
-    framingInstruction: "ثبّت هاتفك بحيث يظهر الجزء العلوي من جسمك والكرسي في الإطار.",
+    framingInstruction: "ضع هاتفك بحيث تظهر الوركان والجزء العلوي من جسمك والكرسي.",
+    startWhenReadyHint: "ابدأ بعد أن تظهر الكاميرا أنها جاهزة.",
     movementInstruction: "اجلس، قف بالكامل، ثم اجلس مرة أخرى ببطء.",
     checkingCameraPosition: "جاري فحص موضع الكاميرا…",
     cameraReadyLabel: "الكاميرا جاهزة ✓",
