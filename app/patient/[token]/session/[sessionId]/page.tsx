@@ -103,6 +103,7 @@ export default function SessionPlayerPage() {
 
   const {
     isCvEligible,
+    cvSaveDebug,
     onMetricsUpdate,
     markSkipped,
     registerMetricsFlush,
@@ -750,6 +751,7 @@ export default function SessionPlayerPage() {
         onCvMetricsUpdate={onMetricsUpdate}
         onCvSkipped={markSkipped}
         onRegisterCvMetricsFlush={registerMetricsFlush}
+        cvSaveDebug={cvSaveDebug}
       />
 
       {exerciseStep === "done" && cvSaveNotice && (

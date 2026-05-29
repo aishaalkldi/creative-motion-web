@@ -1,6 +1,7 @@
 "use client";
 
 import type { SitToStandDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
+import type { CvSaveDebugState } from "@/app/lib/cv/cv-qa-debug";
 import type { ResolvedExerciseView } from "@/app/lib/exercise-resolve";
 import { getLibraryExerciseById } from "@/app/lib/exercise-library-v1";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
@@ -30,6 +31,7 @@ type PatientExerciseSessionCardProps = {
   onCvMetricsUpdate?: (metrics: SitToStandDerivedMetrics) => void;
   onCvSkipped?: () => void;
   onRegisterCvMetricsFlush?: (flush: () => void) => void;
+  cvSaveDebug?: CvSaveDebugState | null;
 };
 
 function DoseTile({
@@ -76,6 +78,7 @@ export function PatientExerciseSessionCard({
   onCvMetricsUpdate,
   onCvSkipped,
   onRegisterCvMetricsFlush,
+  cvSaveDebug = null,
 }: PatientExerciseSessionCardProps) {
   const flowUi = sessionExerciseFlowUi(lang);
   const cardUi = sessionExerciseUi(lang);
@@ -126,6 +129,7 @@ export function PatientExerciseSessionCard({
           onCvMetricsUpdate={onCvMetricsUpdate}
           onCvSkipped={onCvSkipped}
           onRegisterCvMetricsFlush={onRegisterCvMetricsFlush}
+          cvSaveDebug={cvSaveDebug}
         />
 
         <div className="space-y-4 p-5">

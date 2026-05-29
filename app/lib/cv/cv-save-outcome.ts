@@ -2,6 +2,8 @@
  * Patient CV save-before-complete outcomes (no clinical interpretation).
  */
 
+import { isCvQaDebugEnabled } from "@/app/lib/cv/cv-qa-debug";
+
 export type CvSaveOutcome =
   | "saved"
   | "not_active"
@@ -23,17 +25,7 @@ export type CvSaveDebugSnapshot = {
 };
 
 export function shouldLogCvSaveDebug(): boolean {
-  if (typeof process !== "undefined" && process.env.NODE_ENV === "development") {
-    return true;
-  }
-  if (typeof window === "undefined") return false;
-  const host = window.location.hostname;
-  return (
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    host.includes("-git-") ||
-    host.includes("vercel.app")
-  );
+  return isCvQaDebugEnabled();
 }
 
 export function logCvSaveAttempt(snapshot: CvSaveDebugSnapshot): void {

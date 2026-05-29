@@ -1,8 +1,10 @@
 "use client";
 
 import type { SitToStandDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
+import type { CvSaveDebugState } from "@/app/lib/cv/cv-qa-debug";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import { PatientCvCapture } from "@/app/components/patient/cv/PatientCvCapture";
+import { PatientCvSaveDebugStrip } from "@/app/components/patient/cv/PatientCvSaveDebugStrip";
 import { isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
 import { exerciseMediaUi } from "@/app/lib/patient-portal-ui";
 
@@ -20,6 +22,7 @@ export type ExerciseMediaAreaProps = {
   onCvMetricsUpdate?: (metrics: SitToStandDerivedMetrics) => void;
   onCvSkipped?: () => void;
   onRegisterCvMetricsFlush?: (flush: () => void) => void;
+  cvSaveDebug?: CvSaveDebugState | null;
 };
 
 type VisualRegion =
@@ -397,12 +400,15 @@ export function ExerciseMediaArea({
   onCvMetricsUpdate,
   onCvSkipped,
   onRegisterCvMetricsFlush,
+  cvSaveDebug = null,
 }: ExerciseMediaAreaProps) {
   const ui = exerciseMediaUi(language);
   const resolvedMedia = mediaUrl?.trim() || null;
   const poster = thumbnailUrl?.trim() || undefined;
 
-  const showPatientCv = exerciseStep === "active" && isCvEnabledExercise(exerciseId);
+  const cvExercise = isCvEnabledExercise(exerciseId);
+  const showPatientCv = exerciseStep === "active" && cvExercise;
+  const showCvDebug = cvExercise && cvSaveDebug != null;
 
   return (
     <div
@@ -419,6 +425,8 @@ export function ExerciseMediaArea({
           onRegisterMetricsFlush={onRegisterCvMetricsFlush}
         />
       )}
+
+      {showCvDebug && <PatientCvSaveDebugStrip debug={cvSaveDebug} arClass={arClass} />}
 
       <div className="relative">
         {resolvedMedia ? (

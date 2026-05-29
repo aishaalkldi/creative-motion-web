@@ -2,7 +2,7 @@ import type { ClinicalActionStatus } from "@/app/lib/clinical-action-engine";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 
 import type { CvSaveOutcome } from "@/app/lib/cv/cv-save-outcome";
-import type { CvSaveResult } from "@/app/hooks/useCvSessionCapture";
+import type { CvSaveResult } from "@/app/lib/cv/cv-qa-debug";
 
 export type PatientPortalLanguage = PatientExerciseLanguage;
 

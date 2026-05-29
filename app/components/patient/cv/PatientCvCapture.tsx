@@ -140,7 +140,9 @@ export function PatientCvCapture({
   useEffect(() => {
     if (!onRegisterMetricsFlush) return;
     onRegisterMetricsFlush(reportMetrics);
-    return () => onRegisterMetricsFlush(() => {});
+    return () => {
+      onRegisterMetricsFlush(() => {});
+    };
   }, [onRegisterMetricsFlush, reportMetrics]);
 
   useEffect(() => {
