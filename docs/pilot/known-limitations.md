@@ -2,7 +2,7 @@
 
 This document states platform limitations for **controlled clinic pilots** and **workflow validation**. Share with clinicians before demo and reference in consent / clinic communications as appropriate.
 
-**Production build:** Through Sprint W (clinician operational adherence readiness on patient list and profile). Patient portal, assessment, and review flows unchanged in scope for this pilot pack.
+**Production build:** Through Sprint W (clinician operational adherence readiness on patient list and profile) plus **AI Clinician Summary Draft v0** (clinician-only). Patient portal has no AI surface. Assessment, plan, and review flows unchanged in scope for this pilot pack.
 
 ---
 
@@ -28,9 +28,29 @@ Remote assessment and the patient portal support rehabilitation workflow; they *
 
 ## Technology scope (current pilot build)
 
-### No AI in pilot
+### No patient-facing AI — clinician-only AI draft summary (v0)
 
-The current pilot build does **not** include AI-generated clinical recommendations, AI triage, or AI interpretation of patient data for treatment decisions.
+**No patient-facing AI.** Clinician-only AI draft summary is available for review only.
+
+The pilot build includes **AI Clinician Summary Draft v0** on the clinician patient profile (`/clinician/patients/[id]`). It is **not clinical decision support** and does **not** replace clinician judgment.
+
+**What AI v0 does:**
+
+- Generates a **narrative draft** from **structured data only** (session logs, effort/pain, operational flags) — no video, landmarks, hipY, or raw motion data
+- Shows a **required disclaimer** — clinician review required
+- Supports **Approve / Edit / Dismiss** — **local UI only** in v0 (not sent to the patient, not persisted to chart)
+
+**What AI v0 does not do:**
+
+- No diagnosis or differential diagnosis
+- No clinical scoring or recovery grades
+- No automatic progression or phase recommendations
+- No treatment plan mutation
+- No patient-facing medical advice
+- No movement quality judgment
+- No AI triage or autonomous treatment recommendations
+
+**Patient portal:** No AI summary surface — patients never see the draft.
 
 ### Optional patient computer vision (CV) — experimental, not pilot-critical
 
@@ -107,16 +127,18 @@ Pilot operators should confirm Supabase / hosting subprocessors and data locatio
 
 ---
 
-## Product boundaries (unchanged in Sprint E)
+## Product boundaries (PILOT-ACTIVATION-0)
 
-Sprint E adds **documentation only**. The following are explicitly **out of scope** for this pilot pack:
+The following are explicitly **out of scope** for this pilot activation:
 
-- New product features  
-- AI, CV, or voice capabilities  
-- Changes to clinical logic or scoring engines  
-- Database schema changes  
-- Security, middleware, or API route changes (unless critically required elsewhere)  
-- Platform redesign  
+- AI Summary v1 (persistence, audit trail, approved summary storage)
+- Patient-facing AI, Coach AI, or Speech AI
+- Sports program, Gamification, or Motion Framework
+- Supine CV or automatic plan adjustment
+- Clinical scoring engines or autonomous progression
+- New product features beyond what is already in production
+
+**In scope for PILOT-ACTIVATION-0:** supervised use of existing production features — clinician-only AI draft summary v0, optional Sit-to-Stand CV, manual supine exercises, therapist review only.
 
 ---
 
@@ -130,7 +152,7 @@ Arabic safety messaging is also shown in the patient portal (`PatientSafetyNotic
 
 ## What to tell clinicians (short script)
 
-> “RASQ organizes remote intake, plans, and home sessions under your license. You review all assessments and flags. The pilot has no AI and no voice in the supported workflow. Optional sit-to-stand camera assist is experimental, therapist-review only, and not clinically validated — the pilot does not depend on it. Legal pages are for pilot use — get counsel sign-off before commercial rollout.”
+> “RASQ organizes remote intake, plans, and home sessions under your license. You review all assessments and flags. No patient-facing AI — a clinician-only AI draft summary is available for your review only; it is not clinical decision support and does not replace your judgment. There is no voice in the supported workflow. Optional sit-to-stand camera assist is experimental, therapist-review only, and not clinically validated — the pilot does not depend on it. Legal pages are for pilot use — get counsel sign-off before commercial rollout.”
 
 ---
 
@@ -142,6 +164,9 @@ Arabic safety messaging is also shown in the patient portal (`PatientSafetyNotic
 - `clinic-pilot-script.md` — Live demo steps  
 - `demo-scenarios.md` — Knee, lumbar, shoulder scenarios  
 - `pilot-checklist.md` — Before / during / after checklist  
+- `ai-clinician-summary-smoke-test.md` — AI v0 smoke test before activation  
+- `pilot-activation-runbook.md` — 60-minute first activation session  
+- `pilot-activation-metrics.md` — Activation measurement rubric  
 - `pilot-success-metrics.md` — Required pilot metrics  
 - `success-metrics.md` — Extended metrics rubrics  
 - `pilot-feedback-questions.md` — Clinician and patient questions  

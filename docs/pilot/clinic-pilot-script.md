@@ -139,11 +139,30 @@
 
 ---
 
+## Step 11 — AI draft summary (PILOT-ACTIVATION-0, clinician-only)
+
+**On clinician device only — patient device stays on portal or closed.**
+
+1. On **patient profile** (`/clinician/patients/[id]`), scroll to **AI draft summary — clinician review required**.
+2. Read the **disclaimer** aloud with the audience.
+3. Click **Generate summary** → wait for draft.
+4. Walk through the draft — confirm it is understandable and does not diagnose or recommend progression.
+5. Demonstrate **Edit** (optional correction) or **Approve** (local badge only).
+6. Click **Dismiss** — confirm card hides.
+7. Open **patient portal** on second device — confirm **no AI summary surface**.
+8. Confirm **treatment plan unchanged** after Generate.
+
+**Say:** “No patient-facing AI. This clinician-only draft helps me review session context faster. It is not clinical decision support and does not replace my judgment. Approve, Edit, and Dismiss are local to my browser in v0 — nothing is sent to the patient automatically.”
+
+**Do not:** Share draft text with the patient during the demo unless the clinician chooses to communicate it in their own words outside RASQ.
+
+---
+
 ## Closing (2 minutes)
 
-- Recap: intake → remote assessment → plan → portal → session → review.
+- Recap: intake → remote assessment → plan → portal → session → review → (optional) AI draft summary.
 - Point to **Intended Use** and **Clinical Safety** pages.
-- Collect feedback using pilot checklist and success metrics (see `pilot-checklist.md`, `success-metrics.md`).
+- Collect feedback using pilot checklist and activation metrics (see `pilot-checklist.md`, `pilot-activation-metrics.md`, `clinician-feedback-form.md`).
 - Note known limitations (`known-limitations.md`).
 
 ---

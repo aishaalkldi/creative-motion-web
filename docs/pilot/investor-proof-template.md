@@ -34,6 +34,8 @@ _Which end-to-end path was demonstrated live?_
 - [ ] Session completed with effort/pain
 - [ ] Review queue / timeline surfaced actionable item
 - [ ] Clinician acknowledged review
+- [ ] AI draft summary generated (clinician-only; optional for PILOT-ACTIVATION-0)
+- [ ] Patient portal confirmed no AI surface
 
 **One-sentence summary:**
 
@@ -54,6 +56,13 @@ _Manual counts from pilot — not product analytics._
 | Review flags raised | |
 | Review flags resolved | |
 | Clinician usefulness (1–5) | |
+| AI draft summary usefulness (1–5) | |
+| Clinician trust in AI draft (Y/Maybe/N) | |
+| Unsafe wording incidents | |
+| Generate success rate | |
+| CV save success (if STS used) | |
+| Sit-to-Stand rep count usefulness (1–5) | |
+| Patient portal clarity (1–5) | |
 | Recommend to colleague (0–10) | |
 
 ---
@@ -113,5 +122,5 @@ _One measurable goal for the next session._
 | No PHI in quotes or screenshots | ☐ |
 | Clinician approved use of quote | ☐ |
 | Metrics match `pilot-metrics-manual-tracker.md` | ☐ |
-| Claims match actual product (no AI/voice in supported workflow; optional experimental sit-to-stand CV only if mentioned) | ☐ |
+| Claims match actual product (no patient-facing AI; clinician-only AI draft summary for review only — not clinical decision support; no voice in supported workflow; optional experimental sit-to-stand CV only if mentioned; supine exercises manual-only) | ☐ |
 | Intended-use framing: clinician-led, not autonomous diagnosis | ☐ |

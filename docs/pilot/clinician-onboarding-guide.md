@@ -10,7 +10,9 @@
 
 - Confirm your **provider account** is active (clinic admin or RASQ team).
 - Use a **demo or consented patient** per clinic policy.
-- Read `known-limitations.md` — no AI, no autonomous diagnosis; optional experimental sit-to-stand camera assist only (not pilot-critical, therapist review only, not clinically validated).
+- Read `known-limitations.md` — **no patient-facing AI**; clinician-only AI draft summary is available for review only (not clinical decision support); no autonomous diagnosis; optional experimental sit-to-stand camera assist only (not pilot-critical, therapist review only, not clinically validated); supine/manual exercises are manual-only.
+- Complete `ai-clinician-summary-smoke-test.md` on production before first activation session.
+- Review `pilot-activation-runbook.md` for the 60-minute supervised session (1 clinician, 2–3 test patients).
 - Legal pages (`/privacy`, `/terms`, `/intended-use`, `/clinical-safety`) are pilot-ready; counsel review is required before commercial contracts.
 
 ---
@@ -111,7 +113,31 @@ For each patient you may see:
 
 ---
 
-## 7. If the patient reports pain or a safety concern
+## 8. AI draft summary (clinician-only, PILOT-ACTIVATION-0)
+
+On the patient profile, you may see **AI draft summary — clinician review required**.
+
+| Rule | Detail |
+|------|--------|
+| **Who sees it** | Clinicians only — **not** on patient portal |
+| **Purpose** | Narrative draft to speed up chart review |
+| **Not** | Clinical decision support; does not replace your judgment |
+| **Input** | Structured data only — no video, landmarks, or raw motion |
+| **Actions** | Approve / Edit / Dismiss — **local UI only** in v0 |
+| **Does not** | Diagnose, score clinically, change treatment plan, or recommend progression |
+
+**Workflow:**
+
+1. Read the disclaimer on the card.
+2. Click **Generate summary**.
+3. Review draft — edit if needed, approve locally, or dismiss.
+4. Never assume the draft is sent to the patient — **you** decide all patient communication.
+
+See `ai-clinician-summary-smoke-test.md` for the full smoke test checklist.
+
+---
+
+## 9. If the patient reports pain or a safety concern
 
 ### During remote assessment or portal session
 
@@ -158,7 +184,9 @@ Patients see a **safety notice** in the portal (Arabic/English). Reinforce: stop
 ## Related pilot documents
 
 - `pilot-workflow.md` — End-to-end flow diagram
+- `pilot-activation-runbook.md` — 60-minute first activation session
+- `ai-clinician-summary-smoke-test.md` — AI v0 smoke test
 - `clinic-pilot-script.md` — Live demo script
 - `known-limitations.md` — Platform boundaries
-- `pilot-feedback-questions.md` — After-session feedback
+- `clinician-feedback-form.md` — After-session feedback
 - `patient-guide-ar.md` — Share with Arabic-speaking patients
