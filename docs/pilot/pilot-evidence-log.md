@@ -112,12 +112,16 @@ Confirmed:
 - Dismiss worked and hid the card locally.
 - Regenerate worked and showed a new draft.
 - Movement tracking sessions remained visible.
-- Patient portal has no AI surface: PASS
-- Treatment plan unchanged after refresh: PASS
+- Patient portal secure link opened successfully.
+- Patient portal displayed the rehabilitation plan page.
+- No AI draft summary appeared in the patient portal.
+- No Generate Summary button appeared in the patient portal.
+- No Approve / Edit / Dismiss controls appeared in the patient portal.
+- General `/patient` demo page also did not expose AI; the secure `/patient/[token]` link is the valid patient portal check.
+- Treatment plan remained unchanged after clinician AI actions and refresh.
 
 Notes:
-This was a product smoke test, not a clinical note.
-AI summary remained clinician-only and did not show diagnosis, clinical scoring, progression recommendation, movement quality judgment, or treatment plan changes.
+This was a product smoke test only, not a clinical note. The AI summary remained clinician-only and did not appear in the patient portal. AI summary did not show diagnosis, clinical scoring, progression recommendation, movement quality judgment, or treatment plan changes.
 
 ---
 
