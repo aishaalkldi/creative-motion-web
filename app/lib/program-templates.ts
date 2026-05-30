@@ -175,6 +175,145 @@ function buildSessionsFromLabels(
   return sessions;
 }
 
+/** RASQ Clinical Program Library v0 — 12 explicit sessions per sports-knee-foundation.md */
+function buildSportsKneeFoundationSessions(): PilotProgramSession[] {
+  const quadSet = () =>
+    templateExercise("quad-set", "Quad Set / Activation", {
+      sets: 3,
+      reps: "10 × 5s hold",
+      restSec: 30,
+    });
+  const heelSlide = () =>
+    templateExercise("heel-slide", "Heel Slide", {
+      sets: 3,
+      reps: "12–15",
+      restSec: 45,
+    });
+  const terminalKneeExtension = () =>
+    templateExercise("terminal-knee-extension", "Terminal Knee Extension", {
+      sets: 3,
+      reps: "10–12",
+      restSec: 45,
+    });
+  const shortArcQuad = () =>
+    templateExercise("short-arc-quad", "Short Arc Quad", {
+      sets: 3,
+      reps: 10,
+      restSec: 45,
+    });
+  const straightLegRaise = () =>
+    templateExercise("straight-leg-raise", "Straight Leg Raise", {
+      sets: 3,
+      reps: "8–10",
+      restSec: 45,
+    });
+  const sitToStand = () =>
+    templateExercise("sit-to-stand", "Sit-to-Stand", {
+      sets: 3,
+      reps: "8–12",
+      restSec: 60,
+    });
+  const heelRaise = () =>
+    templateExercise("heel-raise", "Heel Raises", {
+      sets: 3,
+      reps: "12–15",
+      restSec: 45,
+    });
+  const miniSquat = () =>
+    templateExercise("mini-squat", "Mini Squat (0–45°)", {
+      sets: 3,
+      reps: "10–15",
+      restSec: 60,
+    });
+  const stepUp = () =>
+    templateExercise("step-up", "Step-Up", {
+      sets: 3,
+      reps: "8–10 each leg",
+      restSec: 60,
+    });
+  const singleLegStance = () =>
+    templateExercise("single-leg-stance", "Single-Leg Stance", {
+      sets: 3,
+      durationSec: 30,
+      restSec: 45,
+    });
+  const lateralBandWalk = () =>
+    templateExercise("lateral-band-walk", "Lateral Band Walk", {
+      sets: 3,
+      reps: "10 steps each direction",
+      restSec: 60,
+    });
+  const walkingTolerance = () =>
+    templateExercise("walking-tolerance", "Walking Tolerance", {
+      sets: 1,
+      durationSec: 420,
+      restSec: 0,
+    });
+
+  return [
+    {
+      sessionNumber: 1,
+      title: "Session 1 — Activation I",
+      exercises: [quadSet(), heelSlide(), terminalKneeExtension()],
+    },
+    {
+      sessionNumber: 2,
+      title: "Session 2 — Activation II",
+      exercises: [quadSet(), shortArcQuad(), heelSlide()],
+    },
+    {
+      sessionNumber: 3,
+      title: "Session 3 — Extension control",
+      exercises: [straightLegRaise(), terminalKneeExtension(), quadSet()],
+    },
+    {
+      sessionNumber: 4,
+      title: "Session 4 — Sit-to-stand intro",
+      exercises: [sitToStand(), heelRaise(), quadSet()],
+    },
+    {
+      sessionNumber: 5,
+      title: "Session 5 — Closed-chain prep",
+      exercises: [miniSquat(), sitToStand(), heelRaise()],
+    },
+    {
+      sessionNumber: 6,
+      title: "Session 6 — Step & balance",
+      exercises: [stepUp(), singleLegStance(), heelRaise()],
+    },
+    {
+      sessionNumber: 7,
+      title: "Session 7 — Load week 3",
+      exercises: [miniSquat(), stepUp(), sitToStand()],
+    },
+    {
+      sessionNumber: 8,
+      title: "Session 8 — Lateral control",
+      exercises: [lateralBandWalk(), singleLegStance(), miniSquat()],
+    },
+    {
+      sessionNumber: 9,
+      title: "Session 9 — Volume",
+      exercises: [sitToStand(), stepUp(), walkingTolerance()],
+    },
+    {
+      sessionNumber: 10,
+      title: "Session 10 — Integration I",
+      exercises: [miniSquat(), singleLegStance(), sitToStand()],
+    },
+    {
+      sessionNumber: 11,
+      title: "Session 11 — Integration II",
+      exercises: [stepUp(), lateralBandWalk(), walkingTolerance()],
+    },
+    {
+      sessionNumber: 12,
+      title: "Session 12 — Review session",
+      exercises: [sitToStand(), singleLegStance(), miniSquat()],
+    },
+  ];
+}
+
 function defineExpandedProgram(config: {
   id: string;
   title: string;
@@ -425,6 +564,38 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
       "Prone Knee Flexion",
     ],
   }),
+
+  {
+    id: "sports-knee-foundation",
+    title: "Sports Knee Foundation",
+    conditionArea: "Knee",
+    level: "Foundation",
+    programGoal:
+      "Structured four-week foundation for active patients: restore quadriceps activation and knee ROM, build closed-chain tolerance and single-leg control, and establish pain/effort reporting — with therapist review before any progression.",
+    conditionCategory: "Sports / orthopedic rehabilitation (foundation phase)",
+    bodyRegion: "knee",
+    durationWeeks: 4,
+    sessionsPerWeek: 3,
+    suitableFor:
+      "Active adults and recreational athletes with subacute or chronic knee symptoms. Cleared for partial or full weight-bearing. Pain during movement typically ≤ 6/10 at start (clinician-adjustable). Examples: patellofemoral pain, mild/moderate knee OA, post-injury deconditioning, foundation-phase post-ACL with surgeon/protocol alignment.",
+    notSuitableFor:
+      "Non–weight-bearing or touch-down weight-bearing without clearance. Acute post-operative < 6 weeks without surgeon protocol. Locked knee, suspected fracture, joint infection. Repeated giving way without supervision plan. Unresolved red flags.",
+    phaseGoal:
+      "Restore voluntary quadriceps control, comfortable knee flexion, closed-chain tolerance, and single-leg balance — preparing for clinician-led review, not automatic sport return.",
+    expectedResponse:
+      "Stable or decreasing pain after sessions, manageable effort scores, and improving control on activation and functional tasks. Optional sit-to-stand CV assist may support therapist review — not required for completion.",
+    safetyNotes:
+      "Stop if sharp pain occurs during exercise. Stay ≤ 5/10 during exercise unless clinician sets a higher limit. Monitor for swelling after sessions. Contact clinic if sharp pain > 7/10, new giving way, locking, or rapid swelling within 2 hours.",
+    redFlags:
+      "Locked knee. Acute fracture suspicion. Joint infection. Numbness, foot drop, or pulse deficit. Non–weight-bearing status without clearance. Repeated giving way. Unexplained fever or unrelenting night pain.",
+    reviewCriteria:
+      "Review before session 1 (confirm inclusion and dose). Mid-program review after session 6. End-of-program review after session 12. Review if pain increases ≥ 2 points over two consecutive sessions, effort ≥ 8/10 for three sessions, zero sessions in 7 days, or new locking, giving way, or swelling reports.",
+    clinicianUseNote:
+      "Therapist-guided sports knee foundation program for early-to-mid stage strengthening, movement confidence, and graded loading. Not return-to-sport clearance. Clinical examination required before assignment. Edit dose, order, and exclusions before assigning. RASQ does not auto-progress — clinician approves all progression.",
+    patientFriendlyGoal:
+      "Build knee strength and movement confidence for everyday activities and training prep. Complete your sessions and report pain and effort honestly — your therapist reviews progress and decides next steps. This plan does not clear you to return to sport.",
+    sessions: buildSportsKneeFoundationSessions(),
+  },
 
   defineExpandedProgram({
     id: "lumbar-foundation-01",
