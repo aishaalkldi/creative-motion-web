@@ -92,7 +92,37 @@ _Describe one screenshot that best shows RASQ working in clinic context. Do not 
 
 ## Log history (copy block for each new session)
 
+## 2026-05-30 — AI Clinician Summary v0 Smoke Test
+
+Environment:
+Production — https://creative-motion-web.vercel.app
+
+Result:
+PASS
+
+Confirmed:
+- Clinician patient profile loaded.
+- AI draft summary card appeared.
+- Generate Summary worked.
+- Draft summary appeared.
+- Safety disclaimer appeared.
+- Required safety line appeared:
+  “No automatic plan changes are suggested. Therapist review required.”
+- No unsafe wording observed.
+- Dismiss worked and hid the card locally.
+- Regenerate worked and showed a new draft.
+- Movement tracking sessions remained visible.
+- Patient portal has no AI surface: PASS
+- Treatment plan unchanged after refresh: PASS
+
+Notes:
+This was a product smoke test, not a clinical note.
+AI summary remained clinician-only and did not show diagnosis, clinical scoring, progression recommendation, movement quality judgment, or treatment plan changes.
+
+---
+
 <!--
+
 Duplicate the section below for each pilot session.
 
 ---
