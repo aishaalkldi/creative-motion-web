@@ -123,6 +123,24 @@ Confirmed:
 Notes:
 This was a product smoke test only, not a clinical note. The AI summary remained clinician-only and did not appear in the patient portal. AI summary did not show diagnosis, clinical scoring, progression recommendation, movement quality judgment, or treatment plan changes.
 
+Rate-limit observation:
+During repeated Generate/Regenerate testing, the clinician card displayed:
+“AI service rate limit reached. Try again shortly.”
+
+Interpretation:
+- Generate Summary had already worked successfully.
+- A safe clinician-only draft was returned.
+- The required safety line was present:
+  “No automatic plan changes are suggested. Therapist review required.”
+- The rate-limit message appeared only after repeated rapid Generate/Regenerate attempts.
+- No AI appeared in the patient portal.
+- No treatment plan mutation occurred.
+
+Pilot recommendation:
+During pilot activation, use Generate once per patient review.
+Avoid repeated rapid Regenerate clicks.
+If rate limit appears, wait briefly and retry later.
+
 ---
 
 <!--
