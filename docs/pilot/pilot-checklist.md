@@ -24,7 +24,9 @@ Use this checklist before, during, and after a controlled clinic pilot demo.
 ### Clinical & legal framing
 
 - [ ] Team aligned: RASQ **does not diagnose** or **prescribe autonomously**
-- [ ] **No AI / voice** in the supported pilot workflow; **optional experimental CV** (sit-to-stand only) is **not pilot-critical** — state explicitly
+- [ ] **No patient-facing AI** — clinician-only AI draft summary is for review only; **no voice** in supported workflow; **optional experimental CV** (sit-to-stand only) is **not pilot-critical** — state explicitly
+- [ ] `ai-clinician-summary-smoke-test.md` completed on production (if using AI summary)
+- [ ] `pilot-activation-runbook.md` reviewed for first activation session
 - [ ] Legal pages reviewed at high level; counsel review planned before paid contracts
 - [ ] Informed consent / clinic policy for demo patients confirmed
 
@@ -52,6 +54,7 @@ Use this checklist before, during, and after a controlled clinic pilot demo.
 - [ ] Assign plan from pilot template
 - [ ] Patient device: open portal → complete session → submit effort/pain
 - [ ] Clinician: Results / review queue / progress
+- [ ] Clinician (optional activation): AI draft summary — Generate → read disclaimer → Edit/Approve/Dismiss; confirm patient portal has no AI
 
 ### Safety reminders (say aloud)
 
@@ -70,7 +73,7 @@ Use this checklist before, during, and after a controlled clinic pilot demo.
 ### Known limitations to mention
 
 - [ ] No autonomous diagnosis or prescription
-- [ ] No AI or voice input in the supported pilot workflow; optional sit-to-stand CV is experimental, therapist-review only, not clinically validated, and not required for session completion
+- [ ] No patient-facing AI — clinician-only AI draft summary is for review only (not clinical decision support); no voice in supported workflow; optional sit-to-stand CV is experimental, therapist-review only, not clinically validated, and not required for session completion; supine/manual exercises are manual-only
 - [ ] Clinician review required for flagged items
 - [ ] Rate limits are in-memory (may reset on deploy)
 - [ ] Legal pages not final counsel-reviewed
@@ -115,5 +118,7 @@ Use this checklist before, during, and after a controlled clinic pilot demo.
 | Session completed with effort/pain | ☐ |
 | Clinician understood review queue purpose | ☐ |
 | No critical blocker (login, save, link broken) | ☐ |
+| Patient portal has no AI surface | ☐ |
+| Treatment plan unchanged after AI Generate (if used) | ☐ |
 
 If any critical blocker: fix before next clinic session; do not expand pilot scope.

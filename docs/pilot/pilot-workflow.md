@@ -18,7 +18,10 @@ Login
           → Assign Plan
             → Patient Completes Session
               → Clinician Reviews Progress
+                → (Optional) Clinician Generates AI Draft Summary
 ```
+
+**Note:** AI draft summary is **clinician-only**, optional during PILOT-ACTIVATION-0, and does not replace steps 1–9.
 
 ---
 
@@ -35,6 +38,7 @@ Login
 | 7 | Clinician | Send patient portal link | Patient profile → portal URL `/patient/[token]` |
 | 8 | Patient | Open portal, complete session, submit effort/pain | `/patient/[token]` → session flow |
 | 9 | Clinician | Review progress, adherence signals, review queue | `/clinician/results` · `/clinician/patients` · patient profile |
+| 10 | Clinician (optional — PILOT-ACTIVATION-0) | Generate AI draft summary; read disclaimer; Approve/Edit/Dismiss (local UI only) | Patient profile → **AI draft summary — clinician review required** |
 
 ---
 
@@ -76,9 +80,27 @@ Acknowledgment and documentation remain with the **licensed clinician**.
 
 ---
 
+## Optional clinician-only AI draft summary (PILOT-ACTIVATION-0)
+
+On the patient profile, clinicians may use **AI Clinician Summary Draft v0**:
+
+| Aspect | Pilot rule |
+|--------|------------|
+| **Visibility** | Clinician profile only — **no patient portal AI surface** |
+| **Input** | Structured data only — no video, landmarks, hipY, or raw motion |
+| **Output** | Narrative draft + **required disclaimer** |
+| **Actions** | Approve / Edit / Dismiss — **local UI only** in v0 |
+| **Not** | Clinical decision support; does not replace clinician judgment |
+| **Does not** | Diagnose, score clinically, recommend progression, mutate treatment plan, or give patient-facing medical advice |
+
+See `ai-clinician-summary-smoke-test.md` and `pilot-activation-runbook.md`.
+
+---
+
 ## Optional experimental path (not required)
 
 - **Sit-to-stand camera assist only** — optional, experimental, not clinically validated; derived metrics for **therapist review only**
+- **Supine / manual exercises** — manual completion only; no CV
 - Patient may **continue without camera**; session completion does not depend on CV
 - If tracking fails, the patient completes the exercise manually
 
@@ -86,10 +108,13 @@ Acknowledgment and documentation remain with the **licensed clinician**.
 
 - CV as a **pilot-critical** requirement or success criterion
 - Automated form judgment, clinical scoring, or movement quality decisions for patients
-- AI-generated recommendations or triage
+- **Patient-facing AI**, Coach AI, Speech AI, or AI triage
+- AI-generated treatment recommendations or autonomous clinical decisions
 - Autonomous diagnosis or prescription
 - Automatic progression to the next program phase
 - Clinical scoring engines driving treatment
+- Treatment plan mutation from AI Generate
+- Sports program, Gamification, or Motion Framework
 
 **CV Lab** (`/clinician/cv-lab`) is **internal clinician tooling** for experimentation — separate from the required patient workflow above.
 
@@ -113,5 +138,8 @@ Acknowledgment and documentation remain with the **licensed clinician**.
 | `clinic-pilot-script.md` | Live 45–60 min demo script |
 | `patient-guide-ar.md` | Arabic patient handout |
 | `pilot-success-metrics.md` | What to measure |
+| `pilot-activation-runbook.md` | 60-minute first activation session |
+| `pilot-activation-metrics.md` | AI + CV activation metrics |
+| `ai-clinician-summary-smoke-test.md` | AI v0 smoke test |
 | `known-limitations.md` | Safety and product boundaries |
 | `demo-scenarios.md` | Knee / lumbar / shoulder test cases |

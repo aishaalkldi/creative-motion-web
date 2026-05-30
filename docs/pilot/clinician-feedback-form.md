@@ -42,10 +42,48 @@
 - ☐ Portal
 - ☐ Review Queue
 - ☐ Results
+- ☐ AI draft summary (clinician-only)
 
 ---
 
-### 3. Did the Review Queue show something you might have missed?
+### 3. AI draft summary (PILOT-ACTIVATION-0)
+
+**Only if you used Generate summary this session.**
+
+#### 3a. From 1 to 5, how useful was the AI draft summary?
+
+| Score | 1 | 2 | 3 | 4 | 5 |
+|-------|---|---|---|---|---|
+| Circle one | ☐ | ☐ | ☐ | ☐ | ☐ |
+
+#### 3b. Would you use Generate summary again next week?
+
+- ☐ Yes
+- ☐ Maybe
+- ☐ No
+
+#### 3c. Estimated time saved (or added) reviewing the patient
+
+_Minutes: _____ (directional estimate only)_
+
+#### 3d. Did the draft miss important context you already knew?
+
+- ☐ Yes — what? _______________________________
+- ☐ No
+
+#### 3e. Did the wording feel safe (no diagnosis, progression advice, or medical advice)?
+
+- ☐ Yes
+- ☐ No — example: _______________________________
+
+#### 3f. Any unsafe wording incidents?
+
+- ☐ None
+- ☐ Yes — describe: _______________________________
+
+---
+
+### 4. Did the Review Queue show something you might have missed?
 
 **Select one:**
 
@@ -57,7 +95,7 @@
 
 ---
 
-### 4. What took longer than expected?
+### 5. What took longer than expected?
 
 _Free text — workflow step, setup, patient follow-up, etc._
 
@@ -67,7 +105,7 @@ _______________________________________________
 
 ---
 
-### 5. Would you use RASQ with another patient next week?
+### 6. Would you use RASQ with another patient next week?
 
 **Select one:**
 
@@ -79,7 +117,7 @@ _______________________________________________
 
 ---
 
-### 6. What one change would make RASQ better?
+### 7. What one change would make RASQ better?
 
 _Free text — single highest-impact improvement._
 
@@ -89,13 +127,41 @@ _______________________________________________
 
 ---
 
-### 7. How likely are you to recommend RASQ to a colleague?
+### 8. How likely are you to recommend RASQ to a colleague?
 
 **Scale:** 0 = not at all likely · 10 = extremely likely
 
 | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
 |---|---|---|---|---|---|---|---|---|---|-----|
 | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ | ☐ |
+
+---
+
+### 9. Patient portal and CV (optional)
+
+#### 9a. From 1 to 5, how clear was the patient portal?
+
+| Score | 1 | 2 | 3 | 4 | 5 |
+|-------|---|---|---|---|---|
+| Circle one | ☐ | ☐ | ☐ | ☐ | ☐ |
+
+#### 9b. Any patient confusion observed?
+
+- ☐ None
+- ☐ Mild
+- ☐ Blocked workflow — describe: _______________________________
+
+#### 9c. If Sit-to-Stand CV was used: did CV row save successfully?
+
+- ☐ N/A (no CV used)
+- ☐ Yes
+- ☐ No
+
+#### 9d. From 1 to 5, how useful was the Sit-to-Stand rep count for therapist review?
+
+| Score | 1 | 2 | 3 | 4 | 5 |
+|-------|---|---|---|---|---|
+| Circle one | ☐ | ☐ | ☐ | ☐ | ☐ |
 
 ---
 
