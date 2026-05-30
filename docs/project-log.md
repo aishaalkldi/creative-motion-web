@@ -1,5 +1,69 @@
 # Project log
 
+## 2026-05-30 — AI Clinician Summary Draft v0 merged to production
+
+### Summary
+
+PR #10 was merged into main and deployed to production. This release adds a clinician-only AI draft summary on the patient profile, built from structured rehabilitation data for therapist review only.
+
+The summary uses plan session completion, session logs (pain, effort, exercises completed), optional CV metrics (reps, duration, tracking visibility, movement detected), assessment summary when available, and rules-based clinical action status. It does not reach the patient portal.
+
+### Production status
+
+- Production URL: https://creative-motion-web.vercel.app
+- Merge commit: `adc9e15`
+- Feature commit: `27e4ee2`
+- PR: #10 — AI Clinician Summary Draft v0
+- Deployment status: Ready
+- `OPENAI_API_KEY` configured in Vercel Production
+- Production QA: Passed
+
+### What shipped
+
+- `POST /api/clinician/ai-session-summary` — clinician-auth, structured-data-only input
+- De-identified OpenAI payload builder with forbidden-phrase validation and safe fallback
+- Clinician profile card: **AI draft summary — clinician review required**
+- Actions: Generate / Regenerate, Approve, Edit, Dismiss (local UI state only in v0)
+- Unit tests: `clinician-summary.test.ts` (9 cases)
+
+### Validated QA
+
+- `GET /api/health/openai` (clinician auth):
+  - `openaiKeyPresent`: true
+  - `openaiKeyPrefixValid`: true
+  - `apiReachable`: true
+- `POST /api/clinician/ai-session-summary`:
+  - HTTP 200
+  - `draftSummary` returned
+  - `disclaimer` returned
+- Patient portal has no AI summary surface
+- No treatment plan mutation after Generate
+- Unit tests: `npx tsx --test app/lib/ai/clinician-summary.test.ts` — 9/9 pass
+- Build: `npm run build` — pass
+
+### Safety boundaries
+
+- Clinician-only AI — no patient-facing AI
+- No patient portal changes
+- No treatment plan mutation
+- No automatic progression
+- No diagnosis
+- No clinical scoring
+- No patient medical advice
+- No movement quality judgment
+- No video, images, raw landmarks, hipY, or raw motion traces
+- OpenAI payload de-identified and structured-data-only
+- Approve / Edit / Dismiss local UI only in v0 — no persistence table
+- No schema changes
+- No middleware or security changes
+- Therapist review required
+
+### Next recommended step
+
+Clinician smoke testing on a real patient profile in production, then supervised pilot use. Do not expose approved summaries to patients or wire persistence until a later v1 sprint.
+
+---
+
 ## 2026-05-30 — MQ-REP-1 SHADOW-0 shadow-only rep quality FSM merged to production
 
 ### Summary
