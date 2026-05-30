@@ -67,6 +67,7 @@ import { SessionScheduleView } from "../../../components/SessionScheduleView";
 import { ClinicalActionCard } from "../../../components/clinician/ClinicalActionCard";
 import { PatientJourneyTimeline } from "../../../components/clinician/PatientJourneyTimeline";
 import { CvPatientCvMetricsSection } from "../../../components/clinician/cv/CvPatientCvMetricsSection";
+import { AiClinicianSummaryCard } from "../../../components/clinician/AiClinicianSummaryCard";
 import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
 import { indexCvMetricsByPlanSessionId } from "@/app/lib/cv/clinician-session-camera-status";
 import { PatientAdherenceSummary } from "../../../components/clinician/PatientAdherenceSummary";
@@ -1222,6 +1223,11 @@ export default function PatientProfilePage() {
                     : prev,
                 );
               }}
+            />
+
+            <AiClinicianSummaryCard
+              patientId={patient.id}
+              planId={planProgress?.planId ?? treatmentPlan?.id ?? null}
             />
 
             <CvPatientCvMetricsSection patientId={patient.id} />
