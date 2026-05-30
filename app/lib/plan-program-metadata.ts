@@ -22,6 +22,8 @@ const PATIENT_FRIENDLY_GOAL_AR: Record<string, string> = {
     "تحريك ظهرك براحة أكبر واستعادة الثقة في أنشطتك اليومية.",
   "shoulder-mobility-beginner":
     "تخفيف تيبّس الكتف والتحرك براحة أكبر للوصول والمهام اليومية.",
+  "sports-knee-foundation":
+    "بناء قوة الركبة وثقة الحركة للأنشطة اليومية والاستعداد للتدريب. معالجك يراجع تقدّمك — هذه الخطة لا تُخوّلك للعودة للرياضة.",
 };
 
 const GENERIC_REHAB_FOCUS_EN =
