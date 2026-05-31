@@ -12,18 +12,24 @@ import {
 } from "./cv-patient-config";
 
 describe("cv-patient-config allowlist", () => {
-  it("includes sit-to-stand and mini-squat", () => {
-    assert.deepEqual(CV_Y1_ENABLED_EXERCISE_IDS, ["sit-to-stand", "mini-squat"]);
+  it("includes sit-to-stand, mini-squat, and single-leg-stance", () => {
+    assert.deepEqual(CV_Y1_ENABLED_EXERCISE_IDS, [
+      "sit-to-stand",
+      "mini-squat",
+      "single-leg-stance",
+    ]);
   });
 
   it("isCvEnabledExercise accepts allowlisted ids", () => {
     assert.equal(isCvEnabledExercise("sit-to-stand"), true);
     assert.equal(isCvEnabledExercise("mini-squat"), true);
     assert.equal(isCvEnabledExercise("MINI-SQUAT"), true);
+    assert.equal(isCvEnabledExercise("single-leg-stance"), true);
+    assert.equal(isCvEnabledExercise("SINGLE-LEG-STANCE"), true);
   });
 
   it("rejects unknown exercises", () => {
-    assert.equal(isCvEnabledExercise("single-leg-stance"), false);
+    assert.equal(isCvEnabledExercise("heel-raise"), false);
     assert.equal(isCvEnabledExercise(""), false);
     assert.equal(isCvEnabledExercise(null), false);
   });

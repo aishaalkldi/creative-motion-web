@@ -4,8 +4,16 @@
  */
 
 import { DEFAULT_STS_CONFIG, type SitToStandCvConfig } from "@/app/lib/cv/bio-0-contracts";
+import {
+  LAB_SLS_HOLD_CONFIG,
+  type SingleLegStanceHoldConfig,
+} from "@/app/lib/cv/single-leg-stance-detector";
 
-export const CV_Y1_ENABLED_EXERCISE_IDS = ["sit-to-stand", "mini-squat"] as const;
+export const CV_Y1_ENABLED_EXERCISE_IDS = [
+  "sit-to-stand",
+  "mini-squat",
+  "single-leg-stance",
+] as const;
 
 export type CvY1ExerciseId = (typeof CV_Y1_ENABLED_EXERCISE_IDS)[number];
 
@@ -18,6 +26,25 @@ export function isCvEnabledExercise(exerciseId: string | undefined | null): bool
 export const CV_PATIENT_PROTOTYPE_VERSION = "y1";
 
 export const CV_MIN_SAVE_DURATION_S = 3;
+
+/** MediaPipe shell for patient single-leg stance capture. */
+export const PATIENT_SLS_POSE_SHELL = {
+  wasmUrl: DEFAULT_STS_CONFIG.wasmUrl,
+  modelUrl: DEFAULT_STS_CONFIG.modelUrl,
+  canvasWidth: DEFAULT_STS_CONFIG.canvasWidth,
+  canvasHeight: DEFAULT_STS_CONFIG.canvasHeight,
+  initTimeoutMs: DEFAULT_STS_CONFIG.initTimeoutMs,
+  uiFrameUpdateInterval: DEFAULT_STS_CONFIG.uiFrameUpdateInterval,
+  landmarkDotColor: DEFAULT_STS_CONFIG.landmarkDotColor,
+  lowerBodyLandmarkIndices: DEFAULT_STS_CONFIG.lowerBodyLandmarkIndices,
+  prototypeVersion: "cv-y3-single-leg-stance",
+} as const;
+
+/** Patient portal hold FSM tuning — separate from LAB_SLS_HOLD_CONFIG. */
+export const PATIENT_SLS_HOLD_CONFIG: SingleLegStanceHoldConfig = {
+  ...LAB_SLS_HOLD_CONFIG,
+  readinessCheckMs: 2_000,
+};
 
 /**
  * Patient portal only — relative seated hip baseline; CV Lab keeps DEFAULT_STS_CONFIG.

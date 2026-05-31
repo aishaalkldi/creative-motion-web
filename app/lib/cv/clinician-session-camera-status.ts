@@ -4,12 +4,16 @@
  */
 
 import { parseStoredExercise } from "@/app/lib/exercise-resolve";
-import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
+import {
+  isHoldClassCvExercise,
+  type CvSessionMetricPublic,
+} from "@/app/lib/cv/cv-metrics-display";
 import { isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
 
 const CV_EXERCISE_SHORT_NAME: Record<string, string> = {
   "sit-to-stand": "Sit-to-Stand",
   "mini-squat": "Mini Squat",
+  "single-leg-stance": "Single-Leg Stance",
 };
 
 export function sessionIncludesCvExercise(
@@ -88,6 +92,10 @@ export function deriveClinicianSessionCameraLine(input: {
 
   const repParts = metrics.map((row) => {
     const name = formatCvExerciseShortName(row.exerciseId);
+    if (isHoldClassCvExercise(row.exerciseId)) {
+      const holdS = row.sessionDurationS ?? 0;
+      return `${name} hold: ${holdS}s`;
+    }
     const reps = row.repCount ?? 0;
     return `${name} reps: ${reps}`;
   });

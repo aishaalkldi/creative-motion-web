@@ -191,7 +191,7 @@ async function waitForVideoReady(video: HTMLVideoElement): Promise<void> {
   });
 }
 
-async function startVideoPlayback(video: HTMLVideoElement): Promise<void> {
+export async function startVideoPlayback(video: HTMLVideoElement): Promise<void> {
   await waitForVideoReady(video);
   try {
     await video.play();
@@ -201,7 +201,7 @@ async function startVideoPlayback(video: HTMLVideoElement): Promise<void> {
   }
 }
 
-async function createPoseLandmarker(
+export async function createPoseLandmarker(
   PoseLandmarker: Awaited<typeof import("@mediapipe/tasks-vision")>["PoseLandmarker"],
   fileset: Awaited<
     ReturnType<
