@@ -7,16 +7,19 @@ import { describe, it } from "node:test";
 import {
   CV_Y1_ENABLED_EXERCISE_IDS,
   isCvEnabledExercise,
+  PATIENT_HEEL_RAISE_REP_CONFIG,
   PATIENT_MINI_SQUAT_CONFIG,
   PATIENT_STS_CONFIG,
 } from "./cv-patient-config";
+import { LAB_HEEL_RAISE_REP_CONFIG } from "./heel-raise-detector";
 
 describe("cv-patient-config allowlist", () => {
-  it("includes sit-to-stand, mini-squat, and single-leg-stance", () => {
+  it("includes sit-to-stand, mini-squat, single-leg-stance, and heel-raise", () => {
     assert.deepEqual(CV_Y1_ENABLED_EXERCISE_IDS, [
       "sit-to-stand",
       "mini-squat",
       "single-leg-stance",
+      "heel-raise",
     ]);
   });
 
@@ -26,10 +29,12 @@ describe("cv-patient-config allowlist", () => {
     assert.equal(isCvEnabledExercise("MINI-SQUAT"), true);
     assert.equal(isCvEnabledExercise("single-leg-stance"), true);
     assert.equal(isCvEnabledExercise("SINGLE-LEG-STANCE"), true);
+    assert.equal(isCvEnabledExercise("heel-raise"), true);
+    assert.equal(isCvEnabledExercise("HEEL-RAISE"), true);
   });
 
   it("rejects unknown exercises", () => {
-    assert.equal(isCvEnabledExercise("heel-raise"), false);
+    assert.equal(isCvEnabledExercise("step-up"), false);
     assert.equal(isCvEnabledExercise(""), false);
     assert.equal(isCvEnabledExercise(null), false);
   });
@@ -40,5 +45,11 @@ describe("cv-patient-config allowlist", () => {
     assert.equal(PATIENT_STS_CONFIG.minMsBetweenReps, 800);
     assert.equal(PATIENT_MINI_SQUAT_CONFIG.minMsBetweenReps, 1_000);
     assert.equal(PATIENT_MINI_SQUAT_CONFIG.prototypeVersion, "cv-y2-mini-squat");
+  });
+
+  it("keeps PATIENT_HEEL_RAISE_REP_CONFIG separate from lab config", () => {
+    assert.notEqual(PATIENT_HEEL_RAISE_REP_CONFIG, LAB_HEEL_RAISE_REP_CONFIG);
+    assert.equal(PATIENT_HEEL_RAISE_REP_CONFIG.minMsBetweenReps, 800);
+    assert.equal(PATIENT_HEEL_RAISE_REP_CONFIG.baselineDurationMs, 3_000);
   });
 });
