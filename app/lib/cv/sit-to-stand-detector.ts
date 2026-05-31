@@ -31,6 +31,10 @@ import {
   type SagittalHipRepState,
 } from "@/app/lib/cv/sagittal-hip-rep-core";
 import {
+  createRepTemporalSmoothingState,
+  resetRepTemporalSmoothingState,
+} from "@/app/lib/cv/rep-temporal-smoothing";
+import {
   emptyVisibilityLabelCounts,
   evaluateTrackingQualityFromHipVisSum,
   summarizeSessionVisibility,
@@ -281,6 +285,7 @@ export class SitToStandDetector {
   private baselineSamples: number[] = [];
   private baselineHipY: number | null = null;
   private baselineWindowEndMs = 0;
+  private repTemporal = createRepTemporalSmoothingState();
   private trackingStartedAtMs = 0;
   private lastRepAtMs = 0;
   private isBaselineCalibrating = false;
@@ -339,6 +344,7 @@ export class SitToStandDetector {
     this.readinessCheckEndMs = 0;
     this.poseReadiness = this.usesReadiness() ? "checking" : "ready";
     this.bodyFramingState = this.usesReadiness() ? "checking" : "good_distance";
+    resetRepTemporalSmoothingState(this.repTemporal);
   }
 
   private bodyFramingProfile() {
@@ -446,6 +452,7 @@ export class SitToStandDetector {
       isBaselineCalibrating: this.isBaselineCalibrating,
       repCount: this.repCount,
       repPhase: standPhaseToRepPhase(this.standPhase),
+      temporal: this.repTemporal,
     };
   }
 
@@ -457,6 +464,7 @@ export class SitToStandDetector {
     this.isBaselineCalibrating = state.isBaselineCalibrating;
     this.repCount = state.repCount;
     this.standPhase = repPhaseToStandPhase(state.repPhase);
+    this.repTemporal = state.temporal;
   }
 
   private repQualityActive(): boolean {
@@ -678,6 +686,7 @@ export class SitToStandDetector {
     this.repCount = 0;
     this.standPhase = "down";
     this.lastRepAtMs = 0;
+    resetRepTemporalSmoothingState(this.repTemporal);
     this.emit();
   }
 

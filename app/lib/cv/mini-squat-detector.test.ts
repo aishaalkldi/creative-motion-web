@@ -21,6 +21,7 @@ function fullSquatRep(counter: MiniSquatRepCounter, startMs: number): void {
   counter.driveFrame(BASELINE, startMs, TORSO);
   counter.driveFrame(0.52, startMs + 400, TORSO);
   counter.driveFrame(0.44, startMs + 1_500, TORSO);
+  counter.driveFrame(0.44, startMs + 1_516, TORSO);
 }
 
 describe("MiniSquatRepCounter", () => {
@@ -121,6 +122,7 @@ describe("MiniSquatRepCounter", () => {
     counter.driveFrame(0.5, 800, TORSO);
     counter.driveFrame(0.52, 1_100, TORSO);
     counter.driveFrame(0.44, 2_000, TORSO);
+    counter.driveFrame(0.44, 2_016, TORSO);
     assert.equal(counter.repCount, 1);
   });
 

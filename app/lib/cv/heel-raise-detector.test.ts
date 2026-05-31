@@ -23,6 +23,7 @@ function primeFlat(counter: HeelRaiseRepCounter): void {
 function fullHeelRaiseRep(counter: HeelRaiseRepCounter, startMs: number): void {
   counter.driveFrame(BASELINE_ANKLE, startMs, TORSO);
   counter.driveFrame(0.74, startMs + 800, TORSO);
+  counter.driveFrame(0.74, startMs + 816, TORSO);
   counter.driveFrame(BASELINE_ANKLE, startMs + 1_600, TORSO);
 }
 
@@ -147,6 +148,7 @@ describe("HeelRaiseRepCounter", () => {
     primeFlat(counter);
     counter.driveFrame(BASELINE_ANKLE, 0, TORSO);
     counter.driveFrame(0.74, 800, TORSO);
+    counter.driveFrame(0.74, 816, TORSO);
     const snap = counter.getSnapshot();
     assert.equal(snap.repPhase, "peak");
     assert.equal(snap.baselineAnkleY, BASELINE_ANKLE);
