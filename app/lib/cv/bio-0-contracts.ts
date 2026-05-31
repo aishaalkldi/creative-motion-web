@@ -11,7 +11,11 @@ import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 export type CvTrackingQuality = "good" | "fair" | "poor" | "unknown";
 
 /** Allowed patient-portal CV exercise ids (allowlist). */
-export type PatientCvExerciseId = "sit-to-stand" | "mini-squat" | "single-leg-stance";
+export type PatientCvExerciseId =
+  | "sit-to-stand"
+  | "mini-squat"
+  | "single-leg-stance"
+  | "heel-raise";
 
 /** Client → server body for POST /api/patient/cv-session-metrics. */
 export type PatientCvMetricsPayload = {
@@ -57,10 +61,21 @@ export type SingleLegStanceDerivedMetrics = {
   framesTotal: number;
 };
 
+export type HeelRaiseDerivedMetrics = {
+  exerciseId: "heel-raise";
+  repCount: number;
+  sessionDurationS: number;
+  trackingQuality: CvTrackingQuality;
+  movementDetected: boolean;
+  framesWithPose: number;
+  framesTotal: number;
+};
+
 export type PatientCvDerivedMetrics =
   | SitToStandDerivedMetrics
   | MiniSquatDerivedMetrics
-  | SingleLegStanceDerivedMetrics;
+  | SingleLegStanceDerivedMetrics
+  | HeelRaiseDerivedMetrics;
 
 /* ── Sit-to-Stand detector config ─────────────────────────────────────────── */
 
@@ -472,6 +487,21 @@ export const CV_Y2_MINI_SQUAT_PATIENT_PROTOTYPE_VERSION = "cv-y2-mini-squat";
 /** Server-side prototype_version for single-leg stance patient_session saves (CV-Y3). */
 export const CV_Y3_SINGLE_LEG_STANCE_PATIENT_PROTOTYPE_VERSION = "cv-y3-single-leg-stance";
 
+/** Server-side prototype_version for double heel raise patient_session saves (CV-Y4). */
+export const CV_Y4_HEEL_RAISE_PATIENT_PROTOTYPE_VERSION = "cv-y4-heel-raise";
+
+const PATIENT_HEEL_RAISE_CONSENT_DONT_EN = [
+  ...PATIENT_CV_CONSENT_DONT_EN,
+  "Measure heel height or ankle strength",
+  "Score movement quality",
+] as const;
+
+const PATIENT_HEEL_RAISE_CONSENT_DONT_AR = [
+  ...PATIENT_CV_CONSENT_DONT_AR,
+  "لا يقيس ارتفاع الكعب أو قوة الكاحل",
+  "لا يقيّم جودة الحركة",
+] as const;
+
 const PATIENT_SLS_CONSENT_DONT_EN = [
   ...PATIENT_CV_CONSENT_DONT_EN,
   "Give a balance score or pass/fail rating",
@@ -616,6 +646,133 @@ const PATIENT_SLS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
   },
 };
 
+const PATIENT_HEEL_RAISE_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
+  en: {
+    consentTitle: "Camera for movement counting",
+    consentDoIntro: "What this does:",
+    consentDoBullets: [
+      "Uses your camera on this device to detect body position",
+      "Counts double heel raise reps during your exercise",
+      "Shows whether movement is being detected",
+      "Saves derived counts and duration for your therapist to review",
+    ],
+    consentDontIntro: "What this does not do:",
+    consentDontBullets: [...PATIENT_HEEL_RAISE_CONSENT_DONT_EN],
+    consentSecureNote: "Camera access requires a secure connection (HTTPS).",
+    consentDerivedNote:
+      "Only derived session metrics are saved. No video or body coordinates are stored.",
+    consentAccept: "I understand — enable camera",
+    startTracking: "Start movement tracking",
+    stopTracking: "Stop tracking",
+    repsCounted: (n) => `Reps counted: ${n}`,
+    movementDetectedYes: "Movement detected",
+    movementDetectedNo: "Movement not detected — adjust camera angle",
+    trackingSignalLabel: "Tracking signal",
+    trackingGood: "Tracking signal: Good",
+    trackingFair: "Tracking signal: Fair — results may vary",
+    trackingPoor: "Tracking signal: Weak — adjust phone or lighting",
+    sessionDuration: (formatted) => `Session duration: ${formatted}`,
+    savedTherapistReview: "Saved — your therapist can review this session",
+    savingMetrics: "Saving session…",
+    saveError: "Session data could not be saved. You can continue your exercise.",
+    loadingPoseLibrary: "Loading pose library…",
+    loadingPoseModel: "Loading pose model…",
+    startingCamera: "Starting camera…",
+    prototypeNotice:
+      "Movement counting is assistive only. It is not clinically validated and does not replace your therapist's guidance.",
+    therapistReviewOnly: "For therapist review only — not a clinical assessment.",
+    optionalCameraNote:
+      "Optional camera assist · therapist review only · not clinically validated. Double heel raise (experimental). No height or strength score. The pilot workflow does not depend on camera tracking.",
+    continueWithoutCamera: "Continue without camera",
+    moveComfortably: "Take your time and move comfortably.",
+    trackingStatusReady: "Ready",
+    trackingStatusDetecting: "Detecting movement…",
+    startSeatedHint:
+      "Stand at a slight angle (~45°) to the camera so both feet and ankles are visible.",
+    baselineStandStillHint: "Stand still on flat feet while the camera adjusts.",
+    framingInstruction:
+      "Place your phone so your full body and both ankles are visible at a slight angle (~45°).",
+    startWhenReadyHint: "Start after the camera shows ready.",
+    movementInstruction: "Rise onto both toes slowly, hold briefly, then lower slowly.",
+    checkingCameraPosition: "Checking camera position…",
+    cameraReadyLabel: "Camera ready ✓",
+    almostReadyLabel: "Almost ready — adjust your phone slightly",
+    adjustPhoneBodyChairLabel: "Adjust phone position so your body and ankles are visible",
+    poseNotDetectedLabel: "Pose not detected — adjust your phone",
+    tryAgainLabel: "Try again",
+    hipLandmarksHint:
+      "Wait until points appear on your shoulders, hips, and ankles before rising onto your toes.",
+    framingGoodDistance: "Good distance",
+    framingMoveBack: "Step back",
+    framingMoveCloser: "Move closer",
+    framingAdjustAngle: "Adjust camera angle (~45°)",
+    framingLowVisibility: "Low visibility",
+    supportNearWallHint:
+      "Stand near a wall or chair for light support if your plan allows.",
+  },
+  ar: {
+    consentTitle: "الكاميرا لعدّ الحركة",
+    consentDoIntro: "ماذا يفعل هذا:",
+    consentDoBullets: [
+      "يستخدم كاميرتك على هذا الجهاز لاكتشاف وضع الجسم",
+      "يعدّ تكرارات رفع الكعبين معاً أثناء التمرين",
+      "يُظهر ما إذا كانت الحركة تُكتشف",
+      "يحفظ العدّ والمدة المشتقة لمراجعة معالجك",
+    ],
+    consentDontIntro: "ماذا لا يفعل هذا:",
+    consentDontBullets: [...PATIENT_HEEL_RAISE_CONSENT_DONT_AR],
+    consentSecureNote: "يتطلب الوصول للكاميرا اتصالاً آمناً (HTTPS).",
+    consentDerivedNote: "تُحفظ مقاييس الجلسة المشتقة فقط. لا يُخزَّن فيديو أو إحداثيات جسم.",
+    consentAccept: "أفهم — تفعيل الكاميرا",
+    startTracking: "بدء تتبّع الحركة",
+    stopTracking: "إيقاف التتبّع",
+    repsCounted: (n) => `التكرارات المحسوبة: ${n}`,
+    movementDetectedYes: "تم اكتشاف الحركة",
+    movementDetectedNo: "لم تُكتشف الحركة — عدّل زاوية الكاميرا",
+    trackingSignalLabel: "إشارة التتبّع",
+    trackingGood: "إشارة التتبّع: جيدة",
+    trackingFair: "إشارة التتبّع: متوسطة — قد تختلف النتائج",
+    trackingPoor: "إشارة التتبّع: ضعيفة — عدّل الهاتف أو الإضاءة",
+    sessionDuration: (formatted) => `مدة الجلسة: ${formatted}`,
+    savedTherapistReview: "تم الحفظ — يمكن لمعالجك مراجعة هذه الجلسة",
+    savingMetrics: "جاري حفظ الجلسة…",
+    saveError: "تعذّر حفظ بيانات الجلسة. يمكنك متابعة التمرين.",
+    loadingPoseLibrary: "جاري تحميل مكتبة الوضعية…",
+    loadingPoseModel: "جاري تحميل نموذج الوضعية…",
+    startingCamera: "جاري تشغيل الكاميرا…",
+    prototypeNotice:
+      "عدّ الحركة مساعد فقط. غير مُتحقّق سريرياً ولا يُغني عن إرشاد معالجك.",
+    therapistReviewOnly: "لمراجعة المعالج فقط — وليس تقييماً سريرياً.",
+    optionalCameraNote:
+      "مساعدة كاميرا اختيارية · للمعالج فقط · غير مُتحقّق سريرياً. رفع الكعبين معاً (تجريبي). لا درجة ارتفاع أو قوة. مسار التجربة لا يعتمد على تتبّع الكاميرا.",
+    continueWithoutCamera: "المتابعة دون كاميرا",
+    moveComfortably: "خذ وقتك وتحرّك براحة.",
+    trackingStatusReady: "جاهز",
+    trackingStatusDetecting: "جاري اكتشاف الحركة…",
+    startSeatedHint:
+      "قف بزاوية ~45° للكاميرا بحيث تظهر القدمان والكاحلان.",
+    baselineStandStillHint: "قف ثابتاً على القدمين مسطحتين ريثما تضبط الكاميرا.",
+    framingInstruction:
+      "ضع هاتفك بحيث يظهر جسمك كاملاً وكاحلاك معاً بزاوية ~45°.",
+    startWhenReadyHint: "ابدأ بعد أن تظهر الكاميرا أنها جاهزة.",
+    movementInstruction: "ارفع على أطراف القدمين ببطء، ثبّت قليلاً، ثم انزل ببطء.",
+    checkingCameraPosition: "جاري فحص موضع الكاميرا…",
+    cameraReadyLabel: "الكاميرا جاهزة ✓",
+    almostReadyLabel: "يكاد يكون جاهزاً — عدّل الهاتف قليلاً",
+    adjustPhoneBodyChairLabel: "عدّل موضع الهاتف حتى يظهر جسمك والكاحلان",
+    poseNotDetectedLabel: "لم تُكتشف الوضعية — عدّل الهاتف",
+    tryAgainLabel: "حاول مرة أخرى",
+    hipLandmarksHint:
+      "انتظر حتى تظهر النقاط على الكتفين والوركين والكاحلين قبل الرفع على أطراف القدم.",
+    framingGoodDistance: "المسافة مناسبة",
+    framingMoveBack: "ابتعد قليلاً",
+    framingMoveCloser: "اقترب قليلاً",
+    framingAdjustAngle: "عدّل زاوية الكاميرا (~45°)",
+    framingLowVisibility: "وضوح منخفض",
+    supportNearWallHint: "قف قرب جدار أو كرسي للدعم الخفيف إذا سمح برنامجك بذلك.",
+  },
+};
+
 export function patientCvPrototypeVersion(exerciseId: PatientCvExerciseId): string {
   switch (exerciseId) {
     case "sit-to-stand":
@@ -624,6 +781,8 @@ export function patientCvPrototypeVersion(exerciseId: PatientCvExerciseId): stri
       return CV_Y2_MINI_SQUAT_PATIENT_PROTOTYPE_VERSION;
     case "single-leg-stance":
       return CV_Y3_SINGLE_LEG_STANCE_PATIENT_PROTOTYPE_VERSION;
+    case "heel-raise":
+      return CV_Y4_HEEL_RAISE_PATIENT_PROTOTYPE_VERSION;
   }
 }
 
@@ -633,6 +792,7 @@ export function patientCvCopy(
 ): PatientCvCopy {
   if (exerciseId === "mini-squat") return PATIENT_MINI_SQUAT_CV_COPY[lang];
   if (exerciseId === "single-leg-stance") return PATIENT_SLS_CV_COPY[lang];
+  if (exerciseId === "heel-raise") return PATIENT_HEEL_RAISE_CV_COPY[lang];
   return PATIENT_STS_CV_COPY[lang];
 }
 

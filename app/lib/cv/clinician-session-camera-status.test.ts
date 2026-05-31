@@ -61,6 +61,11 @@ describe("clinician session camera status", () => {
     assert.equal(sessionIncludesCvExercise(exercises), true);
   });
 
+  it("sessionIncludesCvExercise detects heel raise sessions", () => {
+    const exercises = ["Heel Raises"];
+    assert.equal(sessionIncludesCvExercise(exercises), true);
+  });
+
   it("deriveClinicianSessionCameraLine formats hold exercise session", () => {
     const line = deriveClinicianSessionCameraLine({
       planSessionId: "session-1",
@@ -76,6 +81,25 @@ describe("clinician session camera status", () => {
       ],
     });
     assert.match(line ?? "", /Single-Leg Stance hold: 22s/);
+  });
+
+  it("deriveClinicianSessionCameraLine formats heel raise session", () => {
+    const line = deriveClinicianSessionCameraLine({
+      planSessionId: "session-1",
+      sessionStatus: "completed",
+      exercises: ["Heel Raises"],
+      cvMetrics: [
+        metric({
+          exerciseId: "heel-raise",
+          repCount: 14,
+          sessionDurationS: 48,
+          trackingQuality: "good",
+          prototypeVersion: "cv-y4-heel-raise",
+        }),
+      ],
+    });
+    assert.match(line ?? "", /Heel Raise reps: 14/);
+    assert.match(line ?? "", /visibility: good/);
   });
 
   it("deriveClinicianSessionCameraLine formats multi-exercise session", () => {

@@ -9,6 +9,7 @@ import {
   CV_Y2_MINI_SQUAT_PATIENT_PROTOTYPE_VERSION,
   CV_Y1B_PATIENT_PROTOTYPE_VERSION,
   CV_Y3_SINGLE_LEG_STANCE_PATIENT_PROTOTYPE_VERSION,
+  CV_Y4_HEEL_RAISE_PATIENT_PROTOTYPE_VERSION,
   patientCvPrototypeVersion,
 } from "@/app/lib/cv/bio-0-contracts";
 import { isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
@@ -18,14 +19,14 @@ function isAllowedPatientCvExerciseId(exerciseId: string): boolean {
 }
 
 describe("patient CV metrics allowlist (API contract)", () => {
-  it("accepts sit-to-stand, mini-squat, and single-leg-stance", () => {
+  it("accepts sit-to-stand, mini-squat, single-leg-stance, and heel-raise", () => {
     assert.equal(isAllowedPatientCvExerciseId("sit-to-stand"), true);
     assert.equal(isAllowedPatientCvExerciseId("mini-squat"), true);
     assert.equal(isAllowedPatientCvExerciseId("single-leg-stance"), true);
+    assert.equal(isAllowedPatientCvExerciseId("heel-raise"), true);
   });
 
   it("rejects unknown exercise ids", () => {
-    assert.equal(isAllowedPatientCvExerciseId("heel-raise"), false);
     assert.equal(isAllowedPatientCvExerciseId("step-up"), false);
   });
 
@@ -36,5 +37,6 @@ describe("patient CV metrics allowlist (API contract)", () => {
       patientCvPrototypeVersion("single-leg-stance"),
       CV_Y3_SINGLE_LEG_STANCE_PATIENT_PROTOTYPE_VERSION,
     );
+    assert.equal(patientCvPrototypeVersion("heel-raise"), CV_Y4_HEEL_RAISE_PATIENT_PROTOTYPE_VERSION);
   });
 });

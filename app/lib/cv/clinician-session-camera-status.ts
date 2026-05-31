@@ -14,6 +14,7 @@ const CV_EXERCISE_SHORT_NAME: Record<string, string> = {
   "sit-to-stand": "Sit-to-Stand",
   "mini-squat": "Mini Squat",
   "single-leg-stance": "Single-Leg Stance",
+  "heel-raise": "Heel Raise",
 };
 
 export function sessionIncludesCvExercise(

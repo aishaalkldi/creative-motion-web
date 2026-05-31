@@ -5,6 +5,10 @@
 
 import { DEFAULT_STS_CONFIG, type SitToStandCvConfig } from "@/app/lib/cv/bio-0-contracts";
 import {
+  LAB_HEEL_RAISE_REP_CONFIG,
+  type HeelRaiseRepConfig,
+} from "@/app/lib/cv/heel-raise-detector";
+import {
   LAB_SLS_HOLD_CONFIG,
   type SingleLegStanceHoldConfig,
 } from "@/app/lib/cv/single-leg-stance-detector";
@@ -13,6 +17,7 @@ export const CV_Y1_ENABLED_EXERCISE_IDS = [
   "sit-to-stand",
   "mini-squat",
   "single-leg-stance",
+  "heel-raise",
 ] as const;
 
 export type CvY1ExerciseId = (typeof CV_Y1_ENABLED_EXERCISE_IDS)[number];
@@ -97,3 +102,27 @@ export const PATIENT_MINI_SQUAT_CONFIG: SitToStandCvConfig = {
   prototypeVersion: "cv-y2-mini-squat",
   bodyFramingProfileId: "standing-sagittal-rep",
 };
+
+/** MediaPipe shell for patient double heel raise capture. */
+export const PATIENT_HEEL_RAISE_POSE_SHELL = {
+  wasmUrl: DEFAULT_STS_CONFIG.wasmUrl,
+  modelUrl: DEFAULT_STS_CONFIG.modelUrl,
+  canvasWidth: DEFAULT_STS_CONFIG.canvasWidth,
+  canvasHeight: DEFAULT_STS_CONFIG.canvasHeight,
+  initTimeoutMs: DEFAULT_STS_CONFIG.initTimeoutMs,
+  uiFrameUpdateInterval: DEFAULT_STS_CONFIG.uiFrameUpdateInterval,
+  landmarkDotColor: DEFAULT_STS_CONFIG.landmarkDotColor,
+  lowerBodyLandmarkIndices: DEFAULT_STS_CONFIG.lowerBodyLandmarkIndices,
+} as const;
+
+/** Patient portal double heel raise rep tuning — separate from LAB_HEEL_RAISE_REP_CONFIG. */
+export const PATIENT_HEEL_RAISE_REP_CONFIG: HeelRaiseRepConfig = {
+  ...LAB_HEEL_RAISE_REP_CONFIG,
+  baselineDurationMs: 3_000,
+  minMsBetweenReps: 800,
+  minAnkleVisibility: 0.3,
+  minSaveDurationS: CV_MIN_SAVE_DURATION_S,
+};
+
+/** Readiness gate before rep counting (not persisted). */
+export const PATIENT_HEEL_RAISE_READINESS_MS = 2_000;
