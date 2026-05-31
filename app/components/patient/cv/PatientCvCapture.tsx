@@ -1,8 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { patientCvCopy, type SitToStandDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
-import { PATIENT_STS_CONFIG } from "@/app/lib/cv/cv-patient-config";
+import {
+  patientCvCopy,
+  type PatientCvDerivedMetrics,
+} from "@/app/lib/cv/bio-0-contracts";
+import {
+  PATIENT_MINI_SQUAT_CONFIG,
+  PATIENT_STS_CONFIG,
+  type CvY1ExerciseId,
+} from "@/app/lib/cv/cv-patient-config";
+import {
+  MiniSquatDetector,
+  formatMiniSquatDuration,
+  mapMiniSquatStartError,
+  type MiniSquatDetectorSnapshot,
+} from "@/app/lib/cv/mini-squat-pose-detector";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import {
   formatSitToStandDuration,
@@ -15,21 +28,32 @@ import {
   type SitToStandTrackingStatus,
 } from "@/app/lib/cv/sit-to-stand-detector";
 
-const { canvasWidth: CANVAS_WIDTH, canvasHeight: CANVAS_HEIGHT } = PATIENT_STS_CONFIG;
-
 const METRICS_REPORT_INTERVAL_MS = 3_000;
 
+type CvDetectorSnapshot = SitToStandDetectorSnapshot | MiniSquatDetectorSnapshot;
+
+type PatientCvDetector = SitToStandDetector | MiniSquatDetector;
+
 export type PatientCvCaptureProps = {
+  exerciseId: CvY1ExerciseId;
   language: PatientExerciseLanguage;
   arClass?: string;
   textDir?: "rtl" | "ltr";
-  onMetricsUpdate?: (metrics: SitToStandDerivedMetrics) => void;
+  onMetricsUpdate?: (metrics: PatientCvDerivedMetrics) => void;
   onSkipped?: () => void;
   onRegisterMetricsFlush?: (flush: () => void) => void;
 };
 
+function canvasSizeForExercise(exerciseId: CvY1ExerciseId): {
+  canvasWidth: number;
+  canvasHeight: number;
+} {
+  const config = exerciseId === "mini-squat" ? PATIENT_MINI_SQUAT_CONFIG : PATIENT_STS_CONFIG;
+  return { canvasWidth: config.canvasWidth, canvasHeight: config.canvasHeight };
+}
+
 function applySnapshot(
-  snapshot: SitToStandDetectorSnapshot,
+  snapshot: CvDetectorSnapshot,
   setters: {
     setPreviewActive: (v: boolean) => void;
     setLoading: (v: boolean) => void;
@@ -58,6 +82,7 @@ function applySnapshot(
 }
 
 export function PatientCvCapture({
+  exerciseId,
   language,
   arClass = "",
   textDir = "ltr",
@@ -65,7 +90,9 @@ export function PatientCvCapture({
   onSkipped,
   onRegisterMetricsFlush,
 }: PatientCvCaptureProps) {
-  const copy = patientCvCopy(language);
+  const copy = patientCvCopy(language, exerciseId);
+  const { canvasWidth: CANVAS_WIDTH, canvasHeight: CANVAS_HEIGHT } =
+    canvasSizeForExercise(exerciseId);
 
   const [skipped, setSkipped] = useState(false);
   const [consented, setConsented] = useState(false);
@@ -85,7 +112,7 @@ export function PatientCvCapture({
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const detectorRef = useRef<SitToStandDetector | null>(null);
+  const detectorRef = useRef<PatientCvDetector | null>(null);
   const startInProgressRef = useRef(false);
   const stopInProgressRef = useRef(false);
   const skipReportRef = useRef(false);
@@ -104,7 +131,7 @@ export function PatientCvCapture({
   }, []);
 
   const syncFromDetector = useCallback(
-    (snapshot: SitToStandDetectorSnapshot) => {
+    (snapshot: CvDetectorSnapshot) => {
       const prevRep = lastReportedRepRef.current;
       applySnapshot(snapshot, {
         setPreviewActive,
@@ -128,14 +155,18 @@ export function PatientCvCapture({
   );
 
   useEffect(() => {
-    const detector = new SitToStandDetector({ onSnapshot: syncFromDetector }, PATIENT_STS_CONFIG);
+    const detector: PatientCvDetector =
+      exerciseId === "mini-squat"
+        ? new MiniSquatDetector({ onSnapshot: syncFromDetector })
+        : new SitToStandDetector({ onSnapshot: syncFromDetector }, PATIENT_STS_CONFIG);
+
     detectorRef.current = detector;
     return () => {
       reportMetrics();
       detector.stop();
       detectorRef.current = null;
     };
-  }, [syncFromDetector, reportMetrics]);
+  }, [exerciseId, syncFromDetector, reportMetrics]);
 
   useEffect(() => {
     if (!onRegisterMetricsFlush) return;
@@ -170,6 +201,8 @@ export function PatientCvCapture({
     stopInProgressRef.current = false;
   }, [reportMetrics, syncFromDetector]);
 
+  const mapStartError = exerciseId === "mini-squat" ? mapMiniSquatStartError : mapSitToStandStartError;
+
   const startSession = useCallback(async () => {
     const detector = detectorRef.current;
     if (
@@ -202,11 +235,11 @@ export function PatientCvCapture({
     } catch (err) {
       detector.stop();
       syncFromDetector(detector.getSnapshot());
-      setError(mapSitToStandStartError(err));
+      setError(mapStartError(err));
     } finally {
       startInProgressRef.current = false;
     }
-  }, [consented, loading, syncFromDetector, reportMetrics]);
+  }, [consented, loading, syncFromDetector, reportMetrics, mapStartError]);
 
   const loadingLabel =
     initPhase === "import"
@@ -249,6 +282,9 @@ export function PatientCvCapture({
 
   const showReadinessActions =
     previewActive && (poseReadiness === "not_ready" || trackingStatus === "pose-lost");
+
+  const formatDuration =
+    exerciseId === "mini-squat" ? formatMiniSquatDuration : formatSitToStandDuration;
 
   if (skipped) {
     return null;
@@ -397,7 +433,7 @@ export function PatientCvCapture({
       )}
 
       {sessionStarted && baselineCalibrating && (poseReadiness === "ready" || poseReadiness === "partial") && (
-        <p className="mt-3 text-[12px] font-medium text-[#1D9E75]">{copy.startSeatedHint}</p>
+        <p className="mt-3 text-[12px] font-medium text-[#1D9E75]">{copy.baselineStandStillHint}</p>
       )}
 
       {sessionStarted && (
@@ -415,7 +451,7 @@ export function PatientCvCapture({
           </p>
 
           <p className="text-[13px] text-[#374151]">
-            {copy.sessionDuration(formatSitToStandDuration(sessionSeconds))}
+            {copy.sessionDuration(formatDuration(sessionSeconds))}
           </p>
 
           <p className="text-[12px] text-[#6B7280]">

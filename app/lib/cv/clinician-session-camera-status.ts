@@ -7,7 +7,12 @@ import { parseStoredExercise } from "@/app/lib/exercise-resolve";
 import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
 import { isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
 
-export function sessionIncludesSitToStand(
+const CV_EXERCISE_SHORT_NAME: Record<string, string> = {
+  "sit-to-stand": "Sit-to-Stand",
+  "mini-squat": "Mini Squat",
+};
+
+export function sessionIncludesCvExercise(
   exercises: readonly unknown[] | null | undefined,
 ): boolean {
   if (!exercises?.length) return false;
@@ -17,18 +22,24 @@ export function sessionIncludesSitToStand(
   });
 }
 
-/** Latest CV metric per plan_session_id (by recordedAt). */
+/** @deprecated Use sessionIncludesCvExercise */
+export const sessionIncludesSitToStand = sessionIncludesCvExercise;
+
+/** All CV metrics per plan_session_id, newest first within each session. */
 export function indexCvMetricsByPlanSessionId(
   metrics: readonly CvSessionMetricPublic[],
-): Map<string, CvSessionMetricPublic> {
-  const map = new Map<string, CvSessionMetricPublic>();
+): Map<string, CvSessionMetricPublic[]> {
+  const map = new Map<string, CvSessionMetricPublic[]>();
   for (const row of metrics) {
     const planSessionId = row.planSessionId?.trim();
     if (!planSessionId) continue;
-    const existing = map.get(planSessionId);
-    if (!existing || new Date(row.recordedAt) > new Date(existing.recordedAt)) {
-      map.set(planSessionId, row);
-    }
+    const list = map.get(planSessionId) ?? [];
+    list.push(row);
+    map.set(planSessionId, list);
+  }
+  for (const [key, list] of map) {
+    list.sort((a, b) => new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime());
+    map.set(key, list);
   }
   return map;
 }
@@ -41,17 +52,24 @@ function formatCameraVisibilityShort(quality: string | null): string {
   return "unknown";
 }
 
+function formatCvExerciseShortName(exerciseId: string | null | undefined): string {
+  const id = exerciseId?.trim().toLowerCase() ?? "";
+  return CV_EXERCISE_SHORT_NAME[id] ?? exerciseId?.trim() ?? "CV exercise";
+}
+
 /**
  * Clinician-only line for rehabilitation plan session rows.
- * Returns null when the session has no sit-to-stand exercise.
+ * Returns null when the session has no CV-eligible exercise.
  */
 export function deriveClinicianSessionCameraLine(input: {
   planSessionId: string;
   sessionStatus: string;
   exercises: readonly unknown[] | null | undefined;
-  cvMetric: CvSessionMetricPublic | null | undefined;
+  cvMetrics?: readonly CvSessionMetricPublic[] | null;
+  /** @deprecated Prefer cvMetrics array */
+  cvMetric?: CvSessionMetricPublic | null | undefined;
 }): string | null {
-  if (!sessionIncludesSitToStand(input.exercises)) return null;
+  if (!sessionIncludesCvExercise(input.exercises)) return null;
 
   const completed =
     input.sessionStatus === "completed" || input.sessionStatus === "done";
@@ -60,11 +78,20 @@ export function deriveClinicianSessionCameraLine(input: {
     return "Not completed";
   }
 
-  if (input.cvMetric) {
-    const reps = input.cvMetric.repCount ?? 0;
-    const visibility = formatCameraVisibilityShort(input.cvMetric.trackingQuality);
-    return `Camera used · reps: ${reps} · visibility: ${visibility}`;
+  const metrics =
+    input.cvMetrics ??
+    (input.cvMetric != null ? [input.cvMetric] : []);
+
+  if (metrics.length === 0) {
+    return "Manual completion · camera not saved";
   }
 
-  return "Manual completion · camera not saved";
+  const repParts = metrics.map((row) => {
+    const name = formatCvExerciseShortName(row.exerciseId);
+    const reps = row.repCount ?? 0;
+    return `${name} reps: ${reps}`;
+  });
+
+  const visibility = formatCameraVisibilityShort(metrics[0]?.trackingQuality ?? null);
+  return `Camera used · ${repParts.join(" · ")} · visibility: ${visibility}`;
 }

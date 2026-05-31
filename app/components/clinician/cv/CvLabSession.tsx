@@ -179,7 +179,7 @@ export function CvLabSession({
     detector.stop();
     syncFromDetector(detector.getSnapshot());
     if (metricsSnapshot) {
-      void saveSessionMetrics(metricsSnapshot).finally(() => {
+      void saveSessionMetrics(metricsSnapshot as SitToStandDerivedMetrics).finally(() => {
         stopInProgressRef.current = false;
       });
     } else {

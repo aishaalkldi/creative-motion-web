@@ -6,6 +6,7 @@
 
 import {
   DEFAULT_STS_CONFIG,
+  type PatientCvDerivedMetrics,
   type SitToStandCvConfig,
   type SitToStandDerivedMetrics,
 } from "@/app/lib/cv/bio-0-contracts";
@@ -15,6 +16,7 @@ import {
   type SessionMotionSummary,
 } from "@/app/lib/cv/rep-quality-fsm";
 import {
+  baselineConfigFromMiniSquat,
   baselineConfigFromSts,
   computeHipMidY,
   computeTorsoSpan,
@@ -434,6 +436,9 @@ export class SitToStandDetector {
   }
 
   private repBaselineConfig() {
+    if (this.config.repPolarity === "drop") {
+      return baselineConfigFromMiniSquat(this.config);
+    }
     return baselineConfigFromSts(this.config);
   }
 
@@ -615,7 +620,7 @@ export class SitToStandDetector {
     if (this.usesBaselineRepCounting()) {
       tickSagittalHipRepBaseline({
         state,
-        polarity: "rise",
+        polarity: this.config.repPolarity ?? "rise",
         hipY,
         nowMs,
         torsoSpan,
@@ -646,7 +651,7 @@ export class SitToStandDetector {
     this.applyRepState(state);
   }
 
-  getDerivedMetrics(): SitToStandDerivedMetrics {
+  getDerivedMetrics(): PatientCvDerivedMetrics {
     const quality = summarizeSessionVisibility({
       hipVisSamples: this.hipVisSamples,
       labelCounts: this.visibilityLabelCounts,
@@ -654,15 +659,16 @@ export class SitToStandDetector {
       visibilityGood: this.config.visibilityGood,
       visibilityFair: this.config.visibilityFair,
     });
+    const exerciseId = this.config.metricsExerciseId ?? "sit-to-stand";
     return {
-      exerciseId: "sit-to-stand",
+      exerciseId,
       repCount: this.repCount,
       sessionDurationS: this.sessionSeconds,
       trackingQuality: quality,
       movementDetected: this.framesWithPose > 0,
       framesWithPose: this.framesWithPose,
       framesTotal: this.framesTotal,
-    };
+    } as PatientCvDerivedMetrics;
   }
 
   isPreviewActive(): boolean {
