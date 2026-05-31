@@ -15,11 +15,28 @@ import {
   type SessionMotionSummary,
 } from "@/app/lib/cv/rep-quality-fsm";
 import {
+  baselineConfigFromSts,
+  computeHipMidY,
+  computeTorsoSpan,
+  hipsMeetMinVisibility,
+  repPhaseToStandPhase,
+  resolveBaselineDeltas,
+  resolveBaselineThresholds,
+  standPhaseToRepPhase,
+  tickSagittalHipRepAbsolute,
+  tickSagittalHipRepBaseline,
+  type PoseLandmark,
+  type SagittalHipRepState,
+} from "@/app/lib/cv/sagittal-hip-rep-core";
+import {
   emptyVisibilityLabelCounts,
   evaluateTrackingQualityFromHipVisSum,
   summarizeSessionVisibility,
   type VisibilityLabelCounts,
 } from "@/app/lib/cv/session-visibility-summary";
+
+export { computeHipMidY, computeTorsoSpan, hipsMeetMinVisibility };
+export type { PoseLandmark };
 
 export type SitToStandTrackingStatus = "idle" | "detecting" | "pose-found" | "pose-lost";
 export type SitToStandTrackingQuality = "good" | "fair" | "poor";
@@ -52,40 +69,6 @@ type PoseLandmarkerInstance = {
 };
 
 type StandPhase = "up" | "down";
-
-type PoseLandmark = { x: number; y: number; visibility?: number };
-
-/** Shoulder–hip span in normalized frame coords (adapts to camera distance). */
-export function computeTorsoSpan(landmarks: PoseLandmark[]): number | null {
-  const ls = landmarks[11];
-  const rs = landmarks[12];
-  const lh = landmarks[23];
-  const rh = landmarks[24];
-  if (!ls || !rs || !lh || !rh) return null;
-
-  const shoulderVis = (ls.visibility ?? 0) + (rs.visibility ?? 0);
-  const hipVis = (lh.visibility ?? 0) + (rh.visibility ?? 0);
-  if (shoulderVis < 0.6 || hipVis < 0.6) return null;
-
-  const shoulderY = (ls.y + rs.y) / 2;
-  const hipY = (lh.y + rh.y) / 2;
-  const span = Math.abs(hipY - shoulderY);
-  if (span < 0.08 || span > 0.9) return null;
-  return span;
-}
-
-export function computeHipMidY(landmarks: PoseLandmark[]): number {
-  return ((landmarks[23]?.y ?? 0) + (landmarks[24]?.y ?? 0)) / 2;
-}
-
-export function hipsMeetMinVisibility(
-  landmarks: PoseLandmark[],
-  minPerHip: number,
-): boolean {
-  const left = landmarks[23]?.visibility ?? 0;
-  const right = landmarks[24]?.visibility ?? 0;
-  return left >= minPerHip && right >= minPerHip;
-}
 
 export function evaluateHipTrackingQuality(
   landmarks: PoseLandmark[],
@@ -241,16 +224,6 @@ async function createPoseLandmarker(
 export type SitToStandDetectorCallbacks = {
   onSnapshot: (snapshot: SitToStandDetectorSnapshot) => void;
 };
-
-function median(values: number[]): number | null {
-  if (values.length === 0) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-  if (sorted.length % 2 === 0) {
-    return (sorted[mid - 1]! + sorted[mid]!) / 2;
-  }
-  return sorted[mid]!;
-}
 
 const IDLE_SNAPSHOT: SitToStandDetectorSnapshot = {
   trackingStatus: "idle",
@@ -460,37 +433,30 @@ export class SitToStandDetector {
     dot(rh.x * width, rh.y * height);
   }
 
-  private maybeFinalizeBaseline(nowMs: number): void {
-    if (!this.usesBaselineRepCounting() || this.baselineHipY !== null) return;
-    if (this.baselineWindowEndMs <= 0 || nowMs < this.baselineWindowEndMs) return;
-
-    const medianY = median(this.baselineSamples);
-    this.baselineHipY =
-      medianY ?? this.config.fallbackSeatedHipY ?? this.config.hipDownThreshold;
-    this.isBaselineCalibrating = false;
+  private repBaselineConfig() {
+    return baselineConfigFromSts(this.config);
   }
 
-  private resolveBaselineDeltas(torsoSpan: number | null): { standDelta: number; resetDelta: number } {
-    const fixedStand = this.config.baselineStandDelta ?? 0.09;
-    const fixedReset = this.config.baselineResetDelta ?? 0.04;
-
-    if (!this.config.baselineScaleByTorso || torsoSpan === null) {
-      return { standDelta: fixedStand, resetDelta: fixedReset };
-    }
-
-    const ratioStand = this.config.baselineStandDeltaRatio ?? 0.18;
-    const ratioReset = this.config.baselineResetDeltaRatio ?? 0.08;
-    const minStand = this.config.baselineStandDeltaMin ?? 0.035;
-    const minReset = this.config.baselineResetDeltaMin ?? 0.02;
-    const scaledStand = ratioStand * torsoSpan;
-    const scaledReset = ratioReset * torsoSpan;
-
-    // Cap at fixed deltas: full-body framing has larger span but smaller absolute hip rise.
-    // Without cap, ratio×span can exceed fixedStand and make far framing stricter than close.
+  private buildRepState(): SagittalHipRepState {
     return {
-      standDelta: Math.max(minStand, Math.min(fixedStand, scaledStand)),
-      resetDelta: Math.max(minReset, Math.min(fixedReset, scaledReset)),
+      baselineSamples: this.baselineSamples,
+      baselineHipY: this.baselineHipY,
+      baselineWindowEndMs: this.baselineWindowEndMs,
+      lastRepAtMs: this.lastRepAtMs,
+      isBaselineCalibrating: this.isBaselineCalibrating,
+      repCount: this.repCount,
+      repPhase: standPhaseToRepPhase(this.standPhase),
     };
+  }
+
+  private applyRepState(state: SagittalHipRepState): void {
+    this.baselineSamples = state.baselineSamples;
+    this.baselineHipY = state.baselineHipY;
+    this.baselineWindowEndMs = state.baselineWindowEndMs;
+    this.lastRepAtMs = state.lastRepAtMs;
+    this.isBaselineCalibrating = state.isBaselineCalibrating;
+    this.repCount = state.repCount;
+    this.standPhase = repPhaseToStandPhase(state.repPhase);
   }
 
   private repQualityActive(): boolean {
@@ -528,11 +494,20 @@ export class SitToStandDetector {
   } | null {
     if (this.usesBaselineRepCounting()) {
       if (this.baselineHipY === null) return null;
-      const { standDelta, resetDelta } = this.resolveBaselineDeltas(torsoSpan);
+      const { primaryDelta, resetDelta } = resolveBaselineDeltas(
+        this.repBaselineConfig(),
+        torsoSpan,
+      );
+      const { enterPeak, returnRest } = resolveBaselineThresholds(
+        "rise",
+        this.baselineHipY,
+        primaryDelta,
+        resetDelta,
+      );
       return {
-        standThreshold: this.baselineHipY - standDelta,
-        seatedThreshold: this.baselineHipY - resetDelta,
-        standDelta,
+        standThreshold: enterPeak,
+        seatedThreshold: returnRest,
+        standDelta: primaryDelta,
         returnDelta: resetDelta,
       };
     }
@@ -635,42 +610,40 @@ export class SitToStandDetector {
   }
 
   private updateRepCountFromHipY(hipY: number, nowMs: number, torsoSpan: number | null): void {
+    const state = this.buildRepState();
+
     if (this.usesBaselineRepCounting()) {
-      this.maybeFinalizeBaseline(nowMs);
-      if (this.baselineHipY === null) {
-        if (this.canCollectBaseline()) {
-          this.baselineSamples.push(hipY);
-        }
-        return;
-      }
-
-      if (!this.canIncrementReps()) return;
-
-      const { standDelta, resetDelta } = this.resolveBaselineDeltas(torsoSpan);
-      const minMs = this.config.minMsBetweenReps ?? 900;
-      const standThreshold = this.baselineHipY - standDelta;
-      const seatedThreshold = this.baselineHipY - resetDelta;
-
-      if (
-        hipY < standThreshold &&
-        this.standPhase === "down" &&
-        nowMs - this.lastRepAtMs >= minMs
-      ) {
-        this.standPhase = "up";
-        this.repCount += 1;
-        this.lastRepAtMs = nowMs;
-      } else if (hipY > seatedThreshold && this.standPhase === "up") {
-        this.standPhase = "down";
-      }
+      tickSagittalHipRepBaseline({
+        state,
+        polarity: "rise",
+        hipY,
+        nowMs,
+        torsoSpan,
+        config: this.repBaselineConfig(),
+        canCollectBaseline: this.canCollectBaseline(),
+        canIncrementReps: (s) => {
+          if (!this.usesReadiness()) return true;
+          if (this.poseReadiness === "checking" || this.poseReadiness === "not_ready") {
+            return false;
+          }
+          if (this.usesBaselineRepCounting() && s.baselineHipY === null) return false;
+          return true;
+        },
+      });
+      this.applyRepState(state);
       return;
     }
 
-    if (hipY < this.config.hipUpThreshold && this.standPhase === "down") {
-      this.standPhase = "up";
-      this.repCount += 1;
-    } else if (hipY > this.config.hipDownThreshold && this.standPhase === "up") {
-      this.standPhase = "down";
-    }
+    tickSagittalHipRepAbsolute({
+      state,
+      polarity: "rise",
+      hipY,
+      config: {
+        peakThreshold: this.config.hipUpThreshold,
+        restThreshold: this.config.hipDownThreshold,
+      },
+    });
+    this.applyRepState(state);
   }
 
   getDerivedMetrics(): SitToStandDerivedMetrics {
