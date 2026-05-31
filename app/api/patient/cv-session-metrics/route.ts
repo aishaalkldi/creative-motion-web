@@ -1,18 +1,19 @@
 /**
  * POST /api/patient/cv-session-metrics
  *
- * Token-scoped public endpoint — derived Sit-to-Stand metrics only.
+ * Token-scoped public endpoint — derived CV metrics (allowlisted exercises only).
  * No video, landmarks, or clinical interpretation. Service role insert.
  */
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { CV_MIN_SAVE_DURATION_S, isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
 import {
-  CV_Y1B_PATIENT_PROTOTYPE_VERSION,
+  patientCvPrototypeVersion,
   type CvTrackingQuality,
+  type PatientCvExerciseId,
 } from "@/app/lib/cv/bio-0-contracts";
 import { bodyHasForbiddenCvKeys } from "@/app/lib/cv/cv-forbidden-keys";
-import { CV_MIN_SAVE_DURATION_S } from "@/app/lib/cv/cv-patient-config";
 import {
   checkPatientGeneralLimit,
   rateLimitExceededResponse,
@@ -25,7 +26,10 @@ import {
 } from "@/app/lib/api/safe-errors";
 
 const TRACKING_QUALITIES = new Set<CvTrackingQuality>(["good", "fair", "poor", "unknown"]);
-const PATIENT_CV_EXERCISE_ID = "sit-to-stand";
+
+function isAllowedPatientCvExerciseId(value: string): value is PatientCvExerciseId {
+  return isCvEnabledExercise(value);
+}
 
 type RequestBody = {
   token?: string;
@@ -94,7 +98,7 @@ export async function POST(req: NextRequest) {
   }
 
   const exerciseId = (body.exerciseId?.trim() ?? "").toLowerCase();
-  if (exerciseId !== PATIENT_CV_EXERCISE_ID) {
+  if (!isAllowedPatientCvExerciseId(exerciseId)) {
     return NextResponse.json({ error: API_ERRORS.UNABLE }, { status: 400 });
   }
 
@@ -166,7 +170,7 @@ export async function POST(req: NextRequest) {
       patient_id: tokenRow.patient_id,
       plan_id: tokenRow.plan_id,
       plan_session_id: sessionId,
-      exercise_id: PATIENT_CV_EXERCISE_ID,
+      exercise_id: exerciseId,
       rep_count: body.repCount ?? null,
       session_duration_s: body.sessionDurationS ?? null,
       tracking_quality: trackingQuality ?? null,
@@ -174,7 +178,7 @@ export async function POST(req: NextRequest) {
       frames_with_pose: body.framesWithPose ?? null,
       frames_total: body.framesTotal ?? null,
       source: "patient_session",
-      prototype_version: CV_Y1B_PATIENT_PROTOTYPE_VERSION,
+      prototype_version: patientCvPrototypeVersion(exerciseId),
     })
     .select("id, recorded_at")
     .single<{ id: string; recorded_at: string }>();

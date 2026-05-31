@@ -1,9 +1,9 @@
 "use client";
 
-import type { SitToStandDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
+import type { PatientCvDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import { PatientCvCapture } from "@/app/components/patient/cv/PatientCvCapture";
-import { isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
+import { isCvEnabledExercise, type CvY1ExerciseId } from "@/app/lib/cv/cv-patient-config";
 import { exerciseMediaUi } from "@/app/lib/patient-portal-ui";
 
 export type ExerciseMediaAreaProps = {
@@ -17,7 +17,7 @@ export type ExerciseMediaAreaProps = {
   textDir?: "rtl" | "ltr";
   /** W-0 exercise card step — CV capture only when "active". */
   exerciseStep?: "preview" | "active" | "done";
-  onCvMetricsUpdate?: (metrics: SitToStandDerivedMetrics) => void;
+  onCvMetricsUpdate?: (metrics: PatientCvDerivedMetrics) => void;
   onCvSkipped?: () => void;
   onRegisterCvMetricsFlush?: (flush: () => void) => void;
 };
@@ -403,14 +403,16 @@ export function ExerciseMediaArea({
   const poster = thumbnailUrl?.trim() || undefined;
 
   const showPatientCv = exerciseStep === "active" && isCvEnabledExercise(exerciseId);
+  const cvExerciseId = exerciseId as CvY1ExerciseId | undefined;
 
   return (
     <div
       className="relative overflow-hidden border-b border-[#D1E7DE] bg-gradient-to-b from-[#E8F5F1] via-[#F0FAF6] to-[#F4F6F5]"
       data-exercise-id={exerciseId ?? undefined}
     >
-      {showPatientCv && (
+      {showPatientCv && cvExerciseId && (
         <PatientCvCapture
+          exerciseId={cvExerciseId}
           language={language}
           arClass={arClass}
           textDir={textDir}

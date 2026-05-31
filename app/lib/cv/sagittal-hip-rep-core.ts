@@ -246,6 +246,33 @@ export function repPhaseToStandPhase(repPhase: SagittalHipRepPhase): "up" | "dow
   return repPhase === "peak" ? "up" : "down";
 }
 
+export function baselineConfigFromMiniSquat(config: {
+  baselineDurationMs?: number;
+  fallbackStandingHipY?: number;
+  fallbackSeatedHipY?: number;
+  baselineScaleByTorso?: boolean;
+  baselineStandDelta?: number;
+  baselineResetDelta?: number;
+  baselineStandDeltaRatio?: number;
+  baselineResetDeltaRatio?: number;
+  baselineStandDeltaMin?: number;
+  baselineResetDeltaMin?: number;
+  minMsBetweenReps?: number;
+}): SagittalHipRepBaselineConfig {
+  return {
+    baselineDurationMs: config.baselineDurationMs ?? 3_000,
+    fallbackBaselineHipY: config.fallbackStandingHipY ?? config.fallbackSeatedHipY ?? 0.45,
+    baselineScaleByTorso: config.baselineScaleByTorso ?? true,
+    baselinePrimaryDelta: config.baselineStandDelta ?? 0.06,
+    baselineResetDelta: config.baselineResetDelta ?? 0.03,
+    baselinePrimaryDeltaRatio: config.baselineStandDeltaRatio ?? 0.11,
+    baselineResetDeltaRatio: config.baselineResetDeltaRatio ?? 0.055,
+    baselinePrimaryDeltaMin: config.baselineStandDeltaMin ?? 0.025,
+    baselineResetDeltaMin: config.baselineResetDeltaMin ?? 0.015,
+    minMsBetweenReps: config.minMsBetweenReps ?? 1_000,
+  };
+}
+
 export function baselineConfigFromSts(config: {
   baselineDurationMs?: number;
   fallbackSeatedHipY?: number;

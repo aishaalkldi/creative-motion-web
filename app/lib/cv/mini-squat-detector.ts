@@ -3,7 +3,7 @@
  * Not enabled for patient portal in MINI-SQUAT-CV-PR-1.
  */
 
-import type { CvTrackingQuality } from "@/app/lib/cv/bio-0-contracts";
+import type { CvTrackingQuality, MiniSquatDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import {
   baselineConfigFromSts,
   createSagittalHipRepState,
@@ -15,15 +15,7 @@ import {
   tickSagittalHipRepBaseline,
 } from "@/app/lib/cv/sagittal-hip-rep-core";
 
-export type MiniSquatDerivedMetrics = {
-  exerciseId: "mini-squat";
-  repCount: number;
-  sessionDurationS: number;
-  trackingQuality: CvTrackingQuality;
-  movementDetected: boolean;
-  framesWithPose: number;
-  framesTotal: number;
-};
+export type { MiniSquatDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 
 /** CV Lab starting config — separate from future PATIENT_MINI_SQUAT_CONFIG. */
 export const LAB_MINI_SQUAT_REP_CONFIG: SagittalHipRepBaselineConfig = {

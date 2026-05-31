@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import type { SitToStandDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
+import type { PatientCvDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import { CV_MIN_SAVE_DURATION_S, isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
 
 export type CvCaptureStatus =
@@ -33,7 +33,7 @@ export function useCvSessionCapture({
   exerciseId,
 }: UseCvSessionCaptureArgs) {
   const [cvStatus, setCvStatus] = useState<CvCaptureStatus>("not_started");
-  const latestMetricsRef = useRef<SitToStandDerivedMetrics | null>(null);
+  const latestMetricsRef = useRef<PatientCvDerivedMetrics | null>(null);
   const hasSavedRef = useRef(false);
   const saveInProgressRef = useRef(false);
   const skippedRef = useRef(false);
@@ -42,7 +42,7 @@ export function useCvSessionCapture({
 
   const isCvEligible = isCvEnabledExercise(exerciseId);
 
-  const onMetricsUpdate = useCallback((metrics: SitToStandDerivedMetrics) => {
+  const onMetricsUpdate = useCallback((metrics: PatientCvDerivedMetrics) => {
     latestMetricsRef.current = metrics;
     if (skippedRef.current || hasSavedRef.current) return;
     setCvStatus((prev) =>

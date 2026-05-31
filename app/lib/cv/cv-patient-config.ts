@@ -5,7 +5,7 @@
 
 import { DEFAULT_STS_CONFIG, type SitToStandCvConfig } from "@/app/lib/cv/bio-0-contracts";
 
-export const CV_Y1_ENABLED_EXERCISE_IDS = ["sit-to-stand"] as const;
+export const CV_Y1_ENABLED_EXERCISE_IDS = ["sit-to-stand", "mini-squat"] as const;
 
 export type CvY1ExerciseId = (typeof CV_Y1_ENABLED_EXERCISE_IDS)[number];
 
@@ -44,4 +44,27 @@ export const PATIENT_STS_CONFIG: SitToStandCvConfig = {
   readinessEnabled: true,
   readinessCheckMs: 2_000,
   minHipVisibility: 0.35,
+};
+
+/**
+ * Patient portal only — standing hip baseline; drop polarity rep counting.
+ * Separate thresholds from PATIENT_STS_CONFIG (never mutate STS).
+ */
+export const PATIENT_MINI_SQUAT_CONFIG: SitToStandCvConfig = {
+  ...DEFAULT_STS_CONFIG,
+  repCountingMode: "baseline",
+  baselineDurationMs: 3_000,
+  baselineStandDelta: 0.06,
+  baselineResetDelta: 0.03,
+  minMsBetweenReps: 1_000,
+  fallbackSeatedHipY: 0.45,
+  baselineScaleByTorso: true,
+  baselineStandDeltaRatio: 0.11,
+  baselineResetDeltaRatio: 0.055,
+  baselineStandDeltaMin: 0.025,
+  baselineResetDeltaMin: 0.015,
+  readinessEnabled: true,
+  readinessCheckMs: 2_000,
+  minHipVisibility: 0.35,
+  prototypeVersion: "cv-y2-mini-squat",
 };

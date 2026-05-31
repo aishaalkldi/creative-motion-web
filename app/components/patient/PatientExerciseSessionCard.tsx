@@ -1,6 +1,6 @@
 "use client";
 
-import type { SitToStandDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
+import type { PatientCvDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import type { ResolvedExerciseView } from "@/app/lib/exercise-resolve";
 import { getLibraryExerciseById } from "@/app/lib/exercise-library-v1";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
@@ -27,7 +27,7 @@ type PatientExerciseSessionCardProps = {
   onStartExercise: () => void;
   onCompleteSet: () => void;
   onCompleteExercise: () => void | Promise<void>;
-  onCvMetricsUpdate?: (metrics: SitToStandDerivedMetrics) => void;
+  onCvMetricsUpdate?: (metrics: PatientCvDerivedMetrics) => void;
   onCvSkipped?: () => void;
   onRegisterCvMetricsFlush?: (flush: () => void) => void;
 };

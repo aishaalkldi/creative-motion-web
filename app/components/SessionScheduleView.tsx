@@ -29,7 +29,7 @@ type Props = {
     session: SchedulableSession,
   ) => "done" | "today" | "upcoming" | "completed" | "ready" | "in-progress";
   /** Clinician profile: CV rows keyed by plan_session_id for camera status lines */
-  cvMetricsByPlanSessionId?: Map<string, CvSessionMetricPublic>;
+  cvMetricsByPlanSessionId?: Map<string, CvSessionMetricPublic[]>;
 };
 
 function formatClinicianExerciseSummary(exercises: SchedulableSession["exercises"]): string {
@@ -147,7 +147,7 @@ export function SessionScheduleView({
                             planSessionId: session.id,
                             sessionStatus: session.status,
                             exercises: session.exercises,
-                            cvMetric: cvMetricsByPlanSessionId.get(session.id),
+                            cvMetrics: cvMetricsByPlanSessionId.get(session.id),
                           })
                         : null;
                     const row = (

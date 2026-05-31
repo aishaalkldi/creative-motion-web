@@ -9,11 +9,14 @@ import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 
 export type CvTrackingQuality = "good" | "fair" | "poor" | "unknown";
 
-/** Client → server body for POST /api/patient/cv-session-metrics (future). */
+/** Allowed patient-portal CV exercise ids (allowlist). */
+export type PatientCvExerciseId = "sit-to-stand" | "mini-squat";
+
+/** Client → server body for POST /api/patient/cv-session-metrics. */
 export type PatientCvMetricsPayload = {
   token: string;
   sessionId: string;
-  exerciseId: "sit-to-stand";
+  exerciseId: PatientCvExerciseId;
   repCount?: number;
   sessionDurationS?: number;
   trackingQuality?: CvTrackingQuality;
@@ -32,6 +35,18 @@ export type SitToStandDerivedMetrics = {
   framesWithPose: number;
   framesTotal: number;
 };
+
+export type MiniSquatDerivedMetrics = {
+  exerciseId: "mini-squat";
+  repCount: number;
+  sessionDurationS: number;
+  trackingQuality: CvTrackingQuality;
+  movementDetected: boolean;
+  framesWithPose: number;
+  framesTotal: number;
+};
+
+export type PatientCvDerivedMetrics = SitToStandDerivedMetrics | MiniSquatDerivedMetrics;
 
 /* ── Sit-to-Stand detector config ─────────────────────────────────────────── */
 
@@ -85,6 +100,10 @@ export type SitToStandCvConfig = {
   minRepDurationMs?: number;
   /** MQ-REP-1 shadow: per-rep timeout before incomplete flags. */
   repTimeoutMs?: number;
+  /** Patient portal: rise = Sit-to-Stand, drop = Mini Squat (default rise). */
+  repPolarity?: "rise" | "drop";
+  /** Metrics payload exercise id (default sit-to-stand). */
+  metricsExerciseId?: PatientCvExerciseId;
 };
 
 export const DEFAULT_STS_CONFIG: SitToStandCvConfig = {
@@ -140,6 +159,7 @@ export type PatientCvCopy = {
   trackingStatusReady: string;
   trackingStatusDetecting: string;
   startSeatedHint: string;
+  baselineStandStillHint: string;
   framingInstruction: string;
   startWhenReadyHint: string;
   movementInstruction: string;
@@ -152,7 +172,25 @@ export type PatientCvCopy = {
   hipLandmarksHint: string;
 };
 
-const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
+/* ── Patient-safe CV copy (EN/AR) — PatientCvCapture ─────────────────────── */
+
+const PATIENT_CV_CONSENT_DONT_EN = [
+  "Record or upload video",
+  "Store body coordinates or pose landmarks",
+  "Judge whether your movement is correct or wrong",
+  "Give a diagnosis, score, or treatment recommendation",
+  "Make an automatic progression or treatment decision",
+] as const;
+
+const PATIENT_CV_CONSENT_DONT_AR = [
+  "لا يسجّل أو يرفع فيديو",
+  "لا يخزّن إحداثيات الجسم أو معالم الوضعية",
+  "لا يحكم على صحة أو خطأ حركتك",
+  "لا يقدّم تشخيصاً أو درجة أو توصية علاجية",
+  "لا يتخذ قرار تقدّم أو علاج تلقائياً",
+] as const;
+
+const PATIENT_STS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
   en: {
     consentTitle: "Camera for movement counting",
     consentDoIntro: "What this does:",
@@ -163,13 +201,7 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
       "Saves derived counts and duration for your therapist to review",
     ],
     consentDontIntro: "What this does not do:",
-    consentDontBullets: [
-      "Record or upload video",
-      "Store body coordinates or pose landmarks",
-      "Judge whether your movement is correct or wrong",
-      "Give a diagnosis, score, or treatment recommendation",
-      "Make an automatic progression or treatment decision",
-    ],
+    consentDontBullets: [...PATIENT_CV_CONSENT_DONT_EN],
     consentSecureNote: "Camera access requires a secure connection (HTTPS).",
     consentDerivedNote:
       "Only derived session metrics are saved. No video or body coordinates are stored.",
@@ -200,6 +232,7 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     trackingStatusReady: "Ready",
     trackingStatusDetecting: "Detecting movement…",
     startSeatedHint: "Start seated, then stand when ready.",
+    baselineStandStillHint: "Stay seated while the camera adjusts.",
     framingInstruction:
       "Place your phone so your hips, upper body, and chair are visible.",
     startWhenReadyHint: "Start after the camera shows ready.",
@@ -260,6 +293,7 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     trackingStatusReady: "جاهز",
     trackingStatusDetecting: "جاري اكتشاف الحركة…",
     startSeatedHint: "ابدأ جالساً، ثم قف عندما تكون مستعداً.",
+    baselineStandStillHint: "ابقَ جالساً ريثما تضبط الكاميرا.",
     framingInstruction: "ضع هاتفك بحيث تظهر الوركان والجزء العلوي من جسمك والكرسي.",
     startWhenReadyHint: "ابدأ بعد أن تظهر الكاميرا أنها جاهزة.",
     movementInstruction: "اجلس، قف بالكامل، ثم اجلس مرة أخرى ببطء.",
@@ -273,11 +307,136 @@ const PATIENT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
   },
 };
 
+const PATIENT_MINI_SQUAT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
+  en: {
+    consentTitle: "Camera for movement counting",
+    consentDoIntro: "What this does:",
+    consentDoBullets: [
+      "Uses your camera on this device to detect body position",
+      "Counts mini squat movements during your exercise",
+      "Shows whether movement is being detected",
+      "Saves derived counts and duration for your therapist to review",
+    ],
+    consentDontIntro: "What this does not do:",
+    consentDontBullets: [...PATIENT_CV_CONSENT_DONT_EN],
+    consentSecureNote: "Camera access requires a secure connection (HTTPS).",
+    consentDerivedNote:
+      "Only derived session metrics are saved. No video or body coordinates are stored.",
+    consentAccept: "I understand — enable camera",
+    startTracking: "Start movement tracking",
+    stopTracking: "Stop tracking",
+    repsCounted: (n) => `Reps counted: ${n}`,
+    movementDetectedYes: "Movement detected",
+    movementDetectedNo: "Movement not detected — adjust camera angle",
+    trackingSignalLabel: "Tracking signal",
+    trackingGood: "Tracking signal: Good",
+    trackingFair: "Tracking signal: Fair — results may vary",
+    trackingPoor: "Tracking signal: Weak — adjust phone or lighting",
+    sessionDuration: (formatted) => `Session duration: ${formatted}`,
+    savedTherapistReview: "Saved — your therapist can review this session",
+    savingMetrics: "Saving session…",
+    saveError: "Session data could not be saved. You can continue your exercise.",
+    loadingPoseLibrary: "Loading pose library…",
+    loadingPoseModel: "Loading pose model…",
+    startingCamera: "Starting camera…",
+    prototypeNotice:
+      "Movement counting is assistive only. It is not clinically validated and does not replace your therapist's guidance.",
+    therapistReviewOnly: "For therapist review only — not a clinical assessment.",
+    optionalCameraNote:
+      "Optional camera assist · therapist review only · not clinically validated. Mini squat (experimental). The pilot workflow does not depend on camera tracking.",
+    continueWithoutCamera: "Continue without camera",
+    moveComfortably: "Take your time and move comfortably.",
+    trackingStatusReady: "Ready",
+    trackingStatusDetecting: "Detecting movement…",
+    startSeatedHint: "Stand facing the camera, feet shoulder-width apart.",
+    baselineStandStillHint: "Stand still while the camera adjusts.",
+    framingInstruction: "Stand facing the camera; hips and upper body visible.",
+    startWhenReadyHint: "Start after the camera shows ready.",
+    movementInstruction: "Squat down slowly, then stand again at a comfortable depth.",
+    checkingCameraPosition: "Checking camera position…",
+    cameraReadyLabel: "Camera ready ✓",
+    almostReadyLabel: "Almost ready — adjust your phone slightly",
+    adjustPhoneBodyChairLabel: "Adjust phone position so your body is visible",
+    poseNotDetectedLabel: "Pose not detected — adjust your phone",
+    tryAgainLabel: "Try again",
+    hipLandmarksHint: "Wait until the points appear on your shoulders and hips before squatting.",
+  },
+  ar: {
+    consentTitle: "الكاميرا لعدّ الحركة",
+    consentDoIntro: "ماذا يفعل هذا:",
+    consentDoBullets: [
+      "يستخدم كاميرتك على هذا الجهاز لاكتشاف وضع الجسم",
+      "يعدّ حركات القرفصاء الصغيرة أثناء التمرين",
+      "يُظهر ما إذا كانت الحركة تُكتشف",
+      "يحفظ العدّ والمدة المشتقة لمراجعة معالجك",
+    ],
+    consentDontIntro: "ماذا لا يفعل هذا:",
+    consentDontBullets: [...PATIENT_CV_CONSENT_DONT_AR],
+    consentSecureNote: "يتطلب الوصول للكاميرا اتصالاً آمناً (HTTPS).",
+    consentDerivedNote: "تُحفظ مقاييس الجلسة المشتقة فقط. لا يُخزَّن فيديو أو إحداثيات جسم.",
+    consentAccept: "أفهم — تفعيل الكاميرا",
+    startTracking: "بدء تتبّع الحركة",
+    stopTracking: "إيقاف التتبّع",
+    repsCounted: (n) => `العدات المحسوبة: ${n}`,
+    movementDetectedYes: "تم اكتشاف الحركة",
+    movementDetectedNo: "لم تُكتشف الحركة — عدّل زاوية الكاميرا",
+    trackingSignalLabel: "إشارة التتبّع",
+    trackingGood: "إشارة التتبّع: جيدة",
+    trackingFair: "إشارة التتبّع: متوسطة — قد تختلف النتائج",
+    trackingPoor: "إشارة التتبّع: ضعيفة — عدّل الهاتف أو الإضاءة",
+    sessionDuration: (formatted) => `مدة الجلسة: ${formatted}`,
+    savedTherapistReview: "تم الحفظ — يمكن لمعالجك مراجعة هذه الجلسة",
+    savingMetrics: "جاري حفظ الجلسة…",
+    saveError: "تعذّر حفظ بيانات الجلسة. يمكنك متابعة التمرين.",
+    loadingPoseLibrary: "جاري تحميل مكتبة الوضعية…",
+    loadingPoseModel: "جاري تحميل نموذج الوضعية…",
+    startingCamera: "جاري تشغيل الكاميرا…",
+    prototypeNotice:
+      "عدّ الحركة مساعد فقط. غير مُتحقّق سريرياً ولا يُغني عن إرشاد معالجك.",
+    therapistReviewOnly: "لمراجعة المعالج فقط — وليس تقييماً سريرياً.",
+    optionalCameraNote:
+      "مساعدة كاميرا اختيارية · للمعالج فقط · غير مُتحقّق سريرياً. القرفصاء الصغيرة (تجريبي). مسار التجربة لا يعتمد على تتبّع الكاميرا.",
+    continueWithoutCamera: "المتابعة بدون كاميرا",
+    moveComfortably: "خذ وقتك وتحرك براحة.",
+    trackingStatusReady: "جاهز",
+    trackingStatusDetecting: "جاري اكتشاف الحركة…",
+    startSeatedHint: "قف مواجهاً للكاميرا، القدمان بعرض الكتفين.",
+    baselineStandStillHint: "قف ثابتاً ريثما تضبط الكاميرا.",
+    framingInstruction: "قف مواجهاً للكاميرا؛ الوركان والجزء العلوي من الجسم ظاهران.",
+    startWhenReadyHint: "ابدأ بعد أن تظهر الكاميرا أنها جاهزة.",
+    movementInstruction: "انزل ببطء في القرفصاء ثم قف مجدداً بعمق مريح.",
+    checkingCameraPosition: "جاري فحص موضع الكاميرا…",
+    cameraReadyLabel: "الكاميرا جاهزة ✓",
+    almostReadyLabel: "يكاد يكون جاهزاً — عدّل الهاتف قليلاً",
+    adjustPhoneBodyChairLabel: "عدّل موضع الهاتف حتى يظهر جسمك",
+    poseNotDetectedLabel: "لم تُكتشف الوضعية — عدّل الهاتف",
+    tryAgainLabel: "حاول مرة أخرى",
+    hipLandmarksHint: "انتظر حتى تظهر النقاط على الكتفين والوركين قبل القرفصاء.",
+  },
+};
+
 /** Server-side prototype_version for patient_session CV saves (CV-Y1B). */
 export const CV_Y1B_PATIENT_PROTOTYPE_VERSION = "cv-y1b-sit-to-stand";
 
-export function patientCvCopy(lang: PatientExerciseLanguage): PatientCvCopy {
-  return PATIENT_CV_COPY[lang];
+/** Server-side prototype_version for mini squat patient_session saves (CV-Y2). */
+export const CV_Y2_MINI_SQUAT_PATIENT_PROTOTYPE_VERSION = "cv-y2-mini-squat";
+
+export function patientCvPrototypeVersion(exerciseId: PatientCvExerciseId): string {
+  switch (exerciseId) {
+    case "sit-to-stand":
+      return CV_Y1B_PATIENT_PROTOTYPE_VERSION;
+    case "mini-squat":
+      return CV_Y2_MINI_SQUAT_PATIENT_PROTOTYPE_VERSION;
+  }
+}
+
+export function patientCvCopy(
+  lang: PatientExerciseLanguage,
+  exerciseId: PatientCvExerciseId = "sit-to-stand",
+): PatientCvCopy {
+  return exerciseId === "mini-squat"
+    ? PATIENT_MINI_SQUAT_CV_COPY[lang]
+    : PATIENT_STS_CV_COPY[lang];
 }
 
 /** Shared prototype / clinician disclaimer strings (CV Lab + future patient). */
