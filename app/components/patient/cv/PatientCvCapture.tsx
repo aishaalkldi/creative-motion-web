@@ -7,6 +7,7 @@ import {
 } from "@/app/lib/cv/bio-0-contracts";
 import {
   PATIENT_MINI_SQUAT_CONFIG,
+  PATIENT_SLS_POSE_SHELL,
   PATIENT_STS_CONFIG,
   type CvY1ExerciseId,
 } from "@/app/lib/cv/cv-patient-config";
@@ -16,6 +17,13 @@ import {
   mapMiniSquatStartError,
   type MiniSquatDetectorSnapshot,
 } from "@/app/lib/cv/mini-squat-pose-detector";
+import {
+  SingleLegStancePoseDetector,
+  formatSingleLegStanceDuration,
+  mapSingleLegStanceStartError,
+  type SingleLegStancePoseDetectorSnapshot,
+} from "@/app/lib/cv/single-leg-stance-pose-detector";
+import type { StanceLeg } from "@/app/lib/cv/single-leg-stance-detector";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import {
   formatSitToStandDuration,
@@ -31,9 +39,16 @@ import {
 
 const METRICS_REPORT_INTERVAL_MS = 3_000;
 
-type CvDetectorSnapshot = SitToStandDetectorSnapshot | MiniSquatDetectorSnapshot;
+function isHoldCvExercise(exerciseId: CvY1ExerciseId): boolean {
+  return exerciseId === "single-leg-stance";
+}
 
-type PatientCvDetector = SitToStandDetector | MiniSquatDetector;
+type CvDetectorSnapshot =
+  | SitToStandDetectorSnapshot
+  | MiniSquatDetectorSnapshot
+  | SingleLegStancePoseDetectorSnapshot;
+
+type PatientCvDetector = SitToStandDetector | MiniSquatDetector | SingleLegStancePoseDetector;
 
 export type PatientCvCaptureProps = {
   exerciseId: CvY1ExerciseId;
@@ -49,8 +64,22 @@ function canvasSizeForExercise(exerciseId: CvY1ExerciseId): {
   canvasWidth: number;
   canvasHeight: number;
 } {
-  const config = exerciseId === "mini-squat" ? PATIENT_MINI_SQUAT_CONFIG : PATIENT_STS_CONFIG;
-  return { canvasWidth: config.canvasWidth, canvasHeight: config.canvasHeight };
+  if (exerciseId === "mini-squat") {
+    return {
+      canvasWidth: PATIENT_MINI_SQUAT_CONFIG.canvasWidth,
+      canvasHeight: PATIENT_MINI_SQUAT_CONFIG.canvasHeight,
+    };
+  }
+  if (exerciseId === "single-leg-stance") {
+    return {
+      canvasWidth: PATIENT_SLS_POSE_SHELL.canvasWidth,
+      canvasHeight: PATIENT_SLS_POSE_SHELL.canvasHeight,
+    };
+  }
+  return {
+    canvasWidth: PATIENT_STS_CONFIG.canvasWidth,
+    canvasHeight: PATIENT_STS_CONFIG.canvasHeight,
+  };
 }
 
 function applySnapshot(
@@ -113,6 +142,7 @@ export function PatientCvCapture({
   const [sessionStarted, setSessionStarted] = useState(false);
   const [movementDetected, setMovementDetected] = useState(false);
   const [baselineCalibrating, setBaselineCalibrating] = useState(false);
+  const [stanceLeg, setStanceLeg] = useState<StanceLeg | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -121,6 +151,7 @@ export function PatientCvCapture({
   const stopInProgressRef = useRef(false);
   const skipReportRef = useRef(false);
   const lastReportedRepRef = useRef(-1);
+  const lastReportedHoldRef = useRef(-1);
   const onMetricsUpdateRef = useRef(onMetricsUpdate);
 
   useEffect(() => {
@@ -137,6 +168,7 @@ export function PatientCvCapture({
   const syncFromDetector = useCallback(
     (snapshot: CvDetectorSnapshot) => {
       const prevRep = lastReportedRepRef.current;
+      const prevHold = lastReportedHoldRef.current;
       applySnapshot(snapshot, {
         setPreviewActive,
         setLoading,
@@ -151,19 +183,35 @@ export function PatientCvCapture({
         setMovementDetected,
         setBaselineCalibrating,
       });
-      if (snapshot.previewActive && snapshot.repCount !== prevRep) {
+      if (!snapshot.previewActive) return;
+      if (isHoldCvExercise(exerciseId)) {
+        if (snapshot.sessionSeconds !== prevHold) {
+          lastReportedHoldRef.current = snapshot.sessionSeconds;
+          reportMetrics();
+        }
+        return;
+      }
+      if (snapshot.repCount !== prevRep) {
         lastReportedRepRef.current = snapshot.repCount;
         reportMetrics();
       }
     },
-    [reportMetrics],
+    [exerciseId, reportMetrics],
   );
 
   useEffect(() => {
+    if (isHoldCvExercise(exerciseId) && stanceLeg === null) {
+      detectorRef.current?.stop();
+      detectorRef.current = null;
+      return;
+    }
+
     const detector: PatientCvDetector =
       exerciseId === "mini-squat"
         ? new MiniSquatDetector({ onSnapshot: syncFromDetector })
-        : new SitToStandDetector({ onSnapshot: syncFromDetector }, PATIENT_STS_CONFIG);
+        : exerciseId === "single-leg-stance"
+          ? new SingleLegStancePoseDetector({ onSnapshot: syncFromDetector }, stanceLeg!)
+          : new SitToStandDetector({ onSnapshot: syncFromDetector }, PATIENT_STS_CONFIG);
 
     detectorRef.current = detector;
     return () => {
@@ -171,7 +219,7 @@ export function PatientCvCapture({
       detector.stop();
       detectorRef.current = null;
     };
-  }, [exerciseId, syncFromDetector, reportMetrics]);
+  }, [exerciseId, stanceLeg, syncFromDetector, reportMetrics]);
 
   useEffect(() => {
     if (!onRegisterMetricsFlush) return;
@@ -206,7 +254,12 @@ export function PatientCvCapture({
     stopInProgressRef.current = false;
   }, [reportMetrics, syncFromDetector]);
 
-  const mapStartError = exerciseId === "mini-squat" ? mapMiniSquatStartError : mapSitToStandStartError;
+  const mapStartError =
+    exerciseId === "mini-squat"
+      ? mapMiniSquatStartError
+      : exerciseId === "single-leg-stance"
+        ? mapSingleLegStanceStartError
+        : mapSitToStandStartError;
 
   const startSession = useCallback(async () => {
     const detector = detectorRef.current;
@@ -233,6 +286,7 @@ export function PatientCvCapture({
     setSessionStarted(true);
     skipReportRef.current = false;
     lastReportedRepRef.current = -1;
+    lastReportedHoldRef.current = -1;
 
     try {
       await detector.start(video, canvas);
@@ -266,6 +320,7 @@ export function PatientCvCapture({
     setTrackingError(null);
     skipReportRef.current = false;
     lastReportedRepRef.current = -1;
+    lastReportedHoldRef.current = -1;
     stopInProgressRef.current = false;
     startInProgressRef.current = false;
   }, [syncFromDetector]);
@@ -294,8 +349,14 @@ export function PatientCvCapture({
       trackingStatus === "pose-lost" ||
       (bodyFramingState !== "good_distance" && bodyFramingState !== "checking"));
 
-  const formatDuration =
-    exerciseId === "mini-squat" ? formatMiniSquatDuration : formatSitToStandDuration;
+  const formatDuration = (() => {
+    if (exerciseId === "mini-squat") return formatMiniSquatDuration;
+    if (exerciseId === "single-leg-stance") return formatSingleLegStanceDuration;
+    return formatSitToStandDuration;
+  })();
+
+  const holdExercise = isHoldCvExercise(exerciseId);
+  const stanceLegRequired = holdExercise && stanceLeg === null;
 
   if (skipped) {
     return null;
@@ -309,6 +370,9 @@ export function PatientCvCapture({
         lang={language}
       >
         <p className="text-[11px] font-semibold text-[#1D9E75]">{copy.optionalCameraNote}</p>
+        {copy.supportNearWallHint ? (
+          <p className="mt-2 text-[12px] leading-relaxed text-[#374151]">{copy.supportNearWallHint}</p>
+        ) : null}
         <h3 className={`mt-2 text-[15px] font-bold text-[#0A0F1A] ${arClass}`}>
           {copy.consentTitle}
         </h3>
@@ -336,6 +400,47 @@ export function PatientCvCapture({
             className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] bg-[#1D9E75] text-[14px] font-bold text-white transition hover:bg-[#179165]"
           >
             {copy.consentAccept}
+          </button>
+          <button
+            type="button"
+            onClick={() => skipCameraWithoutSave()}
+            className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-[#F9FAFB] text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40"
+          >
+            {copy.continueWithoutCamera}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (stanceLegRequired) {
+    return (
+      <div
+        className={`border-b border-[#D1E7DE] bg-white px-4 py-4 ${arClass}`}
+        dir={textDir}
+        lang={language}
+      >
+        <p className="text-[11px] font-semibold text-[#1D9E75]">{copy.optionalCameraNote}</p>
+        {copy.supportNearWallHint ? (
+          <p className="mt-2 text-[12px] leading-relaxed text-[#374151]">{copy.supportNearWallHint}</p>
+        ) : null}
+        <h3 className={`mt-3 text-[15px] font-bold text-[#0A0F1A] ${arClass}`}>
+          {copy.stanceLegPickerTitle}
+        </h3>
+        <div className="mt-4 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => setStanceLeg("left")}
+            className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-white text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40"
+          >
+            {copy.stanceLegLeftLabel}
+          </button>
+          <button
+            type="button"
+            onClick={() => setStanceLeg("right")}
+            className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-white text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40"
+          >
+            {copy.stanceLegRightLabel}
           </button>
           <button
             type="button"
@@ -454,16 +559,27 @@ export function PatientCvCapture({
             {trackingStatusLabel}
           </p>
 
-          <p
-            className="text-[28px] font-bold text-[#1D9E75]"
-            style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
-          >
-            {copy.repsCounted(repCount)}
-          </p>
+          {holdExercise && copy.holdTimeTracked ? (
+            <p
+              className="text-[28px] font-bold text-[#1D9E75]"
+              style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+            >
+              {copy.holdTimeTracked(formatDuration(sessionSeconds))}
+            </p>
+          ) : (
+            <p
+              className="text-[28px] font-bold text-[#1D9E75]"
+              style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+            >
+              {copy.repsCounted(repCount)}
+            </p>
+          )}
 
-          <p className="text-[13px] text-[#374151]">
-            {copy.sessionDuration(formatDuration(sessionSeconds))}
-          </p>
+          {!holdExercise ? (
+            <p className="text-[13px] text-[#374151]">
+              {copy.sessionDuration(formatDuration(sessionSeconds))}
+            </p>
+          ) : null}
 
           <p className="text-[12px] text-[#6B7280]">
             {movementDetected ? copy.movementDetectedYes : copy.movementDetectedNo}

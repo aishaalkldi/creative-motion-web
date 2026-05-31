@@ -76,6 +76,19 @@ export function formatCvMovementDetected(detected: boolean): string {
   return detected ? "Yes" : "No";
 }
 
+/** Hold-class CV exercises store accumulated hold in session_duration_s. */
+export function isHoldClassCvExercise(exerciseId: string | null | undefined): boolean {
+  return exerciseId?.trim().toLowerCase() === "single-leg-stance";
+}
+
+export function cvDurationMetricLabel(exerciseId: string | null | undefined): string {
+  return isHoldClassCvExercise(exerciseId) ? "Assistive hold tracked" : "Duration";
+}
+
+export function cvRepMetricLabel(exerciseId: string | null | undefined): string | null {
+  return isHoldClassCvExercise(exerciseId) ? null : "Reps";
+}
+
 export function formatCvPrototypeLabel(version: string | null | undefined): string {
   const v = version?.trim();
   if (!v || v === "0.1") return "Prototype";

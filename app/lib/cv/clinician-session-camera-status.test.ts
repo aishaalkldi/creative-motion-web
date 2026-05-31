@@ -56,6 +56,28 @@ describe("clinician session camera status", () => {
     assert.equal(map.get("session-1")?.[0]?.exerciseId, "sit-to-stand");
   });
 
+  it("sessionIncludesCvExercise detects single-leg stance sessions", () => {
+    const exercises = ["Single-Leg Stance"];
+    assert.equal(sessionIncludesCvExercise(exercises), true);
+  });
+
+  it("deriveClinicianSessionCameraLine formats hold exercise session", () => {
+    const line = deriveClinicianSessionCameraLine({
+      planSessionId: "session-1",
+      sessionStatus: "completed",
+      exercises: ["Single-Leg Stance"],
+      cvMetrics: [
+        metric({
+          exerciseId: "single-leg-stance",
+          repCount: 0,
+          sessionDurationS: 22,
+          trackingQuality: "good",
+        }),
+      ],
+    });
+    assert.match(line ?? "", /Single-Leg Stance hold: 22s/);
+  });
+
   it("deriveClinicianSessionCameraLine formats multi-exercise session", () => {
     const line = deriveClinicianSessionCameraLine({
       planSessionId: "session-1",

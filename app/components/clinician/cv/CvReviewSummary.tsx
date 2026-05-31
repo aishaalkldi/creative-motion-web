@@ -3,6 +3,8 @@ import {
   CV_CAMERA_VISIBILITY_HELPER,
   CV_CLINICIAN_DISCLAIMER,
   CV_REP_COUNT_FOOTER,
+  cvDurationMetricLabel,
+  cvRepMetricLabel,
   formatCvDuration,
   formatCvMovementDetected,
   formatCvPrototypeLabel,
@@ -98,8 +100,16 @@ function SessionReviewCard({
           <MetricRow label="Date/time" value={formatCvRecordedAt(row.recordedAt)} />
         ) : null}
         <MetricRow label="Exercise" value={exerciseName} />
-        <MetricRow label="Reps" value={row.repCount != null ? String(row.repCount) : "—"} />
-        <MetricRow label="Duration" value={formatCvDuration(row.sessionDurationS)} />
+        {cvRepMetricLabel(row.exerciseId) ? (
+          <MetricRow
+            label={cvRepMetricLabel(row.exerciseId)!}
+            value={row.repCount != null ? String(row.repCount) : "—"}
+          />
+        ) : null}
+        <MetricRow
+          label={profileMode ? cvDurationMetricLabel(row.exerciseId) : "Duration"}
+          value={formatCvDuration(row.sessionDurationS)}
+        />
         <MetricRow
           label={profileMode ? "Tracking signal" : "Tracking quality"}
           value={

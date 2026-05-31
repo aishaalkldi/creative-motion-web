@@ -1,6 +1,6 @@
 /**
- * CV Lab / internal Single-Leg Stance hold detector (foundation only).
- * Not enabled for patient portal in SINGLE-LEG-STANCE-CV-PR-1.
+ * CV Lab / internal Single-Leg Stance hold detector.
+ * Patient portal wiring: single-leg-stance-pose-detector.ts (SINGLE-LEG-STANCE-CV-PR-2).
  */
 
 import {

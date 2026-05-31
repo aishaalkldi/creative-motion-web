@@ -11,7 +11,7 @@ import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 export type CvTrackingQuality = "good" | "fair" | "poor" | "unknown";
 
 /** Allowed patient-portal CV exercise ids (allowlist). */
-export type PatientCvExerciseId = "sit-to-stand" | "mini-squat";
+export type PatientCvExerciseId = "sit-to-stand" | "mini-squat" | "single-leg-stance";
 
 /** Client → server body for POST /api/patient/cv-session-metrics. */
 export type PatientCvMetricsPayload = {
@@ -47,7 +47,20 @@ export type MiniSquatDerivedMetrics = {
   framesTotal: number;
 };
 
-export type PatientCvDerivedMetrics = SitToStandDerivedMetrics | MiniSquatDerivedMetrics;
+export type SingleLegStanceDerivedMetrics = {
+  exerciseId: "single-leg-stance";
+  repCount: 0;
+  sessionDurationS: number;
+  trackingQuality: CvTrackingQuality;
+  movementDetected: boolean;
+  framesWithPose: number;
+  framesTotal: number;
+};
+
+export type PatientCvDerivedMetrics =
+  | SitToStandDerivedMetrics
+  | MiniSquatDerivedMetrics
+  | SingleLegStanceDerivedMetrics;
 
 /* ── Sit-to-Stand detector config ─────────────────────────────────────────── */
 
@@ -178,6 +191,13 @@ export type PatientCvCopy = {
   framingMoveCloser: string;
   framingAdjustAngle: string;
   framingLowVisibility: string;
+  /** Hold-class exercises — stance leg picker (single-leg-stance). */
+  stanceLegPickerTitle?: string;
+  stanceLegLeftLabel?: string;
+  stanceLegRightLabel?: string;
+  supportNearWallHint?: string;
+  /** Hold-class exercises — primary live metric label. */
+  holdTimeTracked?: (formatted: string) => string;
 };
 
 /* ── Patient-safe CV copy (EN/AR) — PatientCvCapture ─────────────────────── */
@@ -449,12 +469,161 @@ export const CV_Y1B_PATIENT_PROTOTYPE_VERSION = "cv-y1b-sit-to-stand";
 /** Server-side prototype_version for mini squat patient_session saves (CV-Y2). */
 export const CV_Y2_MINI_SQUAT_PATIENT_PROTOTYPE_VERSION = "cv-y2-mini-squat";
 
+/** Server-side prototype_version for single-leg stance patient_session saves (CV-Y3). */
+export const CV_Y3_SINGLE_LEG_STANCE_PATIENT_PROTOTYPE_VERSION = "cv-y3-single-leg-stance";
+
+const PATIENT_SLS_CONSENT_DONT_EN = [
+  ...PATIENT_CV_CONSENT_DONT_EN,
+  "Give a balance score or pass/fail rating",
+] as const;
+
+const PATIENT_SLS_CONSENT_DONT_AR = [
+  ...PATIENT_CV_CONSENT_DONT_AR,
+  "لا يقدّم درجة توازن أو تقييم نجاح/فشل",
+] as const;
+
+const PATIENT_SLS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
+  en: {
+    consentTitle: "Camera for hold tracking",
+    consentDoIntro: "What this does:",
+    consentDoBullets: [
+      "Uses your camera on this device to detect body position",
+      "Tracks assistive hold time during single-leg stance",
+      "Shows whether hold time is being detected",
+      "Saves derived hold duration for your therapist to review",
+    ],
+    consentDontIntro: "What this does not do:",
+    consentDontBullets: [...PATIENT_SLS_CONSENT_DONT_EN],
+    consentSecureNote: "Camera access requires a secure connection (HTTPS).",
+    consentDerivedNote:
+      "Only derived session metrics are saved. No video or body coordinates are stored.",
+    consentAccept: "I understand — enable camera",
+    startTracking: "Start hold tracking",
+    stopTracking: "Stop tracking",
+    repsCounted: () => "",
+    holdTimeTracked: (formatted) => `Hold time tracked: ${formatted}`,
+    movementDetectedYes: "Hold detected",
+    movementDetectedNo: "Hold not detected yet — adjust camera angle",
+    trackingSignalLabel: "Tracking signal",
+    trackingGood: "Tracking signal: Good",
+    trackingFair: "Tracking signal: Fair — results may vary",
+    trackingPoor: "Tracking signal: Weak — adjust phone or lighting",
+    sessionDuration: (formatted) => `Hold time tracked: ${formatted}`,
+    savedTherapistReview: "Saved — your therapist can review this session",
+    savingMetrics: "Saving session…",
+    saveError: "Session data could not be saved. You can continue your exercise.",
+    loadingPoseLibrary: "Loading pose library…",
+    loadingPoseModel: "Loading pose model…",
+    startingCamera: "Starting camera…",
+    prototypeNotice:
+      "Hold tracking is assistive only. It is not a balance test and is not clinically validated.",
+    therapistReviewOnly: "For therapist review only — not a clinical assessment.",
+    optionalCameraNote:
+      "Optional camera assist · therapist review only · not clinically validated. Single-leg stance (experimental). The pilot workflow does not depend on camera tracking.",
+    continueWithoutCamera: "Continue without camera",
+    moveComfortably: "Take your time and move comfortably.",
+    trackingStatusReady: "Ready",
+    trackingStatusDetecting: "Detecting hold…",
+    startSeatedHint: "Stand facing the camera, feet hip-width apart.",
+    baselineStandStillHint: "Stand on both feet while the camera adjusts.",
+    framingInstruction:
+      "Stand facing the camera — full body from head to feet visible when possible.",
+    startWhenReadyHint: "Start after the camera shows ready.",
+    movementInstruction:
+      "Lift one foot off the ground and hold. Lower gently when you need a break.",
+    checkingCameraPosition: "Checking camera position…",
+    cameraReadyLabel: "Camera ready ✓",
+    almostReadyLabel: "Almost ready — adjust your phone slightly",
+    adjustPhoneBodyChairLabel: "Adjust phone position so your full body is visible",
+    poseNotDetectedLabel: "Pose not detected — adjust your phone",
+    tryAgainLabel: "Try again",
+    hipLandmarksHint:
+      "Wait until points appear on shoulders, hips, and ankles before lifting your foot.",
+    framingGoodDistance: "Good distance",
+    framingMoveBack: "Step back",
+    framingMoveCloser: "Move closer",
+    framingAdjustAngle: "Adjust camera angle",
+    framingLowVisibility: "Low visibility",
+    stanceLegPickerTitle: "Which leg are you standing on?",
+    stanceLegLeftLabel: "Left leg standing",
+    stanceLegRightLabel: "Right leg standing",
+    supportNearWallHint:
+      "Stand near a wall or chair for light support if your plan allows.",
+  },
+  ar: {
+    consentTitle: "الكاميرا لتتبّع الثبات",
+    consentDoIntro: "ماذا يفعل هذا:",
+    consentDoBullets: [
+      "يستخدم كاميرتك على هذا الجهاز لاكتشاف وضع الجسم",
+      "يتتبّع وقت الثبات المساعد أثناء الوقوف على رجل واحدة",
+      "يُظهر ما إذا كان وقت الثبات يُكتشف",
+      "يحفظ مدة الثبات المشتقة لمراجعة معالجك",
+    ],
+    consentDontIntro: "ماذا لا يفعل هذا:",
+    consentDontBullets: [...PATIENT_SLS_CONSENT_DONT_AR],
+    consentSecureNote: "يتطلب الوصول للكاميرا اتصالاً آمناً (HTTPS).",
+    consentDerivedNote: "تُحفظ مقاييس الجلسة المشتقة فقط. لا يُخزَّن فيديو أو إحداثيات جسم.",
+    consentAccept: "أفهم — تفعيل الكاميرا",
+    startTracking: "بدء تتبّع الثبات",
+    stopTracking: "إيقاف التتبّع",
+    repsCounted: () => "",
+    holdTimeTracked: (formatted) => `وقت الثبات المتتبّع: ${formatted}`,
+    movementDetectedYes: "تم اكتشاف الثبات",
+    movementDetectedNo: "لم يُكتشف الثبات بعد — عدّل زاوية الكاميرا",
+    trackingSignalLabel: "إشارة التتبّع",
+    trackingGood: "إشارة التتبّع: جيدة",
+    trackingFair: "إشارة التتبّع: متوسطة — قد تختلف النتائج",
+    trackingPoor: "إشارة التتبّع: ضعيفة — عدّل الهاتف أو الإضاءة",
+    sessionDuration: (formatted) => `وقت الثبات المتتبّع: ${formatted}`,
+    savedTherapistReview: "تم الحفظ — يمكن لمعالجك مراجعة هذه الجلسة",
+    savingMetrics: "جاري حفظ الجلسة…",
+    saveError: "تعذّر حفظ بيانات الجلسة. يمكنك متابعة التمرين.",
+    loadingPoseLibrary: "جاري تحميل مكتبة الوضعية…",
+    loadingPoseModel: "جاري تحميل نموذج الوضعية…",
+    startingCamera: "جاري تشغيل الكاميرا…",
+    prototypeNotice:
+      "تتبّع الثبات مساعد فقط. ليس اختبار توازن وغير مُتحقّق سريرياً.",
+    therapistReviewOnly: "لمراجعة المعالج فقط — وليس تقييماً سريرياً.",
+    optionalCameraNote:
+      "مساعدة كاميرا اختيارية · للمعالج فقط · غير مُتحقّق سريرياً. الوقوف على رجل واحدة (تجريبي). مسار التجربة لا يعتمد على تتبّع الكاميرا.",
+    continueWithoutCamera: "المتابعة دون كاميرا",
+    moveComfortably: "خذ وقتك وتحرّك براحة.",
+    trackingStatusReady: "جاهز",
+    trackingStatusDetecting: "جاري اكتشاف الثبات…",
+    startSeatedHint: "قف مواجهاً للكاميرا، القدمان بعرض الوركين.",
+    baselineStandStillHint: "قف على القدمين ريثما تضبط الكاميرا.",
+    framingInstruction:
+      "قف مواجهاً للكاميرا — يُفضّل ظهور الجسم كاملاً من الرأس إلى القدمين.",
+    startWhenReadyHint: "ابدأ بعد أن تظهر الكاميرا أنها جاهزة.",
+    movementInstruction: "ارفع قدماً عن الأرض وثبّت. انزل بلطف عند الحاجة.",
+    checkingCameraPosition: "جاري فحص موضع الكاميرا…",
+    cameraReadyLabel: "الكاميرا جاهزة ✓",
+    almostReadyLabel: "يكاد يكون جاهزاً — عدّل الهاتف قليلاً",
+    adjustPhoneBodyChairLabel: "عدّل موضع الهاتف حتى يظهر جسمك بالكامل",
+    poseNotDetectedLabel: "لم تُكتشف الوضعية — عدّل الهاتف",
+    tryAgainLabel: "حاول مرة أخرى",
+    hipLandmarksHint:
+      "انتظر حتى تظهر النقاط على الكتفين والوركين والكاحلين قبل رفع القدم.",
+    framingGoodDistance: "المسافة مناسبة",
+    framingMoveBack: "ابتعد قليلاً",
+    framingMoveCloser: "اقترب قليلاً",
+    framingAdjustAngle: "عدّل زاوية الكاميرا",
+    framingLowVisibility: "وضوح منخفض",
+    stanceLegPickerTitle: "على أي ساق تقف؟",
+    stanceLegLeftLabel: "الوقوف على الساق اليسرى",
+    stanceLegRightLabel: "الوقوف على الساق اليمنى",
+    supportNearWallHint: "قف قرب جدار أو كرسي للدعم الخفيف إذا سمح برنامجك بذلك.",
+  },
+};
+
 export function patientCvPrototypeVersion(exerciseId: PatientCvExerciseId): string {
   switch (exerciseId) {
     case "sit-to-stand":
       return CV_Y1B_PATIENT_PROTOTYPE_VERSION;
     case "mini-squat":
       return CV_Y2_MINI_SQUAT_PATIENT_PROTOTYPE_VERSION;
+    case "single-leg-stance":
+      return CV_Y3_SINGLE_LEG_STANCE_PATIENT_PROTOTYPE_VERSION;
   }
 }
 
@@ -462,9 +631,9 @@ export function patientCvCopy(
   lang: PatientExerciseLanguage,
   exerciseId: PatientCvExerciseId = "sit-to-stand",
 ): PatientCvCopy {
-  return exerciseId === "mini-squat"
-    ? PATIENT_MINI_SQUAT_CV_COPY[lang]
-    : PATIENT_STS_CV_COPY[lang];
+  if (exerciseId === "mini-squat") return PATIENT_MINI_SQUAT_CV_COPY[lang];
+  if (exerciseId === "single-leg-stance") return PATIENT_SLS_CV_COPY[lang];
+  return PATIENT_STS_CV_COPY[lang];
 }
 
 /** Shared prototype / clinician disclaimer strings (CV Lab + future patient). */
