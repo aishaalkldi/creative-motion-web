@@ -13,6 +13,7 @@ import {
   drawBodyFramingOverlay,
   type BodyFramingState,
 } from "@/app/lib/cv/body-framing-evaluator";
+import { drawPoseLandmarkDots } from "@/app/lib/cv/pose-landmark-overlay";
 import type { PoseLandmark } from "@/app/lib/cv/sagittal-hip-rep-core";
 import {
   SingleLegStanceHoldDetector,
@@ -60,12 +61,6 @@ type PoseLandmarkerInstance = {
 export type SingleLegStancePoseDetectorCallbacks = {
   onSnapshot: (snapshot: SingleLegStancePoseDetectorSnapshot) => void;
 };
-
-const READINESS_COLORS = {
-  readyGood: "#1D9E75",
-  readyPartial: "#F59E0B",
-  notReady: "#9CA3AF",
-} as const;
 
 /**
  * Patient single-leg stance detector — MediaPipe shell + hold FSM engine.
@@ -142,61 +137,6 @@ export class SingleLegStancePoseDetector {
 
   canSaveMetrics(): boolean {
     return this.getDerivedMetrics().sessionDurationS >= this.holdConfig.minSaveHoldS;
-  }
-
-  private readinessOverlayColor(poseReadiness: PoseReadiness): string {
-    if (poseReadiness === "checking" || poseReadiness === "not_ready") {
-      return READINESS_COLORS.notReady;
-    }
-    if (poseReadiness === "partial") return READINESS_COLORS.readyPartial;
-    return READINESS_COLORS.readyGood;
-  }
-
-  private drawReadinessSkeleton(
-    ctx: CanvasRenderingContext2D,
-    landmarks: PoseLandmark[],
-    width: number,
-    height: number,
-    poseReadiness: PoseReadiness,
-  ): void {
-    const ls = landmarks[11];
-    const rs = landmarks[12];
-    const lh = landmarks[23];
-    const rh = landmarks[24];
-    const lk = landmarks[25];
-    const rk = landmarks[26];
-    const la = landmarks[27];
-    const ra = landmarks[28];
-    if (!ls || !rs || !lh || !rh) return;
-
-    const color = this.readinessOverlayColor(poseReadiness);
-    const shoulderX = ((ls.x + rs.x) / 2) * width;
-    const shoulderY = ((ls.y + rs.y) / 2) * height;
-    const hipX = ((lh.x + rh.x) / 2) * width;
-    const hipY = ((lh.y + rh.y) / 2) * height;
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(shoulderX, shoulderY);
-    ctx.lineTo(hipX, hipY);
-    ctx.stroke();
-
-    const dot = (x: number, y: number) => {
-      ctx.beginPath();
-      ctx.arc(x, y, 6, 0, 2 * Math.PI);
-      ctx.fillStyle = color;
-      ctx.fill();
-    };
-
-    dot(ls.x * width, ls.y * height);
-    dot(rs.x * width, rs.y * height);
-    dot(lh.x * width, lh.y * height);
-    dot(rh.x * width, rh.y * height);
-    if (lk) dot(lk.x * width, lk.y * height);
-    if (rk) dot(rk.x * width, rk.y * height);
-    if (la) dot(la.x * width, la.y * height);
-    if (ra) dot(ra.x * width, ra.y * height);
   }
 
   private emit(): void {
@@ -354,7 +294,7 @@ export class SingleLegStancePoseDetector {
 
             const holdSnap = this.holdEngine.getSnapshot();
             drawBodyFramingOverlay(ctx, canvasWidth, canvasHeight, holdSnap.bodyFramingState);
-            this.drawReadinessSkeleton(
+            drawPoseLandmarkDots(
               ctx,
               landmarks,
               canvasWidth,

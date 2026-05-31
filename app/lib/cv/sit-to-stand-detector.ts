@@ -42,6 +42,7 @@ import {
   type BodyFramingState,
 } from "@/app/lib/cv/body-framing-evaluator";
 import { resolveBodyFramingProfile } from "@/app/lib/cv/body-framing-profiles";
+import { drawPoseLandmarkDots } from "@/app/lib/cv/pose-landmark-overlay";
 
 export { computeHipMidY, computeTorsoSpan, hipsMeetMinVisibility };
 export type { PoseLandmark, BodyFramingState };
@@ -250,12 +251,6 @@ const IDLE_SNAPSHOT: SitToStandDetectorSnapshot = {
   isBaselineCalibrating: false,
 };
 
-const READINESS_COLORS = {
-  readyGood: "#1D9E75",
-  readyPartial: "#F59E0B",
-  notReady: "#9CA3AF",
-} as const;
-
 /**
  * Manages MediaPipe pose detection, rep counting, timer, and canvas overlay for Sit-to-Stand.
  */
@@ -433,52 +428,6 @@ export class SitToStandDetector {
     if (!wasCountingReady && (this.poseReadiness === "ready" || this.poseReadiness === "partial")) {
       this.maybeStartBaselineWindow(nowMs);
     }
-  }
-
-  private readinessOverlayColor(): string {
-    if (this.poseReadiness === "checking" || this.poseReadiness === "not_ready") {
-      return READINESS_COLORS.notReady;
-    }
-    if (this.poseReadiness === "partial") return READINESS_COLORS.readyPartial;
-    return READINESS_COLORS.readyGood;
-  }
-
-  private drawReadinessSkeleton(
-    ctx: CanvasRenderingContext2D,
-    landmarks: PoseLandmark[],
-    width: number,
-    height: number,
-  ): void {
-    const ls = landmarks[11];
-    const rs = landmarks[12];
-    const lh = landmarks[23];
-    const rh = landmarks[24];
-    if (!ls || !rs || !lh || !rh) return;
-
-    const color = this.readinessOverlayColor();
-    const shoulderX = ((ls.x + rs.x) / 2) * width;
-    const shoulderY = ((ls.y + rs.y) / 2) * height;
-    const hipX = ((lh.x + rh.x) / 2) * width;
-    const hipY = ((lh.y + rh.y) / 2) * height;
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(shoulderX, shoulderY);
-    ctx.lineTo(hipX, hipY);
-    ctx.stroke();
-
-    const dot = (x: number, y: number) => {
-      ctx.beginPath();
-      ctx.arc(x, y, 6, 0, 2 * Math.PI);
-      ctx.fillStyle = color;
-      ctx.fill();
-    };
-
-    dot(ls.x * width, ls.y * height);
-    dot(rs.x * width, rs.y * height);
-    dot(lh.x * width, lh.y * height);
-    dot(rh.x * width, rh.y * height);
   }
 
   private repBaselineConfig() {
@@ -957,16 +906,21 @@ export class SitToStandDetector {
                   this.bodyFramingState,
                 );
               }
-              this.drawReadinessSkeleton(ctx, landmarks, canvasWidth, canvasHeight);
+              drawPoseLandmarkDots(
+                ctx,
+                landmarks,
+                canvasWidth,
+                canvasHeight,
+                this.poseReadiness,
+              );
             } else {
-              for (const idx of this.config.lowerBodyLandmarkIndices) {
-                const lm = landmarks[idx];
-                if (!lm) continue;
-                ctx.beginPath();
-                ctx.arc(lm.x * canvasWidth, lm.y * canvasHeight, 4, 0, 2 * Math.PI);
-                ctx.fillStyle = this.config.landmarkDotColor;
-                ctx.fill();
-              }
+              drawPoseLandmarkDots(
+                ctx,
+                landmarks,
+                canvasWidth,
+                canvasHeight,
+                "ready",
+              );
             }
           } else if (this.trackingStatus !== "pose-lost") {
             this.trackingStatus = "pose-lost";
