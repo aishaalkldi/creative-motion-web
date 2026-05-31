@@ -137,10 +137,13 @@ export type SitToStandCvConfig = {
   bodyFramingProfileId?: BodyFramingProfileId;
 };
 
+/** Patient portal pose model — Full (better landmark stability than Lite). */
+export const POSE_LANDMARKER_FULL_MODEL_URL =
+  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task";
+
 export const DEFAULT_STS_CONFIG: SitToStandCvConfig = {
   wasmUrl: "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.34/wasm",
-  modelUrl:
-    "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+  modelUrl: POSE_LANDMARKER_FULL_MODEL_URL,
   canvasWidth: 640,
   canvasHeight: 480,
   initTimeoutMs: 45_000,
@@ -152,7 +155,7 @@ export const DEFAULT_STS_CONFIG: SitToStandCvConfig = {
   minSaveDurationS: 3,
   prototypeVersion: "y1",
   landmarkDotColor: "#1D9E75",
-  lowerBodyLandmarkIndices: [23, 24, 25, 26, 27, 28],
+  lowerBodyLandmarkIndices: [11, 12, 23, 24, 25, 26, 27, 28],
 };
 
 /* ── Patient-safe CV copy (EN/AR) — PatientCvCapture (sit-to-stand only) ─── */
@@ -213,6 +216,10 @@ export type PatientCvCopy = {
   supportNearWallHint?: string;
   /** Hold-class exercises — primary live metric label. */
   holdTimeTracked?: (formatted: string) => string;
+  /** Simplified live body-detection indicator (patient canvas). */
+  liveSignalBodyVisible: string;
+  liveSignalAdjustPosition: string;
+  liveSignalMoveBackLighting: string;
 };
 
 /* ── Patient-safe CV copy (EN/AR) — PatientCvCapture ─────────────────────── */
@@ -232,6 +239,18 @@ const PATIENT_CV_CONSENT_DONT_AR = [
   "لا يقدّم تشخيصاً أو درجة أو توصية علاجية",
   "لا يتخذ قرار تقدّم أو علاج تلقائياً",
 ] as const;
+
+const PATIENT_LIVE_SIGNAL_COPY_EN = {
+  liveSignalBodyVisible: "Body visible",
+  liveSignalAdjustPosition: "Adjust position",
+  liveSignalMoveBackLighting: "Move back or improve lighting",
+} as const;
+
+const PATIENT_LIVE_SIGNAL_COPY_AR = {
+  liveSignalBodyVisible: "الجسم ظاهر",
+  liveSignalAdjustPosition: "عدّل وضعيتك",
+  liveSignalMoveBackLighting: "ابتعد أو حسّن الإضاءة",
+} as const;
 
 const PATIENT_STS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
   en: {
@@ -294,6 +313,7 @@ const PATIENT_STS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     framingMoveCloser: "Move closer",
     framingAdjustAngle: "Adjust camera angle",
     framingLowVisibility: "Low visibility",
+    ...PATIENT_LIVE_SIGNAL_COPY_EN,
   },
   ar: {
     consentTitle: "الكاميرا لعدّ الحركة",
@@ -357,6 +377,7 @@ const PATIENT_STS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     framingMoveCloser: "اقترب قليلاً",
     framingAdjustAngle: "عدّل زاوية الكاميرا",
     framingLowVisibility: "وضوح منخفض",
+    ...PATIENT_LIVE_SIGNAL_COPY_AR,
   },
 };
 
@@ -418,6 +439,7 @@ const PATIENT_MINI_SQUAT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy>
     framingMoveCloser: "Move closer",
     framingAdjustAngle: "Adjust camera angle",
     framingLowVisibility: "Low visibility",
+    ...PATIENT_LIVE_SIGNAL_COPY_EN,
   },
   ar: {
     consentTitle: "الكاميرا لعدّ الحركة",
@@ -475,6 +497,7 @@ const PATIENT_MINI_SQUAT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy>
     framingMoveCloser: "اقترب قليلاً",
     framingAdjustAngle: "عدّل زاوية الكاميرا",
     framingLowVisibility: "وضوح منخفض",
+    ...PATIENT_LIVE_SIGNAL_COPY_AR,
   },
 };
 
@@ -579,6 +602,7 @@ const PATIENT_SLS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     stanceLegRightLabel: "Right leg standing",
     supportNearWallHint:
       "Stand near a wall or chair for light support if your plan allows.",
+    ...PATIENT_LIVE_SIGNAL_COPY_EN,
   },
   ar: {
     consentTitle: "الكاميرا لتتبّع الثبات",
@@ -643,6 +667,7 @@ const PATIENT_SLS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     stanceLegLeftLabel: "الوقوف على الساق اليسرى",
     stanceLegRightLabel: "الوقوف على الساق اليمنى",
     supportNearWallHint: "قف قرب جدار أو كرسي للدعم الخفيف إذا سمح برنامجك بذلك.",
+    ...PATIENT_LIVE_SIGNAL_COPY_AR,
   },
 };
 
@@ -709,6 +734,7 @@ const PATIENT_HEEL_RAISE_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy>
     framingLowVisibility: "Low visibility",
     supportNearWallHint:
       "Stand near a wall or chair for light support if your plan allows.",
+    ...PATIENT_LIVE_SIGNAL_COPY_EN,
   },
   ar: {
     consentTitle: "الكاميرا لعدّ الحركة",
@@ -770,6 +796,7 @@ const PATIENT_HEEL_RAISE_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy>
     framingAdjustAngle: "عدّل زاوية الكاميرا (~45°)",
     framingLowVisibility: "وضوح منخفض",
     supportNearWallHint: "قف قرب جدار أو كرسي للدعم الخفيف إذا سمح برنامجك بذلك.",
+    ...PATIENT_LIVE_SIGNAL_COPY_AR,
   },
 };
 

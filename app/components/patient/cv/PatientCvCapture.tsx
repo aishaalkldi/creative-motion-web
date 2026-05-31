@@ -43,6 +43,10 @@ import {
   type SitToStandTrackingQuality,
   type SitToStandTrackingStatus,
 } from "@/app/lib/cv/sit-to-stand-detector";
+import {
+  resolveLiveBodySignal,
+  type LiveBodySignal,
+} from "@/app/lib/cv/pose-landmark-overlay";
 
 const METRICS_REPORT_INTERVAL_MS = 3_000;
 
@@ -381,6 +385,33 @@ export function PatientCvCapture({
   const holdExercise = isHoldCvExercise(exerciseId);
   const stanceLegRequired = holdExercise && stanceLeg === null;
 
+  const liveBodySignal: LiveBodySignal = resolveLiveBodySignal({
+    trackingStatus,
+    poseReadiness,
+    bodyFramingState,
+  });
+
+  const liveSignalLabel =
+    liveBodySignal === "body_visible"
+      ? copy.liveSignalBodyVisible
+      : liveBodySignal === "move_back_lighting"
+        ? copy.liveSignalMoveBackLighting
+        : copy.liveSignalAdjustPosition;
+
+  const liveSignalStyles =
+    liveBodySignal === "body_visible"
+      ? "border-[#D1E7DE] bg-[#F0FAF6] text-[#1D9E75]"
+      : liveBodySignal === "move_back_lighting"
+        ? "border-amber-200 bg-amber-50 text-amber-900"
+        : "border-[#E2E8E5] bg-[#F9FAFB] text-[#374151]";
+
+  const liveSignalDotClass =
+    liveBodySignal === "body_visible"
+      ? "bg-[#1D9E75]"
+      : liveBodySignal === "move_back_lighting"
+        ? "bg-amber-500"
+        : "bg-[#9CA3AF]";
+
   if (skipped) {
     return null;
   }
@@ -540,6 +571,20 @@ export function PatientCvCapture({
         style={{ display: showPreview ? "block" : "none" }}
         aria-label={copy.consentTitle}
       />
+
+      {previewActive && (
+        <div
+          className={`mt-2 flex items-center gap-2 rounded-[6px] border px-3 py-2 text-[12px] font-semibold ${liveSignalStyles} ${arClass}`}
+          role="status"
+          aria-live="polite"
+        >
+          <span
+            className={`h-2.5 w-2.5 shrink-0 rounded-full ${liveSignalDotClass}`}
+            aria-hidden
+          />
+          <span>{liveSignalLabel}</span>
+        </div>
+      )}
 
       {previewActive && (
         <button
