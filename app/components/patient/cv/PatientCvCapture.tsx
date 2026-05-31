@@ -21,6 +21,7 @@ import {
   formatSitToStandDuration,
   mapSitToStandStartError,
   SitToStandDetector,
+  type BodyFramingState,
   type PoseReadiness,
   type SitToStandDetectorSnapshot,
   type SitToStandInitPhase,
@@ -63,6 +64,7 @@ function applySnapshot(
     setTrackingStatus: (v: SitToStandTrackingStatus) => void;
     setTrackingQuality: (v: SitToStandTrackingQuality | null) => void;
     setPoseReadiness: (v: PoseReadiness) => void;
+    setBodyFramingState: (v: BodyFramingState) => void;
     setSessionSeconds: (v: number) => void;
     setMovementDetected: (v: boolean) => void;
     setBaselineCalibrating: (v: boolean) => void;
@@ -75,6 +77,7 @@ function applySnapshot(
   setters.setTrackingStatus(snapshot.trackingStatus);
   setters.setTrackingQuality(snapshot.trackingQuality);
   setters.setPoseReadiness(snapshot.poseReadiness);
+  setters.setBodyFramingState(snapshot.bodyFramingState);
   setters.setSessionSeconds(snapshot.sessionSeconds);
   setters.setMovementDetected(snapshot.movementDetected);
   setters.setBaselineCalibrating(snapshot.isBaselineCalibrating);
@@ -105,6 +108,7 @@ export function PatientCvCapture({
   const [trackingStatus, setTrackingStatus] = useState<SitToStandTrackingStatus>("idle");
   const [trackingQuality, setTrackingQuality] = useState<SitToStandTrackingQuality | null>(null);
   const [poseReadiness, setPoseReadiness] = useState<PoseReadiness>("checking");
+  const [bodyFramingState, setBodyFramingState] = useState<BodyFramingState>("checking");
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [sessionStarted, setSessionStarted] = useState(false);
   const [movementDetected, setMovementDetected] = useState(false);
@@ -142,6 +146,7 @@ export function PatientCvCapture({
         setTrackingStatus,
         setTrackingQuality,
         setPoseReadiness,
+        setBodyFramingState,
         setSessionSeconds,
         setMovementDetected,
         setBaselineCalibrating,
@@ -269,19 +274,25 @@ export function PatientCvCapture({
     if (loading && initPhase === "import") return copy.loadingPoseLibrary;
     if (loading && initPhase === "model") return copy.loadingPoseModel;
     if (loading && initPhase === "camera") return copy.startingCamera;
-    if (poseReadiness === "checking") return copy.checkingCameraPosition;
-    if (poseReadiness === "not_ready" || trackingStatus === "pose-lost") {
-      return trackingStatus === "pose-lost"
-        ? copy.poseNotDetectedLabel
-        : copy.adjustPhoneBodyChairLabel;
+    if (trackingStatus === "pose-lost") return copy.poseNotDetectedLabel;
+    if (bodyFramingState === "checking" || poseReadiness === "checking") {
+      return copy.checkingCameraPosition;
     }
+    if (bodyFramingState === "move_back") return copy.framingMoveBack;
+    if (bodyFramingState === "move_closer") return copy.framingMoveCloser;
+    if (bodyFramingState === "adjust_camera_angle") return copy.framingAdjustAngle;
+    if (bodyFramingState === "low_visibility") return copy.framingLowVisibility;
+    if (poseReadiness === "not_ready") return copy.adjustPhoneBodyChairLabel;
     if (poseReadiness === "partial") return copy.almostReadyLabel;
-    if (poseReadiness === "ready") return copy.cameraReadyLabel;
+    if (poseReadiness === "ready") return copy.framingGoodDistance;
     return copy.checkingCameraPosition;
   })();
 
   const showReadinessActions =
-    previewActive && (poseReadiness === "not_ready" || trackingStatus === "pose-lost");
+    previewActive &&
+    (poseReadiness === "not_ready" ||
+      trackingStatus === "pose-lost" ||
+      (bodyFramingState !== "good_distance" && bodyFramingState !== "checking"));
 
   const formatDuration =
     exerciseId === "mini-squat" ? formatMiniSquatDuration : formatSitToStandDuration;
