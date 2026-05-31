@@ -34,6 +34,15 @@ import {
   createRepTemporalSmoothingState,
   resetRepTemporalSmoothingState,
 } from "@/app/lib/cv/rep-temporal-smoothing";
+import type { SessionMotionEvidenceSummary } from "@/app/lib/cv/motion-evidence.types";
+import { MotionTimelineAccumulator } from "@/app/lib/cv/motion-timeline-accumulator";
+import { repTimingEventsFromCaptureRecords } from "@/app/lib/cv/motion-evidence-rep-events";
+import {
+  deriveJointVisibilityScores,
+  mapStandPhaseToMotionPhase,
+  mapTrackingLabelToMotionQuality,
+} from "@/app/lib/cv/motion-evidence-visibility";
+import { buildSessionMotionEvidenceSummary } from "@/app/lib/cv/session-motion-summary-builder";
 import {
   emptyVisibilityLabelCounts,
   evaluateTrackingQualityFromHipVisSum,
@@ -299,6 +308,11 @@ export class SitToStandDetector {
   private repQualityFsm: RepQualityFsm | null = null;
   private repQualitySessionStartedMs = 0;
   private repQualityLastSummary: SessionMotionSummary | null = null;
+  private motionEvidenceFsm: RepQualityFsm | null = null;
+  private motionEvidenceSessionStartedMs = 0;
+  private motionTimeline: MotionTimelineAccumulator | null = null;
+  private lastMotionEvidenceSummary: SessionMotionEvidenceSummary | null = null;
+  private lastRepCountForEvidence = 0;
 
   constructor(
     callbacks: SitToStandDetectorCallbacks,
@@ -617,6 +631,142 @@ export class SitToStandDetector {
     });
   }
 
+  /** Phase 1 motion evidence — available after stop(); clinician persistence only. */
+  getSessionMotionEvidenceSummary(): SessionMotionEvidenceSummary | null {
+    return this.lastMotionEvidenceSummary;
+  }
+
+  private startMotionEvidenceCollection(): void {
+    this.motionTimeline?.destroy();
+    this.motionTimeline = new MotionTimelineAccumulator();
+    this.motionTimeline.startSession();
+    this.motionTimeline.startSampling();
+    this.motionEvidenceFsm = new RepQualityFsm({
+      ...DEFAULT_REP_QUALITY_FSM_CONFIG,
+      minRepDurationMs:
+        this.config.minRepDurationMs ?? DEFAULT_REP_QUALITY_FSM_CONFIG.minRepDurationMs,
+      repTimeoutMs: this.config.repTimeoutMs ?? DEFAULT_REP_QUALITY_FSM_CONFIG.repTimeoutMs,
+      visibilityFairSum: this.config.visibilityFair,
+    });
+    this.motionEvidenceSessionStartedMs = 0;
+    this.lastMotionEvidenceSummary = null;
+    this.lastRepCountForEvidence = 0;
+  }
+
+  private motionEvidenceNowMs(nowMs: number): number {
+    if (this.motionEvidenceSessionStartedMs === 0) {
+      this.motionEvidenceSessionStartedMs = nowMs;
+    }
+    return nowMs - this.motionEvidenceSessionStartedMs;
+  }
+
+  private tickMotionEvidenceFsm(
+    landmarks: PoseLandmark[],
+    hipY: number,
+    nowMs: number,
+    torsoSpan: number | null,
+  ): void {
+    const fsm = this.motionEvidenceFsm;
+    if (!fsm) return;
+
+    const sessionNow = this.motionEvidenceNowMs(nowMs);
+    const hipVisibilitySum = (landmarks[23]?.visibility ?? 0) + (landmarks[24]?.visibility ?? 0);
+    const thresholds = this.resolveRepQualityThresholds(torsoSpan);
+
+    if (!thresholds) {
+      fsm.tick({
+        hipY,
+        nowMs: sessionNow,
+        standThreshold: 0,
+        seatedThreshold: 1,
+        standDelta: 0,
+        returnDelta: 0,
+        hipVisibilitySum,
+        posePresent: true,
+        canCount: false,
+      });
+      return;
+    }
+
+    fsm.tick({
+      hipY,
+      nowMs: sessionNow,
+      standThreshold: thresholds.standThreshold,
+      seatedThreshold: thresholds.seatedThreshold,
+      standDelta: thresholds.standDelta,
+      returnDelta: thresholds.returnDelta,
+      hipVisibilitySum,
+      posePresent: true,
+      canCount: this.canIncrementReps(),
+    });
+  }
+
+  private updateMotionTimeline(landmarks: PoseLandmark[] | null): void {
+    const timeline = this.motionTimeline;
+    if (!timeline) return;
+
+    const events: Array<"rep_completed"> = [];
+    if (this.repCount > this.lastRepCountForEvidence) {
+      events.push("rep_completed");
+      this.lastRepCountForEvidence = this.repCount;
+    }
+
+    if (landmarks) {
+      timeline.updatePending({
+        nowMs: this.sessionSeconds * 1000,
+        posePresent: true,
+        trackingQuality: mapTrackingLabelToMotionQuality(this.trackingQuality),
+        repCountConfirmed: this.repCount,
+        visibility: deriveJointVisibilityScores(landmarks),
+        movementPhase: mapStandPhaseToMotionPhase(this.standPhase),
+        events,
+      });
+      return;
+    }
+
+    timeline.updatePending({
+      nowMs: this.sessionSeconds * 1000,
+      posePresent: false,
+      trackingQuality: "lost",
+      repCountConfirmed: this.repCount,
+      visibility: { hip: 0, knee: 0, ankle: 0 },
+      movementPhase: mapStandPhaseToMotionPhase(this.standPhase),
+      events,
+    });
+  }
+
+  private finalizeMotionEvidence(): void {
+    if (!this.motionTimeline) return;
+
+    const snapshots = this.motionTimeline.endSession();
+    this.motionTimeline.destroy();
+    this.motionTimeline = null;
+
+    if (this.motionEvidenceFsm) {
+      const sessionNow =
+        this.motionEvidenceSessionStartedMs > 0
+          ? performance.now() - this.motionEvidenceSessionStartedMs
+          : 0;
+      this.motionEvidenceFsm.finalizeSession(sessionNow);
+    }
+
+    const repEvents = this.motionEvidenceFsm
+      ? repTimingEventsFromCaptureRecords(this.motionEvidenceFsm.getReps())
+      : [];
+
+    this.lastMotionEvidenceSummary = buildSessionMotionEvidenceSummary({
+      exerciseId: "sit-to-stand",
+      snapshots,
+      repsDetected: this.repCount,
+      repEvents,
+      capturedAt: new Date().toISOString(),
+    });
+
+    this.motionEvidenceFsm?.reset();
+    this.motionEvidenceFsm = null;
+    this.motionEvidenceSessionStartedMs = 0;
+  }
+
   private updateRepCountFromHipY(hipY: number, nowMs: number, torsoSpan: number | null): void {
     const state = this.buildRepState();
 
@@ -742,6 +892,7 @@ export class SitToStandDetector {
     this.initPhase = null;
     this.trackingError = null;
     this.finalizeRepQualitySession();
+    this.finalizeMotionEvidence();
     this.resetBaselineState();
     this.emit();
   }
@@ -851,6 +1002,8 @@ export class SitToStandDetector {
       }
       this.emit();
 
+      this.startMotionEvidenceCollection();
+
       this.timerId = setInterval(() => {
         this.sessionSeconds += 1;
         this.emit();
@@ -905,6 +1058,8 @@ export class SitToStandDetector {
             this.updatePoseReadiness(nowMs, landmarks);
             this.updateRepCountFromHipY(hipY, nowMs, torsoSpan);
             this.tickRepQualityFsm(landmarks, hipY, nowMs, torsoSpan);
+            this.tickMotionEvidenceFsm(landmarks, hipY, nowMs, torsoSpan);
+            this.updateMotionTimeline(landmarks);
 
             if (this.config.readinessEnabled) {
               if (this.bodyFramingProfile()) {
@@ -945,6 +1100,14 @@ export class SitToStandDetector {
                   : 0;
               this.repQualityFsm.handlePoseLost(sessionNow);
             }
+            if (this.motionEvidenceFsm) {
+              const sessionNow =
+                this.motionEvidenceSessionStartedMs > 0
+                  ? performance.now() - this.motionEvidenceSessionStartedMs
+                  : 0;
+              this.motionEvidenceFsm.handlePoseLost(sessionNow);
+            }
+            this.updateMotionTimeline(null);
           }
         } catch {
           consecutiveDetectErrors += 1;

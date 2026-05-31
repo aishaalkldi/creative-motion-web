@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import type { PatientCvDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
+import type { SessionMotionEvidenceSummary } from "@/app/lib/cv/motion-evidence.types";
 import { CV_MIN_SAVE_DURATION_S, isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
 
 export type CvCaptureStatus =
@@ -39,6 +40,9 @@ export function useCvSessionCapture({
   const skippedRef = useRef(false);
   const saveFlightRef = useRef<Promise<CvSaveResult> | null>(null);
   const flushMetricsRef = useRef<(() => void) | null>(null);
+  const motionSummaryProviderRef = useRef<(() => SessionMotionEvidenceSummary | null) | null>(
+    null,
+  );
 
   const isCvEligible = isCvEnabledExercise(exerciseId);
 
@@ -62,6 +66,13 @@ export function useCvSessionCapture({
     flushMetricsRef.current = flush;
   }, []);
 
+  const registerMotionSummaryProvider = useCallback(
+    (provider: () => SessionMotionEvidenceSummary | null) => {
+      motionSummaryProviderRef.current = provider;
+    },
+    [],
+  );
+
   const resetCapture = useCallback(() => {
     latestMetricsRef.current = null;
     hasSavedRef.current = false;
@@ -69,6 +80,7 @@ export function useCvSessionCapture({
     skippedRef.current = false;
     saveFlightRef.current = null;
     flushMetricsRef.current = null;
+    motionSummaryProviderRef.current = null;
     setCvStatus("not_started");
   }, []);
 
@@ -89,7 +101,9 @@ export function useCvSessionCapture({
         saveInProgressRef.current = true;
         setCvStatus("save_pending");
 
-        const payload = {
+        const motionSummary = motionSummaryProviderRef.current?.() ?? undefined;
+
+        const payload: Record<string, unknown> = {
           token,
           sessionId: planSessionId,
           exerciseId: metrics.exerciseId,
@@ -100,6 +114,9 @@ export function useCvSessionCapture({
           framesWithPose: metrics.framesWithPose,
           framesTotal: metrics.framesTotal,
         };
+        if (motionSummary) {
+          payload.motionSummary = motionSummary;
+        }
 
         try {
           const res = await fetch("/api/patient/cv-session-metrics", {
@@ -140,6 +157,7 @@ export function useCvSessionCapture({
     onMetricsUpdate,
     markSkipped,
     registerMetricsFlush,
+    registerMotionSummaryProvider,
     saveCvMetrics,
     resetCapture,
   };

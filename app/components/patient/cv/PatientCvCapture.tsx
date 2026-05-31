@@ -81,6 +81,9 @@ export type PatientCvCaptureProps = {
   onMetricsUpdate?: (metrics: PatientCvDerivedMetrics) => void;
   onSkipped?: () => void;
   onRegisterMetricsFlush?: (flush: () => void) => void;
+  onRegisterMotionSummaryProvider?: (
+    provider: () => import("@/app/lib/cv/motion-evidence.types").SessionMotionEvidenceSummary | null,
+  ) => void;
 };
 
 function canvasSizeForExercise(exerciseId: CvY1ExerciseId): {
@@ -150,6 +153,7 @@ export function PatientCvCapture({
   onMetricsUpdate,
   onSkipped,
   onRegisterMetricsFlush,
+  onRegisterMotionSummaryProvider,
 }: PatientCvCaptureProps) {
   const copy = patientCvCopy(language, exerciseId);
   const { canvasWidth: CANVAS_WIDTH, canvasHeight: CANVAS_HEIGHT } =
@@ -259,6 +263,17 @@ export function PatientCvCapture({
     onRegisterMetricsFlush(reportMetrics);
     return () => onRegisterMetricsFlush(() => {});
   }, [onRegisterMetricsFlush, reportMetrics]);
+
+  useEffect(() => {
+    if (!onRegisterMotionSummaryProvider || exerciseId !== "sit-to-stand") return;
+    onRegisterMotionSummaryProvider(() => {
+      const detector = detectorRef.current;
+      return detector instanceof SitToStandDetector
+        ? detector.getSessionMotionEvidenceSummary()
+        : null;
+    });
+    return () => onRegisterMotionSummaryProvider(() => null);
+  }, [onRegisterMotionSummaryProvider, exerciseId]);
 
   useEffect(() => {
     if (!previewActive) return;

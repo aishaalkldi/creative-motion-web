@@ -20,6 +20,9 @@ export type ExerciseMediaAreaProps = {
   onCvMetricsUpdate?: (metrics: PatientCvDerivedMetrics) => void;
   onCvSkipped?: () => void;
   onRegisterCvMetricsFlush?: (flush: () => void) => void;
+  onRegisterCvMotionSummaryProvider?: (
+    provider: () => import("@/app/lib/cv/motion-evidence.types").SessionMotionEvidenceSummary | null,
+  ) => void;
 };
 
 type VisualRegion =
@@ -397,6 +400,7 @@ export function ExerciseMediaArea({
   onCvMetricsUpdate,
   onCvSkipped,
   onRegisterCvMetricsFlush,
+  onRegisterCvMotionSummaryProvider,
 }: ExerciseMediaAreaProps) {
   const ui = exerciseMediaUi(language);
   const resolvedMedia = mediaUrl?.trim() || null;
@@ -419,6 +423,7 @@ export function ExerciseMediaArea({
           onMetricsUpdate={onCvMetricsUpdate}
           onSkipped={onCvSkipped}
           onRegisterMetricsFlush={onRegisterCvMetricsFlush}
+          onRegisterMotionSummaryProvider={onRegisterCvMotionSummaryProvider}
         />
       )}
 

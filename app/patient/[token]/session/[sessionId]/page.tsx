@@ -106,6 +106,7 @@ export default function SessionPlayerPage() {
     onMetricsUpdate,
     markSkipped,
     registerMetricsFlush,
+    registerMotionSummaryProvider,
     saveCvMetrics,
     resetCapture,
   } = useCvSessionCapture({
@@ -750,6 +751,7 @@ export default function SessionPlayerPage() {
         onCvMetricsUpdate={onMetricsUpdate}
         onCvSkipped={markSkipped}
         onRegisterCvMetricsFlush={registerMetricsFlush}
+        onRegisterCvMotionSummaryProvider={registerMotionSummaryProvider}
       />
 
       {exerciseStep === "done" && cvSaveNotice && (

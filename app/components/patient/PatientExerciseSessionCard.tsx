@@ -30,6 +30,9 @@ type PatientExerciseSessionCardProps = {
   onCvMetricsUpdate?: (metrics: PatientCvDerivedMetrics) => void;
   onCvSkipped?: () => void;
   onRegisterCvMetricsFlush?: (flush: () => void) => void;
+  onRegisterCvMotionSummaryProvider?: (
+    provider: () => import("@/app/lib/cv/motion-evidence.types").SessionMotionEvidenceSummary | null,
+  ) => void;
 };
 
 function DoseTile({
@@ -76,6 +79,7 @@ export function PatientExerciseSessionCard({
   onCvMetricsUpdate,
   onCvSkipped,
   onRegisterCvMetricsFlush,
+  onRegisterCvMotionSummaryProvider,
 }: PatientExerciseSessionCardProps) {
   const flowUi = sessionExerciseFlowUi(lang);
   const cardUi = sessionExerciseUi(lang);
@@ -126,6 +130,7 @@ export function PatientExerciseSessionCard({
           onCvMetricsUpdate={onCvMetricsUpdate}
           onCvSkipped={onCvSkipped}
           onRegisterCvMetricsFlush={onRegisterCvMetricsFlush}
+          onRegisterCvMotionSummaryProvider={onRegisterCvMotionSummaryProvider}
         />
 
         <div className="space-y-4 p-5">

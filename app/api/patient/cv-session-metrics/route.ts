@@ -15,6 +15,10 @@ import {
 } from "@/app/lib/cv/bio-0-contracts";
 import { bodyHasForbiddenCvKeys } from "@/app/lib/cv/cv-forbidden-keys";
 import {
+  findForbiddenMotionEvidenceKey,
+  validateSessionMotionEvidenceSummary,
+} from "@/app/lib/cv/motion-evidence-privacy";
+import {
   checkPatientGeneralLimit,
   rateLimitExceededResponse,
 } from "@/app/lib/rate-limit";
@@ -41,6 +45,7 @@ type RequestBody = {
   movementDetected?: boolean;
   framesWithPose?: number;
   framesTotal?: number;
+  motionSummary?: unknown;
 };
 
 type TokenRow = {
@@ -87,6 +92,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: API_ERRORS.UNABLE }, { status: 400 });
   }
 
+  const motionForbidden = findForbiddenMotionEvidenceKey(body);
+  if (motionForbidden) {
+    return NextResponse.json({ error: API_ERRORS.UNABLE }, { status: 400 });
+  }
+
+  if (
+    body.motionSummary !== undefined &&
+    body.motionSummary !== null &&
+    !validateSessionMotionEvidenceSummary(body.motionSummary)
+  ) {
+    return NextResponse.json({ error: API_ERRORS.UNABLE }, { status: 400 });
+  }
+
+  if (
+    body.motionSummary !== undefined &&
+    body.motionSummary !== null &&
+    !validateSessionMotionEvidenceSummary(body.motionSummary)
+  ) {
+    return NextResponse.json({ error: API_ERRORS.UNABLE }, { status: 400 });
+  }
+
   const tokenValue = body.token?.trim() ?? "";
   const sessionId = body.sessionId?.trim() ?? "";
 
@@ -99,6 +125,28 @@ export async function POST(req: NextRequest) {
 
   const exerciseId = (body.exerciseId?.trim() ?? "").toLowerCase();
   if (!isAllowedPatientCvExerciseId(exerciseId)) {
+    return NextResponse.json({ error: API_ERRORS.UNABLE }, { status: 400 });
+  }
+
+  if (
+    body.motionSummary &&
+    typeof body.motionSummary === "object" &&
+    !Array.isArray(body.motionSummary)
+  ) {
+    const summary = body.motionSummary as Record<string, unknown>;
+    if (summary.exerciseId !== exerciseId) {
+      return NextResponse.json({ error: API_ERRORS.UNABLE }, { status: 400 });
+    }
+    if (
+      body.repCount !== undefined &&
+      typeof summary.repsDetected === "number" &&
+      summary.repsDetected !== body.repCount
+    ) {
+      return NextResponse.json({ error: API_ERRORS.UNABLE }, { status: 400 });
+    }
+  }
+
+  if (body.motionSummary !== undefined && body.motionSummary !== null && exerciseId !== "sit-to-stand") {
     return NextResponse.json({ error: API_ERRORS.UNABLE }, { status: 400 });
   }
 
@@ -186,6 +234,27 @@ export async function POST(req: NextRequest) {
   if (insertErr) {
     console.error("[POST /api/patient/cv-session-metrics] insert failed");
     return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
+  }
+
+  if (
+    body.motionSummary &&
+    validateSessionMotionEvidenceSummary(body.motionSummary) &&
+    exerciseId === "sit-to-stand"
+  ) {
+    const { error: summaryErr } = await admin.from("session_motion_summaries").insert({
+      provider_id: tokenRow.provider_id,
+      patient_id: tokenRow.patient_id,
+      session_id: sessionId,
+      cv_session_metrics_id: inserted.id,
+      exercise_id: exerciseId,
+      schema_version: "sms-1",
+      summary_json: body.motionSummary,
+    });
+
+    if (summaryErr) {
+      console.error("[POST /api/patient/cv-session-metrics] motion summary insert failed");
+      return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
+    }
   }
 
   return NextResponse.json({
