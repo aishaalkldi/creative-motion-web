@@ -3,6 +3,7 @@
  * No biomechanics agent runtime. No clinical scoring. No AI.
  */
 
+import type { BodyFramingProfileId } from "@/app/lib/cv/body-framing-profiles";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 
 /* ── Metrics payload (future patient API) ─────────────────────────────────── */
@@ -104,6 +105,8 @@ export type SitToStandCvConfig = {
   repPolarity?: "rise" | "drop";
   /** Metrics payload exercise id (default sit-to-stand). */
   metricsExerciseId?: PatientCvExerciseId;
+  /** Patient portal body framing profile (distance guide). */
+  bodyFramingProfileId?: BodyFramingProfileId;
 };
 
 export const DEFAULT_STS_CONFIG: SitToStandCvConfig = {
@@ -170,6 +173,11 @@ export type PatientCvCopy = {
   poseNotDetectedLabel: string;
   tryAgainLabel: string;
   hipLandmarksHint: string;
+  framingGoodDistance: string;
+  framingMoveBack: string;
+  framingMoveCloser: string;
+  framingAdjustAngle: string;
+  framingLowVisibility: string;
 };
 
 /* ── Patient-safe CV copy (EN/AR) — PatientCvCapture ─────────────────────── */
@@ -246,6 +254,11 @@ const PATIENT_STS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     tryAgainLabel: "Try again",
     hipLandmarksHint:
       "Wait until the points appear on your shoulders and hips before standing.",
+    framingGoodDistance: "Good distance",
+    framingMoveBack: "Step back",
+    framingMoveCloser: "Move closer",
+    framingAdjustAngle: "Adjust camera angle",
+    framingLowVisibility: "Low visibility",
   },
   ar: {
     consentTitle: "الكاميرا لعدّ الحركة",
@@ -304,6 +317,11 @@ const PATIENT_STS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
     poseNotDetectedLabel: "لم تُكتشف الوضعية — عدّل الهاتف",
     tryAgainLabel: "حاول مرة أخرى",
     hipLandmarksHint: "انتظر حتى تظهر النقاط على الكتفين والوركين قبل الوقوف.",
+    framingGoodDistance: "المسافة مناسبة",
+    framingMoveBack: "ابتعد قليلاً",
+    framingMoveCloser: "اقترب قليلاً",
+    framingAdjustAngle: "عدّل زاوية الكاميرا",
+    framingLowVisibility: "وضوح منخفض",
   },
 };
 
@@ -360,6 +378,11 @@ const PATIENT_MINI_SQUAT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy>
     poseNotDetectedLabel: "Pose not detected — adjust your phone",
     tryAgainLabel: "Try again",
     hipLandmarksHint: "Wait until the points appear on your shoulders and hips before squatting.",
+    framingGoodDistance: "Good distance",
+    framingMoveBack: "Step back",
+    framingMoveCloser: "Move closer",
+    framingAdjustAngle: "Adjust camera angle",
+    framingLowVisibility: "Low visibility",
   },
   ar: {
     consentTitle: "الكاميرا لعدّ الحركة",
@@ -412,6 +435,11 @@ const PATIENT_MINI_SQUAT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy>
     poseNotDetectedLabel: "لم تُكتشف الوضعية — عدّل الهاتف",
     tryAgainLabel: "حاول مرة أخرى",
     hipLandmarksHint: "انتظر حتى تظهر النقاط على الكتفين والوركين قبل القرفصاء.",
+    framingGoodDistance: "المسافة مناسبة",
+    framingMoveBack: "ابتعد قليلاً",
+    framingMoveCloser: "اقترب قليلاً",
+    framingAdjustAngle: "عدّل زاوية الكاميرا",
+    framingLowVisibility: "وضوح منخفض",
   },
 };
 

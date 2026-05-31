@@ -44,6 +44,7 @@ export const PATIENT_STS_CONFIG: SitToStandCvConfig = {
   readinessEnabled: true,
   readinessCheckMs: 2_000,
   minHipVisibility: 0.35,
+  bodyFramingProfileId: "seated-rise",
 };
 
 /**
@@ -67,4 +68,5 @@ export const PATIENT_MINI_SQUAT_CONFIG: SitToStandCvConfig = {
   readinessCheckMs: 2_000,
   minHipVisibility: 0.35,
   prototypeVersion: "cv-y2-mini-squat",
+  bodyFramingProfileId: "standing-sagittal-rep",
 };

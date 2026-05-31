@@ -36,9 +36,15 @@ import {
   summarizeSessionVisibility,
   type VisibilityLabelCounts,
 } from "@/app/lib/cv/session-visibility-summary";
+import {
+  drawBodyFramingOverlay,
+  evaluateBodyFraming,
+  type BodyFramingState,
+} from "@/app/lib/cv/body-framing-evaluator";
+import { resolveBodyFramingProfile } from "@/app/lib/cv/body-framing-profiles";
 
 export { computeHipMidY, computeTorsoSpan, hipsMeetMinVisibility };
-export type { PoseLandmark };
+export type { PoseLandmark, BodyFramingState };
 
 export type SitToStandTrackingStatus = "idle" | "detecting" | "pose-found" | "pose-lost";
 export type SitToStandTrackingQuality = "good" | "fair" | "poor";
@@ -50,6 +56,7 @@ export type SitToStandDetectorSnapshot = {
   trackingStatus: SitToStandTrackingStatus;
   trackingQuality: SitToStandTrackingQuality | null;
   poseReadiness: PoseReadiness;
+  bodyFramingState: BodyFramingState;
   repCount: number;
   sessionSeconds: number;
   movementDetected: boolean;
@@ -231,6 +238,7 @@ const IDLE_SNAPSHOT: SitToStandDetectorSnapshot = {
   trackingStatus: "idle",
   trackingQuality: null,
   poseReadiness: "ready",
+  bodyFramingState: "good_distance",
   repCount: 0,
   sessionSeconds: 0,
   movementDetected: false,
@@ -282,6 +290,7 @@ export class SitToStandDetector {
   private lastRepAtMs = 0;
   private isBaselineCalibrating = false;
   private poseReadiness: PoseReadiness = "ready";
+  private bodyFramingState: BodyFramingState = "good_distance";
   private readinessCheckEndMs = 0;
   /** MQ-SIGNAL-1B: in-memory session visibility (saved summary only; not persisted). */
   private hipVisSamples: number[] = [];
@@ -304,6 +313,7 @@ export class SitToStandDetector {
       trackingStatus: this.trackingStatus,
       trackingQuality: this.trackingQuality,
       poseReadiness: this.poseReadiness,
+      bodyFramingState: this.bodyFramingState,
       repCount: this.repCount,
       sessionSeconds: this.sessionSeconds,
       movementDetected: this.movementDetected,
@@ -333,6 +343,24 @@ export class SitToStandDetector {
     this.isBaselineCalibrating = false;
     this.readinessCheckEndMs = 0;
     this.poseReadiness = this.usesReadiness() ? "checking" : "ready";
+    this.bodyFramingState = this.usesReadiness() ? "checking" : "good_distance";
+  }
+
+  private bodyFramingProfile() {
+    return resolveBodyFramingProfile(this.config.bodyFramingProfileId);
+  }
+
+  private mapFramingToPoseReadiness(
+    framingState: BodyFramingState,
+    quality: SitToStandTrackingQuality,
+  ): PoseReadiness {
+    if (framingState === "good_distance") {
+      return "ready";
+    }
+    if (framingState === "low_visibility" && quality === "fair") {
+      return "partial";
+    }
+    return "not_ready";
   }
 
   private canCollectBaseline(): boolean {
@@ -371,15 +399,33 @@ export class SitToStandDetector {
   private updatePoseReadiness(nowMs: number, landmarks: PoseLandmark[]): void {
     if (!this.usesReadiness()) {
       this.poseReadiness = "ready";
+      this.bodyFramingState = "good_distance";
       return;
     }
 
     if (nowMs < this.readinessCheckEndMs) {
       this.poseReadiness = "checking";
+      this.bodyFramingState = "checking";
       return;
     }
 
     const quality = this.trackingQuality ?? "poor";
+    const framingProfile = this.bodyFramingProfile();
+
+    if (framingProfile) {
+      this.bodyFramingState = evaluateBodyFraming(landmarks, framingProfile, {
+        checking: false,
+        trackingQuality: quality,
+      });
+
+      if (this.bodyFramingState !== "good_distance") {
+        this.poseReadiness = this.mapFramingToPoseReadiness(this.bodyFramingState, quality);
+        return;
+      }
+    } else {
+      this.bodyFramingState = "good_distance";
+    }
+
     const wasCountingReady =
       this.poseReadiness === "ready" || this.poseReadiness === "partial";
     this.poseReadiness = evaluatePoseFrameReadiness(landmarks, quality, this.config);
@@ -903,6 +949,14 @@ export class SitToStandDetector {
             this.tickRepQualityFsm(landmarks, hipY, nowMs, torsoSpan);
 
             if (this.config.readinessEnabled) {
+              if (this.bodyFramingProfile()) {
+                drawBodyFramingOverlay(
+                  ctx,
+                  canvasWidth,
+                  canvasHeight,
+                  this.bodyFramingState,
+                );
+              }
               this.drawReadinessSkeleton(ctx, landmarks, canvasWidth, canvasHeight);
             } else {
               for (const idx of this.config.lowerBodyLandmarkIndices) {
@@ -919,6 +973,7 @@ export class SitToStandDetector {
             this.trackingQuality = null;
             if (this.usesReadiness()) {
               this.poseReadiness = "not_ready";
+              this.bodyFramingState = "low_visibility";
             }
             if (this.repQualityActive() && this.repQualityFsm) {
               const sessionNow =
