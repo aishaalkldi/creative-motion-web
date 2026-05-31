@@ -71,6 +71,16 @@ describe("sagittal-hip-rep-core", () => {
       canCollectBaseline: false,
       canIncrementReps: () => true,
     });
+    tickSagittalHipRepBaseline({
+      state,
+      polarity: "rise",
+      hipY: 0.47,
+      nowMs: 1_016,
+      torsoSpan: TORSO,
+      config: stsBaselineConfig(),
+      canCollectBaseline: false,
+      canIncrementReps: () => true,
+    });
     assert.equal(state.repCount, 1);
     assert.equal(state.repPhase, "peak");
 
@@ -79,6 +89,16 @@ describe("sagittal-hip-rep-core", () => {
       polarity: "rise",
       hipY: 0.54,
       nowMs: 1_500,
+      torsoSpan: TORSO,
+      config: stsBaselineConfig(),
+      canCollectBaseline: false,
+      canIncrementReps: () => true,
+    });
+    tickSagittalHipRepBaseline({
+      state,
+      polarity: "rise",
+      hipY: 0.54,
+      nowMs: 1_516,
       torsoSpan: TORSO,
       config: stsBaselineConfig(),
       canCollectBaseline: false,
@@ -115,6 +135,16 @@ describe("sagittal-hip-rep-core", () => {
       canCollectBaseline: false,
       canIncrementReps: () => true,
     });
+    tickSagittalHipRepBaseline({
+      state,
+      polarity: "drop",
+      hipY: 0.44,
+      nowMs: 1_516,
+      torsoSpan: TORSO,
+      config: miniSquatConfig(),
+      canCollectBaseline: false,
+      canIncrementReps: () => true,
+    });
     assert.equal(state.repCount, 1);
     assert.equal(state.repPhase, "rest");
   });
@@ -129,6 +159,16 @@ describe("sagittal-hip-rep-core", () => {
       polarity: "rise",
       hipY: 0.48,
       nowMs: 1_000,
+      torsoSpan: TORSO,
+      config: stsBaselineConfig(),
+      canCollectBaseline: false,
+      canIncrementReps: () => true,
+    });
+    tickSagittalHipRepBaseline({
+      state,
+      polarity: "rise",
+      hipY: 0.47,
+      nowMs: 1_016,
       torsoSpan: TORSO,
       config: stsBaselineConfig(),
       canCollectBaseline: false,
@@ -154,6 +194,16 @@ describe("sagittal-hip-rep-core", () => {
       canCollectBaseline: false,
       canIncrementReps: () => true,
     });
+    tickSagittalHipRepBaseline({
+      state,
+      polarity: "rise",
+      hipY: 0.47,
+      nowMs: 1_416,
+      torsoSpan: TORSO,
+      config: stsBaselineConfig(),
+      canCollectBaseline: false,
+      canIncrementReps: () => true,
+    });
     assert.equal(state.repCount, 1);
   });
 
@@ -162,7 +212,13 @@ describe("sagittal-hip-rep-core", () => {
     tickSagittalHipRepAbsolute({
       state,
       polarity: "rise",
-      hipY: 0.4,
+      hipY: 0.38,
+      config: { peakThreshold: 0.42, restThreshold: 0.58 },
+    });
+    tickSagittalHipRepAbsolute({
+      state,
+      polarity: "rise",
+      hipY: 0.38,
       config: { peakThreshold: 0.42, restThreshold: 0.58 },
     });
     assert.equal(state.repCount, 1);

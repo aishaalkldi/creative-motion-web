@@ -220,6 +220,22 @@ export type PatientCvCopy = {
   liveSignalBodyVisible: string;
   liveSignalAdjustPosition: string;
   liveSignalMoveBackLighting: string;
+  /** Pre-tracking camera setup wizard. */
+  setupWizardTitle: string;
+  setupExerciseHint: string;
+  setupCheckBodyVisible: string;
+  setupCheckCorrectDistance: string;
+  setupCheckFeetAnklesVisible: string;
+  setupCheckLightingAcceptable: string;
+  setupStateReadyToStart: string;
+  setupStateMoveBack: string;
+  setupStateMoveCloser: string;
+  setupStateImproveLighting: string;
+  setupStateShowFeetAnkles: string;
+  setupStateAdjustCameraAngle: string;
+  setupStartAnyway: string;
+  setupStartAnywayWarning: string;
+  setupCheckingCamera: string;
 };
 
 /* ── Patient-safe CV copy (EN/AR) — PatientCvCapture ─────────────────────── */
@@ -252,7 +268,70 @@ const PATIENT_LIVE_SIGNAL_COPY_AR = {
   liveSignalMoveBackLighting: "ابتعد أو حسّن الإضاءة",
 } as const;
 
-const PATIENT_STS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
+const PATIENT_SETUP_WIZARD_COPY_EN = {
+  setupWizardTitle: "Camera setup",
+  setupCheckBodyVisible: "Body visible",
+  setupCheckCorrectDistance: "Correct distance",
+  setupCheckFeetAnklesVisible: "Feet and ankles visible",
+  setupCheckLightingAcceptable: "Lighting acceptable",
+  setupStateReadyToStart: "Ready to start",
+  setupStateMoveBack: "Move back",
+  setupStateMoveCloser: "Move closer",
+  setupStateImproveLighting: "Improve lighting",
+  setupStateShowFeetAnkles: "Show feet and ankles",
+  setupStateAdjustCameraAngle: "Adjust camera angle",
+  setupStartAnyway: "Start anyway",
+  setupStartAnywayWarning:
+    "Camera setup is not ideal. Tracking may miss reps or feel less reliable.",
+  setupCheckingCamera: "Checking camera setup…",
+} as const;
+
+const PATIENT_SETUP_WIZARD_COPY_AR = {
+  setupWizardTitle: "إعداد الكاميرا",
+  setupCheckBodyVisible: "الجسم ظاهر",
+  setupCheckCorrectDistance: "المسافة مناسبة",
+  setupCheckFeetAnklesVisible: "القدمان والكاحلان ظاهران",
+  setupCheckLightingAcceptable: "الإضاءة مناسبة",
+  setupStateReadyToStart: "جاهز للبدء",
+  setupStateMoveBack: "ابتعد",
+  setupStateMoveCloser: "اقترب",
+  setupStateImproveLighting: "حسّن الإضاءة",
+  setupStateShowFeetAnkles: "أظهر القدمين والكاحلين",
+  setupStateAdjustCameraAngle: "عدّل زاوية الكاميرا",
+  setupStartAnyway: "ابدأ على أي حال",
+  setupStartAnywayWarning:
+    "إعداد الكاميرا ليس مثالياً. قد يفوت التتبّع بعض التكرارات أو يكون أقل موثوقية.",
+  setupCheckingCamera: "جاري فحص إعداد الكاميرا…",
+} as const;
+
+const PATIENT_SETUP_EXERCISE_HINTS: Record<
+  PatientCvExerciseId,
+  Record<PatientExerciseLanguage, string>
+> = {
+  "sit-to-stand": {
+    en: "Show the chair and your full body.",
+    ar: "أظهر الكرسي وجسمك بالكامل.",
+  },
+  "mini-squat": {
+    en: "Stand with your full body visible.",
+    ar: "قف مع ظهور جسمك بالكامل.",
+  },
+  "single-leg-stance": {
+    en: "Stand near support with your full body visible.",
+    ar: "قف قرب الدعم مع ظهور جسمك بالكامل.",
+  },
+  "heel-raise": {
+    en: "Stand at a slight 45° angle with both ankles visible.",
+    ar: "قف بزاوية 45° تقريباً مع ظهور الكاحلين معاً.",
+  },
+};
+
+type PatientCvCopyBase = Omit<
+  PatientCvCopy,
+  keyof typeof PATIENT_SETUP_WIZARD_COPY_EN | "setupExerciseHint"
+>;
+
+const PATIENT_STS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = {
   en: {
     consentTitle: "Camera for movement counting",
     consentDoIntro: "What this does:",
@@ -381,7 +460,7 @@ const PATIENT_STS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
   },
 };
 
-const PATIENT_MINI_SQUAT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
+const PATIENT_MINI_SQUAT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = {
   en: {
     consentTitle: "Camera for movement counting",
     consentDoIntro: "What this does:",
@@ -535,7 +614,7 @@ const PATIENT_SLS_CONSENT_DONT_AR = [
   "لا يقدّم درجة توازن أو تقييم نجاح/فشل",
 ] as const;
 
-const PATIENT_SLS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
+const PATIENT_SLS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = {
   en: {
     consentTitle: "Camera for hold tracking",
     consentDoIntro: "What this does:",
@@ -671,7 +750,7 @@ const PATIENT_SLS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
   },
 };
 
-const PATIENT_HEEL_RAISE_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopy> = {
+const PATIENT_HEEL_RAISE_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = {
   en: {
     consentTitle: "Camera for movement counting",
     consentDoIntro: "What this does:",
@@ -817,10 +896,17 @@ export function patientCvCopy(
   lang: PatientExerciseLanguage,
   exerciseId: PatientCvExerciseId = "sit-to-stand",
 ): PatientCvCopy {
-  if (exerciseId === "mini-squat") return PATIENT_MINI_SQUAT_CV_COPY[lang];
-  if (exerciseId === "single-leg-stance") return PATIENT_SLS_CV_COPY[lang];
-  if (exerciseId === "heel-raise") return PATIENT_HEEL_RAISE_CV_COPY[lang];
-  return PATIENT_STS_CV_COPY[lang];
+  const setupCopy =
+    lang === "ar" ? PATIENT_SETUP_WIZARD_COPY_AR : PATIENT_SETUP_WIZARD_COPY_EN;
+  const setupExerciseHint = PATIENT_SETUP_EXERCISE_HINTS[exerciseId][lang];
+
+  let base: PatientCvCopyBase;
+  if (exerciseId === "mini-squat") base = PATIENT_MINI_SQUAT_CV_COPY[lang];
+  else if (exerciseId === "single-leg-stance") base = PATIENT_SLS_CV_COPY[lang];
+  else if (exerciseId === "heel-raise") base = PATIENT_HEEL_RAISE_CV_COPY[lang];
+  else base = PATIENT_STS_CV_COPY[lang];
+
+  return { ...base, ...setupCopy, setupExerciseHint };
 }
 
 /** Shared prototype / clinician disclaimer strings (CV Lab + future patient). */

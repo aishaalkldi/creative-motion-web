@@ -47,6 +47,13 @@ import {
   resolveLiveBodySignal,
   type LiveBodySignal,
 } from "@/app/lib/cv/pose-landmark-overlay";
+import {
+  cameraSetupCheckLabel,
+  cameraSetupWizardStateLabel,
+  evaluateCameraSetupChecks,
+  isCameraSetupReady,
+  resolveCameraSetupWizardState,
+} from "@/app/lib/cv/camera-setup-wizard";
 
 const METRICS_REPORT_INTERVAL_MS = 3_000;
 
@@ -165,6 +172,8 @@ export function PatientCvCapture({
   const [movementDetected, setMovementDetected] = useState(false);
   const [baselineCalibrating, setBaselineCalibrating] = useState(false);
   const [stanceLeg, setStanceLeg] = useState<StanceLeg | null>(null);
+  const [wizardComplete, setWizardComplete] = useState(false);
+  const [startAnywayAcknowledged, setStartAnywayAcknowledged] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -287,7 +296,7 @@ export function PatientCvCapture({
           ? mapHeelRaiseStartError
           : mapSitToStandStartError;
 
-  const startSession = useCallback(async () => {
+  const startSetupPreview = useCallback(async () => {
     const detector = detectorRef.current;
     if (
       !consented ||
@@ -309,6 +318,46 @@ export function PatientCvCapture({
     startInProgressRef.current = true;
     setError(null);
     setTrackingError(null);
+    skipReportRef.current = true;
+
+    try {
+      await detector.start(video, canvas);
+    } catch (err) {
+      detector.stop();
+      syncFromDetector(detector.getSnapshot());
+      setError(mapStartError(err));
+    } finally {
+      startInProgressRef.current = false;
+    }
+  }, [consented, loading, syncFromDetector, mapStartError]);
+
+  const beginTrackingSession = useCallback(async () => {
+    const detector = detectorRef.current;
+    if (
+      !consented ||
+      !detector ||
+      startInProgressRef.current ||
+      loading
+    ) {
+      return;
+    }
+
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas) {
+      setError("Video element not available.");
+      return;
+    }
+
+    if (detector.isPreviewActive()) {
+      detector.stop();
+      syncFromDetector(detector.getSnapshot());
+    }
+
+    startInProgressRef.current = true;
+    setError(null);
+    setTrackingError(null);
+    setWizardComplete(true);
     setSessionStarted(true);
     skipReportRef.current = false;
     lastReportedRepRef.current = -1;
@@ -320,11 +369,37 @@ export function PatientCvCapture({
     } catch (err) {
       detector.stop();
       syncFromDetector(detector.getSnapshot());
+      setWizardComplete(false);
+      setSessionStarted(false);
       setError(mapStartError(err));
     } finally {
       startInProgressRef.current = false;
     }
   }, [consented, loading, syncFromDetector, reportMetrics, mapStartError]);
+
+  const holdExercise = isHoldCvExercise(exerciseId);
+  const stanceLegRequired = holdExercise && stanceLeg === null;
+
+  useEffect(() => {
+    if (skipped || !consented || stanceLegRequired || wizardComplete) return;
+    if (previewActive || loading || startInProgressRef.current || error) return;
+    void startSetupPreview();
+  }, [
+    skipped,
+    consented,
+    stanceLegRequired,
+    wizardComplete,
+    previewActive,
+    loading,
+    error,
+    startSetupPreview,
+  ]);
+
+  useEffect(() => {
+    setWizardComplete(false);
+    setStartAnywayAcknowledged(false);
+    setSessionStarted(false);
+  }, [exerciseId, stanceLeg]);
 
   const loadingLabel =
     initPhase === "import"
@@ -341,6 +416,8 @@ export function PatientCvCapture({
     const detector = detectorRef.current;
     detector?.stop();
     if (detector) syncFromDetector(detector.getSnapshot());
+    setWizardComplete(false);
+    setStartAnywayAcknowledged(false);
     setSessionStarted(false);
     setError(null);
     setTrackingError(null);
@@ -382,8 +459,35 @@ export function PatientCvCapture({
     return formatSitToStandDuration;
   })();
 
-  const holdExercise = isHoldCvExercise(exerciseId);
-  const stanceLegRequired = holdExercise && stanceLeg === null;
+  const setupEvaluateInput = {
+    exerciseId,
+    trackingStatus,
+    poseReadiness,
+    bodyFramingState,
+    trackingQuality,
+  };
+  const setupChecks = evaluateCameraSetupChecks(setupEvaluateInput);
+  const setupReady = isCameraSetupReady(setupChecks);
+  const wizardState = resolveCameraSetupWizardState(setupEvaluateInput);
+  const canBeginTracking = setupReady || startAnywayAcknowledged;
+
+  const setupCheckLabels = {
+    body_visible: copy.setupCheckBodyVisible,
+    correct_distance: copy.setupCheckCorrectDistance,
+    feet_ankles_visible: copy.setupCheckFeetAnklesVisible,
+    lighting_acceptable: copy.setupCheckLightingAcceptable,
+  };
+
+  const wizardStateLabels = {
+    ready_to_start: copy.setupStateReadyToStart,
+    move_back: copy.setupStateMoveBack,
+    move_closer: copy.setupStateMoveCloser,
+    improve_lighting: copy.setupStateImproveLighting,
+    show_feet_ankles: copy.setupStateShowFeetAnkles,
+    adjust_camera_angle: copy.setupStateAdjustCameraAngle,
+  };
+
+  const wizardStatusLabel = cameraSetupWizardStateLabel(wizardState, wizardStateLabels);
 
   const liveBodySignal: LiveBodySignal = resolveLiveBodySignal({
     trackingStatus,
@@ -514,147 +618,253 @@ export function PatientCvCapture({
       dir={textDir}
       lang={language}
     >
-      <p className="text-[11px] text-[#6B7280]">{copy.moveComfortably}</p>
-      <p className="mt-2 text-[12px] leading-relaxed text-[#374151]">{copy.framingInstruction}</p>
-      <p className="mt-1 text-[12px] leading-relaxed text-[#374151]">{copy.startWhenReadyHint}</p>
-      <p className="mt-1 text-[12px] leading-relaxed text-[#374151]">{copy.movementInstruction}</p>
-      <p className="mt-1 text-[11px] text-[#6B7280]">{copy.hipLandmarksHint}</p>
+      {!wizardComplete ? (
+        <>
+          <h3 className={`text-[15px] font-bold text-[#0A0F1A] ${arClass}`}>
+            {copy.setupWizardTitle}
+          </h3>
+          <p className="mt-2 text-[12px] leading-relaxed text-[#374151]">
+            {copy.setupExerciseHint}
+          </p>
+          {(loading || (!previewActive && !error)) && (
+            <p className="mt-2 text-[12px] font-medium text-[#6B7280]">
+              {loading ? loadingLabel : copy.setupCheckingCamera}
+            </p>
+          )}
 
-      {error && (
-        <div className="mt-3 rounded-[8px] border border-rose-200 bg-rose-50 px-3.5 py-3 text-[12px] text-rose-800">
-          <p>{error}</p>
-          {!previewActive && !loading && (
+          {error && (
+            <div className="mt-3 rounded-[8px] border border-rose-200 bg-rose-50 px-3.5 py-3 text-[12px] text-rose-800">
+              <p>{error}</p>
+              {!previewActive && !loading && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setError(null);
+                    void startSetupPreview();
+                  }}
+                  className="mt-2 text-[12px] font-semibold text-[#1D9E75] underline"
+                >
+                  {copy.tryAgainLabel}
+                </button>
+              )}
+            </div>
+          )}
+
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            playsInline
+            className="pointer-events-none fixed left-0 top-0 h-px w-px opacity-0"
+            aria-hidden
+          />
+          <canvas
+            ref={canvasRef}
+            width={CANVAS_WIDTH}
+            height={CANVAS_HEIGHT}
+            className="mt-3 w-full rounded-[8px] border border-[#D1E7DE] bg-[#0A0F1A]"
+            style={{ display: showPreview ? "block" : "none" }}
+            aria-label={copy.setupWizardTitle}
+          />
+
+          {previewActive && (
+            <div
+              className={`mt-2 flex items-center gap-2 rounded-[6px] border px-3 py-2 text-[12px] font-semibold ${liveSignalStyles} ${arClass}`}
+              role="status"
+              aria-live="polite"
+            >
+              <span
+                className={`h-2.5 w-2.5 shrink-0 rounded-full ${liveSignalDotClass}`}
+                aria-hidden
+              />
+              <span>{liveSignalLabel}</span>
+            </div>
+          )}
+
+          {previewActive && (
+            <ul className="mt-3 space-y-2" aria-label={copy.setupWizardTitle}>
+              {setupChecks.map((check) => (
+                <li
+                  key={check.id}
+                  className={`flex items-center gap-2 text-[12px] ${
+                    check.passed ? "text-[#1D9E75]" : "text-[#6B7280]"
+                  }`}
+                >
+                  <span aria-hidden>{check.passed ? "✓" : "○"}</span>
+                  <span>{cameraSetupCheckLabel(check.id, setupCheckLabels)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {previewActive && (
+            <div
+              className={`mt-3 rounded-[6px] border px-3 py-2 text-[12px] font-semibold ${
+                setupReady
+                  ? "border-[#D1E7DE] bg-[#F0FAF6] text-[#1D9E75]"
+                  : "border-[#E2E8E5] bg-[#F9FAFB] text-[#374151]"
+              }`}
+              role="status"
+            >
+              {wizardStatusLabel}
+            </div>
+          )}
+
+          {startAnywayAcknowledged && !setupReady && (
+            <p className="mt-2 text-[12px] leading-relaxed text-amber-800">
+              {copy.setupStartAnywayWarning}
+            </p>
+          )}
+
+          <div className="mt-4 flex flex-col gap-2">
             <button
               type="button"
-              onClick={() => {
-                setError(null);
-                void startSession();
-              }}
-              className="mt-2 text-[12px] font-semibold text-[#1D9E75] underline"
+              disabled={loading || !previewActive || !canBeginTracking}
+              onClick={() => void beginTrackingSession()}
+              className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] bg-[#1D9E75] text-[14px] font-bold text-white transition hover:bg-[#179165] disabled:opacity-50"
             >
               {copy.startTracking}
             </button>
+            {!setupReady && previewActive && !loading && (
+              <button
+                type="button"
+                onClick={() => setStartAnywayAcknowledged(true)}
+                className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-amber-200 bg-amber-50 text-[14px] font-semibold text-amber-900 transition hover:border-amber-300"
+              >
+                {copy.setupStartAnyway}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => skipCameraWithoutSave()}
+              className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-[#F9FAFB] text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40"
+            >
+              {copy.continueWithoutCamera}
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="text-[11px] text-[#6B7280]">{copy.moveComfortably}</p>
+          <p className="mt-2 text-[12px] leading-relaxed text-[#374151]">{copy.framingInstruction}</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-[#374151]">{copy.startWhenReadyHint}</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-[#374151]">{copy.movementInstruction}</p>
+          <p className="mt-1 text-[11px] text-[#6B7280]">{copy.hipLandmarksHint}</p>
+
+          {error && (
+            <div className="mt-3 rounded-[8px] border border-rose-200 bg-rose-50 px-3.5 py-3 text-[12px] text-rose-800">
+              <p>{error}</p>
+            </div>
           )}
-        </div>
-      )}
 
-      {trackingError && previewActive && (
-        <div className="mt-3 rounded-[8px] border border-amber-200 bg-amber-50 px-3.5 py-3 text-[12px] text-amber-900">
-          {trackingError}
-        </div>
-      )}
+          {trackingError && previewActive && (
+            <div className="mt-3 rounded-[8px] border border-amber-200 bg-amber-50 px-3.5 py-3 text-[12px] text-amber-900">
+              {trackingError}
+            </div>
+          )}
 
-      {!previewActive && (
-        <button
-          type="button"
-          disabled={loading}
-          onClick={() => void startSession()}
-          className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-[7px] bg-[#1D9E75] text-[14px] font-bold text-white transition hover:bg-[#179165] disabled:opacity-50"
-        >
-          {loading ? loadingLabel : copy.startTracking}
-        </button>
-      )}
-
-      <video
-        ref={videoRef}
-        autoPlay
-        muted
-        playsInline
-        className="pointer-events-none fixed left-0 top-0 h-px w-px opacity-0"
-        aria-hidden
-      />
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_WIDTH}
-        height={CANVAS_HEIGHT}
-        className="mt-3 w-full rounded-[8px] border border-[#D1E7DE] bg-[#0A0F1A]"
-        style={{ display: showPreview ? "block" : "none" }}
-        aria-label={copy.consentTitle}
-      />
-
-      {previewActive && (
-        <div
-          className={`mt-2 flex items-center gap-2 rounded-[6px] border px-3 py-2 text-[12px] font-semibold ${liveSignalStyles} ${arClass}`}
-          role="status"
-          aria-live="polite"
-        >
-          <span
-            className={`h-2.5 w-2.5 shrink-0 rounded-full ${liveSignalDotClass}`}
+          <video
+            ref={videoRef}
+            autoPlay
+            muted
+            playsInline
+            className="pointer-events-none fixed left-0 top-0 h-px w-px opacity-0"
             aria-hidden
           />
-          <span>{liveSignalLabel}</span>
-        </div>
-      )}
+          <canvas
+            ref={canvasRef}
+            width={CANVAS_WIDTH}
+            height={CANVAS_HEIGHT}
+            className="mt-3 w-full rounded-[8px] border border-[#D1E7DE] bg-[#0A0F1A]"
+            style={{ display: showPreview ? "block" : "none" }}
+            aria-label={copy.consentTitle}
+          />
 
-      {previewActive && (
-        <button
-          type="button"
-          disabled={stopInProgressRef.current}
-          onClick={handleStopSession}
-          className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-white text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40 disabled:opacity-50"
-        >
-          {copy.stopTracking}
-        </button>
-      )}
-
-      {showReadinessActions && (
-        <div className="mt-3 flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={() => handleTryAgain()}
-            className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] bg-[#1D9E75] text-[14px] font-bold text-white transition hover:bg-[#179165]"
-          >
-            {copy.tryAgainLabel}
-          </button>
-          <button
-            type="button"
-            onClick={() => skipCameraWithoutSave()}
-            className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-[#F9FAFB] text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40"
-          >
-            {copy.continueWithoutCamera}
-          </button>
-        </div>
-      )}
-
-      {sessionStarted && baselineCalibrating && (poseReadiness === "ready" || poseReadiness === "partial") && (
-        <p className="mt-3 text-[12px] font-medium text-[#1D9E75]">{copy.baselineStandStillHint}</p>
-      )}
-
-      {sessionStarted && (
-        <div className="mt-4 space-y-2 rounded-[8px] border border-[#D1E7DE] bg-[#F9FAFB] px-3.5 py-3">
-          <p className="text-[12px] font-semibold text-[#374151]">
-            <span className="text-[#6B7280]">{copy.trackingSignalLabel}: </span>
-            {trackingStatusLabel}
-          </p>
-
-          {holdExercise && copy.holdTimeTracked ? (
-            <p
-              className="text-[28px] font-bold text-[#1D9E75]"
-              style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+          {previewActive && (
+            <div
+              className={`mt-2 flex items-center gap-2 rounded-[6px] border px-3 py-2 text-[12px] font-semibold ${liveSignalStyles} ${arClass}`}
+              role="status"
+              aria-live="polite"
             >
-              {copy.holdTimeTracked(formatDuration(sessionSeconds))}
-            </p>
-          ) : (
-            <p
-              className="text-[28px] font-bold text-[#1D9E75]"
-              style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
-            >
-              {copy.repsCounted(repCount)}
-            </p>
+              <span
+                className={`h-2.5 w-2.5 shrink-0 rounded-full ${liveSignalDotClass}`}
+                aria-hidden
+              />
+              <span>{liveSignalLabel}</span>
+            </div>
           )}
 
-          {!holdExercise ? (
-            <p className="text-[13px] text-[#374151]">
-              {copy.sessionDuration(formatDuration(sessionSeconds))}
-            </p>
-          ) : null}
+          {previewActive && (
+            <button
+              type="button"
+              disabled={stopInProgressRef.current}
+              onClick={handleStopSession}
+              className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-white text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40 disabled:opacity-50"
+            >
+              {copy.stopTracking}
+            </button>
+          )}
 
-          <p className="text-[12px] text-[#6B7280]">
-            {movementDetected ? copy.movementDetectedYes : copy.movementDetectedNo}
-          </p>
+          {showReadinessActions && (
+            <div className="mt-3 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => handleTryAgain()}
+                className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] bg-[#1D9E75] text-[14px] font-bold text-white transition hover:bg-[#179165]"
+              >
+                {copy.tryAgainLabel}
+              </button>
+              <button
+                type="button"
+                onClick={() => skipCameraWithoutSave()}
+                className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-[#F9FAFB] text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40"
+              >
+                {copy.continueWithoutCamera}
+              </button>
+            </div>
+          )}
 
-          <p className="text-[10px] leading-relaxed text-[#9CA3AF]">{copy.prototypeNotice}</p>
-        </div>
+          {sessionStarted && baselineCalibrating && (poseReadiness === "ready" || poseReadiness === "partial") && (
+            <p className="mt-3 text-[12px] font-medium text-[#1D9E75]">{copy.baselineStandStillHint}</p>
+          )}
+
+          {sessionStarted && (
+            <div className="mt-4 space-y-2 rounded-[8px] border border-[#D1E7DE] bg-[#F9FAFB] px-3.5 py-3">
+              <p className="text-[12px] font-semibold text-[#374151]">
+                <span className="text-[#6B7280]">{copy.trackingSignalLabel}: </span>
+                {trackingStatusLabel}
+              </p>
+
+              {holdExercise && copy.holdTimeTracked ? (
+                <p
+                  className="text-[28px] font-bold text-[#1D9E75]"
+                  style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+                >
+                  {copy.holdTimeTracked(formatDuration(sessionSeconds))}
+                </p>
+              ) : (
+                <p
+                  className="text-[28px] font-bold text-[#1D9E75]"
+                  style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+                >
+                  {copy.repsCounted(repCount)}
+                </p>
+              )}
+
+              {!holdExercise ? (
+                <p className="text-[13px] text-[#374151]">
+                  {copy.sessionDuration(formatDuration(sessionSeconds))}
+                </p>
+              ) : null}
+
+              <p className="text-[12px] text-[#6B7280]">
+                {movementDetected ? copy.movementDetectedYes : copy.movementDetectedNo}
+              </p>
+
+              <p className="text-[10px] leading-relaxed text-[#9CA3AF]">{copy.prototypeNotice}</p>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
