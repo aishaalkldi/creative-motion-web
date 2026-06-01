@@ -907,7 +907,9 @@ export class SitToStandDetector {
           );
 
           ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-          ctx.drawImage(this.videoEl, 0, 0, canvasWidth, canvasHeight);
+          if (!this.config.landmarksOverlayOnly) {
+            ctx.drawImage(this.videoEl, 0, 0, canvasWidth, canvasHeight);
+          }
 
           consecutiveDetectErrors = 0;
 

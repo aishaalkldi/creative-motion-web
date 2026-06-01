@@ -135,6 +135,8 @@ export type SitToStandCvConfig = {
   metricsExerciseId?: PatientCvExerciseId;
   /** Patient portal body framing profile (distance guide). */
   bodyFramingProfileId?: BodyFramingProfileId;
+  /** Patient portal: draw pose dots on a transparent overlay; video element stays visible underneath. */
+  landmarksOverlayOnly?: boolean;
 };
 
 /** Patient portal pose model — Full (better landmark stability than Lite). */

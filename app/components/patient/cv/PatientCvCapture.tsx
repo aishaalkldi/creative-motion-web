@@ -79,6 +79,7 @@ type PatientCvDetector =
 
 type PatientCameraPreviewStackProps = {
   videoRef: RefObject<HTMLVideoElement | null>;
+  canvasRef: RefObject<HTMLCanvasElement | null>;
   containerRef: RefObject<HTMLDivElement | null>;
   canvasWidth: number;
   canvasHeight: number;
@@ -157,6 +158,7 @@ function auditPreviewLayers(
 
 function PatientCameraPreviewStack({
   videoRef,
+  canvasRef,
   containerRef,
   canvasWidth,
   canvasHeight,
@@ -176,6 +178,14 @@ function PatientCameraPreviewStack({
         muted
         playsInline
         className="block h-full w-full object-cover"
+      />
+      {/* Transparent landmark overlay — video stays visible underneath (PR #33 fix) */}
+      <canvas
+        ref={canvasRef}
+        width={canvasWidth}
+        height={canvasHeight}
+        aria-hidden
+        className="pointer-events-none absolute inset-0 h-full w-full"
       />
       {loadingHint ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60 px-4 text-center text-[12px] font-medium text-white">
@@ -336,6 +346,13 @@ export function PatientCvCapture({
     onMetricsUpdateRef.current?.(detector.getDerivedMetrics());
   }, [trackingStopped]);
 
+  /** Always push latest derived metrics — used before save even after stop(). */
+  const flushMetricsForSave = useCallback(() => {
+    const detector = detectorRef.current;
+    if (!detector) return;
+    onMetricsUpdateRef.current?.(detector.getDerivedMetrics());
+  }, []);
+
   const syncFromDetector = useCallback(
     (snapshot: CvDetectorSnapshot) => {
       const prevRep = lastReportedRepRef.current;
@@ -389,17 +406,17 @@ export function PatientCvCapture({
 
     detectorRef.current = detector;
     return () => {
-      reportMetrics();
+      flushMetricsForSave();
       detector.stop();
       detectorRef.current = null;
     };
-  }, [exerciseId, stanceLeg, syncFromDetector, reportMetrics]);
+  }, [exerciseId, stanceLeg, syncFromDetector, flushMetricsForSave]);
 
   useEffect(() => {
     if (!onRegisterMetricsFlush) return;
-    onRegisterMetricsFlush(reportMetrics);
+    onRegisterMetricsFlush(flushMetricsForSave);
     return () => onRegisterMetricsFlush(() => {});
-  }, [onRegisterMetricsFlush, reportMetrics]);
+  }, [onRegisterMetricsFlush, flushMetricsForSave]);
 
   useEffect(() => {
     if (!previewActive && !trackingStopped) return;
@@ -426,9 +443,10 @@ export function PatientCvCapture({
     reportMetrics();
     detector.stop();
     setCameraLive(false);
+    flushMetricsForSave();
     syncFromDetector(detector.getSnapshot());
     stopInProgressRef.current = false;
-  }, [reportMetrics, syncFromDetector]);
+  }, [reportMetrics, syncFromDetector, flushMetricsForSave]);
 
   const mapStartError =
     exerciseId === "mini-squat"
@@ -826,19 +844,12 @@ export function PatientCvCapture({
 
       <PatientCameraPreviewStack
         videoRef={videoRef}
+        canvasRef={canvasRef}
         containerRef={previewContainerRef}
         canvasWidth={CANVAS_WIDTH}
         canvasHeight={CANVAS_HEIGHT}
         ariaLabel={copy.consentTitle}
         loadingHint={previewLoadingHint}
-      />
-      {/* Processing canvas: offscreen only — never stacked over the visible video */}
-      <canvas
-        ref={canvasRef}
-        width={CANVAS_WIDTH}
-        height={CANVAS_HEIGHT}
-        aria-hidden
-        className="pointer-events-none fixed left-0 top-0 h-px w-px opacity-0"
       />
 
       {noVideoFrames && (

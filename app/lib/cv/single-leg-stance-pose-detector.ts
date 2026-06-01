@@ -302,7 +302,9 @@ export class SingleLegStancePoseDetector {
           const result = this.poseLandmarker.detectForVideo(this.videoEl, this.detectTimestamp);
 
           ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-          ctx.drawImage(this.videoEl, 0, 0, canvasWidth, canvasHeight);
+          if (!this.shellConfig.landmarksOverlayOnly) {
+            ctx.drawImage(this.videoEl, 0, 0, canvasWidth, canvasHeight);
+          }
 
           consecutiveDetectErrors = 0;
 
