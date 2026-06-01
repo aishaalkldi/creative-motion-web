@@ -50,6 +50,13 @@ import {
   type VisibilityLabelCounts,
 } from "@/app/lib/cv/session-visibility-summary";
 import {
+  PATIENT_CAMERA_NO_FRAMES_ERROR,
+  PATIENT_CAMERA_NO_FRAMES_MESSAGE,
+  releaseMediaStream,
+  waitForDecodedVideoFrames,
+  waitForVideoElementLayout,
+} from "@/app/lib/cv/patient-camera-stream";
+import {
   drawBodyFramingOverlay,
   evaluateBodyFraming,
   type BodyFramingState,
@@ -164,6 +171,9 @@ export function needsSitToStandSecureContext(): boolean {
 }
 
 export function mapSitToStandStartError(err: unknown): string {
+  if (err instanceof Error && err.message === PATIENT_CAMERA_NO_FRAMES_ERROR) {
+    return PATIENT_CAMERA_NO_FRAMES_MESSAGE;
+  }
   if (err instanceof DOMException) {
     if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
       return "Camera access was denied. Movement tracking could not start. Please check camera permission and try again.";
@@ -210,9 +220,13 @@ export async function startVideoPlayback(video: HTMLVideoElement): Promise<void>
   try {
     await video.play();
   } catch (err) {
-    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return;
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      await waitForDecodedVideoFrames(video);
+      return;
+    }
     throw err;
   }
+  await waitForDecodedVideoFrames(video);
 }
 
 export async function createPoseLandmarker(
@@ -636,6 +650,69 @@ export class SitToStandDetector {
     return this.lastMotionEvidenceSummary;
   }
 
+  /** Finalize in-RAM motion evidence when preview already stopped but summary not yet built. */
+  ensureMotionEvidenceFinalized(): void {
+    if (this.lastMotionEvidenceSummary || !this.motionTimeline) return;
+    this.finalizeMotionEvidence();
+  }
+
+  /**
+   * Synchronously finalize motion evidence for persistence.
+   * Does not tear down camera — summary should already exist after stopPatientTrackingSession().
+   */
+  finalizeMotionEvidenceForSave(): SessionMotionEvidenceSummary | null {
+    if (this.lastMotionEvidenceSummary) {
+      return this.lastMotionEvidenceSummary;
+    }
+    this.ensureMotionEvidenceFinalized();
+    return this.lastMotionEvidenceSummary;
+  }
+
+  /**
+   * @deprecated MVP uses single auto-start flow; kept for mini-squat compatibility.
+   */
+  beginPatientTrackingSession(): void {
+    if (!this.previewActive) return;
+
+    if (this.timerId) {
+      clearInterval(this.timerId);
+      this.timerId = null;
+    }
+
+    this.repCount = 0;
+    this.standPhase = "down";
+    this.sessionSeconds = 0;
+    this.movementDetected = false;
+    this.framesWithPose = 0;
+    this.framesTotal = 0;
+    this.lastRepAtMs = 0;
+    this.trackingStartedAtMs = performance.now();
+    resetRepTemporalSmoothingState(this.repTemporal);
+    this.resetVisibilityAccumulators();
+    this.resetRepQualityState();
+    this.resetBaselineState();
+    this.startMotionEvidenceCollection();
+
+    if (this.usesReadiness()) {
+      this.readinessCheckEndMs = 0;
+      this.poseReadiness = "ready";
+      this.bodyFramingState = "good_distance";
+    }
+
+    if (this.usesBaselineRepCounting()) {
+      const durationMs = this.config.baselineDurationMs ?? 2_000;
+      this.baselineWindowEndMs = this.trackingStartedAtMs + durationMs;
+      this.isBaselineCalibrating = true;
+    }
+
+    this.timerId = setInterval(() => {
+      this.sessionSeconds += 1;
+      this.emit();
+    }, 1000);
+
+    this.emit();
+  }
+
   private startMotionEvidenceCollection(): void {
     this.motionTimeline?.destroy();
     this.motionTimeline = new MotionTimelineAccumulator();
@@ -828,6 +905,34 @@ export class SitToStandDetector {
     return this.previewActive;
   }
 
+  /** Camera stream is attached and has not been torn down (survives tracking pause). */
+  isCameraStreamActive(): boolean {
+    return Boolean(this.stream?.active);
+  }
+
+  /**
+   * Pause rep counting and finalize motion evidence without stopping the camera or MediaPipe.
+   * Call on "Stop tracking"; summary is read later at save time.
+   */
+  stopPatientTrackingSession(): void {
+    if (!this.previewActive) {
+      this.ensureMotionEvidenceFinalized();
+      return;
+    }
+
+    this.previewActive = false;
+    cancelAnimationFrame(this.animFrameId);
+    this.animFrameId = 0;
+    if (this.timerId) {
+      clearInterval(this.timerId);
+      this.timerId = null;
+    }
+
+    this.finalizeRepQualitySession();
+    this.finalizeMotionEvidence();
+    this.emit();
+  }
+
   canSaveMetrics(): boolean {
     return this.sessionSeconds >= this.config.minSaveDurationS;
   }
@@ -959,6 +1064,10 @@ export class SitToStandDetector {
       this.initPhase = "camera";
       this.emit();
 
+      await waitForVideoElementLayout(video);
+
+      releaseMediaStream(this.stream, video);
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: this.usesReadiness()
           ? {
@@ -987,6 +1096,10 @@ export class SitToStandDetector {
 
       await startVideoPlayback(video);
       if (!isCurrent()) return;
+
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        throw new Error(PATIENT_CAMERA_NO_FRAMES_ERROR);
+      }
 
       this.previewActive = true;
       this.initPhase = null;
@@ -1025,6 +1138,11 @@ export class SitToStandDetector {
             void this.videoEl.play().catch(() => undefined);
           }
 
+          if (this.videoEl.videoWidth === 0 || this.videoEl.videoHeight === 0) {
+            this.animFrameId = requestAnimationFrame(detect);
+            return;
+          }
+
           this.detectTimestamp = Math.max(this.detectTimestamp + 1, performance.now());
 
           const result = this.poseLandmarker.detectForVideo(
@@ -1032,8 +1150,10 @@ export class SitToStandDetector {
             this.detectTimestamp,
           );
 
-          ctx.clearRect(0, 0, canvasWidth, canvasHeight);
-          ctx.drawImage(this.videoEl, 0, 0, canvasWidth, canvasHeight);
+          if (!this.config.canvasOverlayOnly) {
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+            ctx.drawImage(this.videoEl, 0, 0, canvasWidth, canvasHeight);
+          }
 
           consecutiveDetectErrors = 0;
 
@@ -1061,30 +1181,32 @@ export class SitToStandDetector {
             this.tickMotionEvidenceFsm(landmarks, hipY, nowMs, torsoSpan);
             this.updateMotionTimeline(landmarks);
 
-            if (this.config.readinessEnabled) {
-              if (this.bodyFramingProfile()) {
-                drawBodyFramingOverlay(
+            if (!this.config.canvasOverlayOnly) {
+              if (this.config.readinessEnabled) {
+                if (this.bodyFramingProfile()) {
+                  drawBodyFramingOverlay(
+                    ctx,
+                    canvasWidth,
+                    canvasHeight,
+                    this.bodyFramingState,
+                  );
+                }
+                drawPoseLandmarkDots(
                   ctx,
+                  landmarks,
                   canvasWidth,
                   canvasHeight,
-                  this.bodyFramingState,
+                  this.poseReadiness,
+                );
+              } else {
+                drawPoseLandmarkDots(
+                  ctx,
+                  landmarks,
+                  canvasWidth,
+                  canvasHeight,
+                  "ready",
                 );
               }
-              drawPoseLandmarkDots(
-                ctx,
-                landmarks,
-                canvasWidth,
-                canvasHeight,
-                this.poseReadiness,
-              );
-            } else {
-              drawPoseLandmarkDots(
-                ctx,
-                landmarks,
-                canvasWidth,
-                canvasHeight,
-                "ready",
-              );
             }
           } else if (this.trackingStatus !== "pose-lost") {
             this.trackingStatus = "pose-lost";
