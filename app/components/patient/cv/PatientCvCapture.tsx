@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import {
   patientCvCopy,
   type PatientCvDerivedMetrics,
@@ -48,12 +48,16 @@ import {
   type LiveBodySignal,
 } from "@/app/lib/cv/pose-landmark-overlay";
 import {
-  cameraSetupCheckLabel,
-  cameraSetupWizardStateLabel,
-  evaluateCameraSetupChecks,
-  isCameraSetupReady,
-  resolveCameraSetupWizardState,
-} from "@/app/lib/cv/camera-setup-wizard";
+  collectPatientCameraDiagnostics,
+  isVideoPreviewRenderable,
+  PATIENT_CAMERA_NO_FRAMES_ERROR,
+  PATIENT_CAMERA_NO_FRAMES_MESSAGE,
+} from "@/app/lib/cv/patient-camera-stream";
+import {
+  collectPatientCvDebugSnapshot,
+  isPatientCvDebugEnabled,
+  type PatientCvDebugSnapshot,
+} from "@/app/lib/cv/patient-camera-debug";
 
 const METRICS_REPORT_INTERVAL_MS = 3_000;
 
@@ -72,6 +76,132 @@ type PatientCvDetector =
   | MiniSquatDetector
   | SingleLegStancePoseDetector
   | HeelRaisePoseDetector;
+
+type PatientCameraPreviewStackProps = {
+  videoRef: RefObject<HTMLVideoElement | null>;
+  containerRef: RefObject<HTMLDivElement | null>;
+  canvasWidth: number;
+  canvasHeight: number;
+  ariaLabel: string;
+  loadingHint?: string | null;
+};
+
+function auditPreviewLayers(
+  label: string,
+  video: HTMLVideoElement | null,
+  canvas: HTMLCanvasElement | null,
+  container: HTMLDivElement | null,
+  state: Record<string, unknown>,
+): void {
+  if (typeof window === "undefined") return;
+  const vStyle = video ? window.getComputedStyle(video) : null;
+  const cStyle = canvas ? window.getComputedStyle(canvas) : null;
+  const diagnostics = collectPatientCameraDiagnostics(label, video, canvas, container);
+
+  const canvasCoversPreview = Boolean(
+    canvas &&
+      canvas.clientWidth > 32 &&
+      canvas.clientHeight > 32 &&
+      cStyle?.display !== "none" &&
+      cStyle?.visibility !== "hidden" &&
+      Number(cStyle?.opacity ?? 1) > 0.01,
+  );
+
+  const videoHealthy = diagnostics.previewRenderable && diagnostics.clientWidth > 0;
+
+  let diagnosis = "ok";
+  if (!video) diagnosis = "missing video element";
+  else if (!diagnostics.hasSrcObject) diagnosis = "video missing srcObject";
+  else if (diagnostics.videoWidth === 0 || diagnostics.videoHeight === 0)
+    diagnosis = "video has no decoded frames";
+  else if (diagnostics.clientWidth === 0 || diagnostics.clientHeight === 0)
+    diagnosis = "video visible box is 0 size";
+  else if (vStyle?.display === "none" || Number(vStyle?.opacity ?? 1) <= 0.01)
+    diagnosis = "video hidden via CSS";
+  else if (canvasCoversPreview) diagnosis = "full-size canvas may be covering preview";
+
+  console.info(`[CV preview audit] ${label}`, {
+    ...state,
+    ...diagnostics,
+    previewOk: videoHealthy && !canvasCoversPreview,
+    videoHealthy,
+    canvasCoversPreview,
+    diagnosis,
+    video: video
+      ? {
+          hidden: video.hidden,
+          opacity: vStyle?.opacity ?? null,
+          display: vStyle?.display ?? null,
+          clientWidth: video.clientWidth,
+          clientHeight: video.clientHeight,
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          readyState: video.readyState,
+          hasSrcObject: Boolean(video.srcObject),
+        }
+      : null,
+    canvas: canvas
+      ? {
+          hidden: canvas.hidden,
+          opacity: cStyle?.opacity ?? null,
+          display: cStyle?.display ?? null,
+          zIndex: cStyle?.zIndex ?? null,
+          clientWidth: canvas.clientWidth,
+          clientHeight: canvas.clientHeight,
+          width: canvas.width,
+          height: canvas.height,
+        }
+      : null,
+  });
+}
+
+function PatientCameraPreviewStack({
+  videoRef,
+  containerRef,
+  canvasWidth,
+  canvasHeight,
+  ariaLabel,
+  loadingHint,
+}: PatientCameraPreviewStackProps) {
+  return (
+    <div
+      ref={containerRef}
+      className="relative mt-3 w-full overflow-hidden rounded-[8px] border border-[#D1E7DE] bg-black"
+      style={{ aspectRatio: `${canvasWidth} / ${canvasHeight}` }}
+      aria-label={ariaLabel}
+    >
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        className="block h-full w-full object-cover"
+      />
+      {loadingHint ? (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60 px-4 text-center text-[12px] font-medium text-white">
+          {loadingHint}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PatientCameraDebugPanel({ snapshot }: { snapshot: PatientCvDebugSnapshot }) {
+  return (
+    <div className="mt-2 rounded-[6px] border border-dashed border-[#6B7280] bg-[#0A0F1A] px-3 py-2 font-mono text-[10px] leading-relaxed text-[#E5E7EB]">
+      <p className="font-bold text-[#5DCAA5]">CV debug (?cvDebug=1)</p>
+      <p>videoWidth: {snapshot.videoWidth}</p>
+      <p>videoHeight: {snapshot.videoHeight}</p>
+      <p>readyState: {snapshot.readyState}</p>
+      <p>stream active: {String(snapshot.streamActive)}</p>
+      <p>frames received: {snapshot.framesReceived}</p>
+      <p>preview visible: {String(snapshot.previewVisible)}</p>
+      <p>hasSrcObject: {String(snapshot.hasSrcObject)}</p>
+      <p>client: {snapshot.clientWidth}×{snapshot.clientHeight}</p>
+      <p>paused: {String(snapshot.paused)}</p>
+    </div>
+  );
+}
 
 export type PatientCvCaptureProps = {
   exerciseId: CvY1ExerciseId;
@@ -126,6 +256,7 @@ function applySnapshot(
     setSessionSeconds: (v: number) => void;
     setMovementDetected: (v: boolean) => void;
     setBaselineCalibrating: (v: boolean) => void;
+    setFramesTotal: (v: number) => void;
   },
 ): void {
   setters.setPreviewActive(snapshot.previewActive);
@@ -139,6 +270,7 @@ function applySnapshot(
   setters.setSessionSeconds(snapshot.sessionSeconds);
   setters.setMovementDetected(snapshot.movementDetected);
   setters.setBaselineCalibrating(snapshot.isBaselineCalibrating);
+  setters.setFramesTotal(snapshot.framesTotal);
   setters.setLoading(snapshot.initPhase !== null);
 }
 
@@ -158,6 +290,8 @@ export function PatientCvCapture({
   const [skipped, setSkipped] = useState(false);
   const [consented, setConsented] = useState(false);
   const [previewActive, setPreviewActive] = useState(false);
+  const [cameraLive, setCameraLive] = useState(false);
+  const [trackingStopped, setTrackingStopped] = useState(false);
   const [loading, setLoading] = useState(false);
   const [initPhase, setInitPhase] = useState<SitToStandInitPhase>(null);
   const [error, setError] = useState<string | null>(null);
@@ -168,19 +302,21 @@ export function PatientCvCapture({
   const [poseReadiness, setPoseReadiness] = useState<PoseReadiness>("checking");
   const [bodyFramingState, setBodyFramingState] = useState<BodyFramingState>("checking");
   const [sessionSeconds, setSessionSeconds] = useState(0);
-  const [sessionStarted, setSessionStarted] = useState(false);
   const [movementDetected, setMovementDetected] = useState(false);
   const [baselineCalibrating, setBaselineCalibrating] = useState(false);
   const [stanceLeg, setStanceLeg] = useState<StanceLeg | null>(null);
-  const [wizardComplete, setWizardComplete] = useState(false);
-  const [startAnywayAcknowledged, setStartAnywayAcknowledged] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [videoElReady, setVideoElReady] = useState(false);
+  const [noVideoFrames, setNoVideoFrames] = useState(false);
+  const [framesTotal, setFramesTotal] = useState(0);
+  const [cvDebugEnabled, setCvDebugEnabled] = useState(false);
+  const [debugSnapshot, setDebugSnapshot] = useState<PatientCvDebugSnapshot | null>(null);
   const detectorRef = useRef<PatientCvDetector | null>(null);
   const startInProgressRef = useRef(false);
   const stopInProgressRef = useRef(false);
-  const skipReportRef = useRef(false);
   const lastReportedRepRef = useRef(-1);
   const lastReportedHoldRef = useRef(-1);
   const onMetricsUpdateRef = useRef(onMetricsUpdate);
@@ -189,12 +325,16 @@ export function PatientCvCapture({
     onMetricsUpdateRef.current = onMetricsUpdate;
   }, [onMetricsUpdate]);
 
-  const reportMetrics = useCallback(() => {
-    if (skipReportRef.current) return;
-    const detector = detectorRef.current;
-    if (!detector?.isPreviewActive()) return;
-    onMetricsUpdateRef.current?.(detector.getDerivedMetrics());
+  useEffect(() => {
+    setCvDebugEnabled(isPatientCvDebugEnabled());
   }, []);
+
+  const reportMetrics = useCallback(() => {
+    const detector = detectorRef.current;
+    if (!detector) return;
+    if (!detector.isPreviewActive() && !trackingStopped) return;
+    onMetricsUpdateRef.current?.(detector.getDerivedMetrics());
+  }, [trackingStopped]);
 
   const syncFromDetector = useCallback(
     (snapshot: CvDetectorSnapshot) => {
@@ -213,8 +353,9 @@ export function PatientCvCapture({
         setSessionSeconds,
         setMovementDetected,
         setBaselineCalibrating,
+        setFramesTotal,
       });
-      if (!snapshot.previewActive) return;
+      if (!snapshot.previewActive && !trackingStopped) return;
       if (isHoldCvExercise(exerciseId)) {
         if (snapshot.sessionSeconds !== prevHold) {
           lastReportedHoldRef.current = snapshot.sessionSeconds;
@@ -227,7 +368,7 @@ export function PatientCvCapture({
         reportMetrics();
       }
     },
-    [exerciseId, reportMetrics],
+    [exerciseId, reportMetrics, trackingStopped],
   );
 
   useEffect(() => {
@@ -261,29 +402,31 @@ export function PatientCvCapture({
   }, [onRegisterMetricsFlush, reportMetrics]);
 
   useEffect(() => {
-    if (!previewActive) return;
+    if (!previewActive && !trackingStopped) return;
     reportMetrics();
     const id = setInterval(reportMetrics, METRICS_REPORT_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [previewActive, reportMetrics]);
+  }, [previewActive, trackingStopped, reportMetrics]);
 
   const skipCameraWithoutSave = useCallback(() => {
-    skipReportRef.current = true;
     const detector = detectorRef.current;
     detector?.stop();
     if (detector) syncFromDetector(detector.getSnapshot());
+    setCameraLive(false);
+    setTrackingStopped(false);
     setSkipped(true);
     onSkipped?.();
   }, [syncFromDetector, onSkipped]);
 
   const handleStopSession = useCallback(() => {
-    if (stopInProgressRef.current || !detectorRef.current?.isPreviewActive()) return;
+    const detector = detectorRef.current;
+    if (stopInProgressRef.current || !detector?.isPreviewActive()) return;
 
     stopInProgressRef.current = true;
     reportMetrics();
-    const detector = detectorRef.current;
-    detector?.stop();
-    if (detector) syncFromDetector(detector.getSnapshot());
+    detector.stop();
+    setCameraLive(false);
+    syncFromDetector(detector.getSnapshot());
     stopInProgressRef.current = false;
   }, [reportMetrics, syncFromDetector]);
 
@@ -296,14 +439,15 @@ export function PatientCvCapture({
           ? mapHeelRaiseStartError
           : mapSitToStandStartError;
 
-  const startSetupPreview = useCallback(async () => {
+  const startCameraTracking = useCallback(async () => {
     const detector = detectorRef.current;
     if (
       !consented ||
       !detector ||
       startInProgressRef.current ||
       loading ||
-      detector.isPreviewActive()
+      detector.isPreviewActive() ||
+      cameraLive
     ) {
       return;
     }
@@ -318,87 +462,64 @@ export function PatientCvCapture({
     startInProgressRef.current = true;
     setError(null);
     setTrackingError(null);
-    skipReportRef.current = true;
+    setTrackingStopped(false);
+    setNoVideoFrames(false);
 
     try {
       await detector.start(video, canvas);
-    } catch (err) {
-      detector.stop();
-      syncFromDetector(detector.getSnapshot());
-      setError(mapStartError(err));
-    } finally {
-      startInProgressRef.current = false;
-    }
-  }, [consented, loading, syncFromDetector, mapStartError]);
-
-  const beginTrackingSession = useCallback(async () => {
-    const detector = detectorRef.current;
-    if (
-      !consented ||
-      !detector ||
-      startInProgressRef.current ||
-      loading
-    ) {
-      return;
-    }
-
-    const video = videoRef.current;
-    const canvas = canvasRef.current;
-    if (!video || !canvas) {
-      setError("Video element not available.");
-      return;
-    }
-
-    if (detector.isPreviewActive()) {
-      detector.stop();
-      syncFromDetector(detector.getSnapshot());
-    }
-
-    startInProgressRef.current = true;
-    setError(null);
-    setTrackingError(null);
-    setWizardComplete(true);
-    setSessionStarted(true);
-    skipReportRef.current = false;
-    lastReportedRepRef.current = -1;
-    lastReportedHoldRef.current = -1;
-
-    try {
-      await detector.start(video, canvas);
+      if (!isVideoPreviewRenderable(video)) {
+        throw new Error(PATIENT_CAMERA_NO_FRAMES_ERROR);
+      }
+      setCameraLive(true);
       reportMetrics();
+      auditPreviewLayers("after-detector-start", video, canvas, previewContainerRef.current, {
+        cameraLive: true,
+        previewActive: detector.isPreviewActive(),
+        cameraPhase: "tracking",
+      });
     } catch (err) {
       detector.stop();
       syncFromDetector(detector.getSnapshot());
-      setWizardComplete(false);
-      setSessionStarted(false);
-      setError(mapStartError(err));
+      setCameraLive(false);
+      const message = mapStartError(err);
+      setError(message);
+      setNoVideoFrames(message === PATIENT_CAMERA_NO_FRAMES_MESSAGE);
     } finally {
       startInProgressRef.current = false;
     }
-  }, [consented, loading, syncFromDetector, reportMetrics, mapStartError]);
+  }, [consented, loading, cameraLive, syncFromDetector, reportMetrics, mapStartError]);
 
   const holdExercise = isHoldCvExercise(exerciseId);
   const stanceLegRequired = holdExercise && stanceLeg === null;
 
+  useLayoutEffect(() => {
+    if (skipped || !consented || stanceLegRequired) {
+      setVideoElReady(false);
+      return;
+    }
+    setVideoElReady(Boolean(videoRef.current));
+  }, [skipped, consented, stanceLegRequired, exerciseId]);
+
   useEffect(() => {
-    if (skipped || !consented || stanceLegRequired || wizardComplete) return;
-    if (previewActive || loading || startInProgressRef.current || error) return;
-    void startSetupPreview();
+    if (skipped || !consented || stanceLegRequired || !videoElReady) return;
+    if (previewActive || cameraLive || loading || startInProgressRef.current || error) return;
+    void startCameraTracking();
   }, [
     skipped,
     consented,
     stanceLegRequired,
-    wizardComplete,
+    videoElReady,
     previewActive,
+    cameraLive,
     loading,
     error,
-    startSetupPreview,
+    startCameraTracking,
   ]);
 
   useEffect(() => {
-    setWizardComplete(false);
-    setStartAnywayAcknowledged(false);
-    setSessionStarted(false);
+    setCameraLive(false);
+    setTrackingStopped(false);
+    setError(null);
   }, [exerciseId, stanceLeg]);
 
   const loadingLabel =
@@ -410,18 +531,94 @@ export function PatientCvCapture({
           ? copy.startingCamera
           : copy.startTracking;
 
-  const showPreview = previewActive || (loading && initPhase === "camera");
+  const showPreviewUi = cameraLive || previewActive || loading;
+  const previewLoadingHint =
+    loading && initPhase === "import"
+      ? copy.loadingPoseLibrary
+      : loading && initPhase === "model"
+        ? copy.loadingPoseModel
+        : loading && initPhase === "camera"
+          ? copy.startingCamera
+          : null;
+
+  useEffect(() => {
+    if (!consented || skipped) return;
+    auditPreviewLayers(
+      "render-state",
+      videoRef.current,
+      canvasRef.current,
+      previewContainerRef.current,
+      {
+        consented,
+        cameraLive,
+        previewActive,
+        trackingStopped,
+        showPreviewUi,
+        loading,
+        initPhase,
+        cameraPhase: loading ? initPhase ?? "idle" : previewActive ? "tracking" : "idle",
+      },
+    );
+  }, [
+    consented,
+    skipped,
+    cameraLive,
+    previewActive,
+    trackingStopped,
+    showPreviewUi,
+    loading,
+    initPhase,
+  ]);
+
+  useEffect(() => {
+    if (!cameraLive || !previewActive || trackingStopped) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const checkFrames = () => {
+      if (!isVideoPreviewRenderable(video)) {
+        setNoVideoFrames(true);
+        auditPreviewLayers(
+          "no-frames-detected",
+          video,
+          canvasRef.current,
+          previewContainerRef.current,
+          { cameraPhase: "tracking", previewActive: true },
+        );
+        return;
+      }
+      setNoVideoFrames(false);
+    };
+
+    const id = window.setInterval(checkFrames, 2_000);
+    checkFrames();
+    return () => window.clearInterval(id);
+  }, [cameraLive, previewActive, trackingStopped]);
+
+  useEffect(() => {
+    if (!cvDebugEnabled || skipped || !consented || stanceLegRequired) {
+      setDebugSnapshot(null);
+      return;
+    }
+    const tick = () => {
+      const detector = detectorRef.current;
+      const frames = detector?.getSnapshot().framesTotal ?? framesTotal;
+      setDebugSnapshot(collectPatientCvDebugSnapshot(videoRef.current, frames));
+    };
+    tick();
+    const id = window.setInterval(tick, 500);
+    return () => window.clearInterval(id);
+  }, [cvDebugEnabled, skipped, consented, stanceLegRequired, framesTotal, previewActive, cameraLive]);
 
   const handleTryAgain = useCallback(() => {
     const detector = detectorRef.current;
     detector?.stop();
     if (detector) syncFromDetector(detector.getSnapshot());
-    setWizardComplete(false);
-    setStartAnywayAcknowledged(false);
-    setSessionStarted(false);
+    setCameraLive(false);
+    setTrackingStopped(false);
     setError(null);
     setTrackingError(null);
-    skipReportRef.current = false;
+    setNoVideoFrames(false);
     lastReportedRepRef.current = -1;
     lastReportedHoldRef.current = -1;
     stopInProgressRef.current = false;
@@ -432,6 +629,7 @@ export function PatientCvCapture({
     if (loading && initPhase === "import") return copy.loadingPoseLibrary;
     if (loading && initPhase === "model") return copy.loadingPoseModel;
     if (loading && initPhase === "camera") return copy.startingCamera;
+    if (trackingStopped) return copy.stopTracking;
     if (trackingStatus === "pose-lost") return copy.poseNotDetectedLabel;
     if (bodyFramingState === "checking" || poseReadiness === "checking") {
       return copy.checkingCameraPosition;
@@ -448,6 +646,7 @@ export function PatientCvCapture({
 
   const showReadinessActions =
     previewActive &&
+    !trackingStopped &&
     (poseReadiness === "not_ready" ||
       trackingStatus === "pose-lost" ||
       (bodyFramingState !== "good_distance" && bodyFramingState !== "checking"));
@@ -458,36 +657,6 @@ export function PatientCvCapture({
     if (exerciseId === "heel-raise") return formatHeelRaiseDuration;
     return formatSitToStandDuration;
   })();
-
-  const setupEvaluateInput = {
-    exerciseId,
-    trackingStatus,
-    poseReadiness,
-    bodyFramingState,
-    trackingQuality,
-  };
-  const setupChecks = evaluateCameraSetupChecks(setupEvaluateInput);
-  const setupReady = isCameraSetupReady(setupChecks);
-  const wizardState = resolveCameraSetupWizardState(setupEvaluateInput);
-  const canBeginTracking = setupReady || startAnywayAcknowledged;
-
-  const setupCheckLabels = {
-    body_visible: copy.setupCheckBodyVisible,
-    correct_distance: copy.setupCheckCorrectDistance,
-    feet_ankles_visible: copy.setupCheckFeetAnklesVisible,
-    lighting_acceptable: copy.setupCheckLightingAcceptable,
-  };
-
-  const wizardStateLabels = {
-    ready_to_start: copy.setupStateReadyToStart,
-    move_back: copy.setupStateMoveBack,
-    move_closer: copy.setupStateMoveCloser,
-    improve_lighting: copy.setupStateImproveLighting,
-    show_feet_ankles: copy.setupStateShowFeetAnkles,
-    adjust_camera_angle: copy.setupStateAdjustCameraAngle,
-  };
-
-  const wizardStatusLabel = cameraSetupWizardStateLabel(wizardState, wizardStateLabels);
 
   const liveBodySignal: LiveBodySignal = resolveLiveBodySignal({
     trackingStatus,
@@ -515,6 +684,8 @@ export function PatientCvCapture({
       : liveBodySignal === "move_back_lighting"
         ? "bg-amber-500"
         : "bg-[#9CA3AF]";
+
+  const showSessionStats = cameraLive && (previewActive || trackingStopped);
 
   if (skipped) {
     return null;
@@ -618,254 +789,169 @@ export function PatientCvCapture({
       dir={textDir}
       lang={language}
     >
-      {!wizardComplete ? (
-        <>
-          <h3 className={`text-[15px] font-bold text-[#0A0F1A] ${arClass}`}>
-            {copy.setupWizardTitle}
-          </h3>
-          <p className="mt-2 text-[12px] leading-relaxed text-[#374151]">
-            {copy.setupExerciseHint}
-          </p>
-          {(loading || (!previewActive && !error)) && (
-            <p className="mt-2 text-[12px] font-medium text-[#6B7280]">
-              {loading ? loadingLabel : copy.setupCheckingCamera}
-            </p>
-          )}
+      <p className="text-[11px] text-[#6B7280]">{copy.moveComfortably}</p>
+      <p className="mt-2 text-[12px] leading-relaxed text-[#374151]">{copy.framingInstruction}</p>
+      <p className="mt-1 text-[12px] leading-relaxed text-[#374151]">{copy.movementInstruction}</p>
+      <p className="mt-1 text-[11px] text-[#6B7280]">{copy.hipLandmarksHint}</p>
 
-          {error && (
-            <div className="mt-3 rounded-[8px] border border-rose-200 bg-rose-50 px-3.5 py-3 text-[12px] text-rose-800">
-              <p>{error}</p>
-              {!previewActive && !loading && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError(null);
-                    void startSetupPreview();
-                  }}
-                  className="mt-2 text-[12px] font-semibold text-[#1D9E75] underline"
-                >
-                  {copy.tryAgainLabel}
-                </button>
-              )}
-            </div>
-          )}
-
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
-            className="pointer-events-none fixed left-0 top-0 h-px w-px opacity-0"
-            aria-hidden
-          />
-          <canvas
-            ref={canvasRef}
-            width={CANVAS_WIDTH}
-            height={CANVAS_HEIGHT}
-            className="mt-3 w-full rounded-[8px] border border-[#D1E7DE] bg-[#0A0F1A]"
-            style={{ display: showPreview ? "block" : "none" }}
-            aria-label={copy.setupWizardTitle}
-          />
-
-          {previewActive && (
-            <div
-              className={`mt-2 flex items-center gap-2 rounded-[6px] border px-3 py-2 text-[12px] font-semibold ${liveSignalStyles} ${arClass}`}
-              role="status"
-              aria-live="polite"
-            >
-              <span
-                className={`h-2.5 w-2.5 shrink-0 rounded-full ${liveSignalDotClass}`}
-                aria-hidden
-              />
-              <span>{liveSignalLabel}</span>
-            </div>
-          )}
-
-          {previewActive && (
-            <ul className="mt-3 space-y-2" aria-label={copy.setupWizardTitle}>
-              {setupChecks.map((check) => (
-                <li
-                  key={check.id}
-                  className={`flex items-center gap-2 text-[12px] ${
-                    check.passed ? "text-[#1D9E75]" : "text-[#6B7280]"
-                  }`}
-                >
-                  <span aria-hidden>{check.passed ? "✓" : "○"}</span>
-                  <span>{cameraSetupCheckLabel(check.id, setupCheckLabels)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {previewActive && (
-            <div
-              className={`mt-3 rounded-[6px] border px-3 py-2 text-[12px] font-semibold ${
-                setupReady
-                  ? "border-[#D1E7DE] bg-[#F0FAF6] text-[#1D9E75]"
-                  : "border-[#E2E8E5] bg-[#F9FAFB] text-[#374151]"
-              }`}
-              role="status"
-            >
-              {wizardStatusLabel}
-            </div>
-          )}
-
-          {startAnywayAcknowledged && !setupReady && (
-            <p className="mt-2 text-[12px] leading-relaxed text-amber-800">
-              {copy.setupStartAnywayWarning}
-            </p>
-          )}
-
-          <div className="mt-4 flex flex-col gap-2">
-            <button
-              type="button"
-              disabled={loading || !previewActive || !canBeginTracking}
-              onClick={() => void beginTrackingSession()}
-              className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] bg-[#1D9E75] text-[14px] font-bold text-white transition hover:bg-[#179165] disabled:opacity-50"
-            >
-              {copy.startTracking}
-            </button>
-            {!setupReady && previewActive && !loading && (
-              <button
-                type="button"
-                onClick={() => setStartAnywayAcknowledged(true)}
-                className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-amber-200 bg-amber-50 text-[14px] font-semibold text-amber-900 transition hover:border-amber-300"
-              >
-                {copy.setupStartAnyway}
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => skipCameraWithoutSave()}
-              className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-[#F9FAFB] text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40"
-            >
-              {copy.continueWithoutCamera}
-            </button>
-          </div>
-        </>
-      ) : (
-        <>
-          <p className="text-[11px] text-[#6B7280]">{copy.moveComfortably}</p>
-          <p className="mt-2 text-[12px] leading-relaxed text-[#374151]">{copy.framingInstruction}</p>
-          <p className="mt-1 text-[12px] leading-relaxed text-[#374151]">{copy.startWhenReadyHint}</p>
-          <p className="mt-1 text-[12px] leading-relaxed text-[#374151]">{copy.movementInstruction}</p>
-          <p className="mt-1 text-[11px] text-[#6B7280]">{copy.hipLandmarksHint}</p>
-
-          {error && (
-            <div className="mt-3 rounded-[8px] border border-rose-200 bg-rose-50 px-3.5 py-3 text-[12px] text-rose-800">
-              <p>{error}</p>
-            </div>
-          )}
-
-          {trackingError && previewActive && (
-            <div className="mt-3 rounded-[8px] border border-amber-200 bg-amber-50 px-3.5 py-3 text-[12px] text-amber-900">
-              {trackingError}
-            </div>
-          )}
-
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
-            className="pointer-events-none fixed left-0 top-0 h-px w-px opacity-0"
-            aria-hidden
-          />
-          <canvas
-            ref={canvasRef}
-            width={CANVAS_WIDTH}
-            height={CANVAS_HEIGHT}
-            className="mt-3 w-full rounded-[8px] border border-[#D1E7DE] bg-[#0A0F1A]"
-            style={{ display: showPreview ? "block" : "none" }}
-            aria-label={copy.consentTitle}
-          />
-
-          {previewActive && (
-            <div
-              className={`mt-2 flex items-center gap-2 rounded-[6px] border px-3 py-2 text-[12px] font-semibold ${liveSignalStyles} ${arClass}`}
-              role="status"
-              aria-live="polite"
-            >
-              <span
-                className={`h-2.5 w-2.5 shrink-0 rounded-full ${liveSignalDotClass}`}
-                aria-hidden
-              />
-              <span>{liveSignalLabel}</span>
-            </div>
-          )}
-
-          {previewActive && (
-            <button
-              type="button"
-              disabled={stopInProgressRef.current}
-              onClick={handleStopSession}
-              className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-white text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40 disabled:opacity-50"
-            >
-              {copy.stopTracking}
-            </button>
-          )}
-
-          {showReadinessActions && (
-            <div className="mt-3 flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => handleTryAgain()}
-                className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] bg-[#1D9E75] text-[14px] font-bold text-white transition hover:bg-[#179165]"
-              >
-                {copy.tryAgainLabel}
-              </button>
-              <button
-                type="button"
-                onClick={() => skipCameraWithoutSave()}
-                className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-[#F9FAFB] text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40"
-              >
-                {copy.continueWithoutCamera}
-              </button>
-            </div>
-          )}
-
-          {sessionStarted && baselineCalibrating && (poseReadiness === "ready" || poseReadiness === "partial") && (
-            <p className="mt-3 text-[12px] font-medium text-[#1D9E75]">{copy.baselineStandStillHint}</p>
-          )}
-
-          {sessionStarted && (
-            <div className="mt-4 space-y-2 rounded-[8px] border border-[#D1E7DE] bg-[#F9FAFB] px-3.5 py-3">
-              <p className="text-[12px] font-semibold text-[#374151]">
-                <span className="text-[#6B7280]">{copy.trackingSignalLabel}: </span>
-                {trackingStatusLabel}
-              </p>
-
-              {holdExercise && copy.holdTimeTracked ? (
-                <p
-                  className="text-[28px] font-bold text-[#1D9E75]"
-                  style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
-                >
-                  {copy.holdTimeTracked(formatDuration(sessionSeconds))}
-                </p>
-              ) : (
-                <p
-                  className="text-[28px] font-bold text-[#1D9E75]"
-                  style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
-                >
-                  {copy.repsCounted(repCount)}
-                </p>
-              )}
-
-              {!holdExercise ? (
-                <p className="text-[13px] text-[#374151]">
-                  {copy.sessionDuration(formatDuration(sessionSeconds))}
-                </p>
-              ) : null}
-
-              <p className="text-[12px] text-[#6B7280]">
-                {movementDetected ? copy.movementDetectedYes : copy.movementDetectedNo}
-              </p>
-
-              <p className="text-[10px] leading-relaxed text-[#9CA3AF]">{copy.prototypeNotice}</p>
-            </div>
-          )}
-        </>
+      {(loading || (!previewActive && !cameraLive && !error)) && (
+        <p className="mt-2 text-[12px] font-medium text-[#6B7280]">
+          {loading ? loadingLabel : copy.setupCheckingCamera}
+        </p>
       )}
+
+      {error && (
+        <div className="mt-3 rounded-[8px] border border-rose-200 bg-rose-50 px-3.5 py-3 text-[12px] text-rose-800">
+          <p>{error}</p>
+          {!previewActive && !cameraLive && !loading && (
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                void startCameraTracking();
+              }}
+              className="mt-2 text-[12px] font-semibold text-[#1D9E75] underline"
+            >
+              {copy.tryAgainLabel}
+            </button>
+          )}
+        </div>
+      )}
+
+      {trackingError && showPreviewUi && (
+        <div className="mt-3 rounded-[8px] border border-amber-200 bg-amber-50 px-3.5 py-3 text-[12px] text-amber-900">
+          {trackingError}
+        </div>
+      )}
+
+      <PatientCameraPreviewStack
+        videoRef={videoRef}
+        containerRef={previewContainerRef}
+        canvasWidth={CANVAS_WIDTH}
+        canvasHeight={CANVAS_HEIGHT}
+        ariaLabel={copy.consentTitle}
+        loadingHint={previewLoadingHint}
+      />
+      {/* Processing canvas: offscreen only — never stacked over the visible video */}
+      <canvas
+        ref={canvasRef}
+        width={CANVAS_WIDTH}
+        height={CANVAS_HEIGHT}
+        aria-hidden
+        className="pointer-events-none fixed left-0 top-0 h-px w-px opacity-0"
+      />
+
+      {noVideoFrames && (
+        <div className="mt-3 rounded-[8px] border border-amber-200 bg-amber-50 px-3.5 py-3 text-[12px] text-amber-900">
+          <p>{PATIENT_CAMERA_NO_FRAMES_MESSAGE}</p>
+          <p className="mt-1 text-[11px]">{copy.continueWithoutCamera}</p>
+          <button
+            type="button"
+            onClick={() => {
+              handleTryAgain();
+            }}
+            className="mt-2 text-[12px] font-semibold text-[#1D9E75] underline"
+          >
+            {copy.tryAgainLabel}
+          </button>
+        </div>
+      )}
+
+      {cvDebugEnabled && debugSnapshot ? (
+        <PatientCameraDebugPanel snapshot={debugSnapshot} />
+      ) : null}
+
+      {showPreviewUi && (
+        <div
+          className={`mt-2 flex items-center gap-2 rounded-[6px] border px-3 py-2 text-[12px] font-semibold ${liveSignalStyles} ${arClass}`}
+          role="status"
+          aria-live="polite"
+        >
+          <span
+            className={`h-2.5 w-2.5 shrink-0 rounded-full ${liveSignalDotClass}`}
+            aria-hidden
+          />
+          <span>{liveSignalLabel}</span>
+        </div>
+      )}
+
+      {previewActive && !trackingStopped && (
+        <button
+          type="button"
+          disabled={stopInProgressRef.current}
+          onClick={handleStopSession}
+          className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-white text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40 disabled:opacity-50"
+        >
+          {copy.stopTracking}
+        </button>
+      )}
+
+      {trackingStopped && (
+        <p className="mt-3 text-[12px] font-medium text-[#374151]" role="status">
+          {copy.stopTracking}
+        </p>
+      )}
+
+      {showReadinessActions && (
+        <div className="mt-3 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => handleTryAgain()}
+            className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] bg-[#1D9E75] text-[14px] font-bold text-white transition hover:bg-[#179165]"
+          >
+            {copy.tryAgainLabel}
+          </button>
+        </div>
+      )}
+
+      {baselineCalibrating && (poseReadiness === "ready" || poseReadiness === "partial") && previewActive && (
+        <p className="mt-3 text-[12px] font-medium text-[#1D9E75]">{copy.baselineStandStillHint}</p>
+      )}
+
+      {showSessionStats && (
+        <div className="mt-4 space-y-2 rounded-[8px] border border-[#D1E7DE] bg-[#F9FAFB] px-3.5 py-3">
+          <p className="text-[12px] font-semibold text-[#374151]">
+            <span className="text-[#6B7280]">{copy.trackingSignalLabel}: </span>
+            {trackingStatusLabel}
+          </p>
+
+          {holdExercise && copy.holdTimeTracked ? (
+            <p
+              className="text-[28px] font-bold text-[#1D9E75]"
+              style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+            >
+              {copy.holdTimeTracked(formatDuration(sessionSeconds))}
+            </p>
+          ) : (
+            <p
+              className="text-[28px] font-bold text-[#1D9E75]"
+              style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+            >
+              {copy.repsCounted(repCount)}
+            </p>
+          )}
+
+          {!holdExercise ? (
+            <p className="text-[13px] text-[#374151]">
+              {copy.sessionDuration(formatDuration(sessionSeconds))}
+            </p>
+          ) : null}
+
+          <p className="text-[12px] text-[#6B7280]">
+            {movementDetected ? copy.movementDetectedYes : copy.movementDetectedNo}
+          </p>
+
+          <p className="text-[10px] leading-relaxed text-[#9CA3AF]">{copy.prototypeNotice}</p>
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => skipCameraWithoutSave()}
+        className="mt-4 flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-[#F9FAFB] text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40"
+      >
+        {copy.continueWithoutCamera}
+      </button>
     </div>
   );
 }

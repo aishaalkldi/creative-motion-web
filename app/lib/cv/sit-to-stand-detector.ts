@@ -41,6 +41,13 @@ import {
   type VisibilityLabelCounts,
 } from "@/app/lib/cv/session-visibility-summary";
 import {
+  PATIENT_CAMERA_NO_FRAMES_ERROR,
+  PATIENT_CAMERA_NO_FRAMES_MESSAGE,
+  releaseMediaStream,
+  waitForDecodedVideoFrames,
+  waitForVideoElementLayout,
+} from "@/app/lib/cv/patient-camera-stream";
+import {
   drawBodyFramingOverlay,
   evaluateBodyFraming,
   type BodyFramingState,
@@ -155,6 +162,9 @@ export function needsSitToStandSecureContext(): boolean {
 }
 
 export function mapSitToStandStartError(err: unknown): string {
+  if (err instanceof Error && err.message === PATIENT_CAMERA_NO_FRAMES_ERROR) {
+    return PATIENT_CAMERA_NO_FRAMES_MESSAGE;
+  }
   if (err instanceof DOMException) {
     if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
       return "Camera access was denied. Movement tracking could not start. Please check camera permission and try again.";
@@ -201,9 +211,13 @@ export async function startVideoPlayback(video: HTMLVideoElement): Promise<void>
   try {
     await video.play();
   } catch (err) {
-    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return;
+    if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+      await waitForDecodedVideoFrames(video);
+      return;
+    }
     throw err;
   }
+  await waitForDecodedVideoFrames(video);
 }
 
 export async function createPoseLandmarker(
@@ -808,6 +822,10 @@ export class SitToStandDetector {
       this.initPhase = "camera";
       this.emit();
 
+      await waitForVideoElementLayout(video);
+
+      releaseMediaStream(this.stream, video);
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: this.usesReadiness()
           ? {
@@ -836,6 +854,10 @@ export class SitToStandDetector {
 
       await startVideoPlayback(video);
       if (!isCurrent()) return;
+
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        throw new Error(PATIENT_CAMERA_NO_FRAMES_ERROR);
+      }
 
       this.previewActive = true;
       this.initPhase = null;
@@ -870,6 +892,11 @@ export class SitToStandDetector {
         try {
           if (this.videoEl.paused && this.previewActive) {
             void this.videoEl.play().catch(() => undefined);
+          }
+
+          if (this.videoEl.videoWidth === 0 || this.videoEl.videoHeight === 0) {
+            this.animFrameId = requestAnimationFrame(detect);
+            return;
           }
 
           this.detectTimestamp = Math.max(this.detectTimestamp + 1, performance.now());
