@@ -21,6 +21,11 @@ import {
   type StanceLeg,
 } from "@/app/lib/cv/single-leg-stance-detector";
 import {
+  PATIENT_CAMERA_NO_FRAMES_ERROR,
+  releaseMediaStream,
+  waitForVideoElementLayout,
+} from "@/app/lib/cv/patient-camera-stream";
+import {
   createPoseLandmarker,
   formatSitToStandDuration,
   getSitToStandBrowserSupportError,
@@ -232,6 +237,10 @@ export class SingleLegStancePoseDetector {
       this.initPhase = "camera";
       this.emit();
 
+      await waitForVideoElementLayout(video);
+
+      releaseMediaStream(this.stream, video);
+
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: "user" },
@@ -259,6 +268,10 @@ export class SingleLegStancePoseDetector {
       await startVideoPlayback(video);
       if (!isCurrent()) return;
 
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        throw new Error(PATIENT_CAMERA_NO_FRAMES_ERROR);
+      }
+
       this.previewActive = true;
       this.initPhase = null;
       this.holdEngine.startSession(performance.now());
@@ -276,6 +289,11 @@ export class SingleLegStancePoseDetector {
         try {
           if (this.videoEl.paused && this.previewActive) {
             void this.videoEl.play().catch(() => undefined);
+          }
+
+          if (this.videoEl.videoWidth === 0 || this.videoEl.videoHeight === 0) {
+            this.animFrameId = requestAnimationFrame(detect);
+            return;
           }
 
           this.detectTimestamp = Math.max(this.detectTimestamp + 1, performance.now());
