@@ -63,6 +63,7 @@ import {
   createStsTimelineCaptureRefs,
   disposeStsMotionTimelineRefs,
   finalizeStsMotionTimelineCapture,
+  logStsMotionTimelineFinalizeSkipped,
   logStsMotionTimelineSummaryDebug,
   recordStsMotionTimelineTick,
 } from "@/app/lib/cv/patient-cv-sts-timeline";
@@ -427,8 +428,10 @@ export function PatientCvCapture({
         stsTimelineRefs,
         detector,
       );
-      if (cvDebugEnabled && summary) {
-        logStsMotionTimelineSummaryDebug(summary, stsTimelineRefs);
+      if (summary) {
+        if (cvDebugEnabled) logStsMotionTimelineSummaryDebug(summary, stsTimelineRefs);
+      } else {
+        logStsMotionTimelineFinalizeSkipped(exerciseId, stsTimelineRefs, summary);
       }
       disposeStsMotionTimelineRefs(stsTimelineRefs);
       flushMetricsForSave();
@@ -472,8 +475,10 @@ export function PatientCvCapture({
       stsTimelineRefs,
       detector,
     );
-    if (cvDebugEnabled && summary) {
-      logStsMotionTimelineSummaryDebug(summary, stsTimelineRefs);
+    if (summary) {
+      if (cvDebugEnabled) logStsMotionTimelineSummaryDebug(summary, stsTimelineRefs);
+    } else {
+      logStsMotionTimelineFinalizeSkipped(exerciseId, stsTimelineRefs, summary);
     }
     detector.stop();
     setCameraLive(false);

@@ -4,7 +4,10 @@
 
 import type { PatientCvDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import type { CvY1ExerciseId } from "@/app/lib/cv/cv-patient-config";
-import { isStsMotionTimelineEnabled } from "@/app/lib/cv/is-sts-motion-timeline-enabled";
+import {
+  isStsMotionTimelineEnabled,
+  isStsMotionTimelinePilotEnabled,
+} from "@/app/lib/cv/is-sts-motion-timeline-enabled";
 import { MotionTimelineAccumulator } from "@/app/lib/cv/motion-timeline-accumulator";
 import {
   findForbiddenKeysInSummaryPayload,
@@ -100,6 +103,19 @@ export function disposeStsMotionTimelineRefs(refs: StsTimelineCaptureRefs): void
   refs.finalized.current = false;
 }
 
+/** Pilot-only skip reason when finalize returns null (browser pilot sessions). */
+export function stsMotionTimelineFinalizeSkipReason(
+  exerciseId: CvY1ExerciseId,
+  refs: StsTimelineCaptureRefs,
+): string {
+  if (exerciseId !== "sit-to-stand") return "not_sts_exercise";
+  if (!isStsMotionTimelineEnabled(exerciseId)) return "timeline_disabled";
+  if (refs.finalized.current && refs.summary.current) return "already_finalized";
+  if (!refs.acc.current && refs.finalized.current) return "already_finalized_no_summary";
+  if (!refs.acc.current) return "accumulator_never_started";
+  return "unknown";
+}
+
 /** Developer-only — never patient-facing. */
 export function logStsMotionTimelineSummaryDebug(
   summary: SessionMotionSummary | null,
@@ -107,7 +123,7 @@ export function logStsMotionTimelineSummaryDebug(
 ): void {
   if (!summary || typeof console === "undefined") return;
   const forbiddenKeys = findForbiddenKeysInSummaryPayload(summary);
-  console.debug("[smt-1] session motion summary", {
+  console.info("[smt-1] session motion summary", {
     schemaVersion: summary.schemaVersion,
     sessionDurationS: summary.sessionDurationS,
     legacyRepCount: summary.legacyRepCount,
@@ -118,5 +134,19 @@ export function logStsMotionTimelineSummaryDebug(
     poseLossEventCount: summary.interruptions.poseLossEventCount,
     forbiddenKeyCount: forbiddenKeys.length,
     snapshotDerived: true,
+  });
+}
+
+/** Pilot-only diagnostic when finalize produced no summary (?cvDebug=1&smtTimeline=1). */
+export function logStsMotionTimelineFinalizeSkipped(
+  exerciseId: CvY1ExerciseId,
+  refs: StsTimelineCaptureRefs,
+  summary: SessionMotionSummary | null,
+): void {
+  if (summary || typeof console === "undefined") return;
+  if (!isStsMotionTimelinePilotEnabled()) return;
+  console.info("[smt-1] finalize skipped", {
+    reason: stsMotionTimelineFinalizeSkipReason(exerciseId, refs),
+    exerciseId,
   });
 }
