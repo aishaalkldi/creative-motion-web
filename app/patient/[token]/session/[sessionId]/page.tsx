@@ -231,7 +231,9 @@ export default function SessionPlayerPage() {
     if (isCvEligible) {
       setCvSaveNotice(cvSessionCaptureSavingMessage(patientLanguage));
       const result = await saveCvMetrics();
-      setCvSaveNotice(cvSessionCapturePatientMessage(patientLanguage, result));
+      setCvSaveNotice(
+        cvSessionCapturePatientMessage(patientLanguage, result, currentView?.exerciseId),
+      );
     } else {
       setCvSaveNotice(null);
     }

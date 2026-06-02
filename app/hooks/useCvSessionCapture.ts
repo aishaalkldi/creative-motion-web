@@ -2,7 +2,8 @@
 
 import { useCallback, useRef, useState } from "react";
 import type { PatientCvDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
-import { CV_MIN_SAVE_DURATION_S, isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
+import { isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
+import { isCvMetricsEligibleForSave } from "@/app/lib/cv/cv-session-save-gate";
 
 export type CvCaptureStatus =
   | "not_started"
@@ -83,7 +84,7 @@ export function useCvSessionCapture({
 
       const metrics = latestMetricsRef.current;
       if (!metrics) return "no_metrics";
-      if (metrics.sessionDurationS < CV_MIN_SAVE_DURATION_S) return "too_short";
+      if (!isCvMetricsEligibleForSave(metrics)) return "too_short";
 
       const run = async (): Promise<CvSaveResult> => {
         saveInProgressRef.current = true;
