@@ -428,7 +428,7 @@ export function PatientCvCapture({
         detector,
       );
       if (cvDebugEnabled && summary) {
-        logStsMotionTimelineSummaryDebug(summary);
+        logStsMotionTimelineSummaryDebug(summary, stsTimelineRefs);
       }
       disposeStsMotionTimelineRefs(stsTimelineRefs);
       flushMetricsForSave();
@@ -473,7 +473,7 @@ export function PatientCvCapture({
       detector,
     );
     if (cvDebugEnabled && summary) {
-      logStsMotionTimelineSummaryDebug(summary);
+      logStsMotionTimelineSummaryDebug(summary, stsTimelineRefs);
     }
     detector.stop();
     setCameraLive(false);
