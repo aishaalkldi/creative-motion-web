@@ -2,6 +2,7 @@ import type { ClinicalActionStatus } from "@/app/lib/clinical-action-engine";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 
 import type { CvSaveOutcome } from "@/app/lib/cv/cv-save-outcome";
+import { isHoldClassCvExercise } from "@/app/lib/cv/cv-metrics-display";
 import type { CvSaveResult } from "@/app/hooks/useCvSessionCapture";
 
 export type PatientPortalLanguage = PatientExerciseLanguage;
@@ -328,6 +329,7 @@ export type SessionExerciseFlowUi = {
   cvSaving: string;
   cvSavedCheck: string;
   cvSaveFailedSessionRecorded: string;
+  cvHoldTooShort: string;
 };
 
 const BODY_REGION_PATIENT: Record<
@@ -397,6 +399,8 @@ const SESSION_EXERCISE_FLOW_UI: Record<
     cvSavedCheck: "Camera result saved ✓",
     cvSaveFailedSessionRecorded:
       "Camera data could not be saved — your session is still recorded",
+    cvHoldTooShort:
+      "Hold time was under 3 seconds, so camera metrics were not saved.",
   },
   ar: {
     sessionOverviewTitle: "نظرة على الجلسة",
@@ -436,6 +440,8 @@ const SESSION_EXERCISE_FLOW_UI: Record<
     cvSaving: "جاري حفظ نتيجة الكاميرا…",
     cvSavedCheck: "تم حفظ نتيجة الكاميرا ✓",
     cvSaveFailedSessionRecorded: "تعذر حفظ بيانات الكاميرا — تم تسجيل جلستك",
+    cvHoldTooShort:
+      "مدة الثبات أقل من 3 ثوانٍ، لذلك لم تُحفظ مقاييس الكاميرا.",
   },
 };
 
@@ -443,11 +449,15 @@ const SESSION_EXERCISE_FLOW_UI: Record<
 export function cvSessionCapturePatientMessage(
   lang: PatientPortalLanguage,
   result: CvSaveResult,
+  exerciseId?: string,
 ): string | null {
   if (result === "not_applicable") return null;
   const ui = sessionExerciseFlowUi(lang);
   if (result === "saved" || result === "already_saved") return ui.cvSavedCheck;
   if (result === "post_error") return ui.cvSaveFailedSessionRecorded;
+  if (result === "too_short" && isHoldClassCvExercise(exerciseId)) {
+    return ui.cvHoldTooShort;
+  }
   return ui.cvNotSavedManual;
 }
 
