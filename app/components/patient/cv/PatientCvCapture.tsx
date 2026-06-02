@@ -67,6 +67,12 @@ import {
   logStsMotionTimelineSummaryDebug,
   recordStsMotionTimelineTick,
 } from "@/app/lib/cv/patient-cv-sts-timeline";
+import { isStsMotionTimelinePilotEnabled } from "@/app/lib/cv/is-sts-motion-timeline-enabled";
+import {
+  buildMotionQualityWithStsPilot,
+  buildStsMotionPilotRecord,
+  type CvMotionQualityPayload,
+} from "@/app/lib/cv/sts-motion-pilot-record";
 
 const METRICS_REPORT_INTERVAL_MS = 3_000;
 
@@ -230,6 +236,7 @@ export type PatientCvCaptureProps = {
   onMetricsUpdate?: (metrics: PatientCvDerivedMetrics) => void;
   onSkipped?: () => void;
   onRegisterMetricsFlush?: (flush: () => void) => void;
+  onRegisterStsPilotRecordFlush?: (flush: () => CvMotionQualityPayload | null) => void;
 };
 
 function canvasSizeForExercise(exerciseId: CvY1ExerciseId): {
@@ -301,6 +308,7 @@ export function PatientCvCapture({
   onMetricsUpdate,
   onSkipped,
   onRegisterMetricsFlush,
+  onRegisterStsPilotRecordFlush,
 }: PatientCvCaptureProps) {
   const copy = patientCvCopy(language, exerciseId);
   const { canvasWidth: CANVAS_WIDTH, canvasHeight: CANVAS_HEIGHT } =
@@ -445,6 +453,32 @@ export function PatientCvCapture({
     onRegisterMetricsFlush(flushMetricsForSave);
     return () => onRegisterMetricsFlush(() => {});
   }, [onRegisterMetricsFlush, flushMetricsForSave]);
+
+  // TODO(PR43): auto-finalize SMT pilot record
+  // on Complete exercise if Stop tracking was not pressed.
+  const buildStsPilotMotionQuality = useCallback((): CvMotionQualityPayload | null => {
+    if (exerciseId !== "sit-to-stand" || !isStsMotionTimelinePilotEnabled()) {
+      return null;
+    }
+    const summary = stsTimelineRefs.summary.current;
+    if (!summary) return null;
+    const detector = detectorRef.current;
+    if (!detector) return null;
+    const metrics = detector.getDerivedMetrics();
+    if (metrics.exerciseId !== "sit-to-stand") return null;
+    const record = buildStsMotionPilotRecord({
+      summary,
+      metrics,
+      snapshotCount: stsTimelineRefs.lastFinalizeSnapshotCount.current ?? 0,
+    });
+    return buildMotionQualityWithStsPilot(record);
+  }, [exerciseId, stsTimelineRefs]);
+
+  useEffect(() => {
+    if (!onRegisterStsPilotRecordFlush) return;
+    onRegisterStsPilotRecordFlush(buildStsPilotMotionQuality);
+    return () => onRegisterStsPilotRecordFlush(() => null);
+  }, [onRegisterStsPilotRecordFlush, buildStsPilotMotionQuality]);
 
   useEffect(() => {
     if (!previewActive && !trackingStopped) return;

@@ -4,6 +4,7 @@ import type { PatientCvDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import { PatientCvCapture } from "@/app/components/patient/cv/PatientCvCapture";
 import { isCvEnabledExercise, type CvY1ExerciseId } from "@/app/lib/cv/cv-patient-config";
+import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
 import { exerciseMediaUi } from "@/app/lib/patient-portal-ui";
 
 export type ExerciseMediaAreaProps = {
@@ -20,6 +21,7 @@ export type ExerciseMediaAreaProps = {
   onCvMetricsUpdate?: (metrics: PatientCvDerivedMetrics) => void;
   onCvSkipped?: () => void;
   onRegisterCvMetricsFlush?: (flush: () => void) => void;
+  onRegisterStsPilotRecordFlush?: (flush: () => CvMotionQualityPayload | null) => void;
 };
 
 type VisualRegion =
@@ -397,6 +399,7 @@ export function ExerciseMediaArea({
   onCvMetricsUpdate,
   onCvSkipped,
   onRegisterCvMetricsFlush,
+  onRegisterStsPilotRecordFlush,
 }: ExerciseMediaAreaProps) {
   const ui = exerciseMediaUi(language);
   const resolvedMedia = mediaUrl?.trim() || null;
@@ -419,6 +422,7 @@ export function ExerciseMediaArea({
           onMetricsUpdate={onCvMetricsUpdate}
           onSkipped={onCvSkipped}
           onRegisterMetricsFlush={onRegisterCvMetricsFlush}
+          onRegisterStsPilotRecordFlush={onRegisterStsPilotRecordFlush}
         />
       )}
 
