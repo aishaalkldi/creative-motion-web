@@ -6,7 +6,10 @@ import type { PatientCvDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import type { CvY1ExerciseId } from "@/app/lib/cv/cv-patient-config";
 import { isStsMotionTimelineEnabled } from "@/app/lib/cv/is-sts-motion-timeline-enabled";
 import { MotionTimelineAccumulator } from "@/app/lib/cv/motion-timeline-accumulator";
-import type { SessionMotionSummary } from "@/app/lib/cv/motion-summary-types";
+import {
+  findForbiddenKeysInSummaryPayload,
+  type SessionMotionSummary,
+} from "@/app/lib/cv/motion-summary-types";
 import {
   finalizeStsMotionTimelineSummary,
   legacyRepCountFromDerivedMetrics,
@@ -20,6 +23,8 @@ export type StsTimelineCaptureRefs = {
   acc: RefBox<MotionTimelineAccumulator | null>;
   summary: RefBox<SessionMotionSummary | null>;
   finalized: RefBox<boolean>;
+  /** Dev-only: snapshot count at last finalize (for console debug). */
+  lastFinalizeSnapshotCount: RefBox<number | null>;
 };
 
 export function createStsTimelineCaptureRefs(): StsTimelineCaptureRefs {
@@ -27,6 +32,7 @@ export function createStsTimelineCaptureRefs(): StsTimelineCaptureRefs {
     acc: { current: null },
     summary: { current: null },
     finalized: { current: false },
+    lastFinalizeSnapshotCount: { current: null },
   };
 }
 
@@ -44,6 +50,7 @@ export function beginStsMotionTimeline(
   if (!isStsMotionTimelineEnabled(exerciseId)) return;
   refs.finalized.current = false;
   refs.summary.current = null;
+  refs.lastFinalizeSnapshotCount.current = null;
   getOrCreateAccumulator(refs).start();
 }
 
@@ -94,13 +101,22 @@ export function disposeStsMotionTimelineRefs(refs: StsTimelineCaptureRefs): void
 }
 
 /** Developer-only — never patient-facing. */
-export function logStsMotionTimelineSummaryDebug(summary: SessionMotionSummary | null): void {
+export function logStsMotionTimelineSummaryDebug(
+  summary: SessionMotionSummary | null,
+  refs?: StsTimelineCaptureRefs,
+): void {
   if (!summary || typeof console === "undefined") return;
+  const forbiddenKeys = findForbiddenKeysInSummaryPayload(summary);
   console.debug("[smt-1] session motion summary", {
     schemaVersion: summary.schemaVersion,
     sessionDurationS: summary.sessionDurationS,
     legacyRepCount: summary.legacyRepCount,
     completeRepCount: summary.completeRepCount,
+    unclearRepCount: summary.unclearRepCount,
+    observationCount: summary.observations.length,
+    snapshotCount: refs?.lastFinalizeSnapshotCount.current ?? null,
+    poseLossEventCount: summary.interruptions.poseLossEventCount,
+    forbiddenKeyCount: forbiddenKeys.length,
     snapshotDerived: true,
   });
 }
