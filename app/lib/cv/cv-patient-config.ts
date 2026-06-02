@@ -43,6 +43,7 @@ export const PATIENT_SLS_POSE_SHELL = {
   landmarkDotColor: DEFAULT_STS_CONFIG.landmarkDotColor,
   lowerBodyLandmarkIndices: DEFAULT_STS_CONFIG.lowerBodyLandmarkIndices,
   prototypeVersion: "cv-y3-single-leg-stance",
+  landmarksOverlayOnly: true,
 } as const;
 
 /** Patient portal hold FSM tuning — separate from LAB_SLS_HOLD_CONFIG. */
@@ -77,6 +78,7 @@ export const PATIENT_STS_CONFIG: SitToStandCvConfig = {
   readinessCheckMs: 2_000,
   minHipVisibility: 0.35,
   bodyFramingProfileId: "seated-rise",
+  landmarksOverlayOnly: true,
 };
 
 /**
@@ -101,6 +103,7 @@ export const PATIENT_MINI_SQUAT_CONFIG: SitToStandCvConfig = {
   minHipVisibility: 0.35,
   prototypeVersion: "cv-y2-mini-squat",
   bodyFramingProfileId: "standing-sagittal-rep",
+  landmarksOverlayOnly: true,
 };
 
 /** MediaPipe shell for patient double heel raise capture. */
@@ -113,6 +116,7 @@ export const PATIENT_HEEL_RAISE_POSE_SHELL = {
   uiFrameUpdateInterval: DEFAULT_STS_CONFIG.uiFrameUpdateInterval,
   landmarkDotColor: DEFAULT_STS_CONFIG.landmarkDotColor,
   lowerBodyLandmarkIndices: DEFAULT_STS_CONFIG.lowerBodyLandmarkIndices,
+  landmarksOverlayOnly: true,
 } as const;
 
 /** Patient portal double heel raise rep tuning — separate from LAB_HEEL_RAISE_REP_CONFIG. */
