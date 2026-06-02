@@ -11,6 +11,7 @@ import {
   disposeStsMotionTimelineRefs,
   finalizeStsMotionTimelineCapture,
   recordStsMotionTimelineTick,
+  stsMotionTimelineFinalizeSkipReason,
 } from "@/app/lib/cv/patient-cv-sts-timeline";
 import type { SitToStandDetectorSnapshot } from "@/app/lib/cv/sit-to-stand-detector";
 
@@ -29,6 +30,24 @@ const BASE_SNAPSHOT: SitToStandDetectorSnapshot = {
   trackingError: null,
   isBaselineCalibrating: false,
 };
+
+describe("stsMotionTimelineFinalizeSkipReason", () => {
+  it("returns not_sts_exercise for mini squat", () => {
+    const refs = createStsTimelineCaptureRefs();
+    assert.equal(
+      stsMotionTimelineFinalizeSkipReason("mini-squat", refs),
+      "not_sts_exercise",
+    );
+  });
+
+  it("returns timeline_disabled when pilot gate is off in Node", () => {
+    const refs = createStsTimelineCaptureRefs();
+    assert.equal(
+      stsMotionTimelineFinalizeSkipReason("sit-to-stand", refs),
+      "timeline_disabled",
+    );
+  });
+});
 
 describe("patient-cv-sts-timeline (flag off)", () => {
   it("no-ops begin, record, and finalize when motionTimelineEnabled is unset", () => {
