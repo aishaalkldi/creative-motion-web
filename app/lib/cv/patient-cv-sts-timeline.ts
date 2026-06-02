@@ -83,11 +83,13 @@ export function finalizeStsMotionTimelineCapture(
   const acc = refs.acc.current;
   if (!acc) return null;
 
+  const snapshotCount = acc.getSnapshotCount();
   const { summary } = finalizeStsMotionTimelineSummary({
     accumulator: acc,
     legacyRepCount: legacyRepCountFromDerivedMetrics(metricsSource.getDerivedMetrics()),
   });
 
+  refs.lastFinalizeSnapshotCount.current = snapshotCount;
   refs.summary.current = summary;
   refs.finalized.current = true;
   acc.stop();

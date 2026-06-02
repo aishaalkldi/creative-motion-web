@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from "react";
 import type { PatientCvDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import { isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
 import { isCvMetricsEligibleForSave } from "@/app/lib/cv/cv-session-save-gate";
+import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
 
 export type CvCaptureStatus =
   | "not_started"
@@ -40,6 +41,7 @@ export function useCvSessionCapture({
   const skippedRef = useRef(false);
   const saveFlightRef = useRef<Promise<CvSaveResult> | null>(null);
   const flushMetricsRef = useRef<(() => void) | null>(null);
+  const flushStsPilotRecordRef = useRef<(() => CvMotionQualityPayload | null) | null>(null);
 
   const isCvEligible = isCvEnabledExercise(exerciseId);
 
@@ -63,6 +65,13 @@ export function useCvSessionCapture({
     flushMetricsRef.current = flush;
   }, []);
 
+  const registerStsPilotRecordFlush = useCallback(
+    (flush: () => CvMotionQualityPayload | null) => {
+      flushStsPilotRecordRef.current = flush;
+    },
+    [],
+  );
+
   const resetCapture = useCallback(() => {
     latestMetricsRef.current = null;
     hasSavedRef.current = false;
@@ -70,6 +79,7 @@ export function useCvSessionCapture({
     skippedRef.current = false;
     saveFlightRef.current = null;
     flushMetricsRef.current = null;
+    flushStsPilotRecordRef.current = null;
     setCvStatus("not_started");
   }, []);
 
@@ -81,6 +91,7 @@ export function useCvSessionCapture({
       if (saveFlightRef.current) return saveFlightRef.current;
 
       flushMetricsRef.current?.();
+      const motionQuality = flushStsPilotRecordRef.current?.() ?? undefined;
 
       const metrics = latestMetricsRef.current;
       if (!metrics) return "no_metrics";
@@ -100,6 +111,7 @@ export function useCvSessionCapture({
           movementDetected: metrics.movementDetected,
           framesWithPose: metrics.framesWithPose,
           framesTotal: metrics.framesTotal,
+          ...(motionQuality ? { motion_quality: motionQuality } : {}),
         };
 
         try {
@@ -141,6 +153,7 @@ export function useCvSessionCapture({
     onMetricsUpdate,
     markSkipped,
     registerMetricsFlush,
+    registerStsPilotRecordFlush,
     saveCvMetrics,
     resetCapture,
   };

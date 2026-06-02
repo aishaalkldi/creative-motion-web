@@ -13,6 +13,7 @@ import {
   type CvTrackingQuality,
   type PatientCvExerciseId,
 } from "@/app/lib/cv/bio-0-contracts";
+import { validateCvMotionQualityPayload } from "@/app/lib/cv/cv-motion-quality-payload";
 import { bodyHasForbiddenCvKeys } from "@/app/lib/cv/cv-forbidden-keys";
 import {
   checkPatientGeneralLimit,
@@ -41,6 +42,7 @@ type RequestBody = {
   movementDetected?: boolean;
   framesWithPose?: number;
   framesTotal?: number;
+  motion_quality?: Record<string, unknown>;
 };
 
 type TokenRow = {
@@ -123,6 +125,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: API_ERRORS.UNABLE }, { status: 400 });
   }
 
+  const motionQualityError = validateCvMotionQualityPayload(body.motion_quality);
+  if (motionQualityError) {
+    return NextResponse.json({ error: API_ERRORS.UNABLE }, { status: 400 });
+  }
+
   const sessionDurationS = body.sessionDurationS ?? 0;
   if (sessionDurationS < CV_MIN_SAVE_DURATION_S) {
     return NextResponse.json({ error: API_ERRORS.UNABLE }, { status: 400 });
@@ -179,6 +186,7 @@ export async function POST(req: NextRequest) {
       frames_total: body.framesTotal ?? null,
       source: "patient_session",
       prototype_version: patientCvPrototypeVersion(exerciseId),
+      motion_quality: body.motion_quality ?? null,
     })
     .select("id, recorded_at")
     .single<{ id: string; recorded_at: string }>();
