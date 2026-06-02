@@ -58,6 +58,14 @@ import {
   isPatientCvDebugEnabled,
   type PatientCvDebugSnapshot,
 } from "@/app/lib/cv/patient-camera-debug";
+import {
+  beginStsMotionTimeline,
+  createStsTimelineCaptureRefs,
+  disposeStsMotionTimelineRefs,
+  finalizeStsMotionTimelineCapture,
+  logStsMotionTimelineSummaryDebug,
+  recordStsMotionTimelineTick,
+} from "@/app/lib/cv/patient-cv-sts-timeline";
 
 const METRICS_REPORT_INTERVAL_MS = 3_000;
 
@@ -330,6 +338,7 @@ export function PatientCvCapture({
   const lastReportedRepRef = useRef(-1);
   const lastReportedHoldRef = useRef(-1);
   const onMetricsUpdateRef = useRef(onMetricsUpdate);
+  const stsTimelineRefs = useRef(createStsTimelineCaptureRefs()).current;
 
   useEffect(() => {
     onMetricsUpdateRef.current = onMetricsUpdate;
@@ -373,6 +382,13 @@ export function PatientCvCapture({
         setFramesTotal,
       });
       if (!snapshot.previewActive && !trackingStopped) return;
+      if (exerciseId === "sit-to-stand") {
+        recordStsMotionTimelineTick(
+          exerciseId,
+          stsTimelineRefs,
+          snapshot as SitToStandDetectorSnapshot,
+        );
+      }
       if (isHoldCvExercise(exerciseId)) {
         if (snapshot.sessionSeconds !== prevHold) {
           lastReportedHoldRef.current = snapshot.sessionSeconds;
@@ -385,7 +401,7 @@ export function PatientCvCapture({
         reportMetrics();
       }
     },
-    [exerciseId, reportMetrics, trackingStopped],
+    [exerciseId, reportMetrics, trackingStopped, stsTimelineRefs],
   );
 
   useEffect(() => {
@@ -406,11 +422,20 @@ export function PatientCvCapture({
 
     detectorRef.current = detector;
     return () => {
+      const summary = finalizeStsMotionTimelineCapture(
+        exerciseId,
+        stsTimelineRefs,
+        detector,
+      );
+      if (cvDebugEnabled && summary) {
+        logStsMotionTimelineSummaryDebug(summary);
+      }
+      disposeStsMotionTimelineRefs(stsTimelineRefs);
       flushMetricsForSave();
       detector.stop();
       detectorRef.current = null;
     };
-  }, [exerciseId, stanceLeg, syncFromDetector, flushMetricsForSave]);
+  }, [exerciseId, stanceLeg, syncFromDetector, flushMetricsForSave, stsTimelineRefs, cvDebugEnabled]);
 
   useEffect(() => {
     if (!onRegisterMetricsFlush) return;
@@ -429,11 +454,12 @@ export function PatientCvCapture({
     const detector = detectorRef.current;
     detector?.stop();
     if (detector) syncFromDetector(detector.getSnapshot());
+    disposeStsMotionTimelineRefs(stsTimelineRefs);
     setCameraLive(false);
     setTrackingStopped(false);
     setSkipped(true);
     onSkipped?.();
-  }, [syncFromDetector, onSkipped]);
+  }, [syncFromDetector, onSkipped, stsTimelineRefs]);
 
   const handleStopSession = useCallback(() => {
     const detector = detectorRef.current;
@@ -441,12 +467,27 @@ export function PatientCvCapture({
 
     stopInProgressRef.current = true;
     reportMetrics();
+    const summary = finalizeStsMotionTimelineCapture(
+      exerciseId,
+      stsTimelineRefs,
+      detector,
+    );
+    if (cvDebugEnabled && summary) {
+      logStsMotionTimelineSummaryDebug(summary);
+    }
     detector.stop();
     setCameraLive(false);
     flushMetricsForSave();
     syncFromDetector(detector.getSnapshot());
     stopInProgressRef.current = false;
-  }, [reportMetrics, syncFromDetector, flushMetricsForSave]);
+  }, [
+    exerciseId,
+    reportMetrics,
+    syncFromDetector,
+    flushMetricsForSave,
+    stsTimelineRefs,
+    cvDebugEnabled,
+  ]);
 
   const mapStartError =
     exerciseId === "mini-squat"
@@ -489,6 +530,7 @@ export function PatientCvCapture({
         throw new Error(PATIENT_CAMERA_NO_FRAMES_ERROR);
       }
       setCameraLive(true);
+      beginStsMotionTimeline(exerciseId, stsTimelineRefs);
       reportMetrics();
       auditPreviewLayers("after-detector-start", video, canvas, previewContainerRef.current, {
         cameraLive: true,
@@ -505,7 +547,16 @@ export function PatientCvCapture({
     } finally {
       startInProgressRef.current = false;
     }
-  }, [consented, loading, cameraLive, syncFromDetector, reportMetrics, mapStartError]);
+  }, [
+    consented,
+    loading,
+    cameraLive,
+    syncFromDetector,
+    reportMetrics,
+    mapStartError,
+    exerciseId,
+    stsTimelineRefs,
+  ]);
 
   const holdExercise = isHoldCvExercise(exerciseId);
   const stanceLegRequired = holdExercise && stanceLeg === null;
@@ -632,6 +683,7 @@ export function PatientCvCapture({
     const detector = detectorRef.current;
     detector?.stop();
     if (detector) syncFromDetector(detector.getSnapshot());
+    disposeStsMotionTimelineRefs(stsTimelineRefs);
     setCameraLive(false);
     setTrackingStopped(false);
     setError(null);
@@ -641,7 +693,7 @@ export function PatientCvCapture({
     lastReportedHoldRef.current = -1;
     stopInProgressRef.current = false;
     startInProgressRef.current = false;
-  }, [syncFromDetector]);
+  }, [syncFromDetector, stsTimelineRefs]);
 
   const trackingStatusLabel = (() => {
     if (loading && initPhase === "import") return copy.loadingPoseLibrary;
