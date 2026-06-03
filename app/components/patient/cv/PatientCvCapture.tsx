@@ -66,6 +66,7 @@ import {
   logStsMotionTimelineFinalizeSkipped,
   logStsMotionTimelineSummaryDebug,
   recordStsMotionTimelineTick,
+  tryFinalizeStsTimelineBeforePilotSave,
 } from "@/app/lib/cv/patient-cv-sts-timeline";
 import { isStsMotionTimelinePilotEnabled } from "@/app/lib/cv/is-sts-motion-timeline-enabled";
 import {
@@ -236,6 +237,7 @@ export type PatientCvCaptureProps = {
   onMetricsUpdate?: (metrics: PatientCvDerivedMetrics) => void;
   onSkipped?: () => void;
   onRegisterMetricsFlush?: (flush: () => void) => void;
+  onRegisterStsPilotBeforeSave?: (beforeSave: () => void) => void;
   onRegisterStsPilotRecordFlush?: (flush: () => CvMotionQualityPayload | null) => void;
 };
 
@@ -308,6 +310,7 @@ export function PatientCvCapture({
   onMetricsUpdate,
   onSkipped,
   onRegisterMetricsFlush,
+  onRegisterStsPilotBeforeSave,
   onRegisterStsPilotRecordFlush,
 }: PatientCvCaptureProps) {
   const copy = patientCvCopy(language, exerciseId);
@@ -454,8 +457,26 @@ export function PatientCvCapture({
     return () => onRegisterMetricsFlush(() => {});
   }, [onRegisterMetricsFlush, flushMetricsForSave]);
 
-  // TODO(PR43): auto-finalize SMT pilot record
-  // on Complete exercise if Stop tracking was not pressed.
+  const finalizeStsPilotBeforeSave = useCallback(() => {
+    const detector = detectorRef.current;
+    if (!detector) return;
+    const summary = tryFinalizeStsTimelineBeforePilotSave(
+      exerciseId,
+      stsTimelineRefs,
+      detector,
+      isStsMotionTimelinePilotEnabled(),
+    );
+    if (summary && cvDebugEnabled) {
+      logStsMotionTimelineSummaryDebug(summary, stsTimelineRefs);
+    }
+  }, [exerciseId, stsTimelineRefs, cvDebugEnabled]);
+
+  useEffect(() => {
+    if (!onRegisterStsPilotBeforeSave) return;
+    onRegisterStsPilotBeforeSave(finalizeStsPilotBeforeSave);
+    return () => onRegisterStsPilotBeforeSave(() => {});
+  }, [onRegisterStsPilotBeforeSave, finalizeStsPilotBeforeSave]);
+
   const buildStsPilotMotionQuality = useCallback((): CvMotionQualityPayload | null => {
     if (exerciseId !== "sit-to-stand" || !isStsMotionTimelinePilotEnabled()) {
       return null;
