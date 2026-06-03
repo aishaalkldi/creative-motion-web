@@ -301,10 +301,7 @@ function MovementPreviewPanel({
   const isArabic = language === "ar";
   const guideImage = patientExerciseGuideImage(exerciseId);
   const [guideImageFailed, setGuideImageFailed] = useState(false);
-  const showGuideImage =
-    exerciseId?.trim().toLowerCase() === "sit-to-stand" &&
-    guideImage != null &&
-    !guideImageFailed;
+  const showGuideImage = guideImage != null && !guideImageFailed;
 
   return (
     <div
