@@ -107,6 +107,17 @@ export function PatientExerciseSessionCard({
       ? flowUi.restSeconds(view.restSec)
       : flowUi.doseNotSet;
 
+  const aboutWhy = view.whyThisMatters?.trim() ?? "";
+  const aboutSupport = view.supportRequirements?.trim() ?? "";
+  const aboutMistakes = view.commonMistakes?.trim() ?? "";
+  const showAboutSection =
+    aboutWhy.length > 0 || aboutSupport.length > 0 || aboutMistakes.length > 0;
+  const aboutSectionTitle = isArabic ? "عن هذا التمرين" : "About this exercise";
+  const whatYouNeedLabel = isArabic ? "ما تحتاجه" : "What you need";
+  const commonMistakesLabel = isArabic
+    ? "أخطاء شائعة تجنّبها"
+    : "Common mistakes to avoid";
+
   return (
     <div
       className={`space-y-4 ${arClass}`}
@@ -177,6 +188,52 @@ export function PatientExerciseSessionCard({
               isArabic={isArabic}
             />
           </div>
+
+          {showAboutSection && (
+            <details
+              className={`rounded-[8px] border border-[#E2E8E5] bg-[#F9FAFB] px-3.5 py-2.5 ${arClass}`}
+            >
+              <summary
+                className={`cursor-pointer text-[12px] font-semibold text-[#0A0F1A] marker:text-[#9CA3AF] ${
+                  isArabic ? "text-right" : "text-left"
+                }`}
+              >
+                {aboutSectionTitle}
+              </summary>
+              <div className="mt-2.5 space-y-2.5 border-t border-[#E2E8E5] pt-2.5">
+                {aboutWhy.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#9CA3AF]">
+                      {cardUi.whyThisMatters}
+                    </p>
+                    <p className="mt-1 text-[12px] leading-relaxed text-[#374151]">
+                      {aboutWhy}
+                    </p>
+                  </div>
+                )}
+                {aboutSupport.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#9CA3AF]">
+                      {whatYouNeedLabel}
+                    </p>
+                    <p className="mt-1 text-[12px] leading-relaxed text-[#374151]">
+                      {aboutSupport}
+                    </p>
+                  </div>
+                )}
+                {aboutMistakes.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-[#9CA3AF]">
+                      {commonMistakesLabel}
+                    </p>
+                    <p className="mt-1 text-[12px] leading-relaxed text-[#374151]">
+                      {aboutMistakes}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
 
           {view.doseLabel && (
             <p

@@ -175,6 +175,10 @@ export type ResolvedExerciseView = {
   doseLabel: string | null;
   patientInstructions: string;
   whyThisMatters: string;
+  /** Setup / equipment (library entries with supportRequirements) */
+  supportRequirements?: string;
+  /** Form cues to avoid (library entries with commonMistakes) */
+  commonMistakes?: string;
   precautions: string;
   fromLibrary: boolean;
   matchType: ResolveMatchType;
@@ -388,6 +392,24 @@ export function resolveExerciseView(
       entry.whyThisMatters,
       entry.whyThisMattersAr,
     ),
+    ...(entry.supportRequirements?.trim() || entry.supportRequirementsAr?.trim()
+      ? {
+          supportRequirements: localizePatientField(
+            language,
+            entry.supportRequirements ?? "",
+            entry.supportRequirementsAr,
+          ),
+        }
+      : {}),
+    ...(entry.commonMistakes?.trim() || entry.commonMistakesAr?.trim()
+      ? {
+          commonMistakes: localizePatientField(
+            language,
+            entry.commonMistakes ?? "",
+            entry.commonMistakesAr,
+          ),
+        }
+      : {}),
     precautions: localizePatientField(
       language,
       entry.precautions,
