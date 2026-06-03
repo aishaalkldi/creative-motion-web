@@ -106,6 +106,7 @@ export default function SessionPlayerPage() {
     onMetricsUpdate,
     markSkipped,
     registerMetricsFlush,
+    registerStsPilotBeforeSave,
     registerStsPilotRecordFlush,
     saveCvMetrics,
     resetCapture,
@@ -753,6 +754,7 @@ export default function SessionPlayerPage() {
         onCvMetricsUpdate={onMetricsUpdate}
         onCvSkipped={markSkipped}
         onRegisterCvMetricsFlush={registerMetricsFlush}
+        onRegisterStsPilotBeforeSave={registerStsPilotBeforeSave}
         onRegisterStsPilotRecordFlush={registerStsPilotRecordFlush}
       />
 

@@ -31,6 +31,7 @@ type PatientExerciseSessionCardProps = {
   onCvMetricsUpdate?: (metrics: PatientCvDerivedMetrics) => void;
   onCvSkipped?: () => void;
   onRegisterCvMetricsFlush?: (flush: () => void) => void;
+  onRegisterStsPilotBeforeSave?: (beforeSave: () => void) => void;
   onRegisterStsPilotRecordFlush?: (flush: () => CvMotionQualityPayload | null) => void;
 };
 
@@ -78,6 +79,7 @@ export function PatientExerciseSessionCard({
   onCvMetricsUpdate,
   onCvSkipped,
   onRegisterCvMetricsFlush,
+  onRegisterStsPilotBeforeSave,
   onRegisterStsPilotRecordFlush,
 }: PatientExerciseSessionCardProps) {
   const flowUi = sessionExerciseFlowUi(lang);
@@ -129,6 +131,7 @@ export function PatientExerciseSessionCard({
           onCvMetricsUpdate={onCvMetricsUpdate}
           onCvSkipped={onCvSkipped}
           onRegisterCvMetricsFlush={onRegisterCvMetricsFlush}
+          onRegisterStsPilotBeforeSave={onRegisterStsPilotBeforeSave}
           onRegisterStsPilotRecordFlush={onRegisterStsPilotRecordFlush}
         />
 

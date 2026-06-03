@@ -72,6 +72,22 @@ export type StsTimelineMetricsSource = {
   getDerivedMetrics(): PatientCvDerivedMetrics;
 };
 
+/**
+ * Pilot save path — finalize in-memory STS timeline before cv-session-metrics POST
+ * when Complete exercise runs without Stop tracking (PR43).
+ */
+export function tryFinalizeStsTimelineBeforePilotSave(
+  exerciseId: CvY1ExerciseId,
+  refs: StsTimelineCaptureRefs,
+  metricsSource: StsTimelineMetricsSource | null,
+  isPilotEnabled: boolean,
+): SessionMotionSummary | null {
+  if (exerciseId !== "sit-to-stand" || !isPilotEnabled || !metricsSource) {
+    return null;
+  }
+  return finalizeStsMotionTimelineCapture(exerciseId, refs, metricsSource);
+}
+
 export function finalizeStsMotionTimelineCapture(
   exerciseId: CvY1ExerciseId,
   refs: StsTimelineCaptureRefs,

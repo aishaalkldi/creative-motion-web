@@ -21,6 +21,7 @@ export type ExerciseMediaAreaProps = {
   onCvMetricsUpdate?: (metrics: PatientCvDerivedMetrics) => void;
   onCvSkipped?: () => void;
   onRegisterCvMetricsFlush?: (flush: () => void) => void;
+  onRegisterStsPilotBeforeSave?: (beforeSave: () => void) => void;
   onRegisterStsPilotRecordFlush?: (flush: () => CvMotionQualityPayload | null) => void;
 };
 
@@ -399,6 +400,7 @@ export function ExerciseMediaArea({
   onCvMetricsUpdate,
   onCvSkipped,
   onRegisterCvMetricsFlush,
+  onRegisterStsPilotBeforeSave,
   onRegisterStsPilotRecordFlush,
 }: ExerciseMediaAreaProps) {
   const ui = exerciseMediaUi(language);
@@ -422,6 +424,7 @@ export function ExerciseMediaArea({
           onMetricsUpdate={onCvMetricsUpdate}
           onSkipped={onCvSkipped}
           onRegisterMetricsFlush={onRegisterCvMetricsFlush}
+          onRegisterStsPilotBeforeSave={onRegisterStsPilotBeforeSave}
           onRegisterStsPilotRecordFlush={onRegisterStsPilotRecordFlush}
         />
       )}

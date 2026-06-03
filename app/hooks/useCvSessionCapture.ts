@@ -41,6 +41,7 @@ export function useCvSessionCapture({
   const skippedRef = useRef(false);
   const saveFlightRef = useRef<Promise<CvSaveResult> | null>(null);
   const flushMetricsRef = useRef<(() => void) | null>(null);
+  const stsPilotBeforeSaveRef = useRef<(() => void) | null>(null);
   const flushStsPilotRecordRef = useRef<(() => CvMotionQualityPayload | null) | null>(null);
 
   const isCvEligible = isCvEnabledExercise(exerciseId);
@@ -65,6 +66,10 @@ export function useCvSessionCapture({
     flushMetricsRef.current = flush;
   }, []);
 
+  const registerStsPilotBeforeSave = useCallback((beforeSave: () => void) => {
+    stsPilotBeforeSaveRef.current = beforeSave;
+  }, []);
+
   const registerStsPilotRecordFlush = useCallback(
     (flush: () => CvMotionQualityPayload | null) => {
       flushStsPilotRecordRef.current = flush;
@@ -79,6 +84,7 @@ export function useCvSessionCapture({
     skippedRef.current = false;
     saveFlightRef.current = null;
     flushMetricsRef.current = null;
+    stsPilotBeforeSaveRef.current = null;
     flushStsPilotRecordRef.current = null;
     setCvStatus("not_started");
   }, []);
@@ -91,6 +97,7 @@ export function useCvSessionCapture({
       if (saveFlightRef.current) return saveFlightRef.current;
 
       flushMetricsRef.current?.();
+      stsPilotBeforeSaveRef.current?.();
       const motionQuality = flushStsPilotRecordRef.current?.() ?? undefined;
 
       const metrics = latestMetricsRef.current;
@@ -153,6 +160,7 @@ export function useCvSessionCapture({
     onMetricsUpdate,
     markSkipped,
     registerMetricsFlush,
+    registerStsPilotBeforeSave,
     registerStsPilotRecordFlush,
     saveCvMetrics,
     resetCapture,
