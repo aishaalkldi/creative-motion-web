@@ -1,10 +1,12 @@
 "use client";
 
+import { useState } from "react";
 import type { PatientCvDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import { PatientCvCapture } from "@/app/components/patient/cv/PatientCvCapture";
 import { isCvEnabledExercise, type CvY1ExerciseId } from "@/app/lib/cv/cv-patient-config";
 import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
+import { patientExerciseGuideImage } from "@/app/lib/exercise-guide-media";
 import { exerciseMediaUi } from "@/app/lib/patient-portal-ui";
 
 export type ExerciseMediaAreaProps = {
@@ -297,6 +299,12 @@ function MovementPreviewPanel({
   const ui = exerciseMediaUi(language);
   const visual = resolveVisualRegion(bodyRegion, exerciseId);
   const isArabic = language === "ar";
+  const guideImage = patientExerciseGuideImage(exerciseId);
+  const [guideImageFailed, setGuideImageFailed] = useState(false);
+  const showGuideImage =
+    exerciseId?.trim().toLowerCase() === "sit-to-stand" &&
+    guideImage != null &&
+    !guideImageFailed;
 
   return (
     <div
@@ -335,8 +343,20 @@ function MovementPreviewPanel({
               "linear-gradient(180deg, rgba(255,255,255,0.92) 0%, rgba(240,250,246,0.85) 100%)",
           }}
         >
-          <div className="flex items-center justify-center">
-            <RegionVisual region={visual} rtl={isArabic} />
+          <div className="flex w-full flex-col items-center justify-center gap-4">
+            {showGuideImage && guideImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={guideImage.src}
+                alt={guideImage.alt}
+                className="h-auto w-full max-w-full object-contain"
+                style={{ maxHeight: "min(70vh, 420px)" }}
+                onError={() => setGuideImageFailed(true)}
+              />
+            ) : null}
+            {!showGuideImage ? (
+              <RegionVisual region={visual} rtl={isArabic} />
+            ) : null}
           </div>
         </div>
 
