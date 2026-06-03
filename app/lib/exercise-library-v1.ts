@@ -3,6 +3,76 @@
  * Stable exerciseId slugs map to future DB rows and CV measurement targets.
  */
 
+import {
+  SPORTS_KNEE_FOUNDATION_CLINICAL_V1,
+  SPORTS_KNEE_FOUNDATION_EXERCISE_IDS,
+  type SportsKneeFoundationExerciseClinical,
+} from "./sports-knee-foundation-clinical-v1";
+
+function sportsKneeClinicalToLibraryEntry(
+  clinical: SportsKneeFoundationExerciseClinical,
+): ExerciseLibraryEntryV1 {
+  const dose = clinical.defaultDosage;
+  return {
+    exerciseId: clinical.exerciseId,
+    nameEn: clinical.nameEn,
+    nameAr: clinical.nameAr,
+    bodyRegion: "knee",
+    conditionCategory: ["ACL", "knee OA", "sports knee foundation"],
+    targetImpairment: clinical.targetImpairment,
+    functionalGoal: clinical.clinicalGoal.en,
+    difficultyLevel: clinical.difficultyLevel,
+    defaultSets: dose.sets,
+    defaultReps: dose.reps,
+    defaultDurationSec: dose.durationSec,
+    defaultRestSec: dose.restSec,
+    equipment: clinical.equipment,
+    precautions: clinical.safetyWarnings.en,
+    precautionsAr: clinical.safetyWarnings.ar,
+    contraindications: clinical.contraindications,
+    whyThisMatters: clinical.whyThisMatters.en,
+    whyThisMattersAr: clinical.whyThisMatters.ar,
+    patientInstructions: clinical.instructions.en,
+    patientInstructionsAr: clinical.instructions.ar,
+    biomechanicalRationale: clinical.biomechanicalRationale,
+    progressionCriteria: clinical.progressionCriteria,
+    regressionCriteria: clinical.regressionCriteria,
+    futureCvMeasurementTarget: clinical.futureCvMeasurementTarget,
+    libraryVersion: "v1",
+    clinicalGoalAr: clinical.clinicalGoal.ar,
+    commonMistakes: clinical.commonMistakes.en,
+    commonMistakesAr: clinical.commonMistakes.ar,
+    safetyWarnings: clinical.safetyWarnings.en,
+    safetyWarningsAr: clinical.safetyWarnings.ar,
+    supportRequirements: clinical.supportRequirements.en,
+    supportRequirementsAr: clinical.supportRequirements.ar,
+  };
+}
+
+function applySportsKneeFoundationClinical(
+  entries: ExerciseLibraryEntryV1[],
+): ExerciseLibraryEntryV1[] {
+  const byId = new Map(
+    SPORTS_KNEE_FOUNDATION_CLINICAL_V1.map((c) => [
+      c.exerciseId,
+      sportsKneeClinicalToLibraryEntry(c),
+    ]),
+  );
+  const merged = entries.map((entry) => {
+    const patch = byId.get(
+      entry.exerciseId as SportsKneeFoundationExerciseClinical["exerciseId"],
+    );
+    return patch ? { ...entry, ...patch } : entry;
+  });
+  for (const id of SPORTS_KNEE_FOUNDATION_EXERCISE_IDS) {
+    if (!merged.some((e) => e.exerciseId === id)) {
+      const patch = byId.get(id as SportsKneeFoundationExerciseClinical["exerciseId"]);
+      if (patch) merged.push(patch);
+    }
+  }
+  return merged;
+}
+
 export type BodyRegion =
   | "knee"
   | "lumbar"
@@ -39,9 +109,20 @@ export type ExerciseLibraryEntryV1 = {
   regressionCriteria: string;
   futureCvMeasurementTarget?: string;
   libraryVersion: "v1";
+  /** Arabic clinical / functional goal (Sports Knee Foundation and extended entries) */
+  clinicalGoalAr?: string;
+  /** Form errors to avoid — clinician reference; optional patient education */
+  commonMistakes?: string;
+  commonMistakesAr?: string;
+  /** Explicit safety / stop-if copy (may mirror precautions for patient-facing use) */
+  safetyWarnings?: string;
+  safetyWarningsAr?: string;
+  /** Equipment and environmental setup */
+  supportRequirements?: string;
+  supportRequirementsAr?: string;
 };
 
-export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
+const EXERCISE_LIBRARY_V1_BASE: ExerciseLibraryEntryV1[] = [
   // ── Knee (10) ─────────────────────────────────────────────────────────────
   {
     exerciseId: "quad-set",
@@ -1527,6 +1608,10 @@ export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] = [
     libraryVersion: "v1",
   },
 ];
+
+/** Sports Knee Foundation clinical content merged for seven foundation exercises */
+export const EXERCISE_LIBRARY_V1: ExerciseLibraryEntryV1[] =
+  applySportsKneeFoundationClinical(EXERCISE_LIBRARY_V1_BASE);
 
 const LIBRARY_BY_ID = new Map(EXERCISE_LIBRARY_V1.map((e) => [e.exerciseId, e]));
 
