@@ -14,12 +14,11 @@ import {
 import { LAB_HEEL_RAISE_REP_CONFIG } from "./heel-raise-detector";
 
 describe("cv-patient-config allowlist", () => {
-  it("includes sit-to-stand, mini-squat, single-leg-stance, and heel-raise", () => {
+  it("includes sit-to-stand, mini-squat, and single-leg-stance only", () => {
     assert.deepEqual(CV_Y1_ENABLED_EXERCISE_IDS, [
       "sit-to-stand",
       "mini-squat",
       "single-leg-stance",
-      "heel-raise",
     ]);
   });
 
@@ -29,8 +28,11 @@ describe("cv-patient-config allowlist", () => {
     assert.equal(isCvEnabledExercise("MINI-SQUAT"), true);
     assert.equal(isCvEnabledExercise("single-leg-stance"), true);
     assert.equal(isCvEnabledExercise("SINGLE-LEG-STANCE"), true);
-    assert.equal(isCvEnabledExercise("heel-raise"), true);
-    assert.equal(isCvEnabledExercise("HEEL-RAISE"), true);
+  });
+
+  it("isCvEnabledExercise rejects heel-raise until patient CV is re-enabled", () => {
+    assert.equal(isCvEnabledExercise("heel-raise"), false);
+    assert.equal(isCvEnabledExercise("HEEL-RAISE"), false);
   });
 
   it("rejects unknown exercises", () => {
