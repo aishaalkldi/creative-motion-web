@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { MotionAnalysisReportPanel } from "@/app/components/clinician/cv/MotionAnalysisReportPanel";
 import {
   CV_CAMERA_VISIBILITY_HELPER,
   CV_CLINICIAN_DISCLAIMER,
@@ -17,6 +18,11 @@ import {
   totalCvRepsRecorded,
   type CvSessionMetricPublic,
 } from "@/app/lib/cv/cv-metrics-display";
+import {
+  buildMotionAnalysisReport,
+  hasDisplayableMotionAnalysisReport,
+  motionAnalysisInputFromCvMetric,
+} from "@/app/lib/cv/motion-analysis-report";
 
 type CvReviewVariant = "lab" | "patient-profile";
 
@@ -75,6 +81,8 @@ function SessionReviewCard({
   profileMode: boolean;
 }) {
   const highlightPatient = profileMode && row.source === "patient_session";
+  const motionReport = buildMotionAnalysisReport(motionAnalysisInputFromCvMetric(row));
+  const showMotionReport = hasDisplayableMotionAnalysisReport(motionReport);
 
   return (
     <article
@@ -129,6 +137,7 @@ function SessionReviewCard({
           </>
         ) : null}
       </dl>
+      {showMotionReport ? <MotionAnalysisReportPanel report={motionReport} /> : null}
       {showPatientLink && row.patientId ? (
         <Link
           href={`/clinician/patients/${row.patientId}`}
