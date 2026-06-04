@@ -12,13 +12,6 @@ import {
   type MiniSquatDetectorSnapshot,
 } from "@/app/lib/cv/mini-squat-pose-detector";
 import {
-  HeelRaisePoseDetector,
-  formatHeelRaiseDuration,
-  mapHeelRaiseStartError,
-  type HeelRaisePoseDetectorSnapshot,
-} from "@/app/lib/cv/heel-raise-pose-detector";
-import {
-  PATIENT_HEEL_RAISE_POSE_SHELL,
   PATIENT_MINI_SQUAT_CONFIG,
   PATIENT_SLS_POSE_SHELL,
   PATIENT_STS_CONFIG,
@@ -84,14 +77,12 @@ function isHoldCvExercise(exerciseId: CvY1ExerciseId): boolean {
 type CvDetectorSnapshot =
   | SitToStandDetectorSnapshot
   | MiniSquatDetectorSnapshot
-  | SingleLegStancePoseDetectorSnapshot
-  | HeelRaisePoseDetectorSnapshot;
+  | SingleLegStancePoseDetectorSnapshot;
 
 type PatientCvDetector =
   | SitToStandDetector
   | MiniSquatDetector
-  | SingleLegStancePoseDetector
-  | HeelRaisePoseDetector;
+  | SingleLegStancePoseDetector;
 
 type PatientCameraPreviewStackProps = {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -255,12 +246,6 @@ function canvasSizeForExercise(exerciseId: CvY1ExerciseId): {
     return {
       canvasWidth: PATIENT_SLS_POSE_SHELL.canvasWidth,
       canvasHeight: PATIENT_SLS_POSE_SHELL.canvasHeight,
-    };
-  }
-  if (exerciseId === "heel-raise") {
-    return {
-      canvasWidth: PATIENT_HEEL_RAISE_POSE_SHELL.canvasWidth,
-      canvasHeight: PATIENT_HEEL_RAISE_POSE_SHELL.canvasHeight,
     };
   }
   return {
@@ -428,9 +413,7 @@ export function PatientCvCapture({
         ? new MiniSquatDetector({ onSnapshot: syncFromDetector })
         : exerciseId === "single-leg-stance"
           ? new SingleLegStancePoseDetector({ onSnapshot: syncFromDetector }, stanceLeg!)
-          : exerciseId === "heel-raise"
-            ? new HeelRaisePoseDetector({ onSnapshot: syncFromDetector })
-            : new SitToStandDetector({ onSnapshot: syncFromDetector }, PATIENT_STS_CONFIG);
+          : new SitToStandDetector({ onSnapshot: syncFromDetector }, PATIENT_STS_CONFIG);
 
     detectorRef.current = detector;
     return () => {
@@ -554,9 +537,7 @@ export function PatientCvCapture({
       ? mapMiniSquatStartError
       : exerciseId === "single-leg-stance"
         ? mapSingleLegStanceStartError
-        : exerciseId === "heel-raise"
-          ? mapHeelRaiseStartError
-          : mapSitToStandStartError;
+        : mapSitToStandStartError;
 
   const startCameraTracking = useCallback(async () => {
     const detector = detectorRef.current;
@@ -784,7 +765,6 @@ export function PatientCvCapture({
   const formatDuration = (() => {
     if (exerciseId === "mini-squat") return formatMiniSquatDuration;
     if (exerciseId === "single-leg-stance") return formatSingleLegStanceDuration;
-    if (exerciseId === "heel-raise") return formatHeelRaiseDuration;
     return formatSitToStandDuration;
   })();
 

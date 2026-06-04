@@ -13,11 +13,11 @@ import {
   type SingleLegStanceHoldConfig,
 } from "@/app/lib/cv/single-leg-stance-detector";
 
+/** Patient-portal CV allowlist. Heel-raise detector remains for lab/tests; patient CV disabled until validated (PR51). */
 export const CV_Y1_ENABLED_EXERCISE_IDS = [
   "sit-to-stand",
   "mini-squat",
   "single-leg-stance",
-  "heel-raise",
 ] as const;
 
 export type CvY1ExerciseId = (typeof CV_Y1_ENABLED_EXERCISE_IDS)[number];
