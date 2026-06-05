@@ -314,6 +314,133 @@ function buildSportsKneeFoundationSessions(): PilotProgramSession[] {
   ];
 }
 
+/** RASQ Sports Knee Foundation v1 — 6 sessions, 3 phases (7-exercise scope) */
+function buildSportsKneeFoundationV1Sessions(): PilotProgramSession[] {
+  return [
+    {
+      sessionNumber: 1,
+      title: "Session 1 — Closed-Chain Start",
+      exercises: [
+        templateExercise("sit-to-stand", "Sit-to-Stand", {
+          sets: 3,
+          reps: "8–10",
+          restSec: 60,
+        }),
+        templateExercise("heel-raise", "Heel Raises", {
+          sets: 3,
+          reps: "12–15",
+          restSec: 45,
+        }),
+      ],
+    },
+    {
+      sessionNumber: 2,
+      title: "Session 2 — Squat & Balance Intro",
+      exercises: [
+        templateExercise("mini-squat", "Mini Squat (0–45°)", {
+          sets: 3,
+          reps: 10,
+          restSec: 60,
+        }),
+        templateExercise("single-leg-stance", "Single Leg Stance — 20 s each leg", {
+          sets: 3,
+          durationSec: 20,
+          restSec: 45,
+        }),
+      ],
+    },
+    {
+      sessionNumber: 3,
+      title: "Session 3 — Dynamic Balance",
+      exercises: [
+        templateExercise("sit-to-stand", "Sit-to-Stand", {
+          sets: 3,
+          reps: "10–12",
+          restSec: 60,
+        }),
+        templateExercise("heel-raise", "Heel Raises", {
+          sets: 3,
+          reps: 15,
+          restSec: 45,
+        }),
+        templateExercise("functional-reach", "Functional Reach", {
+          sets: 3,
+          reps: "3 each arm",
+          restSec: 30,
+        }),
+      ],
+    },
+    {
+      sessionNumber: 4,
+      title: "Session 4 — Lateral Control",
+      exercises: [
+        templateExercise("mini-squat", "Mini Squat (0–45°)", {
+          sets: 3,
+          reps: "12–15",
+          restSec: 60,
+        }),
+        templateExercise("lateral-step", "Lateral Step", {
+          sets: 3,
+          reps: "8 each direction",
+          restSec: 60,
+        }),
+        templateExercise("single-leg-stance", "Single Leg Stance — 25 s each leg", {
+          sets: 3,
+          durationSec: 25,
+          restSec: 45,
+        }),
+      ],
+    },
+    {
+      sessionNumber: 5,
+      title: "Session 5 — Step Loading",
+      exercises: [
+        templateExercise("step-up", "Low Step-Up", {
+          sets: 3,
+          reps: "8 each leg",
+          restSec: 60,
+        }),
+        templateExercise("sit-to-stand", "Sit-to-Stand", {
+          sets: 3,
+          reps: 12,
+          restSec: 60,
+        }),
+        templateExercise("functional-reach", "Functional Reach", {
+          sets: 3,
+          reps: "4 each arm",
+          restSec: 30,
+        }),
+      ],
+    },
+    {
+      sessionNumber: 6,
+      title: "Session 6 — Integration & Review",
+      exercises: [
+        templateExercise("mini-squat", "Mini Squat (0–45°)", {
+          sets: 3,
+          reps: 12,
+          restSec: 60,
+        }),
+        templateExercise("step-up", "Low Step-Up", {
+          sets: 3,
+          reps: "10 each leg",
+          restSec: 60,
+        }),
+        templateExercise("lateral-step", "Lateral Step", {
+          sets: 3,
+          reps: "10 each direction",
+          restSec: 60,
+        }),
+        templateExercise("single-leg-stance", "Single Leg Stance — 30 s each leg", {
+          sets: 3,
+          durationSec: 30,
+          restSec: 45,
+        }),
+      ],
+    },
+  ];
+}
+
 function defineExpandedProgram(config: {
   id: string;
   title: string;
@@ -595,6 +722,39 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     patientFriendlyGoal:
       "Build knee strength and movement confidence for everyday activities and training prep. Complete your sessions and report pain and effort honestly — your therapist reviews progress and decides next steps. This plan does not clear you to return to sport.",
     sessions: buildSportsKneeFoundationSessions(),
+  },
+
+  {
+    id: "sports-knee-foundation-v1",
+    title: "Sports Knee Foundation v1",
+    conditionArea: "Knee",
+    level: "Foundation",
+    programGoal:
+      "Six-session foundation for active patients: build closed-chain strength, single-leg balance, dynamic reach, and step confidence — with therapist review before any progression. Optional CV assist on sit-to-stand, mini squat, and single-leg stance.",
+    conditionCategory:
+      "Early sports knee rehabilitation / functional strengthening / balance foundation",
+    bodyRegion: "knee",
+    durationWeeks: 2,
+    sessionsPerWeek: 3,
+    suitableFor:
+      "Active adults and recreational athletes with subacute or chronic knee symptoms. Cleared for partial or full weight-bearing. Pain during movement typically ≤ 6/10 at start (clinician-adjustable). Able to perform sit-to-stand from a standard chair.",
+    notSuitableFor:
+      "Non–weight-bearing or touch-down weight-bearing without clearance. Locked knee, suspected fracture, joint infection. Repeated giving way without supervision plan. Acute post-operative restrictions without surgeon protocol alignment. Unresolved red flags.",
+    phaseGoal:
+      "Phase 1: closed-chain introduction. Phase 2: strength and dynamic balance. Phase 3: functional integration — clinician reviews exit criteria; no automatic progression.",
+    expectedResponse:
+      "Stable or decreasing pain after sessions, manageable effort scores, and improving control on sit-to-stand, mini squat, step-up, and balance tasks. Optional CV assist may support therapist review — not required for completion.",
+    safetyNotes:
+      "Stop if sharp pain occurs during exercise. Stay ≤ 5/10 during exercise unless clinician sets a higher limit. Monitor for swelling after sessions. Contact clinic if sharp pain > 7/10, new giving way, locking, rapid swelling within 2 hours, or dizziness during balance tasks.",
+    redFlags:
+      "Locked knee. Acute fracture suspicion. Joint infection. Numbness, foot drop, or pulse deficit. Non–weight-bearing status without clearance. Repeated giving way. Unexplained fever or unrelenting night pain.",
+    reviewCriteria:
+      "Review before session 1 (confirm inclusion and dose). Mid-program review after session 3. End-of-program review after session 6. Review if pain increases ≥ 2 points over two consecutive sessions, effort ≥ 8/10 for three sessions, zero sessions in 7 days, or new locking, giving way, or swelling reports.",
+    clinicianUseNote:
+      "Therapist-guided sports knee foundation v1 — 7 exercises only. Not return-to-sport clearance. Clinical examination required before assignment. Edit dose, order, and exclusions before assigning. RASQ does not auto-progress — clinician approves all progression.",
+    patientFriendlyGoal:
+      "Build knee strength and stability for standing, squatting, stepping, and balancing over 6 sessions. Report pain and effort honestly — your therapist reviews progress and decides next steps. This plan does not clear you to return to sport.",
+    sessions: buildSportsKneeFoundationV1Sessions(),
   },
 
   defineExpandedProgram({
