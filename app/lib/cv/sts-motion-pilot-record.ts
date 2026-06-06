@@ -10,6 +10,22 @@ import type { SessionMotionSummary } from "@/app/lib/cv/motion-summary-types";
 
 export const STS_MOTION_PILOT_VERSION = "smt-1" as const;
 
+export type StsMotionPilotPhaseRatios = Partial<
+  Record<"seated" | "rising" | "standing" | "returning" | "rest" | "unknown", number>
+>;
+
+export type StsMotionPilotRepTimings = {
+  avgS: number | null;
+  fastestS: number | null;
+  slowestS: number | null;
+};
+
+export type StsMotionPilotVisibilityRatios = {
+  hip: number;
+  knee: number;
+  ankle: number;
+};
+
 export type StsMotionPilotRecord = {
   pilotVersion: typeof STS_MOTION_PILOT_VERSION;
   isPilot: true;
@@ -21,6 +37,10 @@ export type StsMotionPilotRecord = {
   unclearReps: number;
   trackingSignal: CvTrackingQuality | "lost" | "mixed";
   movementDetected: boolean;
+  phaseRatios: StsMotionPilotPhaseRatios;
+  repTimings: StsMotionPilotRepTimings;
+  visibilityRatios: StsMotionPilotVisibilityRatios;
+  clinicianFlags: string[];
   reviewRequired: true;
   reviewReason: string;
   disclaimer: string;
@@ -37,6 +57,10 @@ export const STS_PILOT_RECORD_ALLOWED_TOP_LEVEL_KEYS = [
   "unclearReps",
   "trackingSignal",
   "movementDetected",
+  "phaseRatios",
+  "repTimings",
+  "visibilityRatios",
+  "clinicianFlags",
   "reviewRequired",
   "reviewReason",
   "disclaimer",
@@ -67,6 +91,22 @@ function dominantTrackingSignal(
   return "unknown";
 }
 
+function clampPct(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return 0;
+  return Math.min(100, Math.max(0, Math.round(value)));
+}
+
+function buildClinicianFlags(summary: SessionMotionSummary): string[] {
+  const flags = new Set<string>(summary.captureFlags);
+  if (summary.unclearRepCount > 0) {
+    flags.add("unclear_reps_recorded");
+  }
+  if (summary.interruptions.poseLossEventCount > 0) {
+    flags.add("pose_tracking_interrupted");
+  }
+  return [...flags].sort();
+}
+
 export function buildStsMotionPilotRecord(
   input: BuildStsMotionPilotRecordInput,
 ): StsMotionPilotRecord {
@@ -83,6 +123,18 @@ export function buildStsMotionPilotRecord(
     unclearReps: summary.unclearRepCount,
     trackingSignal: dominantTrackingSignal(summary.trackingQualityDistribution),
     movementDetected: metrics.movementDetected,
+    phaseRatios: { ...summary.phaseRatios },
+    repTimings: {
+      avgS: summary.repDurationSummary.avgDurationS,
+      fastestS: summary.repDurationSummary.fastestDurationS,
+      slowestS: summary.repDurationSummary.slowestDurationS,
+    },
+    visibilityRatios: {
+      hip: clampPct(summary.visibilityAssist.hipVisiblePct),
+      knee: clampPct(summary.visibilityAssist.kneeVisiblePct),
+      ankle: clampPct(summary.visibilityAssist.ankleVisiblePct),
+    },
+    clinicianFlags: buildClinicianFlags(summary),
     reviewRequired: true,
     reviewReason: "derived_motion_timeline_pilot",
     disclaimer:

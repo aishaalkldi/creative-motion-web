@@ -11,6 +11,47 @@ import {
 } from "@/app/lib/cv/sts-motion-pilot-record";
 
 const TRACKING_SIGNALS = new Set(["good", "fair", "poor", "unknown", "lost", "mixed"]);
+const PHASE_RATIO_KEYS = new Set([
+  "seated",
+  "rising",
+  "standing",
+  "returning",
+  "rest",
+  "unknown",
+]);
+
+function isNullableDurationS(value: unknown): boolean {
+  return value === null || (typeof value === "number" && Number.isFinite(value) && value >= 0);
+}
+
+function isPctInt(value: unknown): boolean {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 100;
+}
+
+function isStsMotionPilotPhaseRatios(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  for (const [key, ratio] of Object.entries(value as Record<string, unknown>)) {
+    if (!PHASE_RATIO_KEYS.has(key)) return false;
+    if (!isPctInt(ratio)) return false;
+  }
+  return true;
+}
+
+function isStsMotionPilotRepTimings(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const timings = value as Record<string, unknown>;
+  return (
+    isNullableDurationS(timings.avgS) &&
+    isNullableDurationS(timings.fastestS) &&
+    isNullableDurationS(timings.slowestS)
+  );
+}
+
+function isStsMotionPilotVisibilityRatios(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const ratios = value as Record<string, unknown>;
+  return isPctInt(ratios.hip) && isPctInt(ratios.knee) && isPctInt(ratios.ankle);
+}
 
 function isStsMotionPilotRecord(value: unknown): value is StsMotionPilotRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -34,6 +75,13 @@ function isStsMotionPilotRecord(value: unknown): value is StsMotionPilotRecord {
     "unclearReps",
   ] as const) {
     if (!Number.isInteger(r[key]) || (r[key] as number) < 0) return false;
+  }
+  if (!isStsMotionPilotPhaseRatios(r.phaseRatios)) return false;
+  if (!isStsMotionPilotRepTimings(r.repTimings)) return false;
+  if (!isStsMotionPilotVisibilityRatios(r.visibilityRatios)) return false;
+  if (!Array.isArray(r.clinicianFlags)) return false;
+  if (!r.clinicianFlags.every((flag) => typeof flag === "string" && flag.length > 0)) {
+    return false;
   }
   return findForbiddenKeysInStsPilotRecord(r as StsMotionPilotRecord).length === 0;
 }

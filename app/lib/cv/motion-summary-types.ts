@@ -86,6 +86,8 @@ export type SessionMotionSummary = {
     slowestDurationS: number | null;
     completedRepCount: number;
   };
+  /** Percent of timeline snapshots per movement phase (assistive, not clinical scoring). */
+  phaseRatios: Partial<Record<MotionSnapshot["movementPhase"], number>>;
   captureFlags: string[];
   observations: BiomechanicalObservation[];
   capturedAt: string;
@@ -106,6 +108,7 @@ export const STS_SUMMARY_ALLOWED_TOP_LEVEL_KEYS = [
   "visibilityAssist",
   "interruptions",
   "repDurationSummary",
+  "phaseRatios",
   "captureFlags",
   "observations",
   "capturedAt",
