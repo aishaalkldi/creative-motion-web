@@ -23,6 +23,10 @@ export const HEEL_RAISE_GUIDE_IMAGE_SRC = "/exercises/heel-raise-guide.jpg";
 
 export const HEEL_RAISE_GUIDE_IMAGE_ALT = "Heel Raise exercise guide";
 
+export const LATERAL_STEP_GUIDE_IMAGE_SRC = "/exercises/lateral-step-guide.png";
+
+export const LATERAL_STEP_GUIDE_IMAGE_ALT = "Lateral Step exercise guide";
+
 const PATIENT_EXERCISE_GUIDE_BY_ID: Readonly<Record<string, { src: string; alt: string }>> = {
   "sit-to-stand": {
     src: SIT_TO_STAND_GUIDE_IMAGE_SRC,
@@ -43,6 +47,10 @@ const PATIENT_EXERCISE_GUIDE_BY_ID: Readonly<Record<string, { src: string; alt: 
   "heel-raise": {
     src: HEEL_RAISE_GUIDE_IMAGE_SRC,
     alt: HEEL_RAISE_GUIDE_IMAGE_ALT,
+  },
+  "lateral-step": {
+    src: LATERAL_STEP_GUIDE_IMAGE_SRC,
+    alt: LATERAL_STEP_GUIDE_IMAGE_ALT,
   },
 };
 
