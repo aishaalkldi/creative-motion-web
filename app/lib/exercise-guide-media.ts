@@ -27,6 +27,10 @@ export const LATERAL_STEP_GUIDE_IMAGE_SRC = "/exercises/lateral-step-guide.png";
 
 export const LATERAL_STEP_GUIDE_IMAGE_ALT = "Lateral Step exercise guide";
 
+export const FUNCTIONAL_REACH_GUIDE_IMAGE_SRC = "/exercises/functional-reach-guide.png";
+
+export const FUNCTIONAL_REACH_GUIDE_IMAGE_ALT = "Functional Reach exercise guide";
+
 const PATIENT_EXERCISE_GUIDE_BY_ID: Readonly<Record<string, { src: string; alt: string }>> = {
   "sit-to-stand": {
     src: SIT_TO_STAND_GUIDE_IMAGE_SRC,
@@ -51,6 +55,10 @@ const PATIENT_EXERCISE_GUIDE_BY_ID: Readonly<Record<string, { src: string; alt: 
   "lateral-step": {
     src: LATERAL_STEP_GUIDE_IMAGE_SRC,
     alt: LATERAL_STEP_GUIDE_IMAGE_ALT,
+  },
+  "functional-reach": {
+    src: FUNCTIONAL_REACH_GUIDE_IMAGE_SRC,
+    alt: FUNCTIONAL_REACH_GUIDE_IMAGE_ALT,
   },
 };
 
