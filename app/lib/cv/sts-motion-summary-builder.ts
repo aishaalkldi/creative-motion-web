@@ -87,6 +87,26 @@ function longestPoseLossGapMs(snapshots: readonly MotionSnapshot[]): number {
   return longest;
 }
 
+function phaseRatiosFromSnapshots(
+  snapshots: readonly MotionSnapshot[],
+): SessionMotionSummary["phaseRatios"] {
+  if (snapshots.length === 0) return {};
+
+  const counts: Partial<Record<MotionSnapshot["movementPhase"], number>> = {};
+  for (const snap of snapshots) {
+    counts[snap.movementPhase] = (counts[snap.movementPhase] ?? 0) + 1;
+  }
+
+  const total = snapshots.length;
+  const ratios: SessionMotionSummary["phaseRatios"] = {};
+  for (const [phase, count] of Object.entries(counts)) {
+    ratios[phase as MotionSnapshot["movementPhase"]] = Math.round(
+      ((count as number) / total) * 100,
+    );
+  }
+  return ratios;
+}
+
 function repDurationSummaryFromRecords(repRecords: readonly StsRepTimingRecord[]) {
   const durations = repRecords
     .filter((r) => r.completed && r.durationMs !== null && r.durationMs > 0)
@@ -233,6 +253,7 @@ export function buildStsSessionMotionSummary(
       longestPoseLossGapMs: longestPoseLossGapMs(snapshots),
     },
     repDurationSummary: repDurationSummaryFromRecords(input.repRecords),
+    phaseRatios: phaseRatiosFromSnapshots(snapshots),
     captureFlags: collectCaptureFlags(input.repRecords),
     capturedAt: input.capturedAt ?? new Date().toISOString(),
     patientVisible: false as const,

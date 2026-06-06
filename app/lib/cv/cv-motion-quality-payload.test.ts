@@ -24,6 +24,7 @@ const SUMMARY: SessionMotionSummary = {
     slowestDurationS: 2,
     completedRepCount: 1,
   },
+  phaseRatios: { standing: 100 },
   captureFlags: [],
   observations: [],
   capturedAt: "2026-06-02T12:00:00.000Z",

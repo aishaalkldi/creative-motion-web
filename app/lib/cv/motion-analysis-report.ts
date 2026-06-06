@@ -1,12 +1,49 @@
 /**
- * RASQ Motion Analysis Report v2 — read-only assistive summary from cv_session_metrics fields.
- * Optional smtPilot display from motion_quality when present. No diagnosis, scoring,
- * progression, or treatment recommendations.
+ * RASQ Motion Analysis Report v3 — read-only assistive summary from
+ * cv_session_metrics fields with session-specific clinical interpretation.
+ * No diagnosis, scoring, progression, or treatment recommendations.
  */
 
 import { isHoldClassCvExercise } from "@/app/lib/cv/cv-metrics-display";
 import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
+import {
+  resolveExerciseKinesiologyContext,
+  type ExerciseKinesiologyContext,
+} from "@/app/lib/cv/exercise-kinesiology-context";
+import {
+  buildMotionAnalysisInterpretation,
+  type MotionAnalysisClinicalObservation,
+  type MotionAnalysisClinicalSnapshot,
+  type MotionAnalysisConfidenceLimitations,
+  type MotionAnalysisConfidenceLevel,
+  type MotionAnalysisKinesiologyInsight,
+  type MotionAnalysisPhaseInterpretation,
+  type MotionAnalysisReportHeader,
+  type MotionAnalysisReportMode,
+  type MotionAnalysisReviewNextGroup,
+  type MotionAnalysisReviewNextItem,
+  type MotionAnalysisSessionSummary,
+} from "@/app/lib/cv/motion-analysis-interpretation";
 import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
+
+export type {
+  MotionAnalysisClinicalObservation,
+  MotionAnalysisClinicalSnapshot,
+  MotionAnalysisConfidenceLimitations,
+  MotionAnalysisConfidenceLevel,
+  MotionAnalysisKinesiologyInsight,
+  MotionAnalysisPhaseInterpretation,
+  MotionAnalysisReportHeader,
+  MotionAnalysisReportMode,
+  MotionAnalysisReviewNextGroup,
+  MotionAnalysisReviewNextItem,
+  MotionAnalysisSessionSummary,
+} from "@/app/lib/cv/motion-analysis-interpretation";
+
+export const MOTION_ANALYSIS_RULES_BASED_LABEL =
+  "Rules-based clinical summary · clinician review required";
+
+export const MOTION_ANALYSIS_REPORT_TITLE = "Movement intelligence report";
 
 export const MOTION_ANALYSIS_SUMMARY_LABELS = [
   "Review suggested",
@@ -31,12 +68,32 @@ export const MOTION_ANALYSIS_CAMERA_DISCLAIMER =
 export const MOTION_ANALYSIS_REVIEW_BANNER =
   "Flagged for clinician review · camera-assisted data only";
 
+export type MotionAnalysisPhaseRatios = Partial<
+  Record<"seated" | "rising" | "standing" | "returning" | "rest" | "unknown", number>
+>;
+
+export type MotionAnalysisRepTimings = {
+  avgS: number | null;
+  fastestS: number | null;
+  slowestS: number | null;
+};
+
+export type MotionAnalysisVisibilityRatios = {
+  hip: number;
+  knee: number;
+  ankle: number;
+};
+
 export type MotionAnalysisSmtPilotSummary = {
   snapshotCount: number;
   completeReps: number;
   unclearReps: number;
   trackingSignal: string;
   showReviewBanner: boolean;
+  phaseRatios: MotionAnalysisPhaseRatios | null;
+  repTimings: MotionAnalysisRepTimings | null;
+  visibilityRatios: MotionAnalysisVisibilityRatios | null;
+  clinicianFlags: string[] | null;
 };
 
 export type MotionAnalysisReport = {
@@ -45,10 +102,22 @@ export type MotionAnalysisReport = {
   movementTimeline: MotionAnalysisTimelineItem[];
   summaryLabel: MotionAnalysisSummaryLabel;
   smtPilot: MotionAnalysisSmtPilotSummary | null;
+  kinesiologyContext: ExerciseKinesiologyContext | null;
+  reportMode: MotionAnalysisReportMode;
+  reportHeader: MotionAnalysisReportHeader | null;
+  clinicalSnapshot: MotionAnalysisClinicalSnapshot | null;
+  sessionSummary: MotionAnalysisSessionSummary | null;
+  phaseInterpretation: MotionAnalysisPhaseInterpretation[] | null;
+  clinicalObservations: MotionAnalysisClinicalObservation[] | null;
+  kinesiologyInsight: MotionAnalysisKinesiologyInsight | null;
+  reviewNext: MotionAnalysisReviewNextItem[] | null;
+  reviewNextGrouped: MotionAnalysisReviewNextGroup[] | null;
+  confidenceLimitations: MotionAnalysisConfidenceLimitations;
 };
 
 export type BuildMotionAnalysisReportInput = {
   exerciseId?: string | null;
+  recordedAt?: string | null;
   sessionDurationS?: number | null;
   repCount?: number | null;
   trackingQuality?: string | null;
@@ -99,7 +168,83 @@ export function parseSmtPilotSummary(
     unclearReps,
     trackingSignal,
     showReviewBanner: reviewRequired || unclearReps > 0,
+    phaseRatios: parsePhaseRatios(smtPilot.phaseRatios),
+    repTimings: parseRepTimings(smtPilot.repTimings),
+    visibilityRatios: parseVisibilityRatios(smtPilot.visibilityRatios),
+    clinicianFlags: parseClinicianFlags(smtPilot.clinicianFlags),
   };
+}
+
+function parsePhaseRatios(value: unknown): MotionAnalysisPhaseRatios | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const allowed = new Set([
+    "seated",
+    "rising",
+    "standing",
+    "returning",
+    "rest",
+    "unknown",
+  ]);
+  const ratios: MotionAnalysisPhaseRatios = {};
+  let hasAny = false;
+  for (const [phase, ratio] of Object.entries(value as Record<string, unknown>)) {
+    if (!allowed.has(phase)) continue;
+    if (typeof ratio !== "number" || !Number.isFinite(ratio)) continue;
+    ratios[phase as keyof MotionAnalysisPhaseRatios] = clampPct(ratio);
+    hasAny = true;
+  }
+  return hasAny ? ratios : null;
+}
+
+function parseRepTimings(value: unknown): MotionAnalysisRepTimings | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const timings = value as Record<string, unknown>;
+  const avgS = parseNullableDurationS(timings.avgS);
+  const fastestS = parseNullableDurationS(timings.fastestS);
+  const slowestS = parseNullableDurationS(timings.slowestS);
+  if (avgS === undefined && fastestS === undefined && slowestS === undefined) {
+    return null;
+  }
+  return {
+    avgS: avgS ?? null,
+    fastestS: fastestS ?? null,
+    slowestS: slowestS ?? null,
+  };
+}
+
+function parseVisibilityRatios(value: unknown): MotionAnalysisVisibilityRatios | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const ratios = value as Record<string, unknown>;
+  if (
+    typeof ratios.hip !== "number" ||
+    typeof ratios.knee !== "number" ||
+    typeof ratios.ankle !== "number"
+  ) {
+    return null;
+  }
+  return {
+    hip: clampPct(ratios.hip),
+    knee: clampPct(ratios.knee),
+    ankle: clampPct(ratios.ankle),
+  };
+}
+
+function parseClinicianFlags(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const flags = value
+    .filter((flag): flag is string => typeof flag === "string" && flag.trim().length > 0)
+    .map((flag) => flag.trim());
+  return flags.length > 0 ? flags : null;
+}
+
+function parseNullableDurationS(value: unknown): number | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return undefined;
+  return Math.round(value * 10) / 10;
+}
+
+function clampPct(value: number): number {
+  return Math.min(100, Math.max(0, Math.round(value)));
 }
 
 function nonNegativeInt(value: unknown): number {
@@ -217,17 +362,47 @@ export function buildMotionAnalysisReport(
   });
 
   const smtPilot = parseSmtPilotSummary(input.motionQuality);
+  const kinesiologyContext = resolveExerciseKinesiologyContext(exerciseId);
+  const summaryLabel = resolveMotionAnalysisSummaryLabel({
+    trackingSignal,
+    movementDetected,
+    sessionDurationSeconds,
+  });
+
+  const recordedAt =
+    typeof input.recordedAt === "string" && input.recordedAt.trim().length > 0
+      ? input.recordedAt.trim()
+      : null;
+
+  const interpretation = buildMotionAnalysisInterpretation({
+    exerciseId,
+    recordedAt,
+    summaryLabel,
+    sessionDurationSeconds,
+    completedReps,
+    movementDetected,
+    trackingSignal,
+    smtPilot,
+    kinesiologyContext,
+  });
 
   return {
     sessionDurationSeconds,
     completedReps,
     movementTimeline,
-    summaryLabel: resolveMotionAnalysisSummaryLabel({
-      trackingSignal,
-      movementDetected,
-      sessionDurationSeconds,
-    }),
+    summaryLabel,
     smtPilot,
+    kinesiologyContext,
+    reportMode: interpretation.reportMode,
+    reportHeader: interpretation.reportHeader,
+    clinicalSnapshot: interpretation.clinicalSnapshot,
+    sessionSummary: interpretation.sessionSummary,
+    phaseInterpretation: interpretation.phaseInterpretation,
+    clinicalObservations: interpretation.clinicalObservations,
+    kinesiologyInsight: interpretation.kinesiologyInsight,
+    reviewNext: interpretation.reviewNext,
+    reviewNextGrouped: interpretation.reviewNextGrouped,
+    confidenceLimitations: interpretation.confidenceLimitations,
   };
 }
 
@@ -236,10 +411,13 @@ export function hasDisplayableMotionAnalysisReport(
   report: MotionAnalysisReport,
 ): boolean {
   return (
-    report.smtPilot != null ||
-    report.sessionDurationSeconds > 0 ||
-    report.completedReps > 0 ||
-    report.movementTimeline.length > 0
+    report.reportMode !== "minimal" &&
+    (report.smtPilot != null ||
+      report.kinesiologyContext != null ||
+      report.reportHeader != null ||
+      report.sessionDurationSeconds > 0 ||
+      report.completedReps > 0 ||
+      report.movementTimeline.length > 0)
   );
 }
 
@@ -248,6 +426,7 @@ export function motionAnalysisInputFromCvMetric(
   metric: Pick<
     CvSessionMetricPublic,
     | "exerciseId"
+    | "recordedAt"
     | "repCount"
     | "sessionDurationS"
     | "trackingQuality"
@@ -257,6 +436,7 @@ export function motionAnalysisInputFromCvMetric(
 ): BuildMotionAnalysisReportInput {
   return {
     exerciseId: metric.exerciseId,
+    recordedAt: metric.recordedAt,
     sessionDurationS: metric.sessionDurationS,
     repCount: metric.repCount,
     trackingQuality: metric.trackingQuality,

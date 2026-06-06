@@ -65,9 +65,22 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
         }),
       });
 
-      const data = (await res.json()) as AiSessionSummaryResponse & { error?: string };
+      const data = (await res.json()) as AiSessionSummaryResponse & {
+        error?: string;
+        code?: string;
+      };
 
       if (!res.ok) {
+        const isRateLimited =
+          res.status === 429 || data.code === "AI_RATE_LIMITED";
+        if (isRateLimited) {
+          setError(null);
+          setFallbackNotice(
+            "AI draft is temporarily unavailable. A rules-based clinician summary is shown below.",
+          );
+          setCardState("idle");
+          return;
+        }
         setError(data.error ?? "Unable to generate summary.");
         setCardState("idle");
         return;
@@ -143,10 +156,15 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
         </p>
       )}
 
-      {fallbackNotice && cardState === "ready" && (
-        <p className="mt-3 rounded-[6px] border border-amber-400/25 bg-amber-400/5 px-3 py-2 text-xs text-amber-200">
-          {fallbackNotice}
-        </p>
+      {fallbackNotice && (
+        <div className="mt-3 rounded-[6px] border border-amber-400/25 bg-amber-400/5 px-3 py-2">
+          <p className="text-xs text-amber-200">{fallbackNotice}</p>
+          {cardState === "idle" ? (
+            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-amber-300/80">
+              Rules-based fallback · clinician review required
+            </p>
+          ) : null}
+        </div>
       )}
 
       {isEditing && displayText != null ? (
