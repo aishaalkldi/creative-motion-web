@@ -68,6 +68,7 @@ type CvMetricRow = {
   patient_id: string | null;
   plan_id: string | null;
   plan_session_id: string | null;
+  motion_quality: Record<string, unknown> | null;
 };
 
 async function buildClients() {
@@ -124,6 +125,7 @@ function toPublicMetric(row: CvMetricRow) {
     patientId: row.patient_id,
     planId: row.plan_id,
     planSessionId: row.plan_session_id,
+    motionQuality: row.motion_quality ?? null,
   };
 }
 
@@ -327,7 +329,7 @@ export async function GET(req: NextRequest) {
   let query = adminClient
     .from("cv_session_metrics")
     .select(
-      "id, exercise_id, rep_count, session_duration_s, tracking_quality, movement_detected, frames_with_pose, frames_total, source, prototype_version, recorded_at, patient_id, plan_id, plan_session_id",
+      "id, exercise_id, rep_count, session_duration_s, tracking_quality, movement_detected, frames_with_pose, frames_total, source, prototype_version, recorded_at, patient_id, plan_id, plan_session_id, motion_quality",
     )
     .eq("provider_id", user.id)
     .order("recorded_at", { ascending: false })

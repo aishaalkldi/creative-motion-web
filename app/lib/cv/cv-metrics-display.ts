@@ -1,3 +1,5 @@
+import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
+
 /** Public derived CV metrics shape from GET /api/cv/session-metrics */
 
 export type CvSessionMetricPublic = {
@@ -13,6 +15,8 @@ export type CvSessionMetricPublic = {
   patientId?: string | null;
   planId?: string | null;
   planSessionId?: string | null;
+  /** Persisted motion_quality JSONB when present (e.g. smtPilot pilot evidence). */
+  motionQuality?: CvMotionQualityPayload | null;
 };
 
 export const CV_CLINICIAN_DISCLAIMER =
