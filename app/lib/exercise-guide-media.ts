@@ -15,6 +15,10 @@ export const MINI_SQUAT_GUIDE_IMAGE_SRC = "/exercises/mini-squat-guide.png";
 
 export const MINI_SQUAT_GUIDE_IMAGE_ALT = "Mini Squat exercise guide";
 
+export const SINGLE_LEG_STANCE_GUIDE_IMAGE_SRC = "/exercises/single-leg-stance-guide.png";
+
+export const SINGLE_LEG_STANCE_GUIDE_IMAGE_ALT = "Single Leg Stance exercise guide";
+
 const PATIENT_EXERCISE_GUIDE_BY_ID: Readonly<Record<string, { src: string; alt: string }>> = {
   "sit-to-stand": {
     src: SIT_TO_STAND_GUIDE_IMAGE_SRC,
@@ -23,6 +27,10 @@ const PATIENT_EXERCISE_GUIDE_BY_ID: Readonly<Record<string, { src: string; alt: 
   "mini-squat": {
     src: MINI_SQUAT_GUIDE_IMAGE_SRC,
     alt: MINI_SQUAT_GUIDE_IMAGE_ALT,
+  },
+  "single-leg-stance": {
+    src: SINGLE_LEG_STANCE_GUIDE_IMAGE_SRC,
+    alt: SINGLE_LEG_STANCE_GUIDE_IMAGE_ALT,
   },
   "step-up": {
     src: STEP_UP_GUIDE_IMAGE_SRC,
