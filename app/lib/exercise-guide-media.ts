@@ -11,10 +11,18 @@ export const STEP_UP_GUIDE_IMAGE_SRC = "/exercises/step-up-guide.jpeg";
 
 export const STEP_UP_GUIDE_IMAGE_ALT = "Step-Up exercise guide";
 
+export const MINI_SQUAT_GUIDE_IMAGE_SRC = "/exercises/mini-squat-guide.png";
+
+export const MINI_SQUAT_GUIDE_IMAGE_ALT = "Mini Squat exercise guide";
+
 const PATIENT_EXERCISE_GUIDE_BY_ID: Readonly<Record<string, { src: string; alt: string }>> = {
   "sit-to-stand": {
     src: SIT_TO_STAND_GUIDE_IMAGE_SRC,
     alt: SIT_TO_STAND_GUIDE_IMAGE_ALT,
+  },
+  "mini-squat": {
+    src: MINI_SQUAT_GUIDE_IMAGE_SRC,
+    alt: MINI_SQUAT_GUIDE_IMAGE_ALT,
   },
   "step-up": {
     src: STEP_UP_GUIDE_IMAGE_SRC,
