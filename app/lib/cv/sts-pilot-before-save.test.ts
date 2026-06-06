@@ -134,7 +134,7 @@ describe("tryFinalizeStsTimelineBeforePilotSave", () => {
     });
   });
 
-  it("skips finalize when pilot gate is off (non-pilot Complete)", () => {
+  it("skips finalize when caller passes gate false", () => {
     withStsTimelineEnabled(() => {
     const refs = createStsTimelineCaptureRefs();
     seedActiveTimeline(refs);

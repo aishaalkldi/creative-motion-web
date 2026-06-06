@@ -27,9 +27,9 @@ describe("isStsMotionTimelinePilotEnabledFromSearch", () => {
 });
 
 describe("isStsMotionTimelineEnabled", () => {
-  it("is off when patient STS config leaves motionTimelineEnabled unset", () => {
-    assert.equal(PATIENT_STS_CONFIG.motionTimelineEnabled, undefined);
-    assert.equal(isStsMotionTimelineEnabled("sit-to-stand"), false);
+  it("is on for STS in production patient config", () => {
+    assert.equal(PATIENT_STS_CONFIG.motionTimelineEnabled, true);
+    assert.equal(isStsMotionTimelineEnabled("sit-to-stand"), true);
   });
 
   it("is off for non-STS exercises even with pilot query string semantics", () => {
@@ -38,17 +38,13 @@ describe("isStsMotionTimelineEnabled", () => {
     assert.equal(isStsMotionTimelineEnabled("heel-raise"), false);
   });
 
-  it("is on for STS when motionTimelineEnabled is true on config", () => {
+  it("is off for STS when motionTimelineEnabled is unset", () => {
     const prev = PATIENT_STS_CONFIG.motionTimelineEnabled;
-    PATIENT_STS_CONFIG.motionTimelineEnabled = true;
+    delete PATIENT_STS_CONFIG.motionTimelineEnabled;
     try {
-      assert.equal(isStsMotionTimelineEnabled("sit-to-stand"), true);
+      assert.equal(isStsMotionTimelineEnabled("sit-to-stand"), false);
     } finally {
-      if (prev === undefined) {
-        delete PATIENT_STS_CONFIG.motionTimelineEnabled;
-      } else {
-        PATIENT_STS_CONFIG.motionTimelineEnabled = prev;
-      }
+      PATIENT_STS_CONFIG.motionTimelineEnabled = prev;
     }
   });
 });

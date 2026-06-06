@@ -61,7 +61,7 @@ import {
   recordStsMotionTimelineTick,
   tryFinalizeStsTimelineBeforePilotSave,
 } from "@/app/lib/cv/patient-cv-sts-timeline";
-import { isStsMotionTimelinePilotEnabled } from "@/app/lib/cv/is-sts-motion-timeline-enabled";
+import { isStsMotionTimelineEnabled } from "@/app/lib/cv/is-sts-motion-timeline-enabled";
 import {
   buildMotionQualityWithStsPilot,
   buildStsMotionPilotRecord,
@@ -447,7 +447,7 @@ export function PatientCvCapture({
       exerciseId,
       stsTimelineRefs,
       detector,
-      isStsMotionTimelinePilotEnabled(),
+      isStsMotionTimelineEnabled(exerciseId),
     );
     if (summary && cvDebugEnabled) {
       logStsMotionTimelineSummaryDebug(summary, stsTimelineRefs);
@@ -461,7 +461,7 @@ export function PatientCvCapture({
   }, [onRegisterStsPilotBeforeSave, finalizeStsPilotBeforeSave]);
 
   const buildStsPilotMotionQuality = useCallback((): CvMotionQualityPayload | null => {
-    if (exerciseId !== "sit-to-stand" || !isStsMotionTimelinePilotEnabled()) {
+    if (exerciseId !== "sit-to-stand" || !isStsMotionTimelineEnabled("sit-to-stand")) {
       return null;
     }
     const summary = stsTimelineRefs.summary.current;

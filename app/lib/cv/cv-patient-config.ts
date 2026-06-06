@@ -79,6 +79,7 @@ export const PATIENT_STS_CONFIG: SitToStandCvConfig = {
   minHipVisibility: 0.35,
   bodyFramingProfileId: "seated-rise",
   landmarksOverlayOnly: true,
+  motionTimelineEnabled: true,
 };
 
 /**

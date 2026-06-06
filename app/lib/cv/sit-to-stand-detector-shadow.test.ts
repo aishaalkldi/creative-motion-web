@@ -137,7 +137,10 @@ describe("SitToStandDetector shadow RepQualityFsm", () => {
   it("keeps repQuality disabled in production patient config", () => {
     assert.equal(PATIENT_STS_CONFIG.repQualityEnabled, undefined);
     assert.equal(PATIENT_STS_CONFIG.repQualityShadowMode, undefined);
-    assert.equal(PATIENT_STS_CONFIG.motionTimelineEnabled, undefined);
+  });
+
+  it("enables motion timeline in production patient config", () => {
+    assert.equal(PATIENT_STS_CONFIG.motionTimelineEnabled, true);
   });
 
   it("returns null from getRepQualitySession when shadow is off", () => {
