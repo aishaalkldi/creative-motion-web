@@ -1,10 +1,12 @@
 /**
- * RASQ Motion Analysis Report v1 — read-only assistive summary from cv_session_metrics fields.
- * No motion_quality, diagnosis, scoring, progression, or treatment recommendations.
+ * RASQ Motion Analysis Report v2 — read-only assistive summary from cv_session_metrics fields.
+ * Optional smtPilot display from motion_quality when present. No diagnosis, scoring,
+ * progression, or treatment recommendations.
  */
 
 import { isHoldClassCvExercise } from "@/app/lib/cv/cv-metrics-display";
 import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
+import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
 
 export const MOTION_ANALYSIS_SUMMARY_LABELS = [
   "Review suggested",
@@ -23,11 +25,26 @@ export type MotionAnalysisTimelineItem = {
   detail: string | null;
 };
 
+export const MOTION_ANALYSIS_CAMERA_DISCLAIMER =
+  "Camera-assisted data · not clinically validated · clinician review required";
+
+export const MOTION_ANALYSIS_REVIEW_BANNER =
+  "Flagged for clinician review · camera-assisted data only";
+
+export type MotionAnalysisSmtPilotSummary = {
+  snapshotCount: number;
+  completeReps: number;
+  unclearReps: number;
+  trackingSignal: string;
+  showReviewBanner: boolean;
+};
+
 export type MotionAnalysisReport = {
   sessionDurationSeconds: number;
   completedReps: number;
   movementTimeline: MotionAnalysisTimelineItem[];
   summaryLabel: MotionAnalysisSummaryLabel;
+  smtPilot: MotionAnalysisSmtPilotSummary | null;
 };
 
 export type BuildMotionAnalysisReportInput = {
@@ -36,7 +53,54 @@ export type BuildMotionAnalysisReportInput = {
   repCount?: number | null;
   trackingQuality?: string | null;
   movementDetected?: boolean | null;
+  motionQuality?: CvMotionQualityPayload | null;
 };
+
+const TRACKING_SIGNALS = new Set(["good", "fair", "poor", "unknown", "lost", "mixed"]);
+
+export type TrackingSignalDotTone = "good" | "fair" | "poor" | "unknown";
+
+export function trackingSignalDotTone(signal: string | null | undefined): TrackingSignalDotTone {
+  const normalized = signal?.trim().toLowerCase();
+  if (normalized === "good") return "good";
+  if (normalized === "fair" || normalized === "mixed") return "fair";
+  if (normalized === "poor" || normalized === "lost") return "poor";
+  return "unknown";
+}
+
+export function formatMotionAnalysisTrackingSignal(signal: string | null | undefined): string {
+  const normalized = signal?.trim().toLowerCase();
+  if (!normalized) return "Unknown";
+  if (normalized === "good") return "Good";
+  if (normalized === "fair") return "Fair";
+  if (normalized === "poor") return "Poor";
+  if (normalized === "unknown") return "Unknown";
+  if (normalized === "lost") return "Lost";
+  if (normalized === "mixed") return "Mixed";
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
+export function parseSmtPilotSummary(
+  motionQuality: CvMotionQualityPayload | null | undefined,
+): MotionAnalysisSmtPilotSummary | null {
+  const smtPilot = motionQuality?.smtPilot;
+  if (!smtPilot || typeof smtPilot !== "object") return null;
+
+  const snapshotCount = nonNegativeInt(smtPilot.snapshotCount);
+  const completeReps = nonNegativeInt(smtPilot.completeReps);
+  const unclearReps = nonNegativeInt(smtPilot.unclearReps);
+  const trackingSignalRaw = String(smtPilot.trackingSignal ?? "").trim().toLowerCase();
+  const trackingSignal = TRACKING_SIGNALS.has(trackingSignalRaw) ? trackingSignalRaw : "unknown";
+  const reviewRequired = smtPilot.reviewRequired === true;
+
+  return {
+    snapshotCount,
+    completeReps,
+    unclearReps,
+    trackingSignal,
+    showReviewBanner: reviewRequired || unclearReps > 0,
+  };
+}
 
 function nonNegativeInt(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return 0;
@@ -152,6 +216,8 @@ export function buildMotionAnalysisReport(
     trackingSignal,
   });
 
+  const smtPilot = parseSmtPilotSummary(input.motionQuality);
+
   return {
     sessionDurationSeconds,
     completedReps,
@@ -161,6 +227,7 @@ export function buildMotionAnalysisReport(
       movementDetected,
       sessionDurationSeconds,
     }),
+    smtPilot,
   };
 }
 
@@ -169,6 +236,7 @@ export function hasDisplayableMotionAnalysisReport(
   report: MotionAnalysisReport,
 ): boolean {
   return (
+    report.smtPilot != null ||
     report.sessionDurationSeconds > 0 ||
     report.completedReps > 0 ||
     report.movementTimeline.length > 0
@@ -184,6 +252,7 @@ export function motionAnalysisInputFromCvMetric(
     | "sessionDurationS"
     | "trackingQuality"
     | "movementDetected"
+    | "motionQuality"
   >,
 ): BuildMotionAnalysisReportInput {
   return {
@@ -192,5 +261,6 @@ export function motionAnalysisInputFromCvMetric(
     repCount: metric.repCount,
     trackingQuality: metric.trackingQuality,
     movementDetected: metric.movementDetected,
+    motionQuality: metric.motionQuality ?? null,
   };
 }

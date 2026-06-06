@@ -8,8 +8,12 @@ import {
   buildMotionAnalysisReport,
   hasDisplayableMotionAnalysisReport,
   motionAnalysisInputFromCvMetric,
+  parseSmtPilotSummary,
   resolveMotionAnalysisSummaryLabel,
+  trackingSignalDotTone,
 } from "@/app/lib/cv/motion-analysis-report";
+import { buildStsMotionPilotRecord } from "@/app/lib/cv/sts-motion-pilot-record";
+import type { SessionMotionSummary } from "@/app/lib/cv/motion-summary-types";
 import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
 
 function metricRow(
@@ -154,5 +158,101 @@ describe("resolveMotionAnalysisSummaryLabel", () => {
       }),
       "Limited visibility",
     );
+  });
+});
+
+describe("parseSmtPilotSummary", () => {
+  it("parses smtPilot fields from motion_quality", () => {
+    const summary: SessionMotionSummary = {
+      sessionDurationS: 12,
+      legacyRepCount: 4,
+      completeRepCount: 3,
+      unclearRepCount: 1,
+      trackingQualityDistribution: { good: 8, fair: 1, poor: 0, unknown: 0, lost: 0 },
+    };
+    const record = buildStsMotionPilotRecord({
+      summary,
+      metrics: {
+        exerciseId: "sit-to-stand",
+        movementDetected: true,
+        repCount: 4,
+        sessionDurationS: 12,
+        trackingQuality: "good",
+        framesWithPose: 10,
+        framesTotal: 12,
+      },
+      snapshotCount: 5,
+    });
+
+    const parsed = parseSmtPilotSummary({ smtPilot: record });
+    assert.ok(parsed);
+    assert.equal(parsed.snapshotCount, 5);
+    assert.equal(parsed.completeReps, 3);
+    assert.equal(parsed.unclearReps, 1);
+    assert.equal(parsed.trackingSignal, "good");
+    assert.equal(parsed.showReviewBanner, true);
+  });
+
+  it("returns null when smtPilot is missing", () => {
+    assert.equal(parseSmtPilotSummary(null), null);
+    assert.equal(parseSmtPilotSummary({}), null);
+  });
+});
+
+describe("buildMotionAnalysisReport smtPilot", () => {
+  it("includes smtPilot summary and remains displayable", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "sit-to-stand",
+      sessionDurationS: 10,
+      repCount: 2,
+      trackingQuality: "good",
+      movementDetected: true,
+      motionQuality: {
+        smtPilot: {
+          pilotVersion: "smt-1",
+          isPilot: true,
+          exerciseId: "sit-to-stand",
+          snapshotCount: 4,
+          durationS: 10,
+          repCount: 2,
+          completeReps: 2,
+          unclearReps: 0,
+          trackingSignal: "fair",
+          movementDetected: true,
+          reviewRequired: true,
+          reviewReason: "derived_motion_timeline_pilot",
+          disclaimer: "Assistive motion capture for clinician review only.",
+        },
+      },
+    });
+
+    assert.ok(report.smtPilot);
+    assert.equal(report.smtPilot.completeReps, 2);
+    assert.equal(report.smtPilot.trackingSignal, "fair");
+    assert.ok(hasDisplayableMotionAnalysisReport(report));
+  });
+
+  it("falls back when motion_quality has no smtPilot", () => {
+    const report = buildMotionAnalysisReport({
+      sessionDurationS: 8,
+      repCount: 1,
+      trackingQuality: "good",
+      movementDetected: true,
+      motionQuality: { otherPhase: "mqe-0" },
+    });
+
+    assert.equal(report.smtPilot, null);
+    assert.equal(report.completedReps, 1);
+  });
+});
+
+describe("trackingSignalDotTone", () => {
+  it("maps tracking signals to dot tones", () => {
+    assert.equal(trackingSignalDotTone("good"), "good");
+    assert.equal(trackingSignalDotTone("fair"), "fair");
+    assert.equal(trackingSignalDotTone("poor"), "poor");
+    assert.equal(trackingSignalDotTone("unknown"), "unknown");
+    assert.equal(trackingSignalDotTone("lost"), "poor");
+    assert.equal(trackingSignalDotTone("mixed"), "fair");
   });
 });
