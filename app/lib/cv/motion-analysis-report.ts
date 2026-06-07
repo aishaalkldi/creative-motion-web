@@ -24,7 +24,13 @@ import {
   type MotionAnalysisReviewNextItem,
   type MotionAnalysisSessionSummary,
 } from "@/app/lib/cv/motion-analysis-interpretation";
+import {
+  buildMovementQualitySignals,
+  type MovementQualitySignals,
+} from "@/app/lib/cv/movement-quality-signals";
 import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
+
+export type { MovementQualitySignals } from "@/app/lib/cv/movement-quality-signals";
 
 export type {
   MotionAnalysisClinicalObservation,
@@ -113,6 +119,7 @@ export type MotionAnalysisReport = {
   reviewNext: MotionAnalysisReviewNextItem[] | null;
   reviewNextGrouped: MotionAnalysisReviewNextGroup[] | null;
   confidenceLimitations: MotionAnalysisConfidenceLimitations;
+  movementQuality: MovementQualitySignals | null;
 };
 
 export type BuildMotionAnalysisReportInput = {
@@ -386,6 +393,17 @@ export function buildMotionAnalysisReport(
     kinesiologyContext,
   });
 
+  const movementQuality = buildMovementQualitySignals({
+    exerciseId,
+    repTimings: smtPilot?.repTimings ?? null,
+    phaseRatios: smtPilot?.phaseRatios ?? null,
+    completeReps: smtPilot?.completeReps ?? completedReps,
+    unclearReps: smtPilot?.unclearReps ?? 0,
+    clinicianFlags: smtPilot?.clinicianFlags ?? null,
+    trackingQuality: trackingSignal,
+    summaryLabel,
+  });
+
   return {
     sessionDurationSeconds,
     completedReps,
@@ -403,6 +421,7 @@ export function buildMotionAnalysisReport(
     reviewNext: interpretation.reviewNext,
     reviewNextGrouped: interpretation.reviewNextGrouped,
     confidenceLimitations: interpretation.confidenceLimitations,
+    movementQuality,
   };
 }
 

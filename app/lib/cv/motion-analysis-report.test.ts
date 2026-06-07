@@ -401,6 +401,12 @@ describe("clinical interpretation layer", () => {
     assert.ok(report.clinicalObservations?.some((obs) => obs.id === "wide_rep_timing_spread"));
     assert.ok(report.reviewNext && report.reviewNext.length > 0);
     assert.ok(hasDisplayableMotionAnalysisReport(report));
+    assert.ok(report.movementQuality);
+    assert.equal(report.movementQuality.pacingConsistency, "Variable");
+    assert.equal(report.movementQuality.phaseConsistency, "Moderate");
+    assert.equal(report.movementQuality.completionClarity, "Clear");
+    assert.equal(report.movementQuality.observedStandingPhaseRatio, 45);
+    assert.equal(report.movementQuality.observedReturningPhaseRatio, 10);
   });
 
   it("flags partial visibility in clinical observations", () => {
@@ -463,6 +469,10 @@ describe("clinical interpretation layer", () => {
     assert.ok(report.reviewNext && report.reviewNext.length > 0);
     assert.ok(report.kinesiologyContext);
     assert.ok(report.smtPilot);
+    assert.ok(report.movementQuality);
+    assert.equal(report.movementQuality.pacingConsistency, "Insufficient data");
+    assert.equal(report.movementQuality.phaseConsistency, "Insufficient data");
+    assert.equal(report.movementQuality.completionClarity, "Clear");
   });
 
   it("provides session summary without smtPilot for kinesiology exercises", () => {
@@ -479,6 +489,7 @@ describe("clinical interpretation layer", () => {
     assert.equal(report.clinicalObservations, null);
     assert.ok(report.kinesiologyContext);
     assert.ok(report.reviewNext && report.reviewNext.length > 0);
+    assert.equal(report.movementQuality, null);
   });
 });
 
