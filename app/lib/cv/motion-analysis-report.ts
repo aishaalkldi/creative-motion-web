@@ -25,11 +25,16 @@ import {
   type MotionAnalysisSessionSummary,
 } from "@/app/lib/cv/motion-analysis-interpretation";
 import {
+  buildBiomechanicalContributionReview,
+  type BiomechanicalContributionReview,
+} from "@/app/lib/cv/biomechanical-contribution-review";
+import {
   buildMovementQualitySignals,
   type MovementQualitySignals,
 } from "@/app/lib/cv/movement-quality-signals";
 import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
 
+export type { BiomechanicalContributionReview } from "@/app/lib/cv/biomechanical-contribution-review";
 export type { MovementQualitySignals } from "@/app/lib/cv/movement-quality-signals";
 
 export type {
@@ -120,6 +125,7 @@ export type MotionAnalysisReport = {
   reviewNextGrouped: MotionAnalysisReviewNextGroup[] | null;
   confidenceLimitations: MotionAnalysisConfidenceLimitations;
   movementQuality: MovementQualitySignals | null;
+  biomechanicalContributionReview: BiomechanicalContributionReview | null;
 };
 
 export type BuildMotionAnalysisReportInput = {
@@ -404,6 +410,17 @@ export function buildMotionAnalysisReport(
     summaryLabel,
   });
 
+  const biomechanicalContributionReview = buildBiomechanicalContributionReview({
+    exerciseId,
+    phaseRatios: smtPilot?.phaseRatios ?? null,
+    movementQuality,
+    clinicianFlags: smtPilot?.clinicianFlags ?? null,
+    kinesiologyContext,
+    trackingQuality: trackingSignal,
+    summaryLabel,
+    visibilityRatios: smtPilot?.visibilityRatios ?? null,
+  });
+
   return {
     sessionDurationSeconds,
     completedReps,
@@ -422,6 +439,7 @@ export function buildMotionAnalysisReport(
     reviewNextGrouped: interpretation.reviewNextGrouped,
     confidenceLimitations: interpretation.confidenceLimitations,
     movementQuality,
+    biomechanicalContributionReview,
   };
 }
 
