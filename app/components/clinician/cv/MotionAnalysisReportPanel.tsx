@@ -95,9 +95,26 @@ function TrackingSignalRow({ signal }: { signal: string }) {
   );
 }
 
+const QUALITY_LABEL_CLASS = {
+  Consistent: "text-[#5DCAA5]",
+  Moderate: "text-[#EF9F27]",
+  Variable: "text-rose-300",
+  Incomplete: "text-rose-300",
+  Clear: "text-[#5DCAA5]",
+  "Mostly clear": "text-[#EF9F27]",
+  Unclear: "text-rose-300",
+  "Insufficient data": "text-[#9CA3AF]",
+} as const;
+
+function QualityLabel({ label }: { label: string }) {
+  const tone = QUALITY_LABEL_CLASS[label as keyof typeof QUALITY_LABEL_CLASS] ?? "text-[#F9FAFB]";
+  return <span className={`font-medium ${tone}`}>{label}</span>;
+}
+
 export function MotionAnalysisReportPanel({ report }: MotionAnalysisReportPanelProps) {
   const header = report.reportHeader;
   const snapshot = report.clinicalSnapshot;
+  const movementQuality = report.movementQuality;
   const smtPilot = report.smtPilot;
   const kinesiology = report.kinesiologyInsight;
   const phaseInterpretation = report.phaseInterpretation;
@@ -194,6 +211,96 @@ export function MotionAnalysisReportPanel({ report }: MotionAnalysisReportPanelP
                   <li key={observation}>{observation}</li>
                 ))}
               </ul>
+            ) : null}
+          </div>
+        ) : null}
+
+        {movementQuality ? (
+          <div className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5">
+            <SectionHeading>Movement quality</SectionHeading>
+            <p className="mt-1 text-[9px] leading-relaxed text-[#6B7280]">
+              Camera-derived movement quality signals — assistive summary only, not a clinical score.
+            </p>
+
+            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+              <PilotMetric
+                label="Average repetition time"
+                value={formatNullableSeconds(movementQuality.averageRepTimeSec)}
+              />
+              <PilotMetric
+                label="Fastest repetition"
+                value={formatNullableSeconds(movementQuality.fastestRepTimeSec)}
+              />
+              <PilotMetric
+                label="Slowest repetition"
+                value={formatNullableSeconds(movementQuality.slowestRepTimeSec)}
+              />
+            </div>
+
+            <div className="mt-2 grid gap-2 sm:grid-cols-3">
+              <div className="rounded-[5px] border border-[#1E2D42] bg-[#070D16] px-2.5 py-2">
+                <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">Pacing consistency</p>
+                <p className="mt-0.5 text-xs">
+                  <QualityLabel label={movementQuality.pacingConsistency} />
+                </p>
+              </div>
+              <div className="rounded-[5px] border border-[#1E2D42] bg-[#070D16] px-2.5 py-2">
+                <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">Phase consistency</p>
+                <p className="mt-0.5 text-xs">
+                  <QualityLabel label={movementQuality.phaseConsistency} />
+                </p>
+              </div>
+              <div className="rounded-[5px] border border-[#1E2D42] bg-[#070D16] px-2.5 py-2">
+                <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">Completion clarity</p>
+                <p className="mt-0.5 text-xs">
+                  <QualityLabel label={movementQuality.completionClarity} />
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <PilotMetric
+                label="Observed standing phase"
+                value={
+                  movementQuality.observedStandingPhaseRatio !== null
+                    ? `${movementQuality.observedStandingPhaseRatio}%`
+                    : "—"
+                }
+              />
+              <PilotMetric
+                label="Observed returning phase"
+                value={
+                  movementQuality.observedReturningPhaseRatio !== null
+                    ? `${movementQuality.observedReturningPhaseRatio}%`
+                    : "—"
+                }
+              />
+            </div>
+
+            {movementQuality.qualitySignals.length > 0 ? (
+              <div className="mt-2">
+                <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">
+                  Movement quality signals
+                </p>
+                <ul className="mt-1 list-inside list-disc space-y-1 text-[10px] leading-snug text-[#D1D5DB]">
+                  {movementQuality.qualitySignals.map((signal) => (
+                    <li key={signal}>{signal}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+
+            {movementQuality.clinicianReviewFocus.length > 0 ? (
+              <div className="mt-2">
+                <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">
+                  Clinician review focus
+                </p>
+                <ul className="mt-1 list-inside list-disc space-y-1 text-[10px] leading-snug text-[#D1D5DB]">
+                  {movementQuality.clinicianReviewFocus.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
             ) : null}
           </div>
         ) : null}
