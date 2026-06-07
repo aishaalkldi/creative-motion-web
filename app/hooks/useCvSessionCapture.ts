@@ -128,6 +128,10 @@ export function useCvSessionCapture({
             body: JSON.stringify(payload),
           });
 
+          const body = (await res.json().catch(() => ({}))) as {
+            alreadySaved?: boolean;
+          };
+
           if (!res.ok) {
             setCvStatus("save_failed");
             return "post_error";
@@ -135,7 +139,7 @@ export function useCvSessionCapture({
 
           hasSavedRef.current = true;
           setCvStatus("saved");
-          return "saved";
+          return body.alreadySaved ? "already_saved" : "saved";
         } catch {
           setCvStatus("save_failed");
           return "post_error";

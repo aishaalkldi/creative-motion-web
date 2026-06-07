@@ -170,6 +170,30 @@ export async function POST(req: NextRequest) {
     return unableToCompleteResponse(404);
   }
 
+  const { data: existingMetric, error: existingErr } = await admin
+    .from("cv_session_metrics")
+    .select("id, recorded_at")
+    .eq("plan_session_id", sessionId)
+    .eq("exercise_id", exerciseId)
+    .eq("source", "patient_session")
+    .order("recorded_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string; recorded_at: string }>();
+
+  if (existingErr) {
+    console.error("[POST /api/patient/cv-session-metrics] existing metric lookup error");
+    return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
+  }
+
+  if (existingMetric) {
+    return NextResponse.json({
+      saved: true,
+      alreadySaved: true,
+      id: existingMetric.id,
+      recordedAt: existingMetric.recorded_at,
+    });
+  }
+
   const { data: inserted, error: insertErr } = await admin
     .from("cv_session_metrics")
     .insert({
