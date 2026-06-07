@@ -115,6 +115,7 @@ export function MotionAnalysisReportPanel({ report }: MotionAnalysisReportPanelP
   const header = report.reportHeader;
   const snapshot = report.clinicalSnapshot;
   const movementQuality = report.movementQuality;
+  const biomechanicalReview = report.biomechanicalContributionReview;
   const smtPilot = report.smtPilot;
   const kinesiology = report.kinesiologyInsight;
   const phaseInterpretation = report.phaseInterpretation;
@@ -297,6 +298,61 @@ export function MotionAnalysisReportPanel({ report }: MotionAnalysisReportPanelP
                 </p>
                 <ul className="mt-1 list-inside list-disc space-y-1 text-[10px] leading-snug text-[#D1D5DB]">
                   {movementQuality.clinicianReviewFocus.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {biomechanicalReview ? (
+          <div className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5">
+            <SectionHeading>Biomechanical contribution review</SectionHeading>
+            <p className="mt-1 text-[9px] leading-relaxed text-[#6B7280]">
+              Rules-based biomechanical context for clinician review — not a diagnosis or muscle assessment.
+            </p>
+
+            <div className="mt-2">
+              <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">
+                Observed movement pattern
+              </p>
+              <ul className="mt-1 list-inside list-disc space-y-1 text-[10px] leading-snug text-[#D1D5DB]">
+                {biomechanicalReview.observedMovementPattern.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="mt-2">
+              <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">
+                Possible contributors for clinician review
+              </p>
+              <ul className="mt-1 list-inside list-disc space-y-1 text-[10px] leading-snug text-[#D1D5DB]">
+                {biomechanicalReview.possibleContributors.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="mt-2">
+              <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">
+                Muscle demand context
+              </p>
+              <ul className="mt-1 list-inside list-disc space-y-1 text-[10px] leading-snug text-[#D1D5DB]">
+                {biomechanicalReview.muscleDemandContext.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+
+            {biomechanicalReview.clinicianReviewPrompts.length > 0 ? (
+              <div className="mt-2">
+                <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">
+                  Clinician review prompts
+                </p>
+                <ul className="mt-1 list-inside list-disc space-y-1 text-[10px] leading-snug text-[#D1D5DB]">
+                  {biomechanicalReview.clinicianReviewPrompts.map((item) => (
                     <li key={item}>{item}</li>
                   ))}
                 </ul>

@@ -742,3 +742,240 @@ describe("STS phase detection pipeline", () => {
     assert.equal(report.phaseInterpretation?.some((p) => p.phaseId === "rising"), false);
   });
 });
+
+describe("biomechanical contribution review", () => {
+  function stsReport(
+    overrides: {
+      phaseRatios?: Record<string, number>;
+      repTimings?: { avgS: number; fastestS: number; slowestS: number };
+      visibilityRatios?: { hip: number; knee: number; ankle: number };
+      clinicianFlags?: string[];
+      unclearReps?: number;
+      trackingQuality?: string;
+      motionQuality?: Record<string, unknown> | null;
+    } = {},
+  ) {
+    if (overrides.motionQuality === null) {
+      return buildMotionAnalysisReport({
+        exerciseId: "sit-to-stand",
+        sessionDurationS: 10,
+        repCount: 2,
+        trackingQuality: overrides.trackingQuality ?? "good",
+        movementDetected: true,
+      });
+    }
+
+    return buildMotionAnalysisReport({
+      exerciseId: "sit-to-stand",
+      sessionDurationS: 12,
+      repCount: 3,
+      trackingQuality: overrides.trackingQuality ?? "good",
+      movementDetected: true,
+      motionQuality: {
+        smtPilot: {
+          pilotVersion: "smt-1",
+          isPilot: true,
+          exerciseId: "sit-to-stand",
+          snapshotCount: 8,
+          durationS: 12,
+          repCount: 3,
+          completeReps: 3,
+          unclearReps: overrides.unclearReps ?? 0,
+          trackingSignal: overrides.trackingQuality ?? "good",
+          movementDetected: true,
+          phaseRatios: overrides.phaseRatios ?? {
+            seated: 12,
+            rising: 25,
+            standing: 40,
+            returning: 18,
+            rest: 5,
+          },
+          repTimings: overrides.repTimings ?? {
+            avgS: 2.1,
+            fastestS: 2.0,
+            slowestS: 2.2,
+          },
+          visibilityRatios: overrides.visibilityRatios ?? {
+            hip: 88,
+            knee: 85,
+            ankle: 82,
+          },
+          clinicianFlags: overrides.clinicianFlags ?? [],
+          reviewRequired: true,
+          reviewReason: "derived_motion_timeline_pilot",
+          disclaimer: "Assistive motion capture for clinician review only.",
+        },
+      },
+    });
+  }
+
+  const FORBIDDEN_PHRASES = [
+    "weak quadriceps",
+    "poor glute",
+    "abnormal movement",
+    "compensation detected",
+  ];
+
+  function assertSafeLanguage(review: NonNullable<
+    ReturnType<typeof buildMotionAnalysisReport>["biomechanicalContributionReview"]
+  >) {
+    const allText = [
+      ...review.observedMovementPattern,
+      ...review.possibleContributors,
+      ...review.muscleDemandContext,
+      ...review.clinicianReviewPrompts,
+    ].join(" ").toLowerCase();
+
+    for (const phrase of FORBIDDEN_PHRASES) {
+      assert.equal(allText.includes(phrase), false, `forbidden phrase: ${phrase}`);
+    }
+  }
+
+  it("builds review for a normal STS session", () => {
+    const report = stsReport();
+
+    assert.ok(report.biomechanicalContributionReview);
+    assertSafeLanguage(report.biomechanicalContributionReview);
+    assert.ok(
+      report.biomechanicalContributionReview.observedMovementPattern.some((item) =>
+        item.includes("consistent repetition pacing"),
+      ),
+    );
+    assert.ok(
+      report.biomechanicalContributionReview.observedMovementPattern.some((item) =>
+        item.includes("Rising phase represented 25%"),
+      ),
+    );
+    assert.ok(
+      report.biomechanicalContributionReview.possibleContributors.includes(
+        "Lower-limb force production strategy",
+      ),
+    );
+    assert.ok(
+      report.biomechanicalContributionReview.muscleDemandContext.some((item) =>
+        item.includes("Quadriceps demand during rising"),
+      ),
+    );
+  });
+
+  it("highlights variable pacing and limited returning phase", () => {
+    const report = stsReport({
+      repTimings: { avgS: 2.8, fastestS: 1.5, slowestS: 4.0 },
+      phaseRatios: {
+        seated: 10,
+        rising: 30,
+        standing: 52,
+        returning: 8,
+        rest: 0,
+      },
+    });
+
+    assert.ok(report.biomechanicalContributionReview);
+    assertSafeLanguage(report.biomechanicalContributionReview);
+    assert.ok(
+      report.biomechanicalContributionReview.observedMovementPattern.some((item) =>
+        item.includes("Variable pacing observed"),
+      ),
+    );
+    assert.ok(
+      report.biomechanicalContributionReview.reviewFlags.includes("variable_pacing"),
+    );
+    assert.ok(
+      report.biomechanicalContributionReview.reviewFlags.includes("low_returning_phase"),
+    );
+    assert.ok(
+      report.biomechanicalContributionReview.possibleContributors.includes(
+        "Eccentric lowering control",
+      ),
+    );
+  });
+
+  it("adds incomplete-cycle prompts when flagged", () => {
+    const report = stsReport({
+      clinicianFlags: ["incomplete_cycle"],
+      phaseRatios: { seated: 30, rising: 20, standing: 35, returning: 0, rest: 15 },
+    });
+
+    assert.ok(report.biomechanicalContributionReview);
+    assertSafeLanguage(report.biomechanicalContributionReview);
+    assert.ok(
+      report.biomechanicalContributionReview.reviewFlags.includes("incomplete_cycle"),
+    );
+    assert.ok(
+      report.biomechanicalContributionReview.clinicianReviewPrompts.some((item) =>
+        item.toLowerCase().includes("incomplete cycles"),
+      ),
+    );
+  });
+
+  it("flags limited visibility sessions", () => {
+    const report = stsReport({
+      trackingQuality: "poor",
+      visibilityRatios: { hip: 40, knee: 35, ankle: 30 },
+      phaseRatios: { standing: 70, rising: 30 },
+      repTimings: { avgS: 2, fastestS: 2, slowestS: 2.2 },
+    });
+
+    assert.ok(report.biomechanicalContributionReview);
+    assertSafeLanguage(report.biomechanicalContributionReview);
+    assert.ok(
+      report.biomechanicalContributionReview.reviewFlags.includes("limited_visibility"),
+    );
+    assert.ok(
+      report.biomechanicalContributionReview.clinicianReviewPrompts.some((item) =>
+        item.toLowerCase().includes("limited camera visibility"),
+      ),
+    );
+  });
+
+  it("falls back safely for legacy STS sessions without phase enrichment", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "sit-to-stand",
+      sessionDurationS: 10,
+      repCount: 2,
+      trackingQuality: "good",
+      movementDetected: true,
+      motionQuality: {
+        smtPilot: {
+          pilotVersion: "smt-1",
+          isPilot: true,
+          exerciseId: "sit-to-stand",
+          snapshotCount: 4,
+          durationS: 10,
+          repCount: 2,
+          completeReps: 2,
+          unclearReps: 0,
+          trackingSignal: "good",
+          movementDetected: true,
+          reviewRequired: true,
+          reviewReason: "derived_motion_timeline_pilot",
+          disclaimer: "Assistive motion capture for clinician review only.",
+        },
+      },
+    });
+
+    assert.ok(report.biomechanicalContributionReview);
+    assertSafeLanguage(report.biomechanicalContributionReview);
+    assert.ok(
+      report.biomechanicalContributionReview.reviewFlags.includes("legacy_phase_data_missing"),
+    );
+    assert.ok(
+      report.biomechanicalContributionReview.observedMovementPattern.some((item) =>
+        item.toLowerCase().includes("phase distribution not available"),
+      ),
+    );
+    assert.ok(report.biomechanicalContributionReview.muscleDemandContext.length >= 4);
+  });
+
+  it("returns null for non-STS exercises", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "mini-squat",
+      sessionDurationS: 8,
+      repCount: 2,
+      trackingQuality: "fair",
+      movementDetected: true,
+    });
+
+    assert.equal(report.biomechanicalContributionReview, null);
+  });
+});
