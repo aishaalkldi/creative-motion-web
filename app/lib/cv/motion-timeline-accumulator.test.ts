@@ -47,6 +47,7 @@ const IDLE_STS_SNAPSHOT: SitToStandDetectorSnapshot = {
   previewActive: false,
   trackingError: null,
   isBaselineCalibrating: false,
+  standPhase: "down",
 };
 
 describe("MotionTimelineAccumulator", () => {

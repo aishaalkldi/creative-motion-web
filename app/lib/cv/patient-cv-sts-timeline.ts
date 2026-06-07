@@ -18,6 +18,11 @@ import {
   legacyRepCountFromDerivedMetrics,
 } from "@/app/lib/cv/sts-motion-summary-finalize";
 import type { SitToStandDetectorSnapshot } from "@/app/lib/cv/sit-to-stand-detector";
+import {
+  createStsPhaseClassifierState,
+  resetStsPhaseClassifierState,
+  type StsPhaseClassifierState,
+} from "@/app/lib/cv/sts-phase-classifier";
 import { buildStsTimelineTickFromCaptureState } from "@/app/lib/cv/sts-timeline-tick-builder";
 
 export type RefBox<T> = { current: T };
@@ -28,6 +33,7 @@ export type StsTimelineCaptureRefs = {
   finalized: RefBox<boolean>;
   /** Dev-only: snapshot count at last finalize (for console debug). */
   lastFinalizeSnapshotCount: RefBox<number | null>;
+  phaseClassifier: RefBox<StsPhaseClassifierState>;
 };
 
 export function createStsTimelineCaptureRefs(): StsTimelineCaptureRefs {
@@ -36,6 +42,7 @@ export function createStsTimelineCaptureRefs(): StsTimelineCaptureRefs {
     summary: { current: null },
     finalized: { current: false },
     lastFinalizeSnapshotCount: { current: null },
+    phaseClassifier: { current: createStsPhaseClassifierState() },
   };
 }
 
@@ -54,6 +61,7 @@ export function beginStsMotionTimeline(
   refs.finalized.current = false;
   refs.summary.current = null;
   refs.lastFinalizeSnapshotCount.current = null;
+  resetStsPhaseClassifierState(refs.phaseClassifier.current);
   getOrCreateAccumulator(refs).start();
 }
 
@@ -65,7 +73,11 @@ export function recordStsMotionTimelineTick(
   if (!isStsMotionTimelineEnabled(exerciseId)) return;
   const acc = refs.acc.current;
   if (!acc?.isActive()) return;
-  acc.recordTick(buildStsTimelineTickFromCaptureState(snapshot));
+  acc.recordTick(
+    buildStsTimelineTickFromCaptureState(snapshot, {
+      phaseClassifier: refs.phaseClassifier.current,
+    }),
+  );
 }
 
 export type StsTimelineMetricsSource = {
@@ -119,6 +131,7 @@ export function disposeStsMotionTimelineRefs(refs: StsTimelineCaptureRefs): void
   refs.acc.current = null;
   refs.summary.current = null;
   refs.finalized.current = false;
+  resetStsPhaseClassifierState(refs.phaseClassifier.current);
 }
 
 /** Pilot-only skip reason when finalize returns null (browser pilot sessions). */

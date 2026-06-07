@@ -29,6 +29,7 @@ const BASE_SNAPSHOT: SitToStandDetectorSnapshot = {
   previewActive: true,
   trackingError: null,
   isBaselineCalibrating: false,
+  standPhase: "down",
 };
 
 function withStsTimelineDisabled<T>(run: () => T): T {

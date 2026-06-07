@@ -96,6 +96,37 @@ function clampPct(value: unknown): number {
   return Math.min(100, Math.max(0, Math.round(value)));
 }
 
+const MOTION_PHASE_KEYS = ["rising", "standing", "returning"] as const;
+
+function buildPhaseDetectionFlags(
+  phaseRatios: SessionMotionSummary["phaseRatios"],
+  completeRepCount: number,
+): string[] {
+  const flags: string[] = [];
+  const motionPhasePct = MOTION_PHASE_KEYS.reduce(
+    (sum, phase) => sum + (phaseRatios[phase] ?? 0),
+    0,
+  );
+  const unknownPct = phaseRatios.unknown ?? 0;
+  const restPct = phaseRatios.rest ?? 0;
+
+  if (completeRepCount > 0 && motionPhasePct === 0) {
+    flags.push("unclear_phase_detection");
+  }
+  if (unknownPct + restPct >= 60) {
+    flags.push("limited_observed_phases");
+  }
+  if (
+    completeRepCount > 0 &&
+    (phaseRatios.rising ?? 0) === 0 &&
+    (phaseRatios.returning ?? 0) === 0
+  ) {
+    flags.push("partial_phase_cycle");
+  }
+
+  return flags;
+}
+
 function buildClinicianFlags(summary: SessionMotionSummary): string[] {
   const flags = new Set<string>(summary.captureFlags);
   if (summary.unclearRepCount > 0) {
@@ -103,6 +134,9 @@ function buildClinicianFlags(summary: SessionMotionSummary): string[] {
   }
   if (summary.interruptions.poseLossEventCount > 0) {
     flags.add("pose_tracking_interrupted");
+  }
+  for (const flag of buildPhaseDetectionFlags(summary.phaseRatios, summary.completeRepCount)) {
+    flags.add(flag);
   }
   return [...flags].sort();
 }

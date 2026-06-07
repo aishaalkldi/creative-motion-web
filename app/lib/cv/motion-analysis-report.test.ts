@@ -13,8 +13,16 @@ import {
   trackingSignalDotTone,
 } from "@/app/lib/cv/motion-analysis-report";
 import { resolveExerciseKinesiologyContext } from "@/app/lib/cv/exercise-kinesiology-context";
-import { buildStsMotionPilotRecord } from "@/app/lib/cv/sts-motion-pilot-record";
+import { MotionTimelineAccumulator } from "@/app/lib/cv/motion-timeline-accumulator";
+import {
+  buildMotionQualityWithStsPilot,
+  buildStsMotionPilotRecord,
+} from "@/app/lib/cv/sts-motion-pilot-record";
 import type { SessionMotionSummary } from "@/app/lib/cv/motion-summary-types";
+import { createStsPhaseClassifierState } from "@/app/lib/cv/sts-phase-classifier";
+import { finalizeStsMotionTimelineSummary } from "@/app/lib/cv/sts-motion-summary-finalize";
+import { buildStsTimelineTickFromCaptureState } from "@/app/lib/cv/sts-timeline-tick-builder";
+import type { SitToStandDetectorSnapshot } from "@/app/lib/cv/sit-to-stand-detector";
 import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
 
 function metricRow(
@@ -599,5 +607,127 @@ describe("movement intelligence report v3", () => {
     assert.ok(report.clinicalSnapshot);
     assert.ok(report.kinesiologyInsight);
     assert.ok(report.confidenceLimitations.bullets.length >= 5);
+  });
+});
+
+describe("STS phase detection pipeline", () => {
+  const STS_BASE: SitToStandDetectorSnapshot = {
+    trackingStatus: "pose-found",
+    trackingQuality: "good",
+    poseReadiness: "ready",
+    bodyFramingState: "good_distance",
+    repCount: 0,
+    sessionSeconds: 0,
+    movementDetected: true,
+    framesWithPose: 10,
+    framesTotal: 10,
+    initPhase: null,
+    previewActive: true,
+    trackingError: null,
+    isBaselineCalibrating: false,
+    standPhase: "down",
+  };
+
+  it("derives multi-phase evidence and report interpretation from timeline snapshots", () => {
+    const classifier = createStsPhaseClassifierState();
+    const acc = new MotionTimelineAccumulator();
+    acc.start();
+
+    const sequence: Array<Partial<SitToStandDetectorSnapshot> & { sessionSeconds: number }> = [
+      { sessionSeconds: 0, standPhase: "down" },
+      { sessionSeconds: 1, standPhase: "up" },
+      { sessionSeconds: 2, standPhase: "up", repCount: 1 },
+      { sessionSeconds: 3, standPhase: "down", repCount: 1 },
+      { sessionSeconds: 4, standPhase: "down", repCount: 1 },
+      { sessionSeconds: 5, standPhase: "up", repCount: 1 },
+      { sessionSeconds: 6, standPhase: "up", repCount: 2 },
+      { sessionSeconds: 7, standPhase: "down", repCount: 2 },
+    ];
+
+    for (const partial of sequence) {
+      acc.recordTick(
+        buildStsTimelineTickFromCaptureState(
+          { ...STS_BASE, ...partial },
+          { phaseClassifier: classifier },
+        ),
+      );
+    }
+
+    const { summary } = finalizeStsMotionTimelineSummary({
+      accumulator: acc,
+      legacyRepCount: 2,
+      capturedAt: "2026-06-05T12:00:00.000Z",
+    });
+
+    assert.ok((summary.phaseRatios.rising ?? 0) > 0);
+    assert.ok((summary.phaseRatios.standing ?? 0) > 0);
+    assert.ok((summary.phaseRatios.returning ?? 0) > 0);
+    assert.ok((summary.phaseRatios.seated ?? 0) > 0);
+    assert.equal(summary.completeRepCount, 2);
+    assert.ok(summary.repDurationSummary.avgDurationS !== null);
+
+    const pilot = buildStsMotionPilotRecord({
+      summary,
+      metrics: {
+        exerciseId: "sit-to-stand",
+        repCount: 2,
+        sessionDurationS: 7,
+        trackingQuality: "good",
+        movementDetected: true,
+        framesWithPose: 70,
+        framesTotal: 70,
+      },
+      snapshotCount: acc.getSnapshotCount(),
+    });
+
+    const report = buildMotionAnalysisReport({
+      exerciseId: "sit-to-stand",
+      sessionDurationS: 7,
+      repCount: 2,
+      trackingQuality: "good",
+      movementDetected: true,
+      motionQuality: buildMotionQualityWithStsPilot(pilot),
+    });
+
+    assert.ok(report.phaseInterpretation?.some((p) => p.phaseId === "rising"));
+    assert.ok(report.phaseInterpretation?.some((p) => p.phaseId === "standing"));
+    assert.ok(report.phaseInterpretation?.some((p) => p.phaseId === "returning"));
+    assert.ok(report.smtPilot?.repTimings?.avgS);
+    assert.ok(hasDisplayableMotionAnalysisReport(report));
+  });
+
+  it("falls back safely when phase ratios are missing", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "sit-to-stand",
+      sessionDurationS: 5,
+      repCount: 1,
+      trackingQuality: "good",
+      movementDetected: true,
+      motionQuality: {
+        smtPilot: {
+          pilotVersion: "smt-1",
+          isPilot: true,
+          exerciseId: "sit-to-stand",
+          snapshotCount: 2,
+          durationS: 5,
+          repCount: 1,
+          completeReps: 1,
+          unclearReps: 0,
+          trackingSignal: "good",
+          movementDetected: true,
+          phaseRatios: { seated: 80, rest: 20 },
+          repTimings: { avgS: null, fastestS: null, slowestS: null },
+          visibilityRatios: { hip: 80, knee: 75, ankle: 70 },
+          clinicianFlags: [],
+          reviewRequired: true,
+          reviewReason: "derived_motion_timeline_pilot",
+          disclaimer: "Assistive only.",
+        },
+      },
+    });
+
+    assert.ok(hasDisplayableMotionAnalysisReport(report));
+    assert.ok(report.phaseInterpretation && report.phaseInterpretation.length > 0);
+    assert.equal(report.phaseInterpretation?.some((p) => p.phaseId === "rising"), false);
   });
 });
