@@ -79,6 +79,8 @@ export type SitToStandDetectorSnapshot = {
   trackingError: string | null;
   /** True while collecting seated hip baseline (patient baseline mode only) */
   isBaselineCalibrating: boolean;
+  /** Derived stand/rest polarity from hip rep FSM (rise: down=seated, up=standing). STS only. */
+  standPhase?: "up" | "down";
 };
 
 type PoseLandmarkerInstance = {
@@ -267,6 +269,7 @@ const IDLE_SNAPSHOT: SitToStandDetectorSnapshot = {
   previewActive: false,
   trackingError: null,
   isBaselineCalibrating: false,
+  standPhase: "down",
 };
 
 /**
@@ -337,6 +340,7 @@ export class SitToStandDetector {
       previewActive: this.previewActive,
       trackingError: this.trackingError,
       isBaselineCalibrating: this.isBaselineCalibrating,
+      standPhase: this.standPhase,
     };
   }
 

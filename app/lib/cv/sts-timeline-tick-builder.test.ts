@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { PATIENT_STS_CONFIG } from "@/app/lib/cv/cv-patient-config";
 import type { SitToStandDetectorSnapshot } from "@/app/lib/cv/sit-to-stand-detector";
+import { createStsPhaseClassifierState } from "@/app/lib/cv/sts-phase-classifier";
 import {
   buildStsTimelineTickFromCaptureState,
   findForbiddenKeysInStsTimelineTick,
@@ -28,6 +29,7 @@ const BASE_SNAPSHOT: SitToStandDetectorSnapshot = {
   previewActive: false,
   trackingError: null,
   isBaselineCalibrating: false,
+  standPhase: "down",
 };
 
 describe("stsMovementPhaseFromStandPhase", () => {
@@ -172,6 +174,43 @@ describe("buildStsTimelineTickFromCaptureState", () => {
       events: ["rep_unclear"],
     });
     assert.deepEqual(tick.events, ["rep_unclear"]);
+  });
+
+  it("infers rising/standing/returning when phase classifier is provided", () => {
+    const classifier = createStsPhaseClassifierState();
+    const seated = buildStsTimelineTickFromCaptureState(
+      { ...BASE_SNAPSHOT, trackingStatus: "pose-found", sessionSeconds: 0, standPhase: "down" },
+      { phaseClassifier: classifier },
+    );
+    const rising = buildStsTimelineTickFromCaptureState(
+      { ...BASE_SNAPSHOT, trackingStatus: "pose-found", sessionSeconds: 1, standPhase: "up" },
+      { phaseClassifier: classifier },
+    );
+    const standing = buildStsTimelineTickFromCaptureState(
+      {
+        ...BASE_SNAPSHOT,
+        trackingStatus: "pose-found",
+        sessionSeconds: 2,
+        standPhase: "up",
+        repCount: 1,
+      },
+      { phaseClassifier: classifier },
+    );
+    const returning = buildStsTimelineTickFromCaptureState(
+      {
+        ...BASE_SNAPSHOT,
+        trackingStatus: "pose-found",
+        sessionSeconds: 3,
+        standPhase: "down",
+        repCount: 1,
+      },
+      { phaseClassifier: classifier },
+    );
+
+    assert.equal(seated.movementPhase, "seated");
+    assert.equal(rising.movementPhase, "rising");
+    assert.equal(standing.movementPhase, "standing");
+    assert.equal(returning.movementPhase, "returning");
   });
 
   it("produces deterministic output for the same snapshot", () => {

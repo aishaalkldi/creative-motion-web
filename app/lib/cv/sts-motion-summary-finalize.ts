@@ -9,6 +9,7 @@ import {
   type SessionMotionSummary,
 } from "@/app/lib/cv/motion-summary-types";
 import { buildStsSessionMotionSummary } from "@/app/lib/cv/sts-motion-summary-builder";
+import { deriveStsRepTimingRecordsFromSnapshots } from "@/app/lib/cv/sts-rep-records-from-snapshots";
 
 export type StsMotionSummaryFinalizeInput = {
   accumulator: MotionTimelineAccumulator;
@@ -24,10 +25,13 @@ export type StsMotionSummaryFinalizeResult = {
 export function finalizeStsMotionTimelineSummary(
   input: StsMotionSummaryFinalizeInput,
 ): StsMotionSummaryFinalizeResult {
+  const snapshots = input.accumulator.getSnapshots();
+  const repRecords = deriveStsRepTimingRecordsFromSnapshots(snapshots);
+
   const summary = buildStsSessionMotionSummary({
-    snapshots: input.accumulator.getSnapshots(),
+    snapshots,
     legacyRepCount: input.legacyRepCount,
-    repRecords: [],
+    repRecords,
     capturedAt: input.capturedAt,
   });
 

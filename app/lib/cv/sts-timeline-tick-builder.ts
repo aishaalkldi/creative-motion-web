@@ -13,12 +13,18 @@ import {
   type StsMotionTimelineTickInput,
 } from "@/app/lib/cv/motion-timeline-accumulator";
 import type { SitToStandDetectorSnapshot } from "@/app/lib/cv/sit-to-stand-detector";
+import {
+  classifyStsMovementPhase,
+  type StsPhaseClassifierState,
+} from "@/app/lib/cv/sts-phase-classifier";
 
 /** Optional capture-side hints (stand phase when available from caller). */
 export type StsTimelineTickCaptureContext = {
   bodyFraming?: BodyFramingProfileId;
   standPhase?: "up" | "down";
   events?: readonly StsMotionSnapshotEvent[];
+  /** Stateful STS phase classifier — enables rising/standing/returning inference. */
+  phaseClassifier?: StsPhaseClassifierState;
 };
 
 /** Assistive visibility scalars from tracking signal — not per-landmark truth. */
@@ -81,8 +87,12 @@ export function buildStsTimelineTickFromCaptureState(
   const bodyFraming =
     context.bodyFraming ?? PATIENT_STS_CONFIG.bodyFramingProfileId ?? "seated-rise";
 
+  const movementPhase = context.phaseClassifier
+    ? classifyStsMovementPhase(snap, context.phaseClassifier)
+    : stsMovementPhaseFromCaptureSnapshot(snap, context.standPhase);
+
   return stsTimelineTickFromDetectorSnapshot(snap, {
-    movementPhase: stsMovementPhaseFromCaptureSnapshot(snap, context.standPhase),
+    movementPhase,
     visibility: stsVisibilityFromCaptureSnapshot(snap),
     bodyFraming,
     events: context.events,
