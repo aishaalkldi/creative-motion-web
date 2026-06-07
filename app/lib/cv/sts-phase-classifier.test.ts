@@ -61,11 +61,38 @@ describe("classifyStsMovementPhase", () => {
     );
   });
 
-  it("returns unknown on pose lost", () => {
+  it("labels rising on down→up even when rep count increments on the same tick", () => {
     const state = createStsPhaseClassifierState();
+    classifyStsMovementPhase({ ...BASE, standPhase: "down" }, state);
     assert.equal(
-      classifyStsMovementPhase({ ...BASE, trackingStatus: "pose-lost" }, state),
-      "unknown",
+      classifyStsMovementPhase(
+        { ...BASE, standPhase: "up", repCount: 1 },
+        state,
+      ),
+      "rising",
     );
+  });
+
+  it("keeps last stable phase during brief pose loss", () => {
+    const state = createStsPhaseClassifierState();
+    classifyStsMovementPhase({ ...BASE, standPhase: "up" }, state);
+    const briefLoss = classifyStsMovementPhase(
+      { ...BASE, trackingStatus: "pose-lost" },
+      state,
+    );
+    assert.equal(briefLoss, "standing");
+  });
+
+  it("returns unknown only after sustained pose loss", () => {
+    const state = createStsPhaseClassifierState();
+    classifyStsMovementPhase({ ...BASE, standPhase: "up" }, state);
+    let phase: ReturnType<typeof classifyStsMovementPhase> = "standing";
+    for (let i = 0; i < 8; i += 1) {
+      phase = classifyStsMovementPhase(
+        { ...BASE, trackingStatus: "pose-lost" },
+        state,
+      );
+    }
+    assert.equal(phase, "unknown");
   });
 });

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { MotionAnalysisReportPanel } from "@/app/components/clinician/cv/MotionAnalysisReportPanel";
+import { dedupeCvMetricsByPlanSessionExercise } from "@/app/lib/cv/cv-metrics-dedupe";
 import {
   CV_CAMERA_VISIBILITY_HELPER,
   CV_CLINICIAN_DISCLAIMER,
@@ -263,7 +264,7 @@ function PatientProfileCvReview({
   exerciseNameById: Record<string, string>;
   maxSessions: number;
 }) {
-  const sorted = sortCvMetricsForPatientProfile(metrics);
+  const sorted = sortCvMetricsForPatientProfile(dedupeCvMetricsByPlanSessionExercise(metrics));
   const patientSessionRows = sorted.filter((r) => r.source === "patient_session");
   const displayMetrics = sorted.slice(0, maxSessions);
   const hasPatientSessions = patientSessionRows.length > 0;

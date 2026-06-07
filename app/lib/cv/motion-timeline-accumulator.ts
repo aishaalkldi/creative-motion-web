@@ -11,6 +11,7 @@ import type {
 } from "@/app/lib/cv/motion-summary-types";
 import { findForbiddenKeysInSummaryPayload } from "@/app/lib/cv/motion-summary-types";
 import type { SitToStandDetectorSnapshot } from "@/app/lib/cv/sit-to-stand-detector";
+import { mergeStsMovementPhaseForBucket } from "@/app/lib/cv/sts-movement-phase-merge";
 
 /** Derived tick passed each frame; maps to one per-second MotionSnapshot bucket. */
 export type StsMotionTimelineTickInput = {
@@ -154,6 +155,10 @@ export class MotionTimelineAccumulator {
     if (existing) {
       this.snapshotsBySec.set(tSec, {
         ...next,
+        movementPhase: mergeStsMovementPhaseForBucket(
+          existing.movementPhase,
+          next.movementPhase,
+        ),
         events: mergeEvents(existing.events, next.events),
       });
     } else {

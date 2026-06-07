@@ -6,25 +6,49 @@
 import type { MotionSnapshot } from "@/app/lib/cv/motion-summary-types";
 import type { SitToStandDetectorSnapshot } from "@/app/lib/cv/sit-to-stand-detector";
 
+/** Consecutive pose-lost ticks before labeling unknown (brief drops stay on last stable phase). */
+export const STS_POSE_LOST_UNKNOWN_MIN_TICKS = 8;
+
 export type StsPhaseClassifierState = {
   prevStandPhase: "up" | "down" | null;
   prevRepCount: number;
+  poseLostTicks: number;
+  lastStablePhase: MotionSnapshot["movementPhase"];
 };
 
 export function createStsPhaseClassifierState(): StsPhaseClassifierState {
-  return { prevStandPhase: null, prevRepCount: 0 };
+  return {
+    prevStandPhase: null,
+    prevRepCount: 0,
+    poseLostTicks: 0,
+    lastStablePhase: "seated",
+  };
 }
 
 export function resetStsPhaseClassifierState(state: StsPhaseClassifierState): void {
   state.prevStandPhase = null;
   state.prevRepCount = 0;
+  state.poseLostTicks = 0;
+  state.lastStablePhase = "seated";
 }
 
 /** Rest/unknown phases take precedence over stand-phase inference. */
+function resolvePoseLostPhase(state: StsPhaseClassifierState): MotionSnapshot["movementPhase"] {
+  state.poseLostTicks += 1;
+  if (state.poseLostTicks >= STS_POSE_LOST_UNKNOWN_MIN_TICKS) {
+    return "unknown";
+  }
+  return state.lastStablePhase;
+}
+
 export function resolveStsRestOrUnknownPhase(
   snap: SitToStandDetectorSnapshot,
+  state?: StsPhaseClassifierState,
 ): MotionSnapshot["movementPhase"] | null {
-  if (snap.trackingStatus === "pose-lost") return "unknown";
+  if (snap.trackingStatus === "pose-lost") {
+    return state ? resolvePoseLostPhase(state) : "unknown";
+  }
+  if (state) state.poseLostTicks = 0;
   if (snap.isBaselineCalibrating) return "rest";
   if (snap.poseReadiness === "checking" || snap.poseReadiness === "not_ready") return "rest";
   if (snap.bodyFramingState === "checking") return "rest";
@@ -41,25 +65,21 @@ export function classifyStsMovementPhase(
   snap: SitToStandDetectorSnapshot,
   state: StsPhaseClassifierState,
 ): MotionSnapshot["movementPhase"] {
-  const early = resolveStsRestOrUnknownPhase(snap);
+  const early = resolveStsRestOrUnknownPhase(snap, state);
   if (early) {
     state.prevStandPhase = snap.standPhase ?? state.prevStandPhase;
     state.prevRepCount = snap.repCount;
+    if (early !== "unknown") state.lastStablePhase = early;
     return early;
   }
 
   const standPhase = snap.standPhase ?? "down";
   const prevStand = state.prevStandPhase;
-  const repIncreased = snap.repCount > state.prevRepCount;
 
   let phase: MotionSnapshot["movementPhase"];
 
   if (standPhase === "up") {
-    if (prevStand === "down") {
-      phase = repIncreased ? "standing" : "rising";
-    } else {
-      phase = "standing";
-    }
+    phase = prevStand === "down" ? "rising" : "standing";
   } else if (prevStand === "up") {
     phase = "returning";
   } else {
@@ -68,6 +88,7 @@ export function classifyStsMovementPhase(
 
   state.prevStandPhase = standPhase;
   state.prevRepCount = snap.repCount;
+  state.lastStablePhase = phase;
 
   return phase;
 }
