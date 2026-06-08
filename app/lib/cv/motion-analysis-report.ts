@@ -29,6 +29,14 @@ import {
   type BiomechanicalContributionReview,
 } from "@/app/lib/cv/biomechanical-contribution-review";
 import {
+  buildBiomechanicalContributionReviewCompact,
+  buildMotionAnalysisExecutiveSummary,
+  resolveStsTimingMetricLabels,
+  type BiomechanicalContributionReviewCompact,
+  type MotionAnalysisExecutiveSummary,
+  type MotionAnalysisTimingMetricLabels,
+} from "@/app/lib/cv/motion-analysis-report-present";
+import {
   buildMovementQualitySignals,
   type MovementQualitySignals,
 } from "@/app/lib/cv/movement-quality-signals";
@@ -36,6 +44,11 @@ import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-recor
 
 export type { BiomechanicalContributionReview } from "@/app/lib/cv/biomechanical-contribution-review";
 export type { MovementQualitySignals } from "@/app/lib/cv/movement-quality-signals";
+export type {
+  BiomechanicalContributionReviewCompact,
+  MotionAnalysisExecutiveSummary,
+  MotionAnalysisTimingMetricLabels,
+} from "@/app/lib/cv/motion-analysis-report-present";
 
 export type {
   MotionAnalysisClinicalObservation,
@@ -126,6 +139,9 @@ export type MotionAnalysisReport = {
   confidenceLimitations: MotionAnalysisConfidenceLimitations;
   movementQuality: MovementQualitySignals | null;
   biomechanicalContributionReview: BiomechanicalContributionReview | null;
+  executiveSummary: MotionAnalysisExecutiveSummary | null;
+  biomechanicalContributionReviewCompact: BiomechanicalContributionReviewCompact | null;
+  timingMetricLabels: MotionAnalysisTimingMetricLabels | null;
 };
 
 export type BuildMotionAnalysisReportInput = {
@@ -421,6 +437,42 @@ export function buildMotionAnalysisReport(
     visibilityRatios: smtPilot?.visibilityRatios ?? null,
   });
 
+  const reportDraft: MotionAnalysisReport = {
+    sessionDurationSeconds,
+    completedReps,
+    movementTimeline,
+    summaryLabel,
+    smtPilot,
+    kinesiologyContext,
+    reportMode: interpretation.reportMode,
+    reportHeader: interpretation.reportHeader,
+    clinicalSnapshot: interpretation.clinicalSnapshot,
+    sessionSummary: interpretation.sessionSummary,
+    phaseInterpretation: interpretation.phaseInterpretation,
+    clinicalObservations: interpretation.clinicalObservations,
+    kinesiologyInsight: interpretation.kinesiologyInsight,
+    reviewNext: interpretation.reviewNext,
+    reviewNextGrouped: interpretation.reviewNextGrouped,
+    confidenceLimitations: interpretation.confidenceLimitations,
+    movementQuality,
+    biomechanicalContributionReview,
+    executiveSummary: null,
+    biomechanicalContributionReviewCompact: null,
+    timingMetricLabels: null,
+  };
+
+  const executiveSummary = buildMotionAnalysisExecutiveSummary(reportDraft);
+  const biomechanicalContributionReviewCompact = biomechanicalContributionReview
+    ? buildBiomechanicalContributionReviewCompact(
+        biomechanicalContributionReview,
+        interpretation.reviewNext,
+      )
+    : null;
+  const timingMetricLabels =
+    exerciseId === "sit-to-stand"
+      ? resolveStsTimingMetricLabels(smtPilot?.phaseRatios ?? null)
+      : null;
+
   return {
     sessionDurationSeconds,
     completedReps,
@@ -440,6 +492,9 @@ export function buildMotionAnalysisReport(
     confidenceLimitations: interpretation.confidenceLimitations,
     movementQuality,
     biomechanicalContributionReview,
+    executiveSummary,
+    biomechanicalContributionReviewCompact,
+    timingMetricLabels,
   };
 }
 
