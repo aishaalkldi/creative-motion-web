@@ -4,7 +4,7 @@
  */
 
 import type { BodyFramingProfileId } from "@/app/lib/cv/body-framing-profiles";
-import { isPatientCvCaptureWired } from "@/app/lib/cv/cv-patient-config";
+import { isCvMotionPilotWiredForCopy } from "@/app/lib/cv/cv-patient-motion-pilot-flags";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 
 /* ── Metrics payload (future patient API) ─────────────────────────────────── */
@@ -17,7 +17,8 @@ export type PatientCvExerciseId =
   | "mini-squat"
   | "single-leg-stance"
   | "heel-raise"
-  | "step-up";
+  | "step-up"
+  | "lateral-step";
 
 /** Client → server body for POST /api/patient/cv-session-metrics. */
 export type PatientCvMetricsPayload = {
@@ -83,12 +84,23 @@ export type StepUpDerivedMetrics = {
   framesTotal: number;
 };
 
+export type LateralStepDerivedMetrics = {
+  exerciseId: "lateral-step";
+  repCount: number;
+  sessionDurationS: number;
+  trackingQuality: CvTrackingQuality;
+  movementDetected: boolean;
+  framesWithPose: number;
+  framesTotal: number;
+};
+
 export type PatientCvDerivedMetrics =
   | SitToStandDerivedMetrics
   | MiniSquatDerivedMetrics
   | SingleLegStanceDerivedMetrics
   | HeelRaiseDerivedMetrics
-  | StepUpDerivedMetrics;
+  | StepUpDerivedMetrics
+  | LateralStepDerivedMetrics;
 
 /* ── Sit-to-Stand detector config ─────────────────────────────────────────── */
 
@@ -344,6 +356,10 @@ const PATIENT_SETUP_EXERCISE_HINTS: Record<
   "step-up": {
     en: "Stand facing the step with your full body and hips visible.",
     ar: "قف مواجهاً للدرجة مع ظهور جسمك ووركيك بالكامل.",
+  },
+  "lateral-step": {
+    en: "Stand with your full body visible for lateral stepping.",
+    ar: "قف مع ظهور جسمك بالكامل للخطوة الجانبية.",
   },
 };
 
@@ -615,6 +631,7 @@ export const CV_Y4_HEEL_RAISE_PATIENT_PROTOTYPE_VERSION = "cv-y4-heel-raise";
 
 /** Server-side prototype_version for step up patient_session saves (CV-Y5). */
 export const CV_Y5_STEP_UP_PATIENT_PROTOTYPE_VERSION = "cv-y5-step-up";
+export const CV_Y6_LATERAL_STEP_PATIENT_PROTOTYPE_VERSION = "cv-y6-lateral-step";
 
 const PATIENT_HEEL_RAISE_CONSENT_DONT_EN = [
   ...PATIENT_CV_CONSENT_DONT_EN,
@@ -1044,6 +1061,63 @@ const PATIENT_STEP_UP_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase
   },
 };
 
+const PATIENT_LATERAL_STEP_CONSENT_DONT_EN = [
+  ...PATIENT_CV_CONSENT_DONT_EN,
+  "Measure step width or hip strength",
+  "Score movement quality",
+] as const;
+
+const PATIENT_LATERAL_STEP_CONSENT_DONT_AR = [
+  ...PATIENT_CV_CONSENT_DONT_AR,
+  "لا يقيس عرض الخطوة أو قوة الورك",
+  "لا يقيّم جودة الحركة",
+] as const;
+
+const PATIENT_LATERAL_STEP_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = {
+  en: {
+    ...PATIENT_STEP_UP_CV_COPY.en,
+    consentDoBullets: [
+      "Uses your camera on this device to detect body position",
+      "Counts lateral-step cycles during your exercise",
+      "Shows whether movement is being detected",
+      "Saves derived counts and duration for your therapist to review",
+    ],
+    consentDontBullets: [...PATIENT_LATERAL_STEP_CONSENT_DONT_EN],
+    optionalCameraNote:
+      "Optional camera assist · therapist review only · not clinically validated. Lateral step (experimental). No width or strength score. The pilot workflow does not depend on camera tracking.",
+    startSeatedHint:
+      "Stand with your full body visible — hips and knees in view for lateral stepping.",
+    baselineStandStillHint: "Stand still at center while the camera adjusts.",
+    framingInstruction:
+      "Place your phone so your full body and hips are visible for lateral steps.",
+    movementInstruction:
+      "Step sideways onto the line or step slowly, pause briefly, then return to center with control.",
+    hipLandmarksHint:
+      "Wait until points appear on your shoulders and hips before lateral stepping.",
+  },
+  ar: {
+    ...PATIENT_STEP_UP_CV_COPY.ar,
+    consentDoBullets: [
+      "يستخدم كاميرتك على هذا الجهاز لاكتشاف وضع الجسم",
+      "يعدّ دورات الخطوة الجانبية أثناء التمرين",
+      "يُظهر ما إذا كانت الحركة تُكتشف",
+      "يحفظ العدّ والمدة المشتقة لمراجعة معالجك",
+    ],
+    consentDontBullets: [...PATIENT_LATERAL_STEP_CONSENT_DONT_AR],
+    optionalCameraNote:
+      "مساعدة كاميرا اختيارية · للمعالج فقط · غير مُتحقّق سريرياً. الخطوة الجانبية (تجريبي). لا درجة عرض أو قوة. مسار التجربة لا يعتمد على تتبّع الكاميرا.",
+    startSeatedHint:
+      "قف مع ظهور جسمك بالكامل — الوركان والركبتان في الإطار للخطوة الجانبية.",
+    baselineStandStillHint: "قف ثابتاً في المنتصف ريثما تضبط الكاميرا.",
+    framingInstruction:
+      "ضع هاتفك بحيث يظهر جسمك كاملاً والوركان للخطوات الجانبية.",
+    movementInstruction:
+      "خطُ جانباً على الخط أو الدرجة ببطء، ثبّت قليلاً، ثم عد للمنتصف بتحكم.",
+    hipLandmarksHint:
+      "انتظر حتى تظهر النقاط على الكتفين والوركين قبل الخطوة الجانبية.",
+  },
+};
+
 export function patientCvPrototypeVersion(exerciseId: PatientCvExerciseId): string {
   switch (exerciseId) {
     case "sit-to-stand":
@@ -1056,6 +1130,8 @@ export function patientCvPrototypeVersion(exerciseId: PatientCvExerciseId): stri
       return CV_Y4_HEEL_RAISE_PATIENT_PROTOTYPE_VERSION;
     case "step-up":
       return CV_Y5_STEP_UP_PATIENT_PROTOTYPE_VERSION;
+    case "lateral-step":
+      return CV_Y6_LATERAL_STEP_PATIENT_PROTOTYPE_VERSION;
   }
 }
 
@@ -1072,19 +1148,10 @@ export function patientCvCopy(
   else if (exerciseId === "single-leg-stance") base = PATIENT_SLS_CV_COPY[lang];
   else if (exerciseId === "heel-raise") base = PATIENT_HEEL_RAISE_CV_COPY[lang];
   else if (exerciseId === "step-up") base = PATIENT_STEP_UP_CV_COPY[lang];
+  else if (exerciseId === "lateral-step") base = PATIENT_LATERAL_STEP_CV_COPY[lang];
   else base = PATIENT_STS_CV_COPY[lang];
 
-  if (exerciseId === "heel-raise" && isPatientCvCaptureWired("heel-raise")) {
-    base = {
-      ...base,
-      optionalCameraNote:
-        lang === "ar"
-          ? "تتبّع بالكاميرا متاح · لمراجعة المعالج فقط · غير مُتحقّق سريرياً."
-          : "Camera-assisted tracking available · therapist review only · not clinically validated.",
-    };
-  }
-
-  if (exerciseId === "step-up" && isPatientCvCaptureWired("step-up")) {
+  if (isCvMotionPilotWiredForCopy(exerciseId)) {
     base = {
       ...base,
       optionalCameraNote:

@@ -66,8 +66,8 @@ describe("buildMotionAnalysisReport", () => {
     assert.ok(hasDisplayableMotionAnalysisReport(report));
   });
 
-  it("builds report for mini-squat, heel-raise, and step-up", () => {
-    for (const exerciseId of ["mini-squat", "heel-raise", "step-up"] as const) {
+  it("builds report for mini-squat, heel-raise, step-up, and lateral-step", () => {
+    for (const exerciseId of ["mini-squat", "heel-raise", "step-up", "lateral-step"] as const) {
       const report = buildMotionAnalysisReport({
         exerciseId,
         sessionDurationS: 10,
@@ -1713,6 +1713,131 @@ describe("step up motion intelligence report (PR68)", () => {
   it("shows phase percentages only for persisted suPilot phase ratios", () => {
     const report = enrichedStepUpReport();
     assert.equal(report.suPilotEvidenceMode, "persisted");
+    assert.ok(report.phaseInterpretation && report.phaseInterpretation.length > 0);
+    assert.ok(report.movementQuality?.observedReturningPhaseRatio !== null);
+  });
+});
+
+describe("lateral step motion intelligence report (PR69)", () => {
+  function enrichedLateralStepReport(
+    overrides: {
+      phaseRatios?: Record<string, number>;
+      repTimings?: { avgS: number; fastestS: number; slowestS: number };
+      clinicianFlags?: string[];
+      repCount?: number;
+      sessionDurationS?: number;
+    } = {},
+  ) {
+    return buildMotionAnalysisReport({
+      exerciseId: "lateral-step",
+      sessionDurationS: overrides.sessionDurationS ?? 15,
+      repCount: overrides.repCount ?? 4,
+      trackingQuality: "good",
+      movementDetected: true,
+      motionQuality: {
+        lsPilot: {
+          pilotVersion: "lsm-1",
+          isPilot: true,
+          exerciseId: "lateral-step",
+          snapshotCount: 12,
+          durationS: overrides.sessionDurationS ?? 15,
+          repCount: overrides.repCount ?? 4,
+          completeReps: overrides.repCount ?? 4,
+          unclearReps: 0,
+          trackingSignal: "good",
+          movementDetected: true,
+          phaseRatios: overrides.phaseRatios ?? {
+            standing: 20,
+            lateral_shift: 18,
+            step_out: 14,
+            return_to_center: 22,
+            rest: 14,
+            unknown: 12,
+          },
+          repTimings: overrides.repTimings ?? {
+            avgS: 3.2,
+            fastestS: 2.8,
+            slowestS: 3.8,
+          },
+          visibilityRatios: { hip: 88, knee: 86, ankle: 92 },
+          clinicianFlags: overrides.clinicianFlags ?? [],
+          reviewRequired: true,
+          reviewReason: "derived_lateral_step_motion_evidence",
+          disclaimer: "Assistive only.",
+        },
+      },
+    });
+  }
+
+  it("builds polished lateral step intelligence report", () => {
+    const report = enrichedLateralStepReport();
+    assert.equal(report.kinesiologyContext?.exerciseId, "lateral-step");
+    assert.ok(report.lsPilot);
+    assert.ok(report.executiveSummary);
+    assert.ok(report.movementQuality);
+    assert.ok(report.biomechanicalContributionReview);
+    assert.equal(report.lsPilotEvidenceMode, "persisted");
+    assert.ok(hasDisplayableMotionAnalysisReport(report));
+  });
+
+  it("includes lateral step phase model in phase interpretation", () => {
+    const report = enrichedLateralStepReport();
+    const phaseIds = (report.phaseInterpretation ?? []).map((phase) => phase.phaseId);
+    assert.ok(phaseIds.includes("lateral_shift"));
+    assert.ok(phaseIds.includes("step_out"));
+    assert.ok(phaseIds.includes("return_to_center"));
+  });
+
+  it("synthesizes lsPilot from session metrics when motion_quality is absent", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "lateral-step",
+      sessionDurationS: 12,
+      repCount: 3,
+      trackingQuality: "fair",
+      movementDetected: true,
+    });
+    assert.ok(report.lsPilot);
+    assert.equal(report.lsPilot!.completeReps, 3);
+    assert.equal(report.lsPilot!.repTimings?.avgS, 4);
+    assert.equal(report.lsPilotEvidenceMode, "synthesized");
+    assert.ok(report.movementQuality);
+  });
+
+  it("uses safe biomechanical review prompts without pathology labels", () => {
+    const report = enrichedLateralStepReport();
+    const prompts = report.biomechanicalContributionReview?.clinicianReviewPrompts ?? [];
+    const joined = prompts.join(" ").toLowerCase();
+    assert.ok(joined.includes("lateral loading") || joined.includes("weight-shift"));
+    assert.ok(joined.includes("step width") || joined.includes("return-to-center"));
+    assert.ok(!joined.includes("weakness"));
+    assert.ok(!joined.includes("return-to-sport"));
+    assert.ok(!joined.includes("treatment recommendation"));
+    assert.ok(!joined.includes("diagnosis"));
+    assert.ok(!joined.includes("instability diagnosis"));
+  });
+
+  it("marks synthesized lsPilot and avoids implying phase detection", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "lateral-step",
+      sessionDurationS: 12,
+      repCount: 3,
+      trackingQuality: "fair",
+      movementDetected: true,
+    });
+
+    assert.equal(report.lsPilotEvidenceMode, "synthesized");
+    assert.equal(report.phaseInterpretation, null);
+    assert.equal(report.movementQuality?.observedReturningPhaseRatio, null);
+    assert.ok(
+      report.executiveSummary?.lines.some((line) =>
+        line.includes("Limited motion evidence"),
+      ),
+    );
+  });
+
+  it("shows phase percentages only for persisted lsPilot phase ratios", () => {
+    const report = enrichedLateralStepReport();
+    assert.equal(report.lsPilotEvidenceMode, "persisted");
     assert.ok(report.phaseInterpretation && report.phaseInterpretation.length > 0);
     assert.ok(report.movementQuality?.observedReturningPhaseRatio !== null);
   });

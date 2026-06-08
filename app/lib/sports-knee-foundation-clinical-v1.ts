@@ -56,6 +56,7 @@ const SPORTS_KNEE_CV_ASSISTED_CANDIDATE_IDS = [
   "single-leg-stance",
   "heel-raise",
   "step-up",
+  "lateral-step",
 ] as const satisfies readonly SportsKneeFoundationExerciseId[];
 
 /** Only exercises with dedicated patient capture wiring (not allowlist-only). */
@@ -320,6 +321,7 @@ export const SPORTS_KNEE_FOUNDATION_CLINICAL_V1: SportsKneeFoundationExerciseCli
       regressionCriteria:
         "Floor-level side steps only, reduce reps, or use hand support if valgus or pain increases.",
       futureCvMeasurementTarget: "lateral step count, knee valgus",
+      cvAssisted: true,
     },
     {
       exerciseId: "step-up",
