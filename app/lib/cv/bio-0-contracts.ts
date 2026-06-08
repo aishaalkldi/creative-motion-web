@@ -16,7 +16,8 @@ export type PatientCvExerciseId =
   | "sit-to-stand"
   | "mini-squat"
   | "single-leg-stance"
-  | "heel-raise";
+  | "heel-raise"
+  | "step-up";
 
 /** Client → server body for POST /api/patient/cv-session-metrics. */
 export type PatientCvMetricsPayload = {
@@ -72,11 +73,22 @@ export type HeelRaiseDerivedMetrics = {
   framesTotal: number;
 };
 
+export type StepUpDerivedMetrics = {
+  exerciseId: "step-up";
+  repCount: number;
+  sessionDurationS: number;
+  trackingQuality: CvTrackingQuality;
+  movementDetected: boolean;
+  framesWithPose: number;
+  framesTotal: number;
+};
+
 export type PatientCvDerivedMetrics =
   | SitToStandDerivedMetrics
   | MiniSquatDerivedMetrics
   | SingleLegStanceDerivedMetrics
-  | HeelRaiseDerivedMetrics;
+  | HeelRaiseDerivedMetrics
+  | StepUpDerivedMetrics;
 
 /* ── Sit-to-Stand detector config ─────────────────────────────────────────── */
 
@@ -328,6 +340,10 @@ const PATIENT_SETUP_EXERCISE_HINTS: Record<
   "heel-raise": {
     en: "Stand at a slight 45° angle with both ankles visible.",
     ar: "قف بزاوية 45° تقريباً مع ظهور الكاحلين معاً.",
+  },
+  "step-up": {
+    en: "Stand facing the step with your full body and hips visible.",
+    ar: "قف مواجهاً للدرجة مع ظهور جسمك ووركيك بالكامل.",
   },
 };
 
@@ -596,6 +612,9 @@ export const CV_Y3_SINGLE_LEG_STANCE_PATIENT_PROTOTYPE_VERSION = "cv-y3-single-l
 
 /** Server-side prototype_version for double heel raise patient_session saves (CV-Y4). */
 export const CV_Y4_HEEL_RAISE_PATIENT_PROTOTYPE_VERSION = "cv-y4-heel-raise";
+
+/** Server-side prototype_version for step up patient_session saves (CV-Y5). */
+export const CV_Y5_STEP_UP_PATIENT_PROTOTYPE_VERSION = "cv-y5-step-up";
 
 const PATIENT_HEEL_RAISE_CONSENT_DONT_EN = [
   ...PATIENT_CV_CONSENT_DONT_EN,
@@ -884,6 +903,147 @@ const PATIENT_HEEL_RAISE_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyB
   },
 };
 
+const PATIENT_STEP_UP_CONSENT_DONT_EN = [
+  ...PATIENT_CV_CONSENT_DONT_EN,
+  "Measure step height or limb strength",
+  "Score movement quality",
+] as const;
+
+const PATIENT_STEP_UP_CONSENT_DONT_AR = [
+  ...PATIENT_CV_CONSENT_DONT_AR,
+  "لا يقيس ارتفاع الدرجة أو قوة الطرف",
+  "لا يقيّم جودة الحركة",
+] as const;
+
+const PATIENT_STEP_UP_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = {
+  en: {
+    consentTitle: "Camera for movement counting",
+    consentDoIntro: "What this does:",
+    consentDoBullets: [
+      "Uses your camera on this device to detect body position",
+      "Counts step-up reps during your exercise",
+      "Shows whether movement is being detected",
+      "Saves derived counts and duration for your therapist to review",
+    ],
+    consentDontIntro: "What this does not do:",
+    consentDontBullets: [...PATIENT_STEP_UP_CONSENT_DONT_EN],
+    consentSecureNote: "Camera access requires a secure connection (HTTPS).",
+    consentDerivedNote:
+      "Only derived session metrics are saved. No video or body coordinates are stored.",
+    consentAccept: "I understand — enable camera",
+    startTracking: "Start movement tracking",
+    stopTracking: "Stop tracking",
+    repsCounted: (n) => `Reps counted: ${n}`,
+    movementDetectedYes: "Movement detected",
+    movementDetectedNo: "Movement not detected — adjust camera angle",
+    trackingSignalLabel: "Tracking signal",
+    trackingGood: "Tracking signal: Good",
+    trackingFair: "Tracking signal: Fair — results may vary",
+    trackingPoor: "Tracking signal: Weak — adjust phone or lighting",
+    sessionDuration: (formatted) => `Session duration: ${formatted}`,
+    savedTherapistReview: "Saved — your therapist can review this session",
+    savingMetrics: "Saving session…",
+    saveError: "Session data could not be saved. You can continue your exercise.",
+    loadingPoseLibrary: "Loading pose library…",
+    loadingPoseModel: "Loading pose model…",
+    startingCamera: "Starting camera…",
+    prototypeNotice:
+      "Movement counting is assistive only. It is not clinically validated and does not replace your therapist's guidance.",
+    therapistReviewOnly: "For therapist review only — not a clinical assessment.",
+    optionalCameraNote:
+      "Optional camera assist · therapist review only · not clinically validated. Step up (experimental). No height or strength score. The pilot workflow does not depend on camera tracking.",
+    continueWithoutCamera: "Continue without camera",
+    moveComfortably: "Take your time and move comfortably.",
+    trackingStatusReady: "Ready",
+    trackingStatusDetecting: "Detecting movement…",
+    startSeatedHint:
+      "Stand facing the step with your full body visible — hips and knees in view.",
+    baselineStandStillHint: "Stand still on the floor while the camera adjusts.",
+    framingInstruction:
+      "Place your phone so your full body, hips, and the step are visible from the side.",
+    startWhenReadyHint: "Start after the camera shows ready.",
+    movementInstruction: "Step up onto the platform slowly, pause briefly, then step down with control.",
+    checkingCameraPosition: "Checking camera position…",
+    cameraReadyLabel: "Camera ready ✓",
+    almostReadyLabel: "Almost ready — adjust your phone slightly",
+    adjustPhoneBodyChairLabel: "Adjust phone position so your body and hips are visible",
+    poseNotDetectedLabel: "Pose not detected — adjust your phone",
+    tryAgainLabel: "Try again",
+    hipLandmarksHint:
+      "Wait until points appear on your shoulders and hips before stepping onto the platform.",
+    framingGoodDistance: "Good distance",
+    framingMoveBack: "Step back",
+    framingMoveCloser: "Move closer",
+    framingAdjustAngle: "Adjust camera angle",
+    framingLowVisibility: "Low visibility",
+    supportNearWallHint:
+      "Stand near a handrail or counter for light support if your plan allows.",
+    ...PATIENT_LIVE_SIGNAL_COPY_EN,
+  },
+  ar: {
+    consentTitle: "الكاميرا لعدّ الحركة",
+    consentDoIntro: "ماذا يفعل هذا:",
+    consentDoBullets: [
+      "يستخدم كاميرتك على هذا الجهاز لاكتشاف وضع الجسم",
+      "يعدّ تكرارات صعود الدرجة أثناء التمرين",
+      "يُظهر ما إذا كانت الحركة تُكتشف",
+      "يحفظ العدّ والمدة المشتقة لمراجعة معالجك",
+    ],
+    consentDontIntro: "ماذا لا يفعل هذا:",
+    consentDontBullets: [...PATIENT_STEP_UP_CONSENT_DONT_AR],
+    consentSecureNote: "يتطلب الوصول للكاميرا اتصالاً آمناً (HTTPS).",
+    consentDerivedNote: "تُحفظ مقاييس الجلسة المشتقة فقط. لا يُخزَّن فيديو أو إحداثيات جسم.",
+    consentAccept: "أفهم — تفعيل الكاميرا",
+    startTracking: "بدء تتبّع الحركة",
+    stopTracking: "إيقاف التتبّع",
+    repsCounted: (n) => `التكرارات المحسوبة: ${n}`,
+    movementDetectedYes: "تم اكتشاف الحركة",
+    movementDetectedNo: "لم تُكتشف الحركة — عدّل زاوية الكاميرا",
+    trackingSignalLabel: "إشارة التتبّع",
+    trackingGood: "إشارة التتبّع: جيدة",
+    trackingFair: "إشارة التتبّع: متوسطة — قد تختلف النتائج",
+    trackingPoor: "إشارة التتبّع: ضعيفة — عدّل الهاتف أو الإضاءة",
+    sessionDuration: (formatted) => `مدة الجلسة: ${formatted}`,
+    savedTherapistReview: "تم الحفظ — يمكن لمعالجك مراجعة هذه الجلسة",
+    savingMetrics: "جاري حفظ الجلسة…",
+    saveError: "تعذّر حفظ بيانات الجلسة. يمكنك متابعة التمرين.",
+    loadingPoseLibrary: "جاري تحميل مكتبة الوضعية…",
+    loadingPoseModel: "جاري تحميل نموذج الوضعية…",
+    startingCamera: "جاري تشغيل الكاميرا…",
+    prototypeNotice:
+      "عدّ الحركة مساعد فقط. غير مُتحقّق سريرياً ولا يُغني عن إرشاد معالجك.",
+    therapistReviewOnly: "لمراجعة المعالج فقط — وليس تقييماً سريرياً.",
+    optionalCameraNote:
+      "مساعدة كاميرا اختيارية · للمعالج فقط · غير مُتحقّق سريرياً. صعود الدرجة (تجريبي). لا درجة ارتفاع أو قوة. مسار التجربة لا يعتمد على تتبّع الكاميرا.",
+    continueWithoutCamera: "المتابعة دون كاميرا",
+    moveComfortably: "خذ وقتك وتحرّك براحة.",
+    trackingStatusReady: "جاهز",
+    trackingStatusDetecting: "جاري اكتشاف الحركة…",
+    startSeatedHint:
+      "قف مواجهاً للدرجة مع ظهور جسمك بالكامل — الوركان والركبتان في الإطار.",
+    baselineStandStillHint: "قف ثابتاً على الأرض ريثما تضبط الكاميرا.",
+    framingInstruction:
+      "ضع هاتفك بحيث يظهر جسمك كاملاً والوركان والدرجة من الجانب.",
+    startWhenReadyHint: "ابدأ بعد أن تظهر الكاميرا أنها جاهزة.",
+    movementInstruction: "اصعد على الدرجة ببطء، ثبّت قليلاً، ثم انزل بتحكم.",
+    checkingCameraPosition: "جاري فحص موضع الكاميرا…",
+    cameraReadyLabel: "الكاميرا جاهزة ✓",
+    almostReadyLabel: "يكاد يكون جاهزاً — عدّل الهاتف قليلاً",
+    adjustPhoneBodyChairLabel: "عدّل موضع الهاتف حتى يظهر جسمك ووركاك",
+    poseNotDetectedLabel: "لم تُكتشف الوضعية — عدّل الهاتف",
+    tryAgainLabel: "حاول مرة أخرى",
+    hipLandmarksHint:
+      "انتظر حتى تظهر النقاط على الكتفين والوركين قبل الصعود على الدرجة.",
+    framingGoodDistance: "المسافة مناسبة",
+    framingMoveBack: "ابتعد قليلاً",
+    framingMoveCloser: "اقترب قليلاً",
+    framingAdjustAngle: "عدّل زاوية الكاميرا",
+    framingLowVisibility: "وضوح منخفض",
+    supportNearWallHint: "قف قرب درابزين أو سطح للدعم الخفيف إذا سمح برنامجك بذلك.",
+    ...PATIENT_LIVE_SIGNAL_COPY_AR,
+  },
+};
+
 export function patientCvPrototypeVersion(exerciseId: PatientCvExerciseId): string {
   switch (exerciseId) {
     case "sit-to-stand":
@@ -894,6 +1054,8 @@ export function patientCvPrototypeVersion(exerciseId: PatientCvExerciseId): stri
       return CV_Y3_SINGLE_LEG_STANCE_PATIENT_PROTOTYPE_VERSION;
     case "heel-raise":
       return CV_Y4_HEEL_RAISE_PATIENT_PROTOTYPE_VERSION;
+    case "step-up":
+      return CV_Y5_STEP_UP_PATIENT_PROTOTYPE_VERSION;
   }
 }
 
@@ -909,9 +1071,20 @@ export function patientCvCopy(
   if (exerciseId === "mini-squat") base = PATIENT_MINI_SQUAT_CV_COPY[lang];
   else if (exerciseId === "single-leg-stance") base = PATIENT_SLS_CV_COPY[lang];
   else if (exerciseId === "heel-raise") base = PATIENT_HEEL_RAISE_CV_COPY[lang];
+  else if (exerciseId === "step-up") base = PATIENT_STEP_UP_CV_COPY[lang];
   else base = PATIENT_STS_CV_COPY[lang];
 
   if (exerciseId === "heel-raise" && isPatientCvCaptureWired("heel-raise")) {
+    base = {
+      ...base,
+      optionalCameraNote:
+        lang === "ar"
+          ? "تتبّع بالكاميرا متاح · لمراجعة المعالج فقط · غير مُتحقّق سريرياً."
+          : "Camera-assisted tracking available · therapist review only · not clinically validated.",
+    };
+  }
+
+  if (exerciseId === "step-up" && isPatientCvCaptureWired("step-up")) {
     base = {
       ...base,
       optionalCameraNote:

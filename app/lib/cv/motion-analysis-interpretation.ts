@@ -55,6 +55,15 @@ const HEEL_RAISE_PHASE_LABELS: Readonly<Record<string, string>> = {
   unknown: "Unknown",
 };
 
+const STEP_UP_PHASE_LABELS: Readonly<Record<string, string>> = {
+  standing: "Standing / baseline",
+  step_ascent: "Step ascent",
+  top_position: "Top position",
+  step_descent: "Step descent",
+  rest: "Rest / transition",
+  unknown: "Unknown",
+};
+
 const UNKNOWN_PHASE_HIGH_PCT = 25;
 const REST_PHASE_HIGH_PCT = 40;
 const RETURNING_PHASE_LOW_PCT = 15;
@@ -192,6 +201,7 @@ function phaseLabel(phaseId: string, kinesiology: ExerciseKinesiologyContext | n
   const fromKinesiology = kinesiology?.movementPhases.find((phase) => phase.id === phaseId);
   if (fromKinesiology) return fromKinesiology.label;
   return (
+    STEP_UP_PHASE_LABELS[phaseId] ??
     HEEL_RAISE_PHASE_LABELS[phaseId] ??
     MINI_SQUAT_PHASE_LABELS[phaseId] ??
     STS_PHASE_LABELS[phaseId] ??
@@ -210,7 +220,8 @@ function buildMetricSummary(input: BuildMotionAnalysisInterpretationInput): stri
       const strictComplete =
         (input.exerciseId === "sit-to-stand" ||
           input.exerciseId === "mini-squat" ||
-          input.exerciseId === "heel-raise") &&
+          input.exerciseId === "heel-raise" ||
+          input.exerciseId === "step-up") &&
         isStrictPhaseCompletenessFromPilot(input.smtPilot) &&
         (input.exerciseId !== "mini-squat" ||
           ((input.smtPilot.phaseRatios?.lowering ?? 0) >= 5 &&
@@ -219,7 +230,11 @@ function buildMetricSummary(input: BuildMotionAnalysisInterpretationInput): stri
         (input.exerciseId !== "heel-raise" ||
           ((input.smtPilot.phaseRatios?.rising ?? 0) >= 5 &&
             (input.smtPilot.phaseRatios?.peak_raise ?? 0) >= 5 &&
-            (input.smtPilot.phaseRatios?.lowering ?? 0) >= 5));
+            (input.smtPilot.phaseRatios?.lowering ?? 0) >= 5)) &&
+        (input.exerciseId !== "step-up" ||
+          ((input.smtPilot.phaseRatios?.step_ascent ?? 0) >= 5 &&
+            (input.smtPilot.phaseRatios?.top_position ?? 0) >= 5 &&
+            (input.smtPilot.phaseRatios?.step_descent ?? 0) >= 5));
       const cycleLabel = formatStsCycleCountLabel(
         input.smtPilot.completeReps,
         strictComplete,
@@ -409,6 +424,36 @@ function observationsFromPhaseRatios(
     observations.push({
       id: "hr_brief_rising",
       text: "A brief rising phase relative to standing was captured — clinician may review heel raise height during ascent.",
+    });
+  }
+
+  const stepAscentPct = phaseRatios.step_ascent ?? 0;
+  const topPositionPct = phaseRatios.top_position ?? 0;
+  const stepDescentPct = phaseRatios.step_descent ?? 0;
+
+  if (exerciseId === "step-up" && stepDescentPct > 0 && stepDescentPct < RETURNING_PHASE_LOW_PCT) {
+    observations.push({
+      id: "su_low_descent",
+      text: "Camera-derived evidence suggests the step descent phase may be under-represented in capture; clinician may review descent control visually.",
+    });
+  }
+
+  if (exerciseId === "step-up" && topPositionPct > 0 && topPositionPct < 10) {
+    observations.push({
+      id: "su_brief_top",
+      text: "A brief top step position relative to capture was noted — clinician may review step height strategy visually.",
+    });
+  }
+
+  if (
+    exerciseId === "step-up" &&
+    stepAscentPct > 0 &&
+    stepAscentPct < RISING_PHASE_LOW_PCT &&
+    standingPct > 40
+  ) {
+    observations.push({
+      id: "su_brief_ascent",
+      text: "A brief step ascent phase relative to standing was captured — clinician may review ascent control visually.",
     });
   }
 

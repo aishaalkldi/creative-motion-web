@@ -16,6 +16,10 @@ import {
   HEEL_RAISE_LIMITED_MOTION_EVIDENCE_LABEL,
 } from "@/app/lib/cv/heel-raise-motion-pilot-record";
 import {
+  STEP_UP_CYCLE_TIMING_ESTIMATED_NOTE,
+  STEP_UP_LIMITED_MOTION_EVIDENCE_LABEL,
+} from "@/app/lib/cv/step-up-motion-pilot-record";
+import {
   MINI_SQUAT_CYCLE_TIMING_ESTIMATED_NOTE,
   MINI_SQUAT_LIMITED_MOTION_EVIDENCE_LABEL,
 } from "@/app/lib/cv/mini-squat-motion-pilot-record";
@@ -23,10 +27,12 @@ import {
 const STS_EXERCISE_ID = "sit-to-stand";
 const MINI_SQUAT_EXERCISE_ID = "mini-squat";
 const HEEL_RAISE_EXERCISE_ID = "heel-raise";
+const STEP_UP_EXERCISE_ID = "step-up";
 const POLISHED_INTELLIGENCE_EXERCISE_IDS = new Set([
   STS_EXERCISE_ID,
   MINI_SQUAT_EXERCISE_ID,
   HEEL_RAISE_EXERCISE_ID,
+  STEP_UP_EXERCISE_ID,
 ]);
 const MEANINGFUL_PHASE_PCT = 5;
 
@@ -126,6 +132,30 @@ export function isStrictHeelRaisePhaseCompleteness(
     rising >= MEANINGFUL_PHASE_PCT &&
     peakRaise >= MEANINGFUL_PHASE_PCT &&
     lowering >= MEANINGFUL_PHASE_PCT;
+
+  if (!phasesComplete) return false;
+  if (movementQuality?.phaseConsistency === "Incomplete") return false;
+  if (movementQuality?.completionClarity === "Unclear") return false;
+  return true;
+}
+
+export function isStrictStepUpPhaseCompleteness(
+  suPilot: MotionAnalysisSmtPilotSummary | null | undefined,
+  movementQuality: MovementQualitySignals | null | undefined,
+): boolean {
+  if (!suPilot?.phaseRatios) return false;
+  if (suPilot.unclearReps > 0) return false;
+  if (hasFlag(suPilot.clinicianFlags, "incomplete_cycle")) return false;
+
+  const ratios = suPilot.phaseRatios;
+  const stepAscent = ratios.step_ascent ?? 0;
+  const topPosition = ratios.top_position ?? 0;
+  const stepDescent = ratios.step_descent ?? 0;
+
+  const phasesComplete =
+    stepAscent >= MEANINGFUL_PHASE_PCT &&
+    topPosition >= MEANINGFUL_PHASE_PCT &&
+    stepDescent >= MEANINGFUL_PHASE_PCT;
 
   if (!phasesComplete) return false;
   if (movementQuality?.phaseConsistency === "Incomplete") return false;
@@ -234,6 +264,13 @@ export function resolveCaptureEvidenceCycleMetricLabel(
   if (exerciseId === HEEL_RAISE_EXERCISE_ID) {
     const strictComplete = isStrictHeelRaisePhaseCompleteness(
       report.hrPilot,
+      report.movementQuality,
+    );
+    return strictComplete ? "Complete cycles" : "Camera-detected cycles";
+  }
+  if (exerciseId === STEP_UP_EXERCISE_ID) {
+    const strictComplete = isStrictStepUpPhaseCompleteness(
+      report.suPilot,
       report.movementQuality,
     );
     return strictComplete ? "Complete cycles" : "Camera-detected cycles";
@@ -378,6 +415,33 @@ function keyHeelRaisePhaseFinding(
   return "Phase distribution limited — clinician may assess heel raise pattern visually.";
 }
 
+function keyStepUpPhaseFinding(
+  movementQuality: MovementQualitySignals | null | undefined,
+  phaseRatios: MotionAnalysisPhaseRatios | null | undefined,
+): string | null {
+  if (movementQuality?.phaseConsistency && movementQuality.phaseConsistency !== "Insufficient data") {
+    const stepDescent = phaseRatios?.step_descent ?? movementQuality.observedReturningPhaseRatio ?? null;
+    const topPosition = phaseRatios?.top_position ?? null;
+    if (stepDescent !== null && stepDescent < 15) {
+      return `Step descent phase under-represented (${stepDescent}% of snapshots) — clinician may review descent control visually.`;
+    }
+    if (topPosition !== null && topPosition < 10) {
+      return `Top step position brief relative to capture (${topPosition}% of snapshots).`;
+    }
+    return `Phase consistency: ${movementQuality.phaseConsistency.toLowerCase()} across captured snapshots.`;
+  }
+
+  if (phaseRatios) {
+    const stepAscent = phaseRatios.step_ascent ?? 0;
+    const stepDescent = phaseRatios.step_descent ?? 0;
+    if (stepAscent > 0 || stepDescent > 0) {
+      return `Step ascent ${stepAscent}% · Step descent ${stepDescent}% of captured snapshots.`;
+    }
+  }
+
+  return "Phase distribution limited — clinician may assess step up pattern visually.";
+}
+
 function keyPacingFinding(
   movementQuality: MovementQualitySignals | null | undefined,
 ): string | null {
@@ -399,6 +463,7 @@ function trackingConfidenceLine(report: MotionAnalysisReport): string {
     report.smtPilot?.trackingSignal ??
     report.msPilot?.trackingSignal ??
     report.hrPilot?.trackingSignal ??
+    report.suPilot?.trackingSignal ??
     report.sessionSummary?.trackingSignal ??
     null;
   const confidence = report.reportHeader?.confidenceLabel ?? "Assistive confidence not recorded";
@@ -420,11 +485,13 @@ export function buildMotionAnalysisExecutiveSummary(
   if (!exerciseId || !POLISHED_INTELLIGENCE_EXERCISE_IDS.has(exerciseId)) return null;
 
   const lines: string[] = [];
-  const motionPilot = report.smtPilot ?? report.msPilot ?? report.hrPilot;
+  const motionPilot = report.smtPilot ?? report.msPilot ?? report.hrPilot ?? report.suPilot;
   const completeReps = motionPilot?.completeReps ?? report.completedReps;
   const synthesizedMiniSquat = isSynthesizedMiniSquatEvidence(report);
   const synthesizedHeelRaise = isSynthesizedHeelRaiseEvidence(report);
-  const synthesizedLimitedEvidence = synthesizedMiniSquat || synthesizedHeelRaise;
+  const synthesizedStepUp = isSynthesizedStepUpEvidence(report);
+  const synthesizedLimitedEvidence =
+    synthesizedMiniSquat || synthesizedHeelRaise || synthesizedStepUp;
   const strictComplete =
     exerciseId === MINI_SQUAT_EXERCISE_ID
       ? !synthesizedMiniSquat &&
@@ -432,7 +499,10 @@ export function buildMotionAnalysisExecutiveSummary(
       : exerciseId === HEEL_RAISE_EXERCISE_ID
         ? !synthesizedHeelRaise &&
           isStrictHeelRaisePhaseCompleteness(report.hrPilot, report.movementQuality)
-        : isStrictStsPhaseCompleteness(report.smtPilot, report.movementQuality);
+        : exerciseId === STEP_UP_EXERCISE_ID
+          ? !synthesizedStepUp &&
+            isStrictStepUpPhaseCompleteness(report.suPilot, report.movementQuality)
+          : isStrictStsPhaseCompleteness(report.smtPilot, report.movementQuality);
   const cycleLabel = formatStsCycleCountLabel(completeReps, strictComplete);
   if (cycleLabel) {
     lines.push(cycleLabel.charAt(0).toUpperCase() + cycleLabel.slice(1) + " recorded.");
@@ -444,6 +514,9 @@ export function buildMotionAnalysisExecutiveSummary(
   } else if (synthesizedHeelRaise) {
     lines.push(HEEL_RAISE_LIMITED_MOTION_EVIDENCE_LABEL + ".");
     lines.push(HEEL_RAISE_CYCLE_TIMING_ESTIMATED_NOTE);
+  } else if (synthesizedStepUp) {
+    lines.push(STEP_UP_LIMITED_MOTION_EVIDENCE_LABEL + ".");
+    lines.push(STEP_UP_CYCLE_TIMING_ESTIMATED_NOTE);
   }
 
   lines.push(trackingConfidenceLine(report));
@@ -454,7 +527,9 @@ export function buildMotionAnalysisExecutiveSummary(
         ? keyMiniSquatPhaseFinding(report.movementQuality, report.msPilot?.phaseRatios ?? null)
         : exerciseId === HEEL_RAISE_EXERCISE_ID
           ? keyHeelRaisePhaseFinding(report.movementQuality, report.hrPilot?.phaseRatios ?? null)
-          : keyStsPhaseFinding(report.movementQuality, report.smtPilot?.phaseRatios ?? null);
+          : exerciseId === STEP_UP_EXERCISE_ID
+            ? keyStepUpPhaseFinding(report.movementQuality, report.suPilot?.phaseRatios ?? null)
+            : keyStsPhaseFinding(report.movementQuality, report.smtPilot?.phaseRatios ?? null);
     if (phaseFinding) lines.push(phaseFinding);
 
     const pacingFinding = keyPacingFinding(report.movementQuality);
@@ -509,4 +584,17 @@ export function hasPersistedHeelRaisePhaseRatios(report: MotionAnalysisReport): 
 
 export function isSynthesizedHeelRaiseEvidence(report: MotionAnalysisReport): boolean {
   return report.hrPilotEvidenceMode === "synthesized";
+}
+
+export function hasPersistedStepUpPhaseRatios(report: MotionAnalysisReport): boolean {
+  if (report.suPilotEvidenceMode !== "persisted") return false;
+  const ratios = report.suPilot?.phaseRatios;
+  return (
+    ratios != null &&
+    Object.values(ratios).some((ratio) => typeof ratio === "number" && ratio > 0)
+  );
+}
+
+export function isSynthesizedStepUpEvidence(report: MotionAnalysisReport): boolean {
+  return report.suPilotEvidenceMode === "synthesized";
 }

@@ -8,6 +8,11 @@ import {
   type HeelRaiseMotionPilotRecord,
 } from "@/app/lib/cv/heel-raise-motion-pilot-record";
 import {
+  findForbiddenKeysInStepUpPilotRecord,
+  STEP_UP_PILOT_RECORD_ALLOWED_TOP_LEVEL_KEYS,
+  type StepUpMotionPilotRecord,
+} from "@/app/lib/cv/step-up-motion-pilot-record";
+import {
   findForbiddenKeysInMiniSquatPilotRecord,
   MINI_SQUAT_PILOT_RECORD_ALLOWED_TOP_LEVEL_KEYS,
   type MiniSquatMotionPilotRecord,
@@ -48,6 +53,15 @@ const HEEL_RAISE_PHASE_RATIO_KEYS = new Set([
   "unknown",
 ]);
 
+const STEP_UP_PHASE_RATIO_KEYS = new Set([
+  "standing",
+  "step_ascent",
+  "top_position",
+  "step_descent",
+  "rest",
+  "unknown",
+]);
+
 function isNullableDurationS(value: unknown): boolean {
   return value === null || (typeof value === "number" && Number.isFinite(value) && value >= 0);
 }
@@ -78,6 +92,10 @@ function isMiniSquatMotionPilotPhaseRatios(value: unknown): boolean {
 
 function isHeelRaiseMotionPilotPhaseRatios(value: unknown): boolean {
   return isMotionPilotPhaseRatios(value, HEEL_RAISE_PHASE_RATIO_KEYS);
+}
+
+function isStepUpMotionPilotPhaseRatios(value: unknown): boolean {
+  return isMotionPilotPhaseRatios(value, STEP_UP_PHASE_RATIO_KEYS);
 }
 
 function isStsMotionPilotRepTimings(value: unknown): boolean {
@@ -195,6 +213,39 @@ function isHeelRaiseMotionPilotRecord(value: unknown): value is HeelRaiseMotionP
   return findForbiddenKeysInHeelRaisePilotRecord(r as HeelRaiseMotionPilotRecord).length === 0;
 }
 
+function isStepUpMotionPilotRecord(value: unknown): value is StepUpMotionPilotRecord {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const r = value as Record<string, unknown>;
+  const keys = Object.keys(r).sort();
+  const allowed = [...STEP_UP_PILOT_RECORD_ALLOWED_TOP_LEVEL_KEYS].sort();
+  if (keys.join(",") !== allowed.join(",")) return false;
+  if (r.pilotVersion !== "sum-1") return false;
+  if (r.isPilot !== true) return false;
+  if (r.exerciseId !== "step-up") return false;
+  if (r.reviewRequired !== true) return false;
+  if (typeof r.reviewReason !== "string" || r.reviewReason.length === 0) return false;
+  if (typeof r.disclaimer !== "string" || r.disclaimer.length === 0) return false;
+  if (!TRACKING_SIGNALS.has(String(r.trackingSignal))) return false;
+  if (typeof r.movementDetected !== "boolean") return false;
+  for (const key of [
+    "snapshotCount",
+    "durationS",
+    "repCount",
+    "completeReps",
+    "unclearReps",
+  ] as const) {
+    if (!Number.isInteger(r[key]) || (r[key] as number) < 0) return false;
+  }
+  if (!isStepUpMotionPilotPhaseRatios(r.phaseRatios)) return false;
+  if (!isStsMotionPilotRepTimings(r.repTimings)) return false;
+  if (!isStsMotionPilotVisibilityRatios(r.visibilityRatios)) return false;
+  if (!Array.isArray(r.clinicianFlags)) return false;
+  if (!r.clinicianFlags.every((flag) => typeof flag === "string" && flag.length > 0)) {
+    return false;
+  }
+  return findForbiddenKeysInStepUpPilotRecord(r as StepUpMotionPilotRecord).length === 0;
+}
+
 /** Returns null when valid; error message when invalid. */
 export function validateCvMotionQualityPayload(value: unknown): string | null {
   if (value === undefined || value === null) return null;
@@ -213,6 +264,9 @@ export function validateCvMotionQualityPayload(value: unknown): string | null {
   }
   if (payload.hrPilot !== undefined && !isHeelRaiseMotionPilotRecord(payload.hrPilot)) {
     return "motion_quality.hrPilot is invalid.";
+  }
+  if (payload.suPilot !== undefined && !isStepUpMotionPilotRecord(payload.suPilot)) {
+    return "motion_quality.suPilot is invalid.";
   }
   return null;
 }
