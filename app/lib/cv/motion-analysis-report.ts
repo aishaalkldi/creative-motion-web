@@ -31,6 +31,7 @@ import {
 import {
   buildBiomechanicalContributionReviewCompact,
   buildMotionAnalysisExecutiveSummary,
+  filterSemanticallyDuplicatePrompts,
   resolveStsTimingMetricLabels,
   type BiomechanicalContributionReviewCompact,
   type MotionAnalysisExecutiveSummary,
@@ -142,6 +143,7 @@ export type MotionAnalysisReport = {
   executiveSummary: MotionAnalysisExecutiveSummary | null;
   biomechanicalContributionReviewCompact: BiomechanicalContributionReviewCompact | null;
   timingMetricLabels: MotionAnalysisTimingMetricLabels | null;
+  movementQualityReviewFocusDisplay: string[] | null;
 };
 
 export type BuildMotionAnalysisReportInput = {
@@ -459,6 +461,7 @@ export function buildMotionAnalysisReport(
     executiveSummary: null,
     biomechanicalContributionReviewCompact: null,
     timingMetricLabels: null,
+    movementQualityReviewFocusDisplay: null,
   };
 
   const executiveSummary = buildMotionAnalysisExecutiveSummary(reportDraft);
@@ -466,11 +469,19 @@ export function buildMotionAnalysisReport(
     ? buildBiomechanicalContributionReviewCompact(
         biomechanicalContributionReview,
         interpretation.reviewNext,
+        movementQuality?.clinicianReviewFocus,
       )
     : null;
   const timingMetricLabels =
     exerciseId === "sit-to-stand"
       ? resolveStsTimingMetricLabels(smtPilot?.phaseRatios ?? null)
+      : null;
+  const movementQualityReviewFocusDisplay =
+    exerciseId === "sit-to-stand" && movementQuality
+      ? filterSemanticallyDuplicatePrompts(movementQuality.clinicianReviewFocus, [
+          ...(interpretation.reviewNext ?? []).map((item) => item.text),
+          ...(biomechanicalContributionReviewCompact?.clinicianReview ?? []),
+        ])
       : null;
 
   return {
@@ -495,6 +506,7 @@ export function buildMotionAnalysisReport(
     executiveSummary,
     biomechanicalContributionReviewCompact,
     timingMetricLabels,
+    movementQualityReviewFocusDisplay,
   };
 }
 
