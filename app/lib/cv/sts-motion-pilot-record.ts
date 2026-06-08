@@ -75,6 +75,7 @@ export type BuildStsMotionPilotRecordInput = {
   summary: SessionMotionSummary;
   metrics: SitToStandDerivedMetrics;
   snapshotCount: number;
+  extraClinicianFlags?: string[];
 };
 
 function dominantTrackingSignal(
@@ -132,7 +133,10 @@ function buildPhaseDetectionFlags(
   return flags;
 }
 
-function buildClinicianFlags(summary: SessionMotionSummary): string[] {
+function buildClinicianFlags(
+  summary: SessionMotionSummary,
+  extraClinicianFlags?: string[],
+): string[] {
   const flags = new Set<string>(summary.captureFlags);
   if (summary.unclearRepCount > 0) {
     flags.add("unclear_reps_recorded");
@@ -141,6 +145,9 @@ function buildClinicianFlags(summary: SessionMotionSummary): string[] {
     flags.add("pose_tracking_interrupted");
   }
   for (const flag of buildPhaseDetectionFlags(summary.phaseRatios, summary.completeRepCount)) {
+    flags.add(flag);
+  }
+  for (const flag of extraClinicianFlags ?? []) {
     flags.add(flag);
   }
   return [...flags].sort();
@@ -173,7 +180,7 @@ export function buildStsMotionPilotRecord(
       knee: clampPct(summary.visibilityAssist.kneeVisiblePct),
       ankle: clampPct(summary.visibilityAssist.ankleVisiblePct),
     },
-    clinicianFlags: buildClinicianFlags(summary),
+    clinicianFlags: buildClinicianFlags(summary, input.extraClinicianFlags),
     reviewRequired: true,
     reviewReason: "derived_motion_timeline_pilot",
     disclaimer:

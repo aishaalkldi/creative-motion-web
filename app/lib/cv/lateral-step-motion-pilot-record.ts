@@ -229,11 +229,17 @@ function dominantTrackingSignal(
   return entries[0]![0] as CvTrackingQuality | "lost";
 }
 
-function buildClinicianFlagsFromSummary(summary: LateralStepSessionMotionSummary): string[] {
+function buildClinicianFlagsFromSummary(
+  summary: LateralStepSessionMotionSummary,
+  extraClinicianFlags?: string[],
+): string[] {
   const flags = new Set<string>(summary.captureFlags);
   if (summary.unclearRepCount > 0) flags.add("unclear_reps_recorded");
   if (summary.interruptions.poseLossEventCount > 0) flags.add("pose_tracking_interrupted");
   for (const flag of buildPhaseDetectionFlags(summary.phaseRatios, summary.completeRepCount)) {
+    flags.add(flag);
+  }
+  for (const flag of extraClinicianFlags ?? []) {
     flags.add(flag);
   }
   return [...flags].sort();
@@ -243,6 +249,7 @@ export type BuildLateralStepMotionPilotRecordFromSummaryInput = {
   summary: LateralStepSessionMotionSummary;
   metrics: LateralStepDerivedMetrics;
   snapshotCount: number;
+  extraClinicianFlags?: string[];
 };
 
 export function buildLateralStepMotionPilotRecordFromSummary(
@@ -271,7 +278,7 @@ export function buildLateralStepMotionPilotRecordFromSummary(
       knee: clampPct(summary.visibilityAssist.kneeVisiblePct),
       ankle: clampPct(summary.visibilityAssist.ankleVisiblePct),
     },
-    clinicianFlags: buildClinicianFlagsFromSummary(summary),
+    clinicianFlags: buildClinicianFlagsFromSummary(summary, input.extraClinicianFlags),
     reviewRequired: true,
     reviewReason: "derived_lateral_step_motion_evidence",
     disclaimer:
