@@ -12,9 +12,11 @@ import {
   type MiniSquatDetectorSnapshot,
 } from "@/app/lib/cv/mini-squat-pose-detector";
 import {
+  isFunctionalReachMotionPilotEnabled,
   isHeelRaiseMotionPilotEnabled,
   isLateralStepMotionPilotEnabled,
   isStepUpMotionPilotEnabled,
+  PATIENT_FUNCTIONAL_REACH_POSE_SHELL,
   PATIENT_HEEL_RAISE_POSE_SHELL,
   PATIENT_LATERAL_STEP_POSE_SHELL,
   PATIENT_STEP_UP_POSE_SHELL,
@@ -40,6 +42,16 @@ import {
   type StepUpPoseDetectorSnapshot,
 } from "@/app/lib/cv/step-up-pose-detector";
 import {
+  FunctionalReachPoseDetector,
+  formatFunctionalReachDuration,
+  mapFunctionalReachStartError,
+  type FunctionalReachPoseDetectorSnapshot,
+} from "@/app/lib/cv/functional-reach-pose-detector";
+import {
+  buildFunctionalReachMotionPilotRecordFromSummary,
+  buildMotionQualityWithFrPilot,
+} from "@/app/lib/cv/functional-reach-motion-pilot-record";
+import {
   LateralStepPoseDetector,
   formatLateralStepDuration,
   mapLateralStepStartError,
@@ -62,6 +74,15 @@ import {
   recordHeelRaiseMotionTimelineTick,
   tryFinalizeHeelRaiseTimelineBeforePilotSave,
 } from "@/app/lib/cv/patient-cv-heel-raise-timeline";
+import {
+  beginFunctionalReachMotionTimeline,
+  createFunctionalReachTimelineCaptureRefs,
+  disposeFunctionalReachMotionTimelineRefs,
+  finalizeFunctionalReachMotionTimelineCapture,
+  logFunctionalReachMotionTimelineSummaryDebug,
+  recordFunctionalReachMotionTimelineTick,
+  tryFinalizeFunctionalReachTimelineBeforePilotSave,
+} from "@/app/lib/cv/patient-cv-functional-reach-timeline";
 import {
   beginLateralStepMotionTimeline,
   createLateralStepTimelineCaptureRefs,
@@ -143,6 +164,7 @@ type CvDetectorSnapshot =
   | SingleLegStancePoseDetectorSnapshot
   | HeelRaisePoseDetectorSnapshot
   | StepUpPoseDetectorSnapshot
+  | FunctionalReachPoseDetectorSnapshot
   | LateralStepPoseDetectorSnapshot;
 
 type PatientCvDetector =
@@ -151,6 +173,7 @@ type PatientCvDetector =
   | SingleLegStancePoseDetector
   | HeelRaisePoseDetector
   | StepUpPoseDetector
+  | FunctionalReachPoseDetector
   | LateralStepPoseDetector;
 
 type PatientCameraPreviewStackProps = {
@@ -329,6 +352,12 @@ function canvasSizeForExercise(exerciseId: CvY1ExerciseId): {
       canvasHeight: PATIENT_STEP_UP_POSE_SHELL.canvasHeight,
     };
   }
+  if (exerciseId === "functional-reach") {
+    return {
+      canvasWidth: PATIENT_FUNCTIONAL_REACH_POSE_SHELL.canvasWidth,
+      canvasHeight: PATIENT_FUNCTIONAL_REACH_POSE_SHELL.canvasHeight,
+    };
+  }
   if (exerciseId === "lateral-step") {
     return {
       canvasWidth: PATIENT_LATERAL_STEP_POSE_SHELL.canvasWidth,
@@ -425,6 +454,7 @@ export function PatientCvCapture({
   const stsTimelineRefs = useRef(createStsTimelineCaptureRefs()).current;
   const hrTimelineRefs = useRef(createHeelRaiseTimelineCaptureRefs()).current;
   const suTimelineRefs = useRef(createStepUpTimelineCaptureRefs()).current;
+  const frTimelineRefs = useRef(createFunctionalReachTimelineCaptureRefs()).current;
   const lsTimelineRefs = useRef(createLateralStepTimelineCaptureRefs()).current;
 
   useEffect(() => {
@@ -490,6 +520,13 @@ export function PatientCvCapture({
           snapshot as SitToStandDetectorSnapshot,
         );
       }
+      if (exerciseId === "functional-reach") {
+        recordFunctionalReachMotionTimelineTick(
+          exerciseId,
+          frTimelineRefs,
+          snapshot as SitToStandDetectorSnapshot,
+        );
+      }
       if (exerciseId === "lateral-step") {
         recordLateralStepMotionTimelineTick(
           exerciseId,
@@ -516,6 +553,7 @@ export function PatientCvCapture({
       stsTimelineRefs,
       hrTimelineRefs,
       suTimelineRefs,
+      frTimelineRefs,
       lsTimelineRefs,
     ],
   );
@@ -528,7 +566,9 @@ export function PatientCvCapture({
     }
 
     const detector: PatientCvDetector =
-      exerciseId === "lateral-step"
+      exerciseId === "functional-reach"
+        ? new FunctionalReachPoseDetector({ onSnapshot: syncFromDetector })
+        : exerciseId === "lateral-step"
         ? new LateralStepPoseDetector({ onSnapshot: syncFromDetector })
         : exerciseId === "step-up"
           ? new StepUpPoseDetector({ onSnapshot: syncFromDetector })
@@ -571,6 +611,15 @@ export function PatientCvCapture({
         logStepUpMotionTimelineSummaryDebug(suSummary, suTimelineRefs);
       }
       disposeStepUpMotionTimelineRefs(suTimelineRefs);
+      const frSummary = finalizeFunctionalReachMotionTimelineCapture(
+        exerciseId,
+        frTimelineRefs,
+        detector,
+      );
+      if (frSummary && cvDebugEnabled) {
+        logFunctionalReachMotionTimelineSummaryDebug(frSummary, frTimelineRefs);
+      }
+      disposeFunctionalReachMotionTimelineRefs(frTimelineRefs);
       const lsSummary = finalizeLateralStepMotionTimelineCapture(
         exerciseId,
         lsTimelineRefs,
@@ -592,6 +641,7 @@ export function PatientCvCapture({
     stsTimelineRefs,
     hrTimelineRefs,
     suTimelineRefs,
+    frTimelineRefs,
     lsTimelineRefs,
     cvDebugEnabled,
   ]);
@@ -630,6 +680,14 @@ export function PatientCvCapture({
     if (suSummary && cvDebugEnabled) {
       logStepUpMotionTimelineSummaryDebug(suSummary, suTimelineRefs);
     }
+    const frSummary = tryFinalizeFunctionalReachTimelineBeforePilotSave(
+      exerciseId,
+      frTimelineRefs,
+      detector,
+    );
+    if (frSummary && cvDebugEnabled) {
+      logFunctionalReachMotionTimelineSummaryDebug(frSummary, frTimelineRefs);
+    }
     const lsSummary = tryFinalizeLateralStepTimelineBeforePilotSave(
       exerciseId,
       lsTimelineRefs,
@@ -643,6 +701,7 @@ export function PatientCvCapture({
     stsTimelineRefs,
     hrTimelineRefs,
     suTimelineRefs,
+    frTimelineRefs,
     lsTimelineRefs,
     cvDebugEnabled,
   ]);
@@ -707,6 +766,24 @@ export function PatientCvCapture({
     return buildMotionQualityWithSuPilot(record);
   }, [exerciseId, suTimelineRefs]);
 
+  const buildFunctionalReachPilotMotionQuality = useCallback((): CvMotionQualityPayload | null => {
+    if (exerciseId !== "functional-reach" || !isFunctionalReachMotionPilotEnabled(exerciseId)) {
+      return null;
+    }
+    const summary = frTimelineRefs.summary.current;
+    if (!summary) return null;
+    const detector = detectorRef.current;
+    if (!detector) return null;
+    const metrics = detector.getDerivedMetrics();
+    if (metrics.exerciseId !== "functional-reach") return null;
+    const record = buildFunctionalReachMotionPilotRecordFromSummary({
+      summary,
+      metrics,
+      snapshotCount: frTimelineRefs.lastFinalizeSnapshotCount.current ?? 0,
+    });
+    return buildMotionQualityWithFrPilot(record);
+  }, [exerciseId, frTimelineRefs]);
+
   const buildLateralStepPilotMotionQuality = useCallback((): CvMotionQualityPayload | null => {
     if (exerciseId !== "lateral-step" || !isLateralStepMotionPilotEnabled(exerciseId)) {
       return null;
@@ -730,12 +807,14 @@ export function PatientCvCapture({
       buildStsPilotMotionQuality() ??
       buildHeelRaisePilotMotionQuality() ??
       buildStepUpPilotMotionQuality() ??
+      buildFunctionalReachPilotMotionQuality() ??
       buildLateralStepPilotMotionQuality()
     );
   }, [
     buildStsPilotMotionQuality,
     buildHeelRaisePilotMotionQuality,
     buildStepUpPilotMotionQuality,
+    buildFunctionalReachPilotMotionQuality,
     buildLateralStepPilotMotionQuality,
   ]);
 
@@ -759,12 +838,13 @@ export function PatientCvCapture({
     disposeStsMotionTimelineRefs(stsTimelineRefs);
     disposeHeelRaiseMotionTimelineRefs(hrTimelineRefs);
     disposeStepUpMotionTimelineRefs(suTimelineRefs);
+    disposeFunctionalReachMotionTimelineRefs(frTimelineRefs);
     disposeLateralStepMotionTimelineRefs(lsTimelineRefs);
     setCameraLive(false);
     setTrackingStopped(false);
     setSkipped(true);
     onSkipped?.();
-  }, [syncFromDetector, onSkipped, stsTimelineRefs, hrTimelineRefs, suTimelineRefs, lsTimelineRefs]);
+  }, [syncFromDetector, onSkipped, stsTimelineRefs, hrTimelineRefs, suTimelineRefs, frTimelineRefs, lsTimelineRefs]);
 
   const handleStopSession = useCallback(() => {
     const detector = detectorRef.current;
@@ -798,6 +878,14 @@ export function PatientCvCapture({
     if (suSummary && cvDebugEnabled) {
       logStepUpMotionTimelineSummaryDebug(suSummary, suTimelineRefs);
     }
+    const frSummary = finalizeFunctionalReachMotionTimelineCapture(
+      exerciseId,
+      frTimelineRefs,
+      detector,
+    );
+    if (frSummary && cvDebugEnabled) {
+      logFunctionalReachMotionTimelineSummaryDebug(frSummary, frTimelineRefs);
+    }
     const lsSummary = finalizeLateralStepMotionTimelineCapture(
       exerciseId,
       lsTimelineRefs,
@@ -819,12 +907,15 @@ export function PatientCvCapture({
     stsTimelineRefs,
     hrTimelineRefs,
     suTimelineRefs,
+    frTimelineRefs,
     lsTimelineRefs,
     cvDebugEnabled,
   ]);
 
   const mapStartError =
-    exerciseId === "lateral-step"
+    exerciseId === "functional-reach"
+      ? mapFunctionalReachStartError
+      : exerciseId === "lateral-step"
       ? mapLateralStepStartError
       : exerciseId === "step-up"
       ? mapStepUpStartError
@@ -871,6 +962,7 @@ export function PatientCvCapture({
       beginStsMotionTimeline(exerciseId, stsTimelineRefs);
       beginHeelRaiseMotionTimeline(exerciseId, hrTimelineRefs);
       beginStepUpMotionTimeline(exerciseId, suTimelineRefs);
+      beginFunctionalReachMotionTimeline(exerciseId, frTimelineRefs);
       beginLateralStepMotionTimeline(exerciseId, lsTimelineRefs);
       reportMetrics();
       auditPreviewLayers("after-detector-start", video, canvas, previewContainerRef.current, {
@@ -899,6 +991,7 @@ export function PatientCvCapture({
     stsTimelineRefs,
     hrTimelineRefs,
     suTimelineRefs,
+    frTimelineRefs,
     lsTimelineRefs,
   ]);
 
@@ -1030,6 +1123,7 @@ export function PatientCvCapture({
     disposeStsMotionTimelineRefs(stsTimelineRefs);
     disposeHeelRaiseMotionTimelineRefs(hrTimelineRefs);
     disposeStepUpMotionTimelineRefs(suTimelineRefs);
+    disposeFunctionalReachMotionTimelineRefs(frTimelineRefs);
     disposeLateralStepMotionTimelineRefs(lsTimelineRefs);
     setCameraLive(false);
     setTrackingStopped(false);
@@ -1040,7 +1134,7 @@ export function PatientCvCapture({
     lastReportedHoldRef.current = -1;
     stopInProgressRef.current = false;
     startInProgressRef.current = false;
-  }, [syncFromDetector, stsTimelineRefs, hrTimelineRefs, suTimelineRefs, lsTimelineRefs]);
+  }, [syncFromDetector, stsTimelineRefs, hrTimelineRefs, suTimelineRefs, frTimelineRefs, lsTimelineRefs]);
 
   const trackingStatusLabel = (() => {
     if (loading && initPhase === "import") return copy.loadingPoseLibrary;
@@ -1069,6 +1163,7 @@ export function PatientCvCapture({
       (bodyFramingState !== "good_distance" && bodyFramingState !== "checking"));
 
   const formatDuration = (() => {
+    if (exerciseId === "functional-reach") return formatFunctionalReachDuration;
     if (exerciseId === "lateral-step") return formatLateralStepDuration;
     if (exerciseId === "step-up") return formatStepUpDuration;
     if (exerciseId === "heel-raise") return formatHeelRaiseDuration;

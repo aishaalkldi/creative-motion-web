@@ -8,6 +8,7 @@ import {
   CV_Y1_ENABLED_EXERCISE_IDS,
   isCvEnabledExercise,
   isPatientCvCaptureWired,
+  PATIENT_FUNCTIONAL_REACH_REP_CONFIG,
   PATIENT_HEEL_RAISE_REP_CONFIG,
   PATIENT_LATERAL_STEP_REP_CONFIG,
   PATIENT_MINI_SQUAT_CONFIG,
@@ -15,12 +16,13 @@ import {
   PATIENT_STS_CONFIG,
   resolvePatientCvDetectorKind,
 } from "./cv-patient-config";
+import { LAB_FUNCTIONAL_REACH_REP_CONFIG } from "./functional-reach-detector";
 import { LAB_HEEL_RAISE_REP_CONFIG } from "./heel-raise-detector";
 import { LAB_LATERAL_STEP_REP_CONFIG } from "./lateral-step-detector";
 import { LAB_STEP_UP_REP_CONFIG } from "./step-up-detector";
 
 describe("cv-patient-config allowlist", () => {
-  it("includes sit-to-stand, mini-squat, single-leg-stance, heel-raise, step-up, and lateral-step", () => {
+  it("includes sit-to-stand, mini-squat, single-leg-stance, heel-raise, step-up, lateral-step, and functional-reach", () => {
     assert.deepEqual(CV_Y1_ENABLED_EXERCISE_IDS, [
       "sit-to-stand",
       "mini-squat",
@@ -28,6 +30,7 @@ describe("cv-patient-config allowlist", () => {
       "heel-raise",
       "step-up",
       "lateral-step",
+      "functional-reach",
     ]);
   });
 
@@ -39,17 +42,19 @@ describe("cv-patient-config allowlist", () => {
     assert.equal(isCvEnabledExercise("SINGLE-LEG-STANCE"), true);
   });
 
-  it("isCvEnabledExercise accepts heel-raise, step-up, and lateral-step", () => {
+  it("isCvEnabledExercise accepts heel-raise, step-up, lateral-step, and functional-reach", () => {
     assert.equal(isCvEnabledExercise("heel-raise"), true);
     assert.equal(isCvEnabledExercise("HEEL-RAISE"), true);
     assert.equal(isCvEnabledExercise("step-up"), true);
     assert.equal(isCvEnabledExercise("STEP-UP"), true);
     assert.equal(isCvEnabledExercise("lateral-step"), true);
     assert.equal(isCvEnabledExercise("LATERAL-STEP"), true);
+    assert.equal(isCvEnabledExercise("functional-reach"), true);
+    assert.equal(isCvEnabledExercise("FUNCTIONAL-REACH"), true);
   });
 
   it("rejects unknown exercises", () => {
-    assert.equal(isCvEnabledExercise("functional-reach"), false);
+    assert.equal(isCvEnabledExercise("unknown-exercise"), false);
     assert.equal(isCvEnabledExercise(""), false);
     assert.equal(isCvEnabledExercise(null), false);
   });
@@ -93,5 +98,16 @@ describe("cv-patient-config allowlist", () => {
     assert.notEqual(PATIENT_LATERAL_STEP_REP_CONFIG, LAB_LATERAL_STEP_REP_CONFIG);
     assert.equal(PATIENT_LATERAL_STEP_REP_CONFIG.minMsBetweenReps, 800);
     assert.equal(PATIENT_LATERAL_STEP_REP_CONFIG.baselineDurationMs, 3_000);
+  });
+
+  it("routes functional-reach to dedicated detector wiring", () => {
+    assert.equal(resolvePatientCvDetectorKind("functional-reach"), "functional-reach");
+    assert.equal(isPatientCvCaptureWired("functional-reach"), true);
+  });
+
+  it("keeps PATIENT_FUNCTIONAL_REACH_REP_CONFIG separate from lab config", () => {
+    assert.notEqual(PATIENT_FUNCTIONAL_REACH_REP_CONFIG, LAB_FUNCTIONAL_REACH_REP_CONFIG);
+    assert.equal(PATIENT_FUNCTIONAL_REACH_REP_CONFIG.minMsBetweenReps, 800);
+    assert.equal(PATIENT_FUNCTIONAL_REACH_REP_CONFIG.baselineDurationMs, 3_000);
   });
 });

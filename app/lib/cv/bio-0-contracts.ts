@@ -18,7 +18,8 @@ export type PatientCvExerciseId =
   | "single-leg-stance"
   | "heel-raise"
   | "step-up"
-  | "lateral-step";
+  | "lateral-step"
+  | "functional-reach";
 
 /** Client → server body for POST /api/patient/cv-session-metrics. */
 export type PatientCvMetricsPayload = {
@@ -94,13 +95,24 @@ export type LateralStepDerivedMetrics = {
   framesTotal: number;
 };
 
+export type FunctionalReachDerivedMetrics = {
+  exerciseId: "functional-reach";
+  repCount: number;
+  sessionDurationS: number;
+  trackingQuality: CvTrackingQuality;
+  movementDetected: boolean;
+  framesWithPose: number;
+  framesTotal: number;
+};
+
 export type PatientCvDerivedMetrics =
   | SitToStandDerivedMetrics
   | MiniSquatDerivedMetrics
   | SingleLegStanceDerivedMetrics
   | HeelRaiseDerivedMetrics
   | StepUpDerivedMetrics
-  | LateralStepDerivedMetrics;
+  | LateralStepDerivedMetrics
+  | FunctionalReachDerivedMetrics;
 
 /* ── Sit-to-Stand detector config ─────────────────────────────────────────── */
 
@@ -360,6 +372,10 @@ const PATIENT_SETUP_EXERCISE_HINTS: Record<
   "lateral-step": {
     en: "Stand with your full body visible for lateral stepping.",
     ar: "قف مع ظهور جسمك بالكامل للخطوة الجانبية.",
+  },
+  "functional-reach": {
+    en: "Stand arm's length from support with shoulders and reaching arm visible.",
+    ar: "قف على مسافة ذراع من الدعم مع ظهور الكتفين وذراع الوصول.",
   },
 };
 
@@ -632,6 +648,7 @@ export const CV_Y4_HEEL_RAISE_PATIENT_PROTOTYPE_VERSION = "cv-y4-heel-raise";
 /** Server-side prototype_version for step up patient_session saves (CV-Y5). */
 export const CV_Y5_STEP_UP_PATIENT_PROTOTYPE_VERSION = "cv-y5-step-up";
 export const CV_Y6_LATERAL_STEP_PATIENT_PROTOTYPE_VERSION = "cv-y6-lateral-step";
+export const CV_Y7_FUNCTIONAL_REACH_PATIENT_PROTOTYPE_VERSION = "cv-y7-functional-reach";
 
 const PATIENT_HEEL_RAISE_CONSENT_DONT_EN = [
   ...PATIENT_CV_CONSENT_DONT_EN,
@@ -1118,6 +1135,63 @@ const PATIENT_LATERAL_STEP_CV_COPY: Record<PatientExerciseLanguage, PatientCvCop
   },
 };
 
+const PATIENT_FUNCTIONAL_REACH_CONSENT_DONT_EN = [
+  ...PATIENT_CV_CONSENT_DONT_EN,
+  "Measure reach distance or balance score",
+  "Score movement quality",
+] as const;
+
+const PATIENT_FUNCTIONAL_REACH_CONSENT_DONT_AR = [
+  ...PATIENT_CV_CONSENT_DONT_AR,
+  "لا يقيس مسافة الوصول أو درجة التوازن",
+  "لا يقيّم جودة الحركة",
+] as const;
+
+const PATIENT_FUNCTIONAL_REACH_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = {
+  en: {
+    ...PATIENT_LATERAL_STEP_CV_COPY.en,
+    consentDoBullets: [
+      "Uses your camera on this device to detect body position",
+      "Counts functional-reach cycles during your exercise",
+      "Shows whether movement is being detected",
+      "Saves derived counts and duration for your therapist to review",
+    ],
+    consentDontBullets: [...PATIENT_FUNCTIONAL_REACH_CONSENT_DONT_EN],
+    optionalCameraNote:
+      "Optional camera assist · therapist review only · not clinically validated. Functional reach (experimental). No reach distance or balance score. The pilot workflow does not depend on camera tracking.",
+    startSeatedHint:
+      "Stand arm's length from support with shoulders and reaching arm visible.",
+    baselineStandStillHint: "Stand still while the camera adjusts.",
+    framingInstruction:
+      "Place your phone so your shoulders, trunk, and reaching arm are visible.",
+    movementInstruction:
+      "Reach forward at shoulder height as far as comfortable without stepping, pause briefly, then return to upright with control.",
+    hipLandmarksHint:
+      "Wait until points appear on your shoulders and hips before reaching forward.",
+  },
+  ar: {
+    ...PATIENT_LATERAL_STEP_CV_COPY.ar,
+    consentDoBullets: [
+      "يستخدم كاميرتك على هذا الجهاز لاكتشاف وضع الجسم",
+      "يعدّ دورات الوصول الوظيفي أثناء التمرين",
+      "يُظهر ما إذا كانت الحركة تُكتشف",
+      "يحفظ العدّ والمدة المشتقة لمراجعة معالجك",
+    ],
+    consentDontBullets: [...PATIENT_FUNCTIONAL_REACH_CONSENT_DONT_AR],
+    optionalCameraNote:
+      "مساعدة كاميرا اختيارية · للمعالج فقط · غير مُتحقّق سريرياً. الوصول الوظيفي (تجريبي). لا مسافة وصول أو درجة توازن. مسار التجربة لا يعتمد على تتبّع الكاميرا.",
+    startSeatedHint:
+      "قف على مسافة ذراع من الدعم مع ظهور الكتفين وذراع الوصول.",
+    baselineStandStillHint: "قف ثابتاً ريثما تضبط الكاميرا.",
+    framingInstruction:
+      "ضع هاتفك بحيث تظهر الكتفان والجذع وذراع الوصول.",
+    movementInstruction:
+      "امتد للأمام على ارتفاع الكتف بقدر ما يسمح الراحة دون خطوة، ثبّت قليلاً، ثم عد للوضع المنتصب بتحكم.",
+    hipLandmarksHint:
+      "انتظر حتى تظهر النقاط على الكتفين والوركين قبل الوصول للأمام.",
+  },
+};
+
 export function patientCvPrototypeVersion(exerciseId: PatientCvExerciseId): string {
   switch (exerciseId) {
     case "sit-to-stand":
@@ -1132,6 +1206,8 @@ export function patientCvPrototypeVersion(exerciseId: PatientCvExerciseId): stri
       return CV_Y5_STEP_UP_PATIENT_PROTOTYPE_VERSION;
     case "lateral-step":
       return CV_Y6_LATERAL_STEP_PATIENT_PROTOTYPE_VERSION;
+    case "functional-reach":
+      return CV_Y7_FUNCTIONAL_REACH_PATIENT_PROTOTYPE_VERSION;
   }
 }
 
@@ -1149,6 +1225,7 @@ export function patientCvCopy(
   else if (exerciseId === "heel-raise") base = PATIENT_HEEL_RAISE_CV_COPY[lang];
   else if (exerciseId === "step-up") base = PATIENT_STEP_UP_CV_COPY[lang];
   else if (exerciseId === "lateral-step") base = PATIENT_LATERAL_STEP_CV_COPY[lang];
+  else if (exerciseId === "functional-reach") base = PATIENT_FUNCTIONAL_REACH_CV_COPY[lang];
   else base = PATIENT_STS_CV_COPY[lang];
 
   if (isCvMotionPilotWiredForCopy(exerciseId)) {

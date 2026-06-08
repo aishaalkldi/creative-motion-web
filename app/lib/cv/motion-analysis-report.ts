@@ -41,6 +41,9 @@ import {
   buildHeelRaiseBiomechanicalContributionReview,
 } from "@/app/lib/cv/heel-raise-biomechanical-contribution-review";
 import {
+  buildFunctionalReachBiomechanicalContributionReview,
+} from "@/app/lib/cv/functional-reach-biomechanical-contribution-review";
+import {
   buildLateralStepBiomechanicalContributionReview,
 } from "@/app/lib/cv/lateral-step-biomechanical-contribution-review";
 import {
@@ -68,6 +71,19 @@ export {
   STEP_UP_CYCLE_TIMING_ESTIMATED_NOTE,
   STEP_UP_LIMITED_MOTION_EVIDENCE_LABEL,
 } from "@/app/lib/cv/step-up-motion-pilot-record";
+import {
+  buildFunctionalReachMotionPilotRecord,
+  type FrPilotEvidenceMode,
+} from "@/app/lib/cv/functional-reach-motion-pilot-record";
+export type { FrPilotEvidenceMode } from "@/app/lib/cv/functional-reach-motion-pilot-record";
+export {
+  FUNCTIONAL_REACH_CYCLE_TIMING_ESTIMATED_NOTE,
+  FUNCTIONAL_REACH_LIMITED_MOTION_EVIDENCE_LABEL,
+} from "@/app/lib/cv/functional-reach-motion-pilot-record";
+import {
+  buildFunctionalReachMovementQualitySignals,
+  functionalReachSignalsToMovementQuality,
+} from "@/app/lib/cv/functional-reach-movement-quality-signals";
 import {
   buildLateralStepMotionPilotRecord,
   type LsPilotEvidenceMode,
@@ -172,6 +188,8 @@ export type MotionAnalysisPhaseRatios = Partial<
     | "lateral_shift"
     | "step_out"
     | "return_to_center"
+    | "reaching_forward"
+    | "peak_reach"
     | "rest"
     | "unknown",
     number
@@ -207,6 +225,7 @@ export type MotionAnalysisMsPilotSummary = MotionAnalysisMotionPilotSummary;
 export type MotionAnalysisHrPilotSummary = MotionAnalysisMotionPilotSummary;
 export type MotionAnalysisSuPilotSummary = MotionAnalysisMotionPilotSummary;
 export type MotionAnalysisLsPilotSummary = MotionAnalysisMotionPilotSummary;
+export type MotionAnalysisFrPilotSummary = MotionAnalysisMotionPilotSummary;
 
 export type MotionAnalysisReport = {
   sessionDurationSeconds: number;
@@ -226,6 +245,9 @@ export type MotionAnalysisReport = {
   lsPilot: MotionAnalysisLsPilotSummary | null;
   /** Whether lsPilot came from motion_quality or was estimated from rep count + duration. */
   lsPilotEvidenceMode: LsPilotEvidenceMode | null;
+  frPilot: MotionAnalysisFrPilotSummary | null;
+  /** Whether frPilot came from motion_quality or was estimated from rep count + duration. */
+  frPilotEvidenceMode: FrPilotEvidenceMode | null;
   kinesiologyContext: ExerciseKinesiologyContext | null;
   reportMode: MotionAnalysisReportMode;
   reportHeader: MotionAnalysisReportHeader | null;
@@ -344,6 +366,14 @@ export function parseLsPilotSummary(
   return parseMotionPilotSummary(lsPilot as Record<string, unknown>);
 }
 
+export function parseFrPilotSummary(
+  motionQuality: CvMotionQualityPayload | null | undefined,
+): MotionAnalysisFrPilotSummary | null {
+  const frPilot = motionQuality?.frPilot;
+  if (!frPilot || typeof frPilot !== "object") return null;
+  return parseMotionPilotSummary(frPilot as Record<string, unknown>);
+}
+
 function synthesizeMsPilotSummary(input: {
   sessionDurationSeconds: number;
   completedReps: number;
@@ -460,6 +490,35 @@ function synthesizeLsPilotSummary(input: {
   return parseMotionPilotSummary(record as unknown as Record<string, unknown>);
 }
 
+function synthesizeFrPilotSummary(input: {
+  sessionDurationSeconds: number;
+  completedReps: number;
+  trackingSignal: string | null;
+  movementDetected: boolean;
+}): MotionAnalysisFrPilotSummary | null {
+  if (input.completedReps <= 0 && input.sessionDurationSeconds <= 0) return null;
+
+  const record = buildFunctionalReachMotionPilotRecord({
+    metrics: {
+      exerciseId: "functional-reach",
+      repCount: input.completedReps,
+      sessionDurationS: input.sessionDurationSeconds,
+      trackingQuality:
+        input.trackingSignal === "good" ||
+        input.trackingSignal === "fair" ||
+        input.trackingSignal === "poor"
+          ? input.trackingSignal
+          : "unknown",
+      movementDetected: input.movementDetected,
+      framesWithPose: 0,
+      framesTotal: 0,
+    },
+    completeReps: input.completedReps,
+  });
+
+  return parseMotionPilotSummary(record as unknown as Record<string, unknown>);
+}
+
 function parsePhaseRatios(value: unknown): MotionAnalysisPhaseRatios | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const allowed = new Set([
@@ -476,6 +535,8 @@ function parsePhaseRatios(value: unknown): MotionAnalysisPhaseRatios | null {
     "lateral_shift",
     "step_out",
     "return_to_center",
+    "reaching_forward",
+    "peak_reach",
     "rest",
     "unknown",
   ]);
@@ -729,7 +790,25 @@ export function buildMotionAnalysisReport(
         ? "persisted"
         : "synthesized"
       : null;
-  const motionPilot = smtPilot ?? msPilot ?? hrPilot ?? suPilot ?? lsPilot;
+  const persistedFrPilot =
+    exerciseId === "functional-reach" ? parseFrPilotSummary(input.motionQuality) : null;
+  const frPilot =
+    exerciseId === "functional-reach"
+      ? persistedFrPilot ??
+        synthesizeFrPilotSummary({
+          sessionDurationSeconds,
+          completedReps,
+          trackingSignal,
+          movementDetected,
+        })
+      : null;
+  const frPilotEvidenceMode: FrPilotEvidenceMode | null =
+    exerciseId === "functional-reach" && frPilot
+      ? persistedFrPilot
+        ? "persisted"
+        : "synthesized"
+      : null;
+  const motionPilot = smtPilot ?? msPilot ?? hrPilot ?? suPilot ?? lsPilot ?? frPilot;
   const kinesiologyContext = resolveExerciseKinesiologyContext(exerciseId);
   const summaryLabel = resolveMotionAnalysisSummaryLabel({
     trackingSignal,
@@ -825,6 +904,21 @@ export function buildMotionAnalysisReport(
         })
       : null;
 
+  const functionalReachMovementQuality =
+    exerciseId === "functional-reach"
+      ? buildFunctionalReachMovementQualitySignals({
+          exerciseId,
+          evidenceMode: frPilotEvidenceMode ?? undefined,
+          repTimings: frPilot?.repTimings ?? null,
+          phaseRatios: frPilot?.phaseRatios ?? null,
+          completeReps: frPilot?.completeReps ?? completedReps,
+          unclearReps: frPilot?.unclearReps ?? 0,
+          clinicianFlags: frPilot?.clinicianFlags ?? null,
+          trackingQuality: trackingSignal,
+          summaryLabel,
+        })
+      : null;
+
   const movementQuality =
     stsMovementQuality ??
     (miniSquatMovementQuality
@@ -838,6 +932,9 @@ export function buildMotionAnalysisReport(
       : null) ??
     (lateralStepMovementQuality
       ? lateralStepSignalsToMovementQuality(lateralStepMovementQuality)
+      : null) ??
+    (functionalReachMovementQuality
+      ? functionalReachSignalsToMovementQuality(functionalReachMovementQuality)
       : null);
 
   const stsBiomechanicalReview = buildBiomechanicalContributionReview({
@@ -911,12 +1008,28 @@ export function buildMotionAnalysisReport(
         })
       : null;
 
+  const functionalReachBiomechanicalReview =
+    exerciseId === "functional-reach"
+      ? buildFunctionalReachBiomechanicalContributionReview({
+          exerciseId,
+          evidenceMode: frPilotEvidenceMode ?? undefined,
+          phaseRatios: frPilot?.phaseRatios ?? null,
+          movementQuality: functionalReachMovementQuality,
+          clinicianFlags: frPilot?.clinicianFlags ?? null,
+          kinesiologyContext,
+          trackingQuality: trackingSignal,
+          summaryLabel,
+          visibilityRatios: frPilot?.visibilityRatios ?? null,
+        })
+      : null;
+
   const biomechanicalContributionReview =
     stsBiomechanicalReview ??
     miniSquatBiomechanicalReview ??
     heelRaiseBiomechanicalReview ??
     stepUpBiomechanicalReview ??
-    lateralStepBiomechanicalReview;
+    lateralStepBiomechanicalReview ??
+    functionalReachBiomechanicalReview;
 
   const reportDraft: MotionAnalysisReport = {
     sessionDurationSeconds,
@@ -932,6 +1045,8 @@ export function buildMotionAnalysisReport(
     suPilotEvidenceMode,
     lsPilot,
     lsPilotEvidenceMode,
+    frPilot,
+    frPilotEvidenceMode,
     kinesiologyContext,
     reportMode: interpretation.reportMode,
     reportHeader: interpretation.reportHeader,
@@ -964,7 +1079,8 @@ export function buildMotionAnalysisReport(
     exerciseId === "mini-squat" ||
     exerciseId === "heel-raise" ||
     exerciseId === "step-up" ||
-    exerciseId === "lateral-step"
+    exerciseId === "lateral-step" ||
+    exerciseId === "functional-reach"
       ? resolveStsTimingMetricLabels(motionPilot?.phaseRatios ?? null)
       : null;
   const movementQualityReviewFocusDisplay =
@@ -972,7 +1088,8 @@ export function buildMotionAnalysisReport(
       exerciseId === "mini-squat" ||
       exerciseId === "heel-raise" ||
       exerciseId === "step-up" ||
-      exerciseId === "lateral-step") &&
+      exerciseId === "lateral-step" ||
+      exerciseId === "functional-reach") &&
     movementQuality
       ? filterSemanticallyDuplicatePrompts(movementQuality.clinicianReviewFocus, [
           ...(interpretation.reviewNext ?? []).map((item) => item.text),
@@ -994,6 +1111,8 @@ export function buildMotionAnalysisReport(
     suPilotEvidenceMode,
     lsPilot,
     lsPilotEvidenceMode,
+    frPilot,
+    frPilotEvidenceMode,
     kinesiologyContext,
     reportMode: interpretation.reportMode,
     reportHeader: interpretation.reportHeader,
@@ -1025,6 +1144,7 @@ export function hasDisplayableMotionAnalysisReport(
       report.hrPilot != null ||
       report.suPilot != null ||
       report.lsPilot != null ||
+      report.frPilot != null ||
       report.kinesiologyContext != null ||
       report.reportHeader != null ||
       report.sessionDurationSeconds > 0 ||

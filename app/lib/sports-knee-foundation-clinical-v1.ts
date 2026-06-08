@@ -57,6 +57,7 @@ const SPORTS_KNEE_CV_ASSISTED_CANDIDATE_IDS = [
   "heel-raise",
   "step-up",
   "lateral-step",
+  "functional-reach",
 ] as const satisfies readonly SportsKneeFoundationExerciseId[];
 
 /** Only exercises with dedicated patient capture wiring (not allowlist-only). */
@@ -279,6 +280,7 @@ export const SPORTS_KNEE_FOUNDATION_CLINICAL_V1: SportsKneeFoundationExerciseCli
       regressionCriteria:
         "Reduce reach distance, shorten hold, or allow fingertip wall touch if balance is uncertain.",
       futureCvMeasurementTarget: "forward reach excursion",
+      cvAssisted: true,
     },
     {
       exerciseId: "lateral-step",
