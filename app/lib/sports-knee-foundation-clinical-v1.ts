@@ -4,6 +4,8 @@
  * Merged into Exercise Library v1 from exercise-library-v1.ts (no circular import).
  */
 
+import { isPatientCvCaptureWired } from "@/app/lib/cv/cv-patient-config";
+
 export const SPORTS_KNEE_FOUNDATION_EXERCISE_IDS = [
   "sit-to-stand",
   "mini-squat",
@@ -42,8 +44,23 @@ export type SportsKneeFoundationExerciseClinical = {
   progressionCriteria: string;
   regressionCriteria: string;
   futureCvMeasurementTarget?: string;
+  /** Camera-assisted tracking available in patient portal (manual fallback retained). */
+  cvAssisted?: boolean;
   whyThisMatters: { en: string; ar: string };
 };
+
+/** Candidate Sports Knee exercises that may expose patient-portal CV assist. */
+const SPORTS_KNEE_CV_ASSISTED_CANDIDATE_IDS = [
+  "sit-to-stand",
+  "mini-squat",
+  "single-leg-stance",
+  "heel-raise",
+] as const satisfies readonly SportsKneeFoundationExerciseId[];
+
+/** Only exercises with dedicated patient capture wiring (not allowlist-only). */
+export const SPORTS_KNEE_CV_ASSISTED_EXERCISE_IDS = SPORTS_KNEE_CV_ASSISTED_CANDIDATE_IDS.filter(
+  (id) => isPatientCvCaptureWired(id),
+);
 
 export const SPORTS_KNEE_FOUNDATION_CLINICAL_V1: SportsKneeFoundationExerciseClinical[] =
   [
@@ -88,6 +105,7 @@ export const SPORTS_KNEE_FOUNDATION_CLINICAL_V1: SportsKneeFoundationExerciseCli
       regressionCriteria:
         "Use a higher seat, reduce reps, or allow light hand support if pain or knee valgus increases.",
       futureCvMeasurementTarget: "sit-to-stand symmetry",
+      cvAssisted: true,
     },
     {
       exerciseId: "mini-squat",
@@ -130,6 +148,7 @@ export const SPORTS_KNEE_FOUNDATION_CLINICAL_V1: SportsKneeFoundationExerciseCli
       regressionCriteria:
         "Reduce depth, use chair support at hips, or decrease reps if valgus or pain increases.",
       futureCvMeasurementTarget: "knee flexion angle, valgus control",
+      cvAssisted: true,
     },
     {
       exerciseId: "single-leg-stance",
@@ -172,6 +191,7 @@ export const SPORTS_KNEE_FOUNDATION_CLINICAL_V1: SportsKneeFoundationExerciseCli
       regressionCriteria:
         "Reduce hold time, use fingertip support, or perform shorter intervals if hip drop or dizziness occurs.",
       futureCvMeasurementTarget: "balance, hip drop",
+      cvAssisted: true,
     },
     {
       exerciseId: "heel-raise",
@@ -214,6 +234,7 @@ export const SPORTS_KNEE_FOUNDATION_CLINICAL_V1: SportsKneeFoundationExerciseCli
       regressionCriteria:
         "Reduce reps, shorten hold, or use bilateral hand support if fatigue or pain increases.",
       futureCvMeasurementTarget: "calf raise height symmetry",
+      cvAssisted: true,
     },
     {
       exerciseId: "functional-reach",

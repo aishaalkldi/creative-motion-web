@@ -4,6 +4,7 @@
  */
 
 import type { BodyFramingProfileId } from "@/app/lib/cv/body-framing-profiles";
+import { isPatientCvCaptureWired } from "@/app/lib/cv/cv-patient-config";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 
 /* ── Metrics payload (future patient API) ─────────────────────────────────── */
@@ -909,6 +910,16 @@ export function patientCvCopy(
   else if (exerciseId === "single-leg-stance") base = PATIENT_SLS_CV_COPY[lang];
   else if (exerciseId === "heel-raise") base = PATIENT_HEEL_RAISE_CV_COPY[lang];
   else base = PATIENT_STS_CV_COPY[lang];
+
+  if (exerciseId === "heel-raise" && isPatientCvCaptureWired("heel-raise")) {
+    base = {
+      ...base,
+      optionalCameraNote:
+        lang === "ar"
+          ? "تتبّع بالكاميرا متاح · لمراجعة المعالج فقط · غير مُتحقّق سريرياً."
+          : "Camera-assisted tracking available · therapist review only · not clinically validated.",
+    };
+  }
 
   return { ...base, ...setupCopy, setupExerciseHint };
 }

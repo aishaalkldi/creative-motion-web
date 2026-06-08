@@ -7,18 +7,21 @@ import { describe, it } from "node:test";
 import {
   CV_Y1_ENABLED_EXERCISE_IDS,
   isCvEnabledExercise,
+  isPatientCvCaptureWired,
   PATIENT_HEEL_RAISE_REP_CONFIG,
   PATIENT_MINI_SQUAT_CONFIG,
   PATIENT_STS_CONFIG,
+  resolvePatientCvDetectorKind,
 } from "./cv-patient-config";
 import { LAB_HEEL_RAISE_REP_CONFIG } from "./heel-raise-detector";
 
 describe("cv-patient-config allowlist", () => {
-  it("includes sit-to-stand, mini-squat, and single-leg-stance only", () => {
+  it("includes sit-to-stand, mini-squat, single-leg-stance, and heel-raise", () => {
     assert.deepEqual(CV_Y1_ENABLED_EXERCISE_IDS, [
       "sit-to-stand",
       "mini-squat",
       "single-leg-stance",
+      "heel-raise",
     ]);
   });
 
@@ -30,9 +33,9 @@ describe("cv-patient-config allowlist", () => {
     assert.equal(isCvEnabledExercise("SINGLE-LEG-STANCE"), true);
   });
 
-  it("isCvEnabledExercise rejects heel-raise until patient CV is re-enabled", () => {
-    assert.equal(isCvEnabledExercise("heel-raise"), false);
-    assert.equal(isCvEnabledExercise("HEEL-RAISE"), false);
+  it("isCvEnabledExercise accepts heel-raise", () => {
+    assert.equal(isCvEnabledExercise("heel-raise"), true);
+    assert.equal(isCvEnabledExercise("HEEL-RAISE"), true);
   });
 
   it("rejects unknown exercises", () => {
@@ -53,5 +56,10 @@ describe("cv-patient-config allowlist", () => {
     assert.notEqual(PATIENT_HEEL_RAISE_REP_CONFIG, LAB_HEEL_RAISE_REP_CONFIG);
     assert.equal(PATIENT_HEEL_RAISE_REP_CONFIG.minMsBetweenReps, 800);
     assert.equal(PATIENT_HEEL_RAISE_REP_CONFIG.baselineDurationMs, 3_000);
+  });
+
+  it("routes heel-raise to dedicated detector wiring", () => {
+    assert.equal(resolvePatientCvDetectorKind("heel-raise"), "heel-raise");
+    assert.equal(isPatientCvCaptureWired("heel-raise"), true);
   });
 });

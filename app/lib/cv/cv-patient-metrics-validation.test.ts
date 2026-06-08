@@ -19,14 +19,14 @@ function isAllowedPatientCvExerciseId(exerciseId: string): boolean {
 }
 
 describe("patient CV metrics allowlist (API contract)", () => {
-  it("accepts sit-to-stand, mini-squat, and single-leg-stance", () => {
+  it("accepts sit-to-stand, mini-squat, single-leg-stance, and heel-raise", () => {
     assert.equal(isAllowedPatientCvExerciseId("sit-to-stand"), true);
     assert.equal(isAllowedPatientCvExerciseId("mini-squat"), true);
     assert.equal(isAllowedPatientCvExerciseId("single-leg-stance"), true);
+    assert.equal(isAllowedPatientCvExerciseId("heel-raise"), true);
   });
 
-  it("rejects heel-raise and unknown exercise ids", () => {
-    assert.equal(isAllowedPatientCvExerciseId("heel-raise"), false);
+  it("rejects unknown exercise ids", () => {
     assert.equal(isAllowedPatientCvExerciseId("step-up"), false);
   });
 

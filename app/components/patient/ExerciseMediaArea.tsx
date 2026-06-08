@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { PatientCvDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import { PatientCvCapture } from "@/app/components/patient/cv/PatientCvCapture";
-import { isCvEnabledExercise, type CvY1ExerciseId } from "@/app/lib/cv/cv-patient-config";
+import { isPatientCvCaptureWired, type CvY1ExerciseId } from "@/app/lib/cv/cv-patient-config";
 import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
 import { patientExerciseGuideImage } from "@/app/lib/exercise-guide-media";
 import { exerciseMediaUi } from "@/app/lib/patient-portal-ui";
@@ -424,7 +424,7 @@ export function ExerciseMediaArea({
   const resolvedMedia = mediaUrl?.trim() || null;
   const poster = thumbnailUrl?.trim() || undefined;
 
-  const showPatientCv = exerciseStep === "active" && isCvEnabledExercise(exerciseId);
+  const showPatientCv = exerciseStep === "active" && isPatientCvCaptureWired(exerciseId);
   const cvExerciseId = exerciseId as CvY1ExerciseId | undefined;
 
   return (

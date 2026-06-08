@@ -5,6 +5,8 @@
 
 import type { CvTrackingQuality } from "@/app/lib/cv/bio-0-contracts";
 import type { SitToStandDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
+import type { HeelRaiseMotionPilotRecord } from "@/app/lib/cv/heel-raise-motion-pilot-record";
+import type { MiniSquatMotionPilotRecord } from "@/app/lib/cv/mini-squat-motion-pilot-record";
 import { findForbiddenKeysInSummaryPayload } from "@/app/lib/cv/motion-summary-types";
 import type { SessionMotionSummary } from "@/app/lib/cv/motion-summary-types";
 
@@ -183,6 +185,8 @@ export function findForbiddenKeysInStsPilotRecord(record: StsMotionPilotRecord):
 /** Payload shape stored on cv_session_metrics.motion_quality */
 export type CvMotionQualityPayload = {
   smtPilot?: StsMotionPilotRecord;
+  msPilot?: MiniSquatMotionPilotRecord;
+  hrPilot?: HeelRaiseMotionPilotRecord;
   [key: string]: unknown;
 };
 
