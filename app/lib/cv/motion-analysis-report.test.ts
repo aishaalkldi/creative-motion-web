@@ -979,3 +979,128 @@ describe("biomechanical contribution review", () => {
     assert.equal(report.biomechanicalContributionReview, null);
   });
 });
+
+describe("report readability polish", () => {
+  function enrichedStsReport(
+    overrides: {
+      phaseRatios?: Record<string, number>;
+      repTimings?: { avgS: number; fastestS: number; slowestS: number };
+      clinicianFlags?: string[];
+    } = {},
+  ) {
+    return buildMotionAnalysisReport({
+      exerciseId: "sit-to-stand",
+      sessionDurationS: 12,
+      repCount: 3,
+      trackingQuality: "good",
+      movementDetected: true,
+      motionQuality: {
+        smtPilot: {
+          pilotVersion: "smt-1",
+          isPilot: true,
+          exerciseId: "sit-to-stand",
+          snapshotCount: 8,
+          durationS: 12,
+          repCount: 3,
+          completeReps: 3,
+          unclearReps: 0,
+          trackingSignal: "good",
+          movementDetected: true,
+          phaseRatios: overrides.phaseRatios ?? {
+            seated: 12,
+            rising: 25,
+            standing: 40,
+            returning: 18,
+            rest: 5,
+          },
+          repTimings: overrides.repTimings ?? {
+            avgS: 2.1,
+            fastestS: 2.0,
+            slowestS: 2.2,
+          },
+          visibilityRatios: { hip: 88, knee: 85, ankle: 82 },
+          clinicianFlags: overrides.clinicianFlags ?? [],
+          reviewRequired: true,
+          reviewReason: "derived_motion_timeline_pilot",
+          disclaimer: "Assistive motion capture for clinician review only.",
+        },
+      },
+    });
+  }
+
+  it("builds executive summary with 3–5 key lines", () => {
+    const report = enrichedStsReport();
+    assert.ok(report.executiveSummary);
+    assert.ok(report.executiveSummary!.lines.length >= 3);
+    assert.ok(report.executiveSummary!.lines.length <= 5);
+    assert.ok(
+      report.executiveSummary!.lines.some((line) =>
+        line.toLowerCase().includes("complete cycle") ||
+        line.toLowerCase().includes("camera-detected movement cycle"),
+      ),
+    );
+    assert.ok(
+      report.executiveSummary!.lines.some((line) =>
+        line.toLowerCase().includes("tracking confidence"),
+      ),
+    );
+  });
+
+  it("uses complete cycles only when strict phase completeness is met", () => {
+    const strict = enrichedStsReport();
+    assert.ok(strict.sessionSummary?.metricSummary?.includes("3 complete cycles"));
+
+    const incomplete = enrichedStsReport({
+      phaseRatios: { seated: 30, rising: 20, standing: 35, returning: 0, rest: 15 },
+      clinicianFlags: ["incomplete_cycle"],
+    });
+    assert.ok(
+      incomplete.sessionSummary?.metricSummary?.includes(
+        "camera-detected movement cycle",
+      ),
+    );
+    assert.equal(
+      incomplete.sessionSummary?.metricSummary?.includes("complete cycle"),
+      false,
+    );
+  });
+
+  it("uses cycle interval timing labels when rest is present", () => {
+    const report = enrichedStsReport();
+    assert.equal(report.timingMetricLabels?.average, "Average cycle interval");
+    assert.equal(report.timingMetricLabels?.fastest, "Fastest cycle interval");
+    assert.equal(report.timingMetricLabels?.slowest, "Slowest cycle interval");
+  });
+
+  it("shortens biomechanical contribution review for display", () => {
+    const report = enrichedStsReport({
+      repTimings: { avgS: 2.8, fastestS: 1.5, slowestS: 4.0 },
+      phaseRatios: {
+        seated: 10,
+        rising: 30,
+        standing: 52,
+        returning: 8,
+        rest: 0,
+      },
+    });
+    assert.ok(report.biomechanicalContributionReviewCompact);
+    assert.ok(report.biomechanicalContributionReviewCompact!.possibleContributors.length <= 3);
+    assert.ok(report.biomechanicalContributionReviewCompact!.muscleDemandContext.length <= 2);
+    assert.ok(report.biomechanicalContributionReviewCompact!.clinicianReview.length <= 3);
+  });
+
+  it("limits review next to prioritized items", () => {
+    const report = enrichedStsReport({
+      repTimings: { avgS: 2.5, fastestS: 1.5, slowestS: 3.5 },
+      phaseRatios: {
+        seated: 15,
+        rising: 25,
+        standing: 45,
+        returning: 10,
+        rest: 5,
+      },
+    });
+    assert.ok(report.reviewNext);
+    assert.ok(report.reviewNext!.length <= 5);
+  });
+});

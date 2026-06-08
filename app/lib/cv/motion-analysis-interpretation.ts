@@ -6,6 +6,10 @@
 
 import { isHoldClassCvExercise } from "@/app/lib/cv/cv-metrics-display";
 import type { ExerciseKinesiologyContext } from "@/app/lib/cv/exercise-kinesiology-context";
+import {
+  formatStsCycleCountLabel,
+  isStrictPhaseCompletenessFromPilot,
+} from "@/app/lib/cv/motion-analysis-report-present";
 import type {
   MotionAnalysisPhaseRatios,
   MotionAnalysisRepTimings,
@@ -180,7 +184,14 @@ function buildMetricSummary(input: BuildMotionAnalysisInterpretationInput): stri
   if (input.smtPilot) {
     const parts: string[] = [];
     if (input.smtPilot.completeReps > 0) {
-      parts.push(`${input.smtPilot.completeReps} complete cycle(s)`);
+      const strictComplete =
+        input.exerciseId === "sit-to-stand" &&
+        isStrictPhaseCompletenessFromPilot(input.smtPilot);
+      const cycleLabel = formatStsCycleCountLabel(
+        input.smtPilot.completeReps,
+        strictComplete,
+      );
+      if (cycleLabel) parts.push(cycleLabel);
     }
     if (input.smtPilot.unclearReps > 0) {
       parts.push(`${input.smtPilot.unclearReps} unclear cycle(s)`);
