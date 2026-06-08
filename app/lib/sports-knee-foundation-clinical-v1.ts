@@ -55,6 +55,7 @@ const SPORTS_KNEE_CV_ASSISTED_CANDIDATE_IDS = [
   "mini-squat",
   "single-leg-stance",
   "heel-raise",
+  "step-up",
 ] as const satisfies readonly SportsKneeFoundationExerciseId[];
 
 /** Only exercises with dedicated patient capture wiring (not allowlist-only). */
@@ -361,6 +362,7 @@ export const SPORTS_KNEE_FOUNDATION_CLINICAL_V1: SportsKneeFoundationExerciseCli
       regressionCriteria:
         "Lower step height, reduce reps, or use hand support if pain or valgus increases.",
       futureCvMeasurementTarget: "step height, knee valgus",
+      cvAssisted: true,
     },
   ];
 

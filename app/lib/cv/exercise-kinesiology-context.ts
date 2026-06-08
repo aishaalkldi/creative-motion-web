@@ -221,11 +221,65 @@ const HEEL_RAISE: ExerciseKinesiologyContext = {
   ],
 };
 
+const STEP_UP: ExerciseKinesiologyContext = {
+  exerciseId: "step-up",
+  primaryMuscles: [
+    "Quadriceps",
+    "Gluteus maximus",
+    "Gluteus medius",
+    "Calf complex",
+    "Core stabilizers",
+  ],
+  movementPhases: [
+    {
+      id: "standing",
+      label: "Standing / baseline",
+      description: "Upright stance on the floor before stepping onto the platform.",
+    },
+    {
+      id: "step_ascent",
+      label: "Step ascent",
+      description: "Controlled concentric loading as the leading leg rises onto the step.",
+    },
+    {
+      id: "top_position",
+      label: "Top position",
+      description: "Brief pause or transition at the top of the step with weight on the leading leg.",
+    },
+    {
+      id: "step_descent",
+      label: "Step descent",
+      description: "Controlled eccentric lowering back to the floor without dropping.",
+    },
+    {
+      id: "rest",
+      label: "Rest / transition",
+      description: "Brief pause between step-up cycles or repositioning between reps.",
+    },
+  ],
+  expectedPatterns: [
+    "Controlled step onto the platform with steady trunk position.",
+    "Controlled step down without rushing or loss of balance — cannot be confirmed from camera data alone.",
+    "Knee alignment over the foot during loading — valgus cannot be confirmed from camera data alone.",
+    "Limb loading strategy may vary across cycles — pacing may be worth clinician review.",
+  ],
+  functionalTransfer:
+    "Stair climbing, step negotiation, lower-limb loading, and sports readiness tasks requiring unilateral closed-chain control.",
+  clinicianObservationGuide: [
+    "Review step height strategy consistency across repetitions relative to prescribed step height.",
+    "Observe ascent control during step-up — assistive capture cannot confirm strength.",
+    "Observe descent control during step-down — assistive capture cannot confirm eccentric control.",
+    "Note limb loading strategy and trunk position during single-limb acceptance.",
+    "Limited camera visibility may affect lower-limb detail — review capture framing.",
+  ],
+};
+
 const KINESIOLOGY_BY_EXERCISE: Readonly<Record<string, ExerciseKinesiologyContext>> = {
   "sit-to-stand": SIT_TO_STAND,
   "mini-squat": MINI_SQUAT,
   "single-leg-stance": SINGLE_LEG_STANCE,
   "heel-raise": HEEL_RAISE,
+  "step-up": STEP_UP,
 };
 
 export const KINESIOLOGY_CONTEXT_EXERCISE_IDS = [
@@ -233,6 +287,7 @@ export const KINESIOLOGY_CONTEXT_EXERCISE_IDS = [
   "mini-squat",
   "single-leg-stance",
   "heel-raise",
+  "step-up",
 ] as const;
 
 export type KinesiologyContextExerciseId = (typeof KINESIOLOGY_CONTEXT_EXERCISE_IDS)[number];

@@ -10,18 +10,21 @@ import {
   isPatientCvCaptureWired,
   PATIENT_HEEL_RAISE_REP_CONFIG,
   PATIENT_MINI_SQUAT_CONFIG,
+  PATIENT_STEP_UP_REP_CONFIG,
   PATIENT_STS_CONFIG,
   resolvePatientCvDetectorKind,
 } from "./cv-patient-config";
 import { LAB_HEEL_RAISE_REP_CONFIG } from "./heel-raise-detector";
+import { LAB_STEP_UP_REP_CONFIG } from "./step-up-detector";
 
 describe("cv-patient-config allowlist", () => {
-  it("includes sit-to-stand, mini-squat, single-leg-stance, and heel-raise", () => {
+  it("includes sit-to-stand, mini-squat, single-leg-stance, heel-raise, and step-up", () => {
     assert.deepEqual(CV_Y1_ENABLED_EXERCISE_IDS, [
       "sit-to-stand",
       "mini-squat",
       "single-leg-stance",
       "heel-raise",
+      "step-up",
     ]);
   });
 
@@ -33,13 +36,15 @@ describe("cv-patient-config allowlist", () => {
     assert.equal(isCvEnabledExercise("SINGLE-LEG-STANCE"), true);
   });
 
-  it("isCvEnabledExercise accepts heel-raise", () => {
+  it("isCvEnabledExercise accepts heel-raise and step-up", () => {
     assert.equal(isCvEnabledExercise("heel-raise"), true);
     assert.equal(isCvEnabledExercise("HEEL-RAISE"), true);
+    assert.equal(isCvEnabledExercise("step-up"), true);
+    assert.equal(isCvEnabledExercise("STEP-UP"), true);
   });
 
   it("rejects unknown exercises", () => {
-    assert.equal(isCvEnabledExercise("step-up"), false);
+    assert.equal(isCvEnabledExercise("functional-reach"), false);
     assert.equal(isCvEnabledExercise(""), false);
     assert.equal(isCvEnabledExercise(null), false);
   });
@@ -61,5 +66,16 @@ describe("cv-patient-config allowlist", () => {
   it("routes heel-raise to dedicated detector wiring", () => {
     assert.equal(resolvePatientCvDetectorKind("heel-raise"), "heel-raise");
     assert.equal(isPatientCvCaptureWired("heel-raise"), true);
+  });
+
+  it("routes step-up to dedicated detector wiring", () => {
+    assert.equal(resolvePatientCvDetectorKind("step-up"), "step-up");
+    assert.equal(isPatientCvCaptureWired("step-up"), true);
+  });
+
+  it("keeps PATIENT_STEP_UP_REP_CONFIG separate from lab config", () => {
+    assert.notEqual(PATIENT_STEP_UP_REP_CONFIG, LAB_STEP_UP_REP_CONFIG);
+    assert.equal(PATIENT_STEP_UP_REP_CONFIG.minMsBetweenReps, 800);
+    assert.equal(PATIENT_STEP_UP_REP_CONFIG.baselineDurationMs, 3_000);
   });
 });

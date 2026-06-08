@@ -20,6 +20,10 @@ import {
   HEEL_RAISE_LIMITED_MOTION_EVIDENCE_LABEL,
 } from "@/app/lib/cv/heel-raise-motion-pilot-record";
 import {
+  STEP_UP_CYCLE_TIMING_ESTIMATED_NOTE,
+  STEP_UP_LIMITED_MOTION_EVIDENCE_LABEL,
+} from "@/app/lib/cv/step-up-motion-pilot-record";
+import {
   MINI_SQUAT_CYCLE_TIMING_ESTIMATED_NOTE,
   MINI_SQUAT_LIMITED_MOTION_EVIDENCE_LABEL,
 } from "@/app/lib/cv/mini-squat-motion-pilot-record";
@@ -27,8 +31,10 @@ import {
   buildCaptureFlagsSummary,
   hasPersistedHeelRaisePhaseRatios,
   hasPersistedMiniSquatPhaseRatios,
+  hasPersistedStepUpPhaseRatios,
   isSynthesizedHeelRaiseEvidence,
   isSynthesizedMiniSquatEvidence,
+  isSynthesizedStepUpEvidence,
   isStsPolishedReport,
   MOVEMENT_TIMING_PHASE_REVIEW_SUBTITLE,
   MOVEMENT_TIMING_PHASE_REVIEW_TITLE,
@@ -182,13 +188,18 @@ function MovementTimingPhaseReviewSection({
     report.sessionSummary?.exerciseId ?? report.kinesiologyContext?.exerciseId ?? null;
   const isMiniSquat = exerciseId === "mini-squat";
   const isHeelRaise = exerciseId === "heel-raise";
-  const isRepCycleExercise = isMiniSquat || isHeelRaise;
+  const isStepUp = exerciseId === "step-up";
+  const isRepCycleExercise = isMiniSquat || isHeelRaise || isStepUp;
   const synthesizedMiniSquat = isSynthesizedMiniSquatEvidence(report);
   const synthesizedHeelRaise = isSynthesizedHeelRaiseEvidence(report);
-  const synthesizedLimitedEvidence = synthesizedMiniSquat || synthesizedHeelRaise;
+  const synthesizedStepUp = isSynthesizedStepUpEvidence(report);
+  const synthesizedLimitedEvidence =
+    synthesizedMiniSquat || synthesizedHeelRaise || synthesizedStepUp;
   const showMiniSquatPhaseRatios = isMiniSquat && hasPersistedMiniSquatPhaseRatios(report);
   const showHeelRaisePhaseRatios = isHeelRaise && hasPersistedHeelRaisePhaseRatios(report);
-  const showRepCyclePhaseRatios = showMiniSquatPhaseRatios || showHeelRaisePhaseRatios;
+  const showStepUpPhaseRatios = isStepUp && hasPersistedStepUpPhaseRatios(report);
+  const showRepCyclePhaseRatios =
+    showMiniSquatPhaseRatios || showHeelRaisePhaseRatios || showStepUpPhaseRatios;
   const timingLabels = report.timingMetricLabels ?? DEFAULT_TIMING_LABELS;
   const completionLabel = isRepCycleExercise ? "Cycle detection clarity" : "Completion clarity";
   const secondaryPhaseLabel = isRepCycleExercise
@@ -208,14 +219,18 @@ function MovementTimingPhaseReviewSection({
       {synthesizedLimitedEvidence ? (
         <p className="mt-2 rounded-[5px] border border-[#EF9F27]/25 bg-[#EF9F27]/5 px-2.5 py-2 text-[10px] leading-relaxed text-[#D1D5DB]">
           <span className="font-medium text-[#EF9F27]">
-            {synthesizedHeelRaise
-              ? HEEL_RAISE_LIMITED_MOTION_EVIDENCE_LABEL
-              : MINI_SQUAT_LIMITED_MOTION_EVIDENCE_LABEL}
+            {synthesizedStepUp
+              ? STEP_UP_LIMITED_MOTION_EVIDENCE_LABEL
+              : synthesizedHeelRaise
+                ? HEEL_RAISE_LIMITED_MOTION_EVIDENCE_LABEL
+                : MINI_SQUAT_LIMITED_MOTION_EVIDENCE_LABEL}
             .{" "}
           </span>
-          {synthesizedHeelRaise
-            ? HEEL_RAISE_CYCLE_TIMING_ESTIMATED_NOTE
-            : MINI_SQUAT_CYCLE_TIMING_ESTIMATED_NOTE}
+          {synthesizedStepUp
+            ? STEP_UP_CYCLE_TIMING_ESTIMATED_NOTE
+            : synthesizedHeelRaise
+              ? HEEL_RAISE_CYCLE_TIMING_ESTIMATED_NOTE
+              : MINI_SQUAT_CYCLE_TIMING_ESTIMATED_NOTE}
         </p>
       ) : null}
 
@@ -563,7 +578,7 @@ function KinesiologyInsightSection({ report }: { report: MotionAnalysisReport })
 }
 
 function CaptureEvidenceSection({ report }: { report: MotionAnalysisReport }) {
-  const motionPilot = report.smtPilot ?? report.msPilot ?? report.hrPilot;
+  const motionPilot = report.smtPilot ?? report.msPilot ?? report.hrPilot ?? report.suPilot;
   const polishedReport = isStsPolishedReport(report);
   const captureTimingLabels = polishedReport
     ? resolveCaptureEvidenceTimingLabels(
@@ -709,7 +724,8 @@ function StsPolishedReportBody({ report }: { report: MotionAnalysisReport }) {
   const captureFlagsSummary = buildCaptureFlagsSummary(
     report.smtPilot?.clinicianFlags ??
       report.msPilot?.clinicianFlags ??
-      report.hrPilot?.clinicianFlags,
+      report.hrPilot?.clinicianFlags ??
+      report.suPilot?.clinicianFlags,
   );
   const expandedReviewFocus =
     report.movementQualityReviewFocusDisplay ??

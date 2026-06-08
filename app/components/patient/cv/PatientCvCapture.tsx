@@ -13,7 +13,9 @@ import {
 } from "@/app/lib/cv/mini-squat-pose-detector";
 import {
   isHeelRaiseMotionPilotEnabled,
+  isStepUpMotionPilotEnabled,
   PATIENT_HEEL_RAISE_POSE_SHELL,
+  PATIENT_STEP_UP_POSE_SHELL,
   PATIENT_MINI_SQUAT_CONFIG,
   PATIENT_SLS_POSE_SHELL,
   PATIENT_STS_CONFIG,
@@ -30,6 +32,16 @@ import {
   buildMotionQualityWithHrPilot,
 } from "@/app/lib/cv/heel-raise-motion-pilot-record";
 import {
+  StepUpPoseDetector,
+  formatStepUpDuration,
+  mapStepUpStartError,
+  type StepUpPoseDetectorSnapshot,
+} from "@/app/lib/cv/step-up-pose-detector";
+import {
+  buildStepUpMotionPilotRecordFromSummary,
+  buildMotionQualityWithSuPilot,
+} from "@/app/lib/cv/step-up-motion-pilot-record";
+import {
   beginHeelRaiseMotionTimeline,
   createHeelRaiseTimelineCaptureRefs,
   disposeHeelRaiseMotionTimelineRefs,
@@ -38,6 +50,15 @@ import {
   recordHeelRaiseMotionTimelineTick,
   tryFinalizeHeelRaiseTimelineBeforePilotSave,
 } from "@/app/lib/cv/patient-cv-heel-raise-timeline";
+import {
+  beginStepUpMotionTimeline,
+  createStepUpTimelineCaptureRefs,
+  disposeStepUpMotionTimelineRefs,
+  finalizeStepUpMotionTimelineCapture,
+  logStepUpMotionTimelineSummaryDebug,
+  recordStepUpMotionTimelineTick,
+  tryFinalizeStepUpTimelineBeforePilotSave,
+} from "@/app/lib/cv/patient-cv-step-up-timeline";
 import {
   SingleLegStancePoseDetector,
   formatSingleLegStanceDuration,
@@ -99,13 +120,15 @@ type CvDetectorSnapshot =
   | SitToStandDetectorSnapshot
   | MiniSquatDetectorSnapshot
   | SingleLegStancePoseDetectorSnapshot
-  | HeelRaisePoseDetectorSnapshot;
+  | HeelRaisePoseDetectorSnapshot
+  | StepUpPoseDetectorSnapshot;
 
 type PatientCvDetector =
   | SitToStandDetector
   | MiniSquatDetector
   | SingleLegStancePoseDetector
-  | HeelRaisePoseDetector;
+  | HeelRaisePoseDetector
+  | StepUpPoseDetector;
 
 type PatientCameraPreviewStackProps = {
   videoRef: RefObject<HTMLVideoElement | null>;
@@ -277,6 +300,12 @@ function canvasSizeForExercise(exerciseId: CvY1ExerciseId): {
       canvasHeight: PATIENT_HEEL_RAISE_POSE_SHELL.canvasHeight,
     };
   }
+  if (exerciseId === "step-up") {
+    return {
+      canvasWidth: PATIENT_STEP_UP_POSE_SHELL.canvasWidth,
+      canvasHeight: PATIENT_STEP_UP_POSE_SHELL.canvasHeight,
+    };
+  }
   return {
     canvasWidth: PATIENT_STS_CONFIG.canvasWidth,
     canvasHeight: PATIENT_STS_CONFIG.canvasHeight,
@@ -366,6 +395,7 @@ export function PatientCvCapture({
   const onMetricsUpdateRef = useRef(onMetricsUpdate);
   const stsTimelineRefs = useRef(createStsTimelineCaptureRefs()).current;
   const hrTimelineRefs = useRef(createHeelRaiseTimelineCaptureRefs()).current;
+  const suTimelineRefs = useRef(createStepUpTimelineCaptureRefs()).current;
 
   useEffect(() => {
     onMetricsUpdateRef.current = onMetricsUpdate;
@@ -423,6 +453,13 @@ export function PatientCvCapture({
           snapshot as SitToStandDetectorSnapshot,
         );
       }
+      if (exerciseId === "step-up") {
+        recordStepUpMotionTimelineTick(
+          exerciseId,
+          suTimelineRefs,
+          snapshot as SitToStandDetectorSnapshot,
+        );
+      }
       if (isHoldCvExercise(exerciseId)) {
         if (snapshot.sessionSeconds !== prevHold) {
           lastReportedHoldRef.current = snapshot.sessionSeconds;
@@ -435,7 +472,7 @@ export function PatientCvCapture({
         reportMetrics();
       }
     },
-    [exerciseId, reportMetrics, trackingStopped, stsTimelineRefs, hrTimelineRefs],
+    [exerciseId, reportMetrics, trackingStopped, stsTimelineRefs, hrTimelineRefs, suTimelineRefs],
   );
 
   useEffect(() => {
@@ -446,13 +483,15 @@ export function PatientCvCapture({
     }
 
     const detector: PatientCvDetector =
-      exerciseId === "heel-raise"
-        ? new HeelRaisePoseDetector({ onSnapshot: syncFromDetector })
-        : exerciseId === "mini-squat"
-          ? new MiniSquatDetector({ onSnapshot: syncFromDetector })
-          : exerciseId === "single-leg-stance"
-            ? new SingleLegStancePoseDetector({ onSnapshot: syncFromDetector }, stanceLeg!)
-            : new SitToStandDetector({ onSnapshot: syncFromDetector }, PATIENT_STS_CONFIG);
+      exerciseId === "step-up"
+        ? new StepUpPoseDetector({ onSnapshot: syncFromDetector })
+        : exerciseId === "heel-raise"
+          ? new HeelRaisePoseDetector({ onSnapshot: syncFromDetector })
+          : exerciseId === "mini-squat"
+            ? new MiniSquatDetector({ onSnapshot: syncFromDetector })
+            : exerciseId === "single-leg-stance"
+              ? new SingleLegStancePoseDetector({ onSnapshot: syncFromDetector }, stanceLeg!)
+              : new SitToStandDetector({ onSnapshot: syncFromDetector }, PATIENT_STS_CONFIG);
 
     detectorRef.current = detector;
     return () => {
@@ -476,6 +515,15 @@ export function PatientCvCapture({
         logHeelRaiseMotionTimelineSummaryDebug(hrSummary, hrTimelineRefs);
       }
       disposeHeelRaiseMotionTimelineRefs(hrTimelineRefs);
+      const suSummary = finalizeStepUpMotionTimelineCapture(
+        exerciseId,
+        suTimelineRefs,
+        detector,
+      );
+      if (suSummary && cvDebugEnabled) {
+        logStepUpMotionTimelineSummaryDebug(suSummary, suTimelineRefs);
+      }
+      disposeStepUpMotionTimelineRefs(suTimelineRefs);
       flushMetricsForSave();
       detector.stop();
       detectorRef.current = null;
@@ -487,6 +535,7 @@ export function PatientCvCapture({
     flushMetricsForSave,
     stsTimelineRefs,
     hrTimelineRefs,
+    suTimelineRefs,
     cvDebugEnabled,
   ]);
 
@@ -516,7 +565,15 @@ export function PatientCvCapture({
     if (hrSummary && cvDebugEnabled) {
       logHeelRaiseMotionTimelineSummaryDebug(hrSummary, hrTimelineRefs);
     }
-  }, [exerciseId, stsTimelineRefs, hrTimelineRefs, cvDebugEnabled]);
+    const suSummary = tryFinalizeStepUpTimelineBeforePilotSave(
+      exerciseId,
+      suTimelineRefs,
+      detector,
+    );
+    if (suSummary && cvDebugEnabled) {
+      logStepUpMotionTimelineSummaryDebug(suSummary, suTimelineRefs);
+    }
+  }, [exerciseId, stsTimelineRefs, hrTimelineRefs, suTimelineRefs, cvDebugEnabled]);
 
   useEffect(() => {
     if (!onRegisterStsPilotBeforeSave) return;
@@ -560,9 +617,31 @@ export function PatientCvCapture({
     return buildMotionQualityWithHrPilot(record);
   }, [exerciseId, hrTimelineRefs]);
 
+  const buildStepUpPilotMotionQuality = useCallback((): CvMotionQualityPayload | null => {
+    if (exerciseId !== "step-up" || !isStepUpMotionPilotEnabled(exerciseId)) {
+      return null;
+    }
+    const summary = suTimelineRefs.summary.current;
+    if (!summary) return null;
+    const detector = detectorRef.current;
+    if (!detector) return null;
+    const metrics = detector.getDerivedMetrics();
+    if (metrics.exerciseId !== "step-up") return null;
+    const record = buildStepUpMotionPilotRecordFromSummary({
+      summary,
+      metrics,
+      snapshotCount: suTimelineRefs.lastFinalizeSnapshotCount.current ?? 0,
+    });
+    return buildMotionQualityWithSuPilot(record);
+  }, [exerciseId, suTimelineRefs]);
+
   const buildMotionPilotRecordFlush = useCallback((): CvMotionQualityPayload | null => {
-    return buildStsPilotMotionQuality() ?? buildHeelRaisePilotMotionQuality();
-  }, [buildStsPilotMotionQuality, buildHeelRaisePilotMotionQuality]);
+    return (
+      buildStsPilotMotionQuality() ??
+      buildHeelRaisePilotMotionQuality() ??
+      buildStepUpPilotMotionQuality()
+    );
+  }, [buildStsPilotMotionQuality, buildHeelRaisePilotMotionQuality, buildStepUpPilotMotionQuality]);
 
   useEffect(() => {
     if (!onRegisterStsPilotRecordFlush) return;
@@ -583,11 +662,12 @@ export function PatientCvCapture({
     if (detector) syncFromDetector(detector.getSnapshot());
     disposeStsMotionTimelineRefs(stsTimelineRefs);
     disposeHeelRaiseMotionTimelineRefs(hrTimelineRefs);
+    disposeStepUpMotionTimelineRefs(suTimelineRefs);
     setCameraLive(false);
     setTrackingStopped(false);
     setSkipped(true);
     onSkipped?.();
-  }, [syncFromDetector, onSkipped, stsTimelineRefs, hrTimelineRefs]);
+  }, [syncFromDetector, onSkipped, stsTimelineRefs, hrTimelineRefs, suTimelineRefs]);
 
   const handleStopSession = useCallback(() => {
     const detector = detectorRef.current;
@@ -613,6 +693,14 @@ export function PatientCvCapture({
     if (hrSummary && cvDebugEnabled) {
       logHeelRaiseMotionTimelineSummaryDebug(hrSummary, hrTimelineRefs);
     }
+    const suSummary = finalizeStepUpMotionTimelineCapture(
+      exerciseId,
+      suTimelineRefs,
+      detector,
+    );
+    if (suSummary && cvDebugEnabled) {
+      logStepUpMotionTimelineSummaryDebug(suSummary, suTimelineRefs);
+    }
     detector.stop();
     setCameraLive(false);
     flushMetricsForSave();
@@ -625,17 +713,20 @@ export function PatientCvCapture({
     flushMetricsForSave,
     stsTimelineRefs,
     hrTimelineRefs,
+    suTimelineRefs,
     cvDebugEnabled,
   ]);
 
   const mapStartError =
-    exerciseId === "heel-raise"
-      ? mapHeelRaiseStartError
-      : exerciseId === "mini-squat"
-        ? mapMiniSquatStartError
-        : exerciseId === "single-leg-stance"
-          ? mapSingleLegStanceStartError
-          : mapSitToStandStartError;
+    exerciseId === "step-up"
+      ? mapStepUpStartError
+      : exerciseId === "heel-raise"
+        ? mapHeelRaiseStartError
+        : exerciseId === "mini-squat"
+          ? mapMiniSquatStartError
+          : exerciseId === "single-leg-stance"
+            ? mapSingleLegStanceStartError
+            : mapSitToStandStartError;
 
   const startCameraTracking = useCallback(async () => {
     const detector = detectorRef.current;
@@ -671,6 +762,7 @@ export function PatientCvCapture({
       setCameraLive(true);
       beginStsMotionTimeline(exerciseId, stsTimelineRefs);
       beginHeelRaiseMotionTimeline(exerciseId, hrTimelineRefs);
+      beginStepUpMotionTimeline(exerciseId, suTimelineRefs);
       reportMetrics();
       auditPreviewLayers("after-detector-start", video, canvas, previewContainerRef.current, {
         cameraLive: true,
@@ -697,6 +789,7 @@ export function PatientCvCapture({
     exerciseId,
     stsTimelineRefs,
     hrTimelineRefs,
+    suTimelineRefs,
   ]);
 
   const holdExercise = isHoldCvExercise(exerciseId);
@@ -826,6 +919,7 @@ export function PatientCvCapture({
     if (detector) syncFromDetector(detector.getSnapshot());
     disposeStsMotionTimelineRefs(stsTimelineRefs);
     disposeHeelRaiseMotionTimelineRefs(hrTimelineRefs);
+    disposeStepUpMotionTimelineRefs(suTimelineRefs);
     setCameraLive(false);
     setTrackingStopped(false);
     setError(null);
@@ -835,7 +929,7 @@ export function PatientCvCapture({
     lastReportedHoldRef.current = -1;
     stopInProgressRef.current = false;
     startInProgressRef.current = false;
-  }, [syncFromDetector, stsTimelineRefs, hrTimelineRefs]);
+  }, [syncFromDetector, stsTimelineRefs, hrTimelineRefs, suTimelineRefs]);
 
   const trackingStatusLabel = (() => {
     if (loading && initPhase === "import") return copy.loadingPoseLibrary;
@@ -864,6 +958,7 @@ export function PatientCvCapture({
       (bodyFramingState !== "good_distance" && bodyFramingState !== "checking"));
 
   const formatDuration = (() => {
+    if (exerciseId === "step-up") return formatStepUpDuration;
     if (exerciseId === "heel-raise") return formatHeelRaiseDuration;
     if (exerciseId === "mini-squat") return formatMiniSquatDuration;
     if (exerciseId === "single-leg-stance") return formatSingleLegStanceDuration;

@@ -9,6 +9,10 @@ import {
   type HeelRaiseRepConfig,
 } from "@/app/lib/cv/heel-raise-detector";
 import {
+  LAB_STEP_UP_REP_CONFIG,
+  type StepUpRepConfig,
+} from "@/app/lib/cv/step-up-detector";
+import {
   LAB_SLS_HOLD_CONFIG,
   type SingleLegStanceHoldConfig,
 } from "@/app/lib/cv/single-leg-stance-detector";
@@ -19,6 +23,7 @@ export const CV_Y1_ENABLED_EXERCISE_IDS = [
   "mini-squat",
   "single-leg-stance",
   "heel-raise",
+  "step-up",
 ] as const;
 
 export type CvY1ExerciseId = (typeof CV_Y1_ENABLED_EXERCISE_IDS)[number];
@@ -33,9 +38,10 @@ export type PatientCvDetectorKind =
   | "sit-to-stand"
   | "mini-squat"
   | "single-leg-stance"
-  | "heel-raise";
+  | "heel-raise"
+  | "step-up";
 
-/** Resolve which patient-portal detector must run — never fall through to STS for heel-raise. */
+/** Resolve which patient-portal detector must run — never fall through to STS for heel-raise or step-up. */
 export function resolvePatientCvDetectorKind(
   exerciseId: CvY1ExerciseId,
 ): PatientCvDetectorKind {
@@ -46,6 +52,8 @@ export function resolvePatientCvDetectorKind(
       return "single-leg-stance";
     case "heel-raise":
       return "heel-raise";
+    case "step-up":
+      return "step-up";
     default:
       return "sit-to-stand";
   }
@@ -58,6 +66,13 @@ export function isHeelRaiseMotionPilotEnabled(exerciseId: CvY1ExerciseId): boole
   return exerciseId === "heel-raise" && PATIENT_HEEL_RAISE_MOTION_PILOT_ENABLED;
 }
 
+/** Step up suPilot timeline + detector wiring (PR68). */
+export const PATIENT_STEP_UP_MOTION_PILOT_ENABLED = true;
+
+export function isStepUpMotionPilotEnabled(exerciseId: CvY1ExerciseId): boolean {
+  return exerciseId === "step-up" && PATIENT_STEP_UP_MOTION_PILOT_ENABLED;
+}
+
 /**
  * True when patient portal has a dedicated detector branch wired (not allowlist-only).
  * Used to gate CV UI and Sports Knee cvAssisted metadata.
@@ -67,6 +82,9 @@ export function isPatientCvCaptureWired(exerciseId: string | undefined | null): 
   const normalized = exerciseId!.trim().toLowerCase() as CvY1ExerciseId;
   if (normalized === "heel-raise") {
     return isHeelRaiseMotionPilotEnabled("heel-raise");
+  }
+  if (normalized === "step-up") {
+    return isStepUpMotionPilotEnabled("step-up");
   }
   return true;
 }
@@ -175,3 +193,29 @@ export const PATIENT_HEEL_RAISE_REP_CONFIG: HeelRaiseRepConfig = {
 
 /** Readiness gate before rep counting (not persisted). */
 export const PATIENT_HEEL_RAISE_READINESS_MS = 2_000;
+
+/** MediaPipe shell for patient step up capture. */
+export const PATIENT_STEP_UP_POSE_SHELL = {
+  wasmUrl: DEFAULT_STS_CONFIG.wasmUrl,
+  modelUrl: DEFAULT_STS_CONFIG.modelUrl,
+  canvasWidth: DEFAULT_STS_CONFIG.canvasWidth,
+  canvasHeight: DEFAULT_STS_CONFIG.canvasHeight,
+  initTimeoutMs: DEFAULT_STS_CONFIG.initTimeoutMs,
+  uiFrameUpdateInterval: DEFAULT_STS_CONFIG.uiFrameUpdateInterval,
+  landmarkDotColor: DEFAULT_STS_CONFIG.landmarkDotColor,
+  lowerBodyLandmarkIndices: DEFAULT_STS_CONFIG.lowerBodyLandmarkIndices,
+  prototypeVersion: "cv-y5-step-up",
+  landmarksOverlayOnly: true,
+} as const;
+
+/** Patient portal step up rep tuning — separate from LAB_STEP_UP_REP_CONFIG. */
+export const PATIENT_STEP_UP_REP_CONFIG: StepUpRepConfig = {
+  ...LAB_STEP_UP_REP_CONFIG,
+  baselineDurationMs: 3_000,
+  minMsBetweenReps: 800,
+  minHipVisibility: 0.3,
+  minSaveDurationS: CV_MIN_SAVE_DURATION_S,
+};
+
+/** Readiness gate before rep counting (not persisted). */
+export const PATIENT_STEP_UP_READINESS_MS = 2_000;
