@@ -6,6 +6,7 @@
 export const PATIENT_HEEL_RAISE_MOTION_PILOT_ENABLED = true;
 export const PATIENT_STEP_UP_MOTION_PILOT_ENABLED = true;
 export const PATIENT_LATERAL_STEP_MOTION_PILOT_ENABLED = true;
+export const PATIENT_FUNCTIONAL_REACH_MOTION_PILOT_ENABLED = true;
 
 export function isCvMotionPilotWiredForCopy(exerciseId: string): boolean {
   switch (exerciseId) {
@@ -15,6 +16,8 @@ export function isCvMotionPilotWiredForCopy(exerciseId: string): boolean {
       return PATIENT_STEP_UP_MOTION_PILOT_ENABLED;
     case "lateral-step":
       return PATIENT_LATERAL_STEP_MOTION_PILOT_ENABLED;
+    case "functional-reach":
+      return PATIENT_FUNCTIONAL_REACH_MOTION_PILOT_ENABLED;
     default:
       return false;
   }

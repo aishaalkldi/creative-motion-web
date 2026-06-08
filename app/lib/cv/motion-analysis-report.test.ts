@@ -1002,9 +1002,9 @@ describe("biomechanical contribution review", () => {
 
   it("returns null for exercises without intelligence support", () => {
     const report = buildMotionAnalysisReport({
-      exerciseId: "functional-reach",
+      exerciseId: "single-leg-stance",
       sessionDurationS: 8,
-      repCount: 2,
+      repCount: 0,
       trackingQuality: "fair",
       movementDetected: true,
     });
@@ -1838,6 +1838,131 @@ describe("lateral step motion intelligence report (PR69)", () => {
   it("shows phase percentages only for persisted lsPilot phase ratios", () => {
     const report = enrichedLateralStepReport();
     assert.equal(report.lsPilotEvidenceMode, "persisted");
+    assert.ok(report.phaseInterpretation && report.phaseInterpretation.length > 0);
+    assert.ok(report.movementQuality?.observedReturningPhaseRatio !== null);
+  });
+});
+
+describe("functional reach motion intelligence report (PR70)", () => {
+  function enrichedFunctionalReachReport(
+    overrides: {
+      phaseRatios?: Record<string, number>;
+      repTimings?: { avgS: number; fastestS: number; slowestS: number };
+      clinicianFlags?: string[];
+      repCount?: number;
+      sessionDurationS?: number;
+    } = {},
+  ) {
+    return buildMotionAnalysisReport({
+      exerciseId: "functional-reach",
+      sessionDurationS: overrides.sessionDurationS ?? 15,
+      repCount: overrides.repCount ?? 4,
+      trackingQuality: "good",
+      movementDetected: true,
+      motionQuality: {
+        frPilot: {
+          pilotVersion: "frm-1",
+          isPilot: true,
+          exerciseId: "functional-reach",
+          snapshotCount: 12,
+          durationS: overrides.sessionDurationS ?? 15,
+          repCount: overrides.repCount ?? 4,
+          completeReps: overrides.repCount ?? 4,
+          unclearReps: 0,
+          trackingSignal: "good",
+          movementDetected: true,
+          phaseRatios: overrides.phaseRatios ?? {
+            standing: 20,
+            reaching_forward: 18,
+            peak_reach: 14,
+            returning: 22,
+            rest: 14,
+            unknown: 12,
+          },
+          repTimings: overrides.repTimings ?? {
+            avgS: 3.2,
+            fastestS: 2.8,
+            slowestS: 3.8,
+          },
+          visibilityRatios: { hip: 88, knee: 86, ankle: 92 },
+          clinicianFlags: overrides.clinicianFlags ?? [],
+          reviewRequired: true,
+          reviewReason: "derived_functional_reach_motion_evidence",
+          disclaimer: "Assistive only.",
+        },
+      },
+    });
+  }
+
+  it("builds polished functional reach intelligence report", () => {
+    const report = enrichedFunctionalReachReport();
+    assert.equal(report.kinesiologyContext?.exerciseId, "functional-reach");
+    assert.ok(report.frPilot);
+    assert.ok(report.executiveSummary);
+    assert.ok(report.movementQuality);
+    assert.ok(report.biomechanicalContributionReview);
+    assert.equal(report.frPilotEvidenceMode, "persisted");
+    assert.ok(hasDisplayableMotionAnalysisReport(report));
+  });
+
+  it("includes functional reach phase model in phase interpretation", () => {
+    const report = enrichedFunctionalReachReport();
+    const phaseIds = (report.phaseInterpretation ?? []).map((phase) => phase.phaseId);
+    assert.ok(phaseIds.includes("reaching_forward"));
+    assert.ok(phaseIds.includes("peak_reach"));
+    assert.ok(phaseIds.includes("returning"));
+  });
+
+  it("synthesizes frPilot from session metrics when motion_quality is absent", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "functional-reach",
+      sessionDurationS: 12,
+      repCount: 3,
+      trackingQuality: "fair",
+      movementDetected: true,
+    });
+    assert.ok(report.frPilot);
+    assert.equal(report.frPilot!.completeReps, 3);
+    assert.equal(report.frPilot!.repTimings?.avgS, 4);
+    assert.equal(report.frPilotEvidenceMode, "synthesized");
+    assert.ok(report.movementQuality);
+  });
+
+  it("uses safe biomechanical review prompts without pathology labels", () => {
+    const report = enrichedFunctionalReachReport();
+    const prompts = report.biomechanicalContributionReview?.clinicianReviewPrompts ?? [];
+    const joined = prompts.join(" ").toLowerCase();
+    assert.ok(joined.includes("reach strategy") || joined.includes("balance strategy"));
+    assert.ok(joined.includes("trunk control") || joined.includes("return control"));
+    assert.ok(!joined.includes("weakness"));
+    assert.ok(!joined.includes("return-to-sport"));
+    assert.ok(!joined.includes("treatment recommendation"));
+    assert.ok(!joined.includes("diagnosis"));
+    assert.ok(!joined.includes("instability diagnosis"));
+  });
+
+  it("marks synthesized frPilot and avoids implying phase detection", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "functional-reach",
+      sessionDurationS: 12,
+      repCount: 3,
+      trackingQuality: "fair",
+      movementDetected: true,
+    });
+
+    assert.equal(report.frPilotEvidenceMode, "synthesized");
+    assert.equal(report.phaseInterpretation, null);
+    assert.equal(report.movementQuality?.observedReturningPhaseRatio, null);
+    assert.ok(
+      report.executiveSummary?.lines.some((line) =>
+        line.includes("Limited motion evidence"),
+      ),
+    );
+  });
+
+  it("shows phase percentages only for persisted frPilot phase ratios", () => {
+    const report = enrichedFunctionalReachReport();
+    assert.equal(report.frPilotEvidenceMode, "persisted");
     assert.ok(report.phaseInterpretation && report.phaseInterpretation.length > 0);
     assert.ok(report.movementQuality?.observedReturningPhaseRatio !== null);
   });

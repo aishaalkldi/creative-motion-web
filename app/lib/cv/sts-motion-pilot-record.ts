@@ -6,6 +6,7 @@
 import type { CvTrackingQuality } from "@/app/lib/cv/bio-0-contracts";
 import type { SitToStandDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import type { HeelRaiseMotionPilotRecord } from "@/app/lib/cv/heel-raise-motion-pilot-record";
+import type { FunctionalReachMotionPilotRecord } from "@/app/lib/cv/functional-reach-motion-pilot-record";
 import type { LateralStepMotionPilotRecord } from "@/app/lib/cv/lateral-step-motion-pilot-record";
 import type { StepUpMotionPilotRecord } from "@/app/lib/cv/step-up-motion-pilot-record";
 import type { MiniSquatMotionPilotRecord } from "@/app/lib/cv/mini-squat-motion-pilot-record";
@@ -191,6 +192,7 @@ export type CvMotionQualityPayload = {
   hrPilot?: HeelRaiseMotionPilotRecord;
   suPilot?: StepUpMotionPilotRecord;
   lsPilot?: LateralStepMotionPilotRecord;
+  frPilot?: FunctionalReachMotionPilotRecord;
   [key: string]: unknown;
 };
 

@@ -5,10 +5,15 @@
 
 import { DEFAULT_STS_CONFIG, type SitToStandCvConfig } from "@/app/lib/cv/bio-0-contracts";
 import {
+  PATIENT_FUNCTIONAL_REACH_MOTION_PILOT_ENABLED,
   PATIENT_HEEL_RAISE_MOTION_PILOT_ENABLED,
   PATIENT_LATERAL_STEP_MOTION_PILOT_ENABLED,
   PATIENT_STEP_UP_MOTION_PILOT_ENABLED,
 } from "@/app/lib/cv/cv-patient-motion-pilot-flags";
+import {
+  LAB_FUNCTIONAL_REACH_REP_CONFIG,
+  type FunctionalReachRepConfig,
+} from "@/app/lib/cv/functional-reach-detector";
 import {
   LAB_HEEL_RAISE_REP_CONFIG,
   type HeelRaiseRepConfig,
@@ -34,6 +39,7 @@ export const CV_Y1_ENABLED_EXERCISE_IDS = [
   "heel-raise",
   "step-up",
   "lateral-step",
+  "functional-reach",
 ] as const;
 
 export type CvY1ExerciseId = (typeof CV_Y1_ENABLED_EXERCISE_IDS)[number];
@@ -50,7 +56,8 @@ export type PatientCvDetectorKind =
   | "single-leg-stance"
   | "heel-raise"
   | "step-up"
-  | "lateral-step";
+  | "lateral-step"
+  | "functional-reach";
 
 /** Resolve which patient-portal detector must run — never fall through to STS for heel-raise or step-up. */
 export function resolvePatientCvDetectorKind(
@@ -67,12 +74,15 @@ export function resolvePatientCvDetectorKind(
       return "step-up";
     case "lateral-step":
       return "lateral-step";
+    case "functional-reach":
+      return "functional-reach";
     default:
       return "sit-to-stand";
   }
 }
 
 export {
+  PATIENT_FUNCTIONAL_REACH_MOTION_PILOT_ENABLED,
   PATIENT_HEEL_RAISE_MOTION_PILOT_ENABLED,
   PATIENT_LATERAL_STEP_MOTION_PILOT_ENABLED,
   PATIENT_STEP_UP_MOTION_PILOT_ENABLED,
@@ -90,6 +100,10 @@ export function isLateralStepMotionPilotEnabled(exerciseId: CvY1ExerciseId): boo
   return exerciseId === "lateral-step" && PATIENT_LATERAL_STEP_MOTION_PILOT_ENABLED;
 }
 
+export function isFunctionalReachMotionPilotEnabled(exerciseId: CvY1ExerciseId): boolean {
+  return exerciseId === "functional-reach" && PATIENT_FUNCTIONAL_REACH_MOTION_PILOT_ENABLED;
+}
+
 /**
  * True when patient portal has a dedicated detector branch wired (not allowlist-only).
  * Used to gate CV UI and Sports Knee cvAssisted metadata.
@@ -105,6 +119,9 @@ export function isPatientCvCaptureWired(exerciseId: string | undefined | null): 
   }
   if (normalized === "lateral-step") {
     return isLateralStepMotionPilotEnabled("lateral-step");
+  }
+  if (normalized === "functional-reach") {
+    return isFunctionalReachMotionPilotEnabled("functional-reach");
   }
   return true;
 }
@@ -265,3 +282,30 @@ export const PATIENT_LATERAL_STEP_REP_CONFIG: LateralStepRepConfig = {
 
 /** Readiness gate before rep counting (not persisted). */
 export const PATIENT_LATERAL_STEP_READINESS_MS = 2_000;
+
+/** MediaPipe shell for patient functional reach capture. */
+export const PATIENT_FUNCTIONAL_REACH_POSE_SHELL = {
+  wasmUrl: DEFAULT_STS_CONFIG.wasmUrl,
+  modelUrl: DEFAULT_STS_CONFIG.modelUrl,
+  canvasWidth: DEFAULT_STS_CONFIG.canvasWidth,
+  canvasHeight: DEFAULT_STS_CONFIG.canvasHeight,
+  initTimeoutMs: DEFAULT_STS_CONFIG.initTimeoutMs,
+  uiFrameUpdateInterval: DEFAULT_STS_CONFIG.uiFrameUpdateInterval,
+  landmarkDotColor: DEFAULT_STS_CONFIG.landmarkDotColor,
+  lowerBodyLandmarkIndices: DEFAULT_STS_CONFIG.lowerBodyLandmarkIndices,
+  prototypeVersion: "cv-y7-functional-reach",
+  landmarksOverlayOnly: true,
+} as const;
+
+/** Patient portal functional reach rep tuning — separate from LAB_FUNCTIONAL_REACH_REP_CONFIG. */
+export const PATIENT_FUNCTIONAL_REACH_REP_CONFIG: FunctionalReachRepConfig = {
+  ...LAB_FUNCTIONAL_REACH_REP_CONFIG,
+  baselineDurationMs: 3_000,
+  minMsBetweenReps: 800,
+  minShoulderVisibility: 0.3,
+  minWristVisibility: 0.28,
+  minSaveDurationS: CV_MIN_SAVE_DURATION_S,
+};
+
+/** Readiness gate before rep counting (not persisted). */
+export const PATIENT_FUNCTIONAL_REACH_READINESS_MS = 2_000;

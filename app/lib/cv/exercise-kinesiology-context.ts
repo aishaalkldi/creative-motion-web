@@ -327,6 +327,59 @@ const LATERAL_STEP: ExerciseKinesiologyContext = {
   ],
 };
 
+const FUNCTIONAL_REACH: ExerciseKinesiologyContext = {
+  exerciseId: "functional-reach",
+  primaryMuscles: [
+    "Ankle strategy",
+    "Hip strategy",
+    "Trunk control",
+    "Core stabilizers",
+    "Shoulder / scapular context",
+  ],
+  movementPhases: [
+    {
+      id: "standing",
+      label: "Standing / baseline",
+      description: "Upright stance before forward reach attempt.",
+    },
+    {
+      id: "reaching_forward",
+      label: "Reaching forward",
+      description: "Controlled forward reach at shoulder height without stepping.",
+    },
+    {
+      id: "peak_reach",
+      label: "Peak reach",
+      description: "Maximum forward reach position relative to baseline.",
+    },
+    {
+      id: "returning",
+      label: "Returning",
+      description: "Controlled return to upright stance after peak reach.",
+    },
+    {
+      id: "rest",
+      label: "Rest / transition",
+      description: "Brief pause between functional reach cycles or arm switches.",
+    },
+  ],
+  expectedPatterns: [
+    "Controlled forward reach with steady trunk position.",
+    "Reach extent consistency across cycles — cannot be confirmed from camera data alone.",
+    "Balance strategy may vary across repetitions — clinician may review ankle vs hip strategy visually.",
+    "Return control may vary across cycles — pacing may be worth clinician review.",
+  ],
+  functionalTransfer:
+    "Dynamic balance, limits of stability, forward reach tasks, and fall-risk reduction activities.",
+  clinicianObservationGuide: [
+    "Clinician may review ankle vs hip balance strategy during forward reach.",
+    "Clinician may review trunk control consistency across repetitions.",
+    "Clinician may review reach extent consistency across cycles.",
+    "Clinician may review return control after each reach.",
+    "Limited camera visibility may affect upper-limb detail — review capture framing.",
+  ],
+};
+
 const KINESIOLOGY_BY_EXERCISE: Readonly<Record<string, ExerciseKinesiologyContext>> = {
   "sit-to-stand": SIT_TO_STAND,
   "mini-squat": MINI_SQUAT,
@@ -334,6 +387,7 @@ const KINESIOLOGY_BY_EXERCISE: Readonly<Record<string, ExerciseKinesiologyContex
   "heel-raise": HEEL_RAISE,
   "step-up": STEP_UP,
   "lateral-step": LATERAL_STEP,
+  "functional-reach": FUNCTIONAL_REACH,
 };
 
 export const KINESIOLOGY_CONTEXT_EXERCISE_IDS = [
@@ -343,6 +397,7 @@ export const KINESIOLOGY_CONTEXT_EXERCISE_IDS = [
   "heel-raise",
   "step-up",
   "lateral-step",
+  "functional-reach",
 ] as const;
 
 export type KinesiologyContextExerciseId = (typeof KINESIOLOGY_CONTEXT_EXERCISE_IDS)[number];

@@ -73,6 +73,15 @@ const LATERAL_STEP_PHASE_LABELS: Readonly<Record<string, string>> = {
   unknown: "Unknown",
 };
 
+const FUNCTIONAL_REACH_PHASE_LABELS: Readonly<Record<string, string>> = {
+  standing: "Standing / baseline",
+  reaching_forward: "Reaching forward",
+  peak_reach: "Peak reach",
+  returning: "Returning",
+  rest: "Rest / transition",
+  unknown: "Unknown",
+};
+
 const UNKNOWN_PHASE_HIGH_PCT = 25;
 const REST_PHASE_HIGH_PCT = 40;
 const RETURNING_PHASE_LOW_PCT = 15;
@@ -210,6 +219,7 @@ function phaseLabel(phaseId: string, kinesiology: ExerciseKinesiologyContext | n
   const fromKinesiology = kinesiology?.movementPhases.find((phase) => phase.id === phaseId);
   if (fromKinesiology) return fromKinesiology.label;
   return (
+    FUNCTIONAL_REACH_PHASE_LABELS[phaseId] ??
     LATERAL_STEP_PHASE_LABELS[phaseId] ??
     STEP_UP_PHASE_LABELS[phaseId] ??
     HEEL_RAISE_PHASE_LABELS[phaseId] ??
@@ -232,7 +242,8 @@ function buildMetricSummary(input: BuildMotionAnalysisInterpretationInput): stri
           input.exerciseId === "mini-squat" ||
           input.exerciseId === "heel-raise" ||
           input.exerciseId === "step-up" ||
-          input.exerciseId === "lateral-step") &&
+          input.exerciseId === "lateral-step" ||
+          input.exerciseId === "functional-reach") &&
         isStrictPhaseCompletenessFromPilot(input.smtPilot) &&
         (input.exerciseId !== "mini-squat" ||
           ((input.smtPilot.phaseRatios?.lowering ?? 0) >= 5 &&
@@ -249,7 +260,11 @@ function buildMetricSummary(input: BuildMotionAnalysisInterpretationInput): stri
         (input.exerciseId !== "lateral-step" ||
           ((input.smtPilot.phaseRatios?.lateral_shift ?? 0) >= 5 &&
             (input.smtPilot.phaseRatios?.step_out ?? 0) >= 5 &&
-            (input.smtPilot.phaseRatios?.return_to_center ?? 0) >= 5));
+            (input.smtPilot.phaseRatios?.return_to_center ?? 0) >= 5)) &&
+        (input.exerciseId !== "functional-reach" ||
+          ((input.smtPilot.phaseRatios?.reaching_forward ?? 0) >= 5 &&
+            (input.smtPilot.phaseRatios?.peak_reach ?? 0) >= 5 &&
+            (input.smtPilot.phaseRatios?.returning ?? 0) >= 5));
       const cycleLabel = formatStsCycleCountLabel(
         input.smtPilot.completeReps,
         strictComplete,
@@ -503,6 +518,40 @@ function observationsFromPhaseRatios(
     observations.push({
       id: "ls_brief_shift",
       text: "A brief lateral shift phase relative to standing was captured — clinician may review weight-shift control visually.",
+    });
+  }
+
+  const reachingForwardPct = phaseRatios.reaching_forward ?? 0;
+  const peakReachPct = phaseRatios.peak_reach ?? 0;
+  const functionalReachReturningPct = phaseRatios.returning ?? 0;
+
+  if (
+    exerciseId === "functional-reach" &&
+    functionalReachReturningPct > 0 &&
+    functionalReachReturningPct < RETURNING_PHASE_LOW_PCT
+  ) {
+    observations.push({
+      id: "fr_low_returning",
+      text: "Camera-derived evidence suggests the return phase may be under-represented in capture; clinician may review return control visually.",
+    });
+  }
+
+  if (exerciseId === "functional-reach" && peakReachPct > 0 && peakReachPct < 10) {
+    observations.push({
+      id: "fr_brief_peak_reach",
+      text: "A brief peak reach position relative to capture was noted — clinician may review reach extent consistency visually.",
+    });
+  }
+
+  if (
+    exerciseId === "functional-reach" &&
+    reachingForwardPct > 0 &&
+    reachingForwardPct < RISING_PHASE_LOW_PCT &&
+    standingPct > 40
+  ) {
+    observations.push({
+      id: "fr_brief_reaching_forward",
+      text: "A brief reaching-forward phase relative to standing was captured — clinician may review reach initiation and trunk strategy visually.",
     });
   }
 
