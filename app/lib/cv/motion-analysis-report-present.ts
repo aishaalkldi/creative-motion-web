@@ -110,29 +110,104 @@ function normalizeForDedupe(text: string): string {
   return text.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-function isNearDuplicatePrompt(prompt: string, reviewNextTexts: string[]): boolean {
+const PROMPT_TOPIC_PATTERNS: ReadonlyArray<{ id: string; pattern: RegExp }> = [
+  { id: "pacing", pattern: /pacing|repetition.{0,20}consistenc|timing variab|cycle.{0,12}interval/ },
+  { id: "lowering", pattern: /lowering|return to sitting|returning phase|descent/ },
+  { id: "standing", pattern: /standing posture|terminal standing/ },
+  { id: "unclear_reps", pattern: /unclear rep|unclear cycle|rep boundar/ },
+];
+
+function promptTopicId(text: string): string | null {
+  const normalized = normalizeForDedupe(text);
+  for (const topic of PROMPT_TOPIC_PATTERNS) {
+    if (topic.pattern.test(normalized)) return topic.id;
+  }
+  return null;
+}
+
+function isNearDuplicatePrompt(prompt: string, existingTexts: string[]): boolean {
   const normalizedPrompt = normalizeForDedupe(prompt);
-  return reviewNextTexts.some((item) => {
+  return existingTexts.some((item) => {
     const normalizedItem = normalizeForDedupe(item);
-    return (
+    if (
       normalizedPrompt === normalizedItem ||
       normalizedPrompt.includes(normalizedItem) ||
       normalizedItem.includes(normalizedPrompt)
-    );
+    ) {
+      return true;
+    }
+    const promptTopic = promptTopicId(prompt);
+    const itemTopic = promptTopicId(item);
+    return promptTopic !== null && promptTopic === itemTopic;
   });
+}
+
+export function filterSemanticallyDuplicatePrompts(
+  prompts: string[],
+  existingTexts: string[],
+): string[] {
+  const kept: string[] = [];
+  const seen = [...existingTexts];
+  for (const prompt of prompts) {
+    if (isNearDuplicatePrompt(prompt, seen)) continue;
+    kept.push(prompt);
+    seen.push(prompt);
+  }
+  return kept;
+}
+
+export function resolveCaptureEvidenceCycleMetricLabel(
+  report: MotionAnalysisReport,
+): string {
+  const strictComplete = isStrictStsPhaseCompleteness(
+    report.smtPilot,
+    report.movementQuality,
+  );
+  return strictComplete ? "Complete cycles" : "Camera-detected cycles";
+}
+
+export function resolveCaptureEvidenceTimingLabels(
+  labels: MotionAnalysisTimingMetricLabels | null | undefined,
+  phaseRatios: MotionAnalysisPhaseRatios | null | undefined,
+): MotionAnalysisTimingMetricLabels {
+  const base = labels ?? resolveStsTimingMetricLabels(phaseRatios);
+  return {
+    average: base.average.replace(/^Average /, "Avg "),
+    fastest: base.fastest,
+    slowest: base.slowest,
+  };
+}
+
+export function buildCaptureFlagsSummary(
+  flags: string[] | null | undefined,
+  maxItems = 3,
+): string | null {
+  if (!flags || flags.length === 0) return null;
+  const readable = flags
+    .slice(0, maxItems)
+    .map((flag) => flag.replace(/_/g, " "));
+  if (flags.length > maxItems) {
+    return `${readable.join(", ")} (+${flags.length - maxItems} more in capture evidence)`;
+  }
+  return readable.join(", ");
 }
 
 export function buildBiomechanicalContributionReviewCompact(
   review: BiomechanicalContributionReview,
   reviewNext: MotionAnalysisReviewNextItem[] | null | undefined,
+  movementQualityFocus: string[] | null | undefined = null,
 ): BiomechanicalContributionReviewCompact {
-  const reviewNextTexts = (reviewNext ?? []).map((item) => item.text);
+  const existingTexts = [
+    ...(reviewNext ?? []).map((item) => item.text),
+    ...(movementQualityFocus ?? []),
+  ];
 
   const observedPattern = review.observedMovementPattern.slice(0, 2).join(" ");
 
-  const clinicianReview = review.clinicianReviewPrompts
-    .filter((prompt) => !isNearDuplicatePrompt(prompt, reviewNextTexts))
-    .slice(0, 3);
+  const clinicianReview = filterSemanticallyDuplicatePrompts(
+    review.clinicianReviewPrompts,
+    existingTexts,
+  ).slice(0, 3);
 
   return {
     observedPattern,

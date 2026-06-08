@@ -12,6 +12,12 @@ import {
   resolveMotionAnalysisSummaryLabel,
   trackingSignalDotTone,
 } from "@/app/lib/cv/motion-analysis-report";
+import {
+  buildCaptureFlagsSummary,
+  filterSemanticallyDuplicatePrompts,
+  resolveCaptureEvidenceCycleMetricLabel,
+  resolveCaptureEvidenceTimingLabels,
+} from "@/app/lib/cv/motion-analysis-report-present";
 import { resolveExerciseKinesiologyContext } from "@/app/lib/cv/exercise-kinesiology-context";
 import { MotionTimelineAccumulator } from "@/app/lib/cv/motion-timeline-accumulator";
 import {
@@ -1102,5 +1108,136 @@ describe("report readability polish", () => {
     });
     assert.ok(report.reviewNext);
     assert.ok(report.reviewNext!.length <= 5);
+  });
+});
+
+describe("report evidence label alignment", () => {
+  function enrichedStsReport(
+    overrides: {
+      phaseRatios?: Record<string, number>;
+      repTimings?: { avgS: number; fastestS: number; slowestS: number };
+      clinicianFlags?: string[];
+    } = {},
+  ) {
+    return buildMotionAnalysisReport({
+      exerciseId: "sit-to-stand",
+      sessionDurationS: 12,
+      repCount: 3,
+      trackingQuality: "good",
+      movementDetected: true,
+      motionQuality: {
+        smtPilot: {
+          pilotVersion: "smt-1",
+          isPilot: true,
+          exerciseId: "sit-to-stand",
+          snapshotCount: 8,
+          durationS: 12,
+          repCount: 3,
+          completeReps: 3,
+          unclearReps: 0,
+          trackingSignal: "good",
+          movementDetected: true,
+          phaseRatios: overrides.phaseRatios ?? {
+            seated: 12,
+            rising: 25,
+            standing: 40,
+            returning: 18,
+            rest: 5,
+          },
+          repTimings: overrides.repTimings ?? {
+            avgS: 2.1,
+            fastestS: 2.0,
+            slowestS: 2.2,
+          },
+          visibilityRatios: { hip: 88, knee: 85, ankle: 82 },
+          clinicianFlags: overrides.clinicianFlags ?? ["pose_tracking_interrupted"],
+          reviewRequired: true,
+          reviewReason: "derived_motion_timeline_pilot",
+          disclaimer: "Assistive only.",
+        },
+      },
+    });
+  }
+
+  it("aligns capture evidence timing labels with main timing section", () => {
+    const report = enrichedStsReport();
+    const captureLabels = resolveCaptureEvidenceTimingLabels(
+      report.timingMetricLabels,
+      report.smtPilot?.phaseRatios ?? null,
+    );
+    assert.equal(captureLabels.average, "Avg cycle interval");
+    assert.equal(captureLabels.fastest, "Fastest cycle interval");
+    assert.equal(captureLabels.slowest, "Slowest cycle interval");
+  });
+
+  it("uses camera-detected cycle wording when strict completeness is not met", () => {
+    const incomplete = enrichedStsReport({
+      phaseRatios: { seated: 30, rising: 20, standing: 35, returning: 0, rest: 15 },
+      clinicianFlags: ["incomplete_cycle"],
+    });
+    assert.equal(
+      resolveCaptureEvidenceCycleMetricLabel(incomplete),
+      "Camera-detected cycles",
+    );
+  });
+
+  it("uses complete cycles label when strict completeness is met", () => {
+    const report = enrichedStsReport({ clinicianFlags: [] });
+    assert.equal(resolveCaptureEvidenceCycleMetricLabel(report), "Complete cycles");
+  });
+
+  it("builds short capture flags summary for show details", () => {
+    const summary = buildCaptureFlagsSummary([
+      "pose_tracking_interrupted",
+      "incomplete_cycle",
+      "unclear_reps_recorded",
+      "high_unknown_phase",
+    ]);
+    assert.ok(summary?.includes("pose tracking interrupted"));
+    assert.ok(summary?.includes("(+1 more"));
+  });
+
+  it("dedupes pacing prompts across biomechanical review and review next", () => {
+    const report = enrichedStsReport({
+      repTimings: { avgS: 2.8, fastestS: 1.5, slowestS: 4.0 },
+      phaseRatios: {
+        seated: 10,
+        rising: 30,
+        standing: 52,
+        returning: 8,
+        rest: 0,
+      },
+      clinicianFlags: [],
+    });
+
+    const reviewNextTexts = (report.reviewNext ?? []).map((item) => item.text);
+    const bioReview = report.biomechanicalContributionReviewCompact?.clinicianReview ?? [];
+    const hasPacingDup = bioReview.some((prompt) =>
+      reviewNextTexts.some(
+        (item) =>
+          /pacing/i.test(prompt) &&
+          /pacing/i.test(item),
+      ),
+    );
+    assert.equal(hasPacingDup, false);
+
+    const filteredFocus = report.movementQualityReviewFocusDisplay ?? [];
+    const focusPacingDup = filteredFocus.some((prompt) =>
+      reviewNextTexts.some(
+        (item) => /pacing/i.test(prompt) && /pacing/i.test(item),
+      ),
+    );
+    assert.equal(focusPacingDup, false);
+  });
+
+  it("filters semantically similar prompts by topic", () => {
+    const filtered = filterSemanticallyDuplicatePrompts(
+      [
+        "Review repetition-to-repetition pacing consistency.",
+        "Confirm terminal standing posture visually.",
+      ],
+      ["Clinician may review pacing consistency across reps during the clinical encounter."],
+    );
+    assert.deepEqual(filtered, ["Confirm terminal standing posture visually."]);
   });
 });

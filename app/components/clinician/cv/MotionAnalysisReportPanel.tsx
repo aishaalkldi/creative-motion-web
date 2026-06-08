@@ -16,9 +16,12 @@ import {
   trackingSignalDotTone,
 } from "@/app/lib/cv/motion-analysis-report";
 import {
+  buildCaptureFlagsSummary,
   isStsPolishedReport,
   MOVEMENT_TIMING_PHASE_REVIEW_SUBTITLE,
   MOVEMENT_TIMING_PHASE_REVIEW_TITLE,
+  resolveCaptureEvidenceCycleMetricLabel,
+  resolveCaptureEvidenceTimingLabels,
 } from "@/app/lib/cv/motion-analysis-report-present";
 
 const SUMMARY_BADGE_CLASS: Record<MotionAnalysisSummaryLabel, string> = {
@@ -506,6 +509,16 @@ function KinesiologyInsightSection({ report }: { report: MotionAnalysisReport })
 
 function CaptureEvidenceSection({ report }: { report: MotionAnalysisReport }) {
   const smtPilot = report.smtPilot;
+  const stsPolished = isStsPolishedReport(report);
+  const captureTimingLabels = stsPolished
+    ? resolveCaptureEvidenceTimingLabels(
+        report.timingMetricLabels,
+        smtPilot?.phaseRatios ?? null,
+      )
+    : null;
+  const cycleMetricLabel = stsPolished
+    ? resolveCaptureEvidenceCycleMetricLabel(report)
+    : "Complete reps";
 
   if (smtPilot) {
     return (
@@ -523,16 +536,25 @@ function CaptureEvidenceSection({ report }: { report: MotionAnalysisReport }) {
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
             <PilotMetric label="Snapshots" value={String(smtPilot.snapshotCount)} />
-            <PilotMetric label="Complete reps" value={String(smtPilot.completeReps)} />
+            <PilotMetric label={cycleMetricLabel} value={String(smtPilot.completeReps)} />
             <PilotMetric label="Unclear reps" value={String(smtPilot.unclearReps)} />
           </div>
           <TrackingSignalRow signal={smtPilot.trackingSignal} />
 
           {smtPilot.repTimings ? (
             <div className="grid grid-cols-3 gap-2">
-              <PilotMetric label="Avg rep" value={formatNullableSeconds(smtPilot.repTimings.avgS)} />
-              <PilotMetric label="Fastest rep" value={formatNullableSeconds(smtPilot.repTimings.fastestS)} />
-              <PilotMetric label="Slowest rep" value={formatNullableSeconds(smtPilot.repTimings.slowestS)} />
+              <PilotMetric
+                label={captureTimingLabels?.average ?? "Avg rep"}
+                value={formatNullableSeconds(smtPilot.repTimings.avgS)}
+              />
+              <PilotMetric
+                label={captureTimingLabels?.fastest ?? "Fastest rep"}
+                value={formatNullableSeconds(smtPilot.repTimings.fastestS)}
+              />
+              <PilotMetric
+                label={captureTimingLabels?.slowest ?? "Slowest rep"}
+                value={formatNullableSeconds(smtPilot.repTimings.slowestS)}
+              />
             </div>
           ) : null}
 
@@ -629,6 +651,11 @@ function CaptureEvidenceSection({ report }: { report: MotionAnalysisReport }) {
 function StsPolishedReportBody({ report }: { report: MotionAnalysisReport }) {
   const isLegacy = report.reportMode === "legacy";
   const clinicalObservations = report.clinicalObservations;
+  const captureFlagsSummary = buildCaptureFlagsSummary(report.smtPilot?.clinicianFlags);
+  const expandedReviewFocus =
+    report.movementQualityReviewFocusDisplay ??
+    report.movementQuality?.clinicianReviewFocus ??
+    [];
 
   return (
     <>
@@ -655,9 +682,14 @@ function StsPolishedReportBody({ report }: { report: MotionAnalysisReport }) {
         </summary>
         <div className="mt-2 space-y-2 border-t border-[#1E2D42] pt-2">
           <ClinicalSnapshotSection report={report} isLegacy={isLegacy} />
+          {captureFlagsSummary ? (
+            <div className="rounded-[6px] border border-[#1E2D42] bg-[#070D16] px-3 py-2.5">
+              <SectionHeading>Capture flags summary</SectionHeading>
+              <p className="mt-1 text-[10px] leading-snug text-[#D1D5DB]">{captureFlagsSummary}</p>
+            </div>
+          ) : null}
           {report.movementQuality &&
-          (report.movementQuality.qualitySignals.length > 0 ||
-            report.movementQuality.clinicianReviewFocus.length > 0) ? (
+          (report.movementQuality.qualitySignals.length > 0 || expandedReviewFocus.length > 0) ? (
             <div className="rounded-[6px] border border-[#1E2D42] bg-[#070D16] px-3 py-2.5">
               <SectionHeading>Expanded timing &amp; phase signals</SectionHeading>
               {report.movementQuality.qualitySignals.length > 0 ? (
@@ -667,9 +699,9 @@ function StsPolishedReportBody({ report }: { report: MotionAnalysisReport }) {
                   ))}
                 </ul>
               ) : null}
-              {report.movementQuality.clinicianReviewFocus.length > 0 ? (
+              {expandedReviewFocus.length > 0 ? (
                 <ul className="mt-2 list-inside list-disc space-y-1 text-[10px] leading-snug text-[#D1D5DB]">
-                  {report.movementQuality.clinicianReviewFocus.map((item) => (
+                  {expandedReviewFocus.map((item) => (
                     <li key={item}>{item}</li>
                   ))}
                 </ul>
