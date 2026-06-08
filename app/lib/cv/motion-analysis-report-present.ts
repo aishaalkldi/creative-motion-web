@@ -16,6 +16,10 @@ import {
   HEEL_RAISE_LIMITED_MOTION_EVIDENCE_LABEL,
 } from "@/app/lib/cv/heel-raise-motion-pilot-record";
 import {
+  LATERAL_STEP_CYCLE_TIMING_ESTIMATED_NOTE,
+  LATERAL_STEP_LIMITED_MOTION_EVIDENCE_LABEL,
+} from "@/app/lib/cv/lateral-step-motion-pilot-record";
+import {
   STEP_UP_CYCLE_TIMING_ESTIMATED_NOTE,
   STEP_UP_LIMITED_MOTION_EVIDENCE_LABEL,
 } from "@/app/lib/cv/step-up-motion-pilot-record";
@@ -28,11 +32,13 @@ const STS_EXERCISE_ID = "sit-to-stand";
 const MINI_SQUAT_EXERCISE_ID = "mini-squat";
 const HEEL_RAISE_EXERCISE_ID = "heel-raise";
 const STEP_UP_EXERCISE_ID = "step-up";
+const LATERAL_STEP_EXERCISE_ID = "lateral-step";
 const POLISHED_INTELLIGENCE_EXERCISE_IDS = new Set([
   STS_EXERCISE_ID,
   MINI_SQUAT_EXERCISE_ID,
   HEEL_RAISE_EXERCISE_ID,
   STEP_UP_EXERCISE_ID,
+  LATERAL_STEP_EXERCISE_ID,
 ]);
 const MEANINGFUL_PHASE_PCT = 5;
 
@@ -163,6 +169,30 @@ export function isStrictStepUpPhaseCompleteness(
   return true;
 }
 
+export function isStrictLateralStepPhaseCompleteness(
+  lsPilot: MotionAnalysisSmtPilotSummary | null | undefined,
+  movementQuality: MovementQualitySignals | null | undefined,
+): boolean {
+  if (!lsPilot?.phaseRatios) return false;
+  if (lsPilot.unclearReps > 0) return false;
+  if (hasFlag(lsPilot.clinicianFlags, "incomplete_cycle")) return false;
+
+  const ratios = lsPilot.phaseRatios;
+  const lateralShift = ratios.lateral_shift ?? 0;
+  const stepOut = ratios.step_out ?? 0;
+  const returnToCenter = ratios.return_to_center ?? 0;
+
+  const phasesComplete =
+    lateralShift >= MEANINGFUL_PHASE_PCT &&
+    stepOut >= MEANINGFUL_PHASE_PCT &&
+    returnToCenter >= MEANINGFUL_PHASE_PCT;
+
+  if (!phasesComplete) return false;
+  if (movementQuality?.phaseConsistency === "Incomplete") return false;
+  if (movementQuality?.completionClarity === "Unclear") return false;
+  return true;
+}
+
 export function formatStsCycleCountLabel(
   completeReps: number,
   strictComplete: boolean,
@@ -271,6 +301,13 @@ export function resolveCaptureEvidenceCycleMetricLabel(
   if (exerciseId === STEP_UP_EXERCISE_ID) {
     const strictComplete = isStrictStepUpPhaseCompleteness(
       report.suPilot,
+      report.movementQuality,
+    );
+    return strictComplete ? "Complete cycles" : "Camera-detected cycles";
+  }
+  if (exerciseId === LATERAL_STEP_EXERCISE_ID) {
+    const strictComplete = isStrictLateralStepPhaseCompleteness(
+      report.lsPilot,
       report.movementQuality,
     );
     return strictComplete ? "Complete cycles" : "Camera-detected cycles";
@@ -442,6 +479,34 @@ function keyStepUpPhaseFinding(
   return "Phase distribution limited — clinician may assess step up pattern visually.";
 }
 
+function keyLateralStepPhaseFinding(
+  movementQuality: MovementQualitySignals | null | undefined,
+  phaseRatios: MotionAnalysisPhaseRatios | null | undefined,
+): string | null {
+  if (movementQuality?.phaseConsistency && movementQuality.phaseConsistency !== "Insufficient data") {
+    const returnToCenter =
+      phaseRatios?.return_to_center ?? movementQuality.observedReturningPhaseRatio ?? null;
+    const stepOut = phaseRatios?.step_out ?? null;
+    if (returnToCenter !== null && returnToCenter < 15) {
+      return `Return-to-center phase under-represented (${returnToCenter}% of snapshots) — clinician may review return control visually.`;
+    }
+    if (stepOut !== null && stepOut < 10) {
+      return `Step-out position brief relative to capture (${stepOut}% of snapshots).`;
+    }
+    return `Phase consistency: ${movementQuality.phaseConsistency.toLowerCase()} across captured snapshots.`;
+  }
+
+  if (phaseRatios) {
+    const lateralShift = phaseRatios.lateral_shift ?? 0;
+    const returnToCenter = phaseRatios.return_to_center ?? 0;
+    if (lateralShift > 0 || returnToCenter > 0) {
+      return `Lateral shift ${lateralShift}% · Return to center ${returnToCenter}% of captured snapshots.`;
+    }
+  }
+
+  return "Phase distribution limited — clinician may assess lateral step pattern visually.";
+}
+
 function keyPacingFinding(
   movementQuality: MovementQualitySignals | null | undefined,
 ): string | null {
@@ -464,6 +529,7 @@ function trackingConfidenceLine(report: MotionAnalysisReport): string {
     report.msPilot?.trackingSignal ??
     report.hrPilot?.trackingSignal ??
     report.suPilot?.trackingSignal ??
+    report.lsPilot?.trackingSignal ??
     report.sessionSummary?.trackingSignal ??
     null;
   const confidence = report.reportHeader?.confidenceLabel ?? "Assistive confidence not recorded";
@@ -485,13 +551,18 @@ export function buildMotionAnalysisExecutiveSummary(
   if (!exerciseId || !POLISHED_INTELLIGENCE_EXERCISE_IDS.has(exerciseId)) return null;
 
   const lines: string[] = [];
-  const motionPilot = report.smtPilot ?? report.msPilot ?? report.hrPilot ?? report.suPilot;
+  const motionPilot =
+    report.smtPilot ?? report.msPilot ?? report.hrPilot ?? report.suPilot ?? report.lsPilot;
   const completeReps = motionPilot?.completeReps ?? report.completedReps;
   const synthesizedMiniSquat = isSynthesizedMiniSquatEvidence(report);
   const synthesizedHeelRaise = isSynthesizedHeelRaiseEvidence(report);
   const synthesizedStepUp = isSynthesizedStepUpEvidence(report);
+  const synthesizedLateralStep = isSynthesizedLateralStepEvidence(report);
   const synthesizedLimitedEvidence =
-    synthesizedMiniSquat || synthesizedHeelRaise || synthesizedStepUp;
+    synthesizedMiniSquat ||
+    synthesizedHeelRaise ||
+    synthesizedStepUp ||
+    synthesizedLateralStep;
   const strictComplete =
     exerciseId === MINI_SQUAT_EXERCISE_ID
       ? !synthesizedMiniSquat &&
@@ -502,7 +573,10 @@ export function buildMotionAnalysisExecutiveSummary(
         : exerciseId === STEP_UP_EXERCISE_ID
           ? !synthesizedStepUp &&
             isStrictStepUpPhaseCompleteness(report.suPilot, report.movementQuality)
-          : isStrictStsPhaseCompleteness(report.smtPilot, report.movementQuality);
+          : exerciseId === LATERAL_STEP_EXERCISE_ID
+            ? !synthesizedLateralStep &&
+              isStrictLateralStepPhaseCompleteness(report.lsPilot, report.movementQuality)
+            : isStrictStsPhaseCompleteness(report.smtPilot, report.movementQuality);
   const cycleLabel = formatStsCycleCountLabel(completeReps, strictComplete);
   if (cycleLabel) {
     lines.push(cycleLabel.charAt(0).toUpperCase() + cycleLabel.slice(1) + " recorded.");
@@ -517,6 +591,9 @@ export function buildMotionAnalysisExecutiveSummary(
   } else if (synthesizedStepUp) {
     lines.push(STEP_UP_LIMITED_MOTION_EVIDENCE_LABEL + ".");
     lines.push(STEP_UP_CYCLE_TIMING_ESTIMATED_NOTE);
+  } else if (synthesizedLateralStep) {
+    lines.push(LATERAL_STEP_LIMITED_MOTION_EVIDENCE_LABEL + ".");
+    lines.push(LATERAL_STEP_CYCLE_TIMING_ESTIMATED_NOTE);
   }
 
   lines.push(trackingConfidenceLine(report));
@@ -529,7 +606,12 @@ export function buildMotionAnalysisExecutiveSummary(
           ? keyHeelRaisePhaseFinding(report.movementQuality, report.hrPilot?.phaseRatios ?? null)
           : exerciseId === STEP_UP_EXERCISE_ID
             ? keyStepUpPhaseFinding(report.movementQuality, report.suPilot?.phaseRatios ?? null)
-            : keyStsPhaseFinding(report.movementQuality, report.smtPilot?.phaseRatios ?? null);
+            : exerciseId === LATERAL_STEP_EXERCISE_ID
+              ? keyLateralStepPhaseFinding(
+                  report.movementQuality,
+                  report.lsPilot?.phaseRatios ?? null,
+                )
+              : keyStsPhaseFinding(report.movementQuality, report.smtPilot?.phaseRatios ?? null);
     if (phaseFinding) lines.push(phaseFinding);
 
     const pacingFinding = keyPacingFinding(report.movementQuality);
@@ -597,4 +679,17 @@ export function hasPersistedStepUpPhaseRatios(report: MotionAnalysisReport): boo
 
 export function isSynthesizedStepUpEvidence(report: MotionAnalysisReport): boolean {
   return report.suPilotEvidenceMode === "synthesized";
+}
+
+export function hasPersistedLateralStepPhaseRatios(report: MotionAnalysisReport): boolean {
+  if (report.lsPilotEvidenceMode !== "persisted") return false;
+  const ratios = report.lsPilot?.phaseRatios;
+  return (
+    ratios != null &&
+    Object.values(ratios).some((ratio) => typeof ratio === "number" && ratio > 0)
+  );
+}
+
+export function isSynthesizedLateralStepEvidence(report: MotionAnalysisReport): boolean {
+  return report.lsPilotEvidenceMode === "synthesized";
 }

@@ -5,9 +5,18 @@
 
 import { DEFAULT_STS_CONFIG, type SitToStandCvConfig } from "@/app/lib/cv/bio-0-contracts";
 import {
+  PATIENT_HEEL_RAISE_MOTION_PILOT_ENABLED,
+  PATIENT_LATERAL_STEP_MOTION_PILOT_ENABLED,
+  PATIENT_STEP_UP_MOTION_PILOT_ENABLED,
+} from "@/app/lib/cv/cv-patient-motion-pilot-flags";
+import {
   LAB_HEEL_RAISE_REP_CONFIG,
   type HeelRaiseRepConfig,
 } from "@/app/lib/cv/heel-raise-detector";
+import {
+  LAB_LATERAL_STEP_REP_CONFIG,
+  type LateralStepRepConfig,
+} from "@/app/lib/cv/lateral-step-detector";
 import {
   LAB_STEP_UP_REP_CONFIG,
   type StepUpRepConfig,
@@ -24,6 +33,7 @@ export const CV_Y1_ENABLED_EXERCISE_IDS = [
   "single-leg-stance",
   "heel-raise",
   "step-up",
+  "lateral-step",
 ] as const;
 
 export type CvY1ExerciseId = (typeof CV_Y1_ENABLED_EXERCISE_IDS)[number];
@@ -39,7 +49,8 @@ export type PatientCvDetectorKind =
   | "mini-squat"
   | "single-leg-stance"
   | "heel-raise"
-  | "step-up";
+  | "step-up"
+  | "lateral-step";
 
 /** Resolve which patient-portal detector must run — never fall through to STS for heel-raise or step-up. */
 export function resolvePatientCvDetectorKind(
@@ -54,23 +65,29 @@ export function resolvePatientCvDetectorKind(
       return "heel-raise";
     case "step-up":
       return "step-up";
+    case "lateral-step":
+      return "lateral-step";
     default:
       return "sit-to-stand";
   }
 }
 
-/** Heel raise hrPilot timeline + detector wiring (PR67b). */
-export const PATIENT_HEEL_RAISE_MOTION_PILOT_ENABLED = true;
+export {
+  PATIENT_HEEL_RAISE_MOTION_PILOT_ENABLED,
+  PATIENT_LATERAL_STEP_MOTION_PILOT_ENABLED,
+  PATIENT_STEP_UP_MOTION_PILOT_ENABLED,
+} from "@/app/lib/cv/cv-patient-motion-pilot-flags";
 
 export function isHeelRaiseMotionPilotEnabled(exerciseId: CvY1ExerciseId): boolean {
   return exerciseId === "heel-raise" && PATIENT_HEEL_RAISE_MOTION_PILOT_ENABLED;
 }
 
-/** Step up suPilot timeline + detector wiring (PR68). */
-export const PATIENT_STEP_UP_MOTION_PILOT_ENABLED = true;
-
 export function isStepUpMotionPilotEnabled(exerciseId: CvY1ExerciseId): boolean {
   return exerciseId === "step-up" && PATIENT_STEP_UP_MOTION_PILOT_ENABLED;
+}
+
+export function isLateralStepMotionPilotEnabled(exerciseId: CvY1ExerciseId): boolean {
+  return exerciseId === "lateral-step" && PATIENT_LATERAL_STEP_MOTION_PILOT_ENABLED;
 }
 
 /**
@@ -85,6 +102,9 @@ export function isPatientCvCaptureWired(exerciseId: string | undefined | null): 
   }
   if (normalized === "step-up") {
     return isStepUpMotionPilotEnabled("step-up");
+  }
+  if (normalized === "lateral-step") {
+    return isLateralStepMotionPilotEnabled("lateral-step");
   }
   return true;
 }
@@ -219,3 +239,29 @@ export const PATIENT_STEP_UP_REP_CONFIG: StepUpRepConfig = {
 
 /** Readiness gate before rep counting (not persisted). */
 export const PATIENT_STEP_UP_READINESS_MS = 2_000;
+
+/** MediaPipe shell for patient lateral step capture. */
+export const PATIENT_LATERAL_STEP_POSE_SHELL = {
+  wasmUrl: DEFAULT_STS_CONFIG.wasmUrl,
+  modelUrl: DEFAULT_STS_CONFIG.modelUrl,
+  canvasWidth: DEFAULT_STS_CONFIG.canvasWidth,
+  canvasHeight: DEFAULT_STS_CONFIG.canvasHeight,
+  initTimeoutMs: DEFAULT_STS_CONFIG.initTimeoutMs,
+  uiFrameUpdateInterval: DEFAULT_STS_CONFIG.uiFrameUpdateInterval,
+  landmarkDotColor: DEFAULT_STS_CONFIG.landmarkDotColor,
+  lowerBodyLandmarkIndices: DEFAULT_STS_CONFIG.lowerBodyLandmarkIndices,
+  prototypeVersion: "cv-y6-lateral-step",
+  landmarksOverlayOnly: true,
+} as const;
+
+/** Patient portal lateral step rep tuning — separate from LAB_LATERAL_STEP_REP_CONFIG. */
+export const PATIENT_LATERAL_STEP_REP_CONFIG: LateralStepRepConfig = {
+  ...LAB_LATERAL_STEP_REP_CONFIG,
+  baselineDurationMs: 3_000,
+  minMsBetweenReps: 800,
+  minHipVisibility: 0.3,
+  minSaveDurationS: CV_MIN_SAVE_DURATION_S,
+};
+
+/** Readiness gate before rep counting (not persisted). */
+export const PATIENT_LATERAL_STEP_READINESS_MS = 2_000;

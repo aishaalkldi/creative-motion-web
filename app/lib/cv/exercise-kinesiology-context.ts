@@ -274,12 +274,66 @@ const STEP_UP: ExerciseKinesiologyContext = {
   ],
 };
 
+const LATERAL_STEP: ExerciseKinesiologyContext = {
+  exerciseId: "lateral-step",
+  primaryMuscles: [
+    "Gluteus medius",
+    "Gluteus maximus",
+    "Quadriceps",
+    "Calf complex",
+    "Core stabilizers",
+  ],
+  movementPhases: [
+    {
+      id: "standing",
+      label: "Standing / baseline",
+      description: "Upright stance at center before lateral stepping.",
+    },
+    {
+      id: "lateral_shift",
+      label: "Lateral shift",
+      description: "Controlled weight shift toward the stepping side.",
+    },
+    {
+      id: "step_out",
+      label: "Step out",
+      description: "Lead leg steps out to the side with controlled landing.",
+    },
+    {
+      id: "return_to_center",
+      label: "Return to center",
+      description: "Trailing leg returns to meet the lead leg at center.",
+    },
+    {
+      id: "rest",
+      label: "Rest / transition",
+      description: "Brief pause between lateral-step cycles or side switches.",
+    },
+  ],
+  expectedPatterns: [
+    "Controlled lateral step with steady trunk position.",
+    "Even step width across cycles — cannot be confirmed from camera data alone.",
+    "Weight shift appears controlled during step-out — lateral loading strategy may be worth clinician review.",
+    "Return-to-center control may vary across cycles — pacing may be worth clinician review.",
+  ],
+  functionalTransfer:
+    "Lateral stability, change of direction, weight shifting, and sports readiness tasks requiring frontal-plane control.",
+  clinicianObservationGuide: [
+    "Clinician may review lateral loading strategy during step-out.",
+    "Clinician may review step width consistency across repetitions.",
+    "Clinician may review weight-shift control during lateral movement.",
+    "Clinician may review return-to-center control after each step.",
+    "Limited camera visibility may affect lower-limb detail — review capture framing.",
+  ],
+};
+
 const KINESIOLOGY_BY_EXERCISE: Readonly<Record<string, ExerciseKinesiologyContext>> = {
   "sit-to-stand": SIT_TO_STAND,
   "mini-squat": MINI_SQUAT,
   "single-leg-stance": SINGLE_LEG_STANCE,
   "heel-raise": HEEL_RAISE,
   "step-up": STEP_UP,
+  "lateral-step": LATERAL_STEP,
 };
 
 export const KINESIOLOGY_CONTEXT_EXERCISE_IDS = [
@@ -288,6 +342,7 @@ export const KINESIOLOGY_CONTEXT_EXERCISE_IDS = [
   "single-leg-stance",
   "heel-raise",
   "step-up",
+  "lateral-step",
 ] as const;
 
 export type KinesiologyContextExerciseId = (typeof KINESIOLOGY_CONTEXT_EXERCISE_IDS)[number];

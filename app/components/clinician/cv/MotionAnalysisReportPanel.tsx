@@ -20,6 +20,10 @@ import {
   HEEL_RAISE_LIMITED_MOTION_EVIDENCE_LABEL,
 } from "@/app/lib/cv/heel-raise-motion-pilot-record";
 import {
+  LATERAL_STEP_CYCLE_TIMING_ESTIMATED_NOTE,
+  LATERAL_STEP_LIMITED_MOTION_EVIDENCE_LABEL,
+} from "@/app/lib/cv/lateral-step-motion-pilot-record";
+import {
   STEP_UP_CYCLE_TIMING_ESTIMATED_NOTE,
   STEP_UP_LIMITED_MOTION_EVIDENCE_LABEL,
 } from "@/app/lib/cv/step-up-motion-pilot-record";
@@ -31,8 +35,10 @@ import {
   buildCaptureFlagsSummary,
   hasPersistedHeelRaisePhaseRatios,
   hasPersistedMiniSquatPhaseRatios,
+  hasPersistedLateralStepPhaseRatios,
   hasPersistedStepUpPhaseRatios,
   isSynthesizedHeelRaiseEvidence,
+  isSynthesizedLateralStepEvidence,
   isSynthesizedMiniSquatEvidence,
   isSynthesizedStepUpEvidence,
   isStsPolishedReport,
@@ -189,17 +195,27 @@ function MovementTimingPhaseReviewSection({
   const isMiniSquat = exerciseId === "mini-squat";
   const isHeelRaise = exerciseId === "heel-raise";
   const isStepUp = exerciseId === "step-up";
-  const isRepCycleExercise = isMiniSquat || isHeelRaise || isStepUp;
+  const isLateralStep = exerciseId === "lateral-step";
+  const isRepCycleExercise = isMiniSquat || isHeelRaise || isStepUp || isLateralStep;
   const synthesizedMiniSquat = isSynthesizedMiniSquatEvidence(report);
   const synthesizedHeelRaise = isSynthesizedHeelRaiseEvidence(report);
   const synthesizedStepUp = isSynthesizedStepUpEvidence(report);
+  const synthesizedLateralStep = isSynthesizedLateralStepEvidence(report);
   const synthesizedLimitedEvidence =
-    synthesizedMiniSquat || synthesizedHeelRaise || synthesizedStepUp;
+    synthesizedMiniSquat ||
+    synthesizedHeelRaise ||
+    synthesizedStepUp ||
+    synthesizedLateralStep;
   const showMiniSquatPhaseRatios = isMiniSquat && hasPersistedMiniSquatPhaseRatios(report);
   const showHeelRaisePhaseRatios = isHeelRaise && hasPersistedHeelRaisePhaseRatios(report);
   const showStepUpPhaseRatios = isStepUp && hasPersistedStepUpPhaseRatios(report);
+  const showLateralStepPhaseRatios =
+    isLateralStep && hasPersistedLateralStepPhaseRatios(report);
   const showRepCyclePhaseRatios =
-    showMiniSquatPhaseRatios || showHeelRaisePhaseRatios || showStepUpPhaseRatios;
+    showMiniSquatPhaseRatios ||
+    showHeelRaisePhaseRatios ||
+    showStepUpPhaseRatios ||
+    showLateralStepPhaseRatios;
   const timingLabels = report.timingMetricLabels ?? DEFAULT_TIMING_LABELS;
   const completionLabel = isRepCycleExercise ? "Cycle detection clarity" : "Completion clarity";
   const secondaryPhaseLabel = isRepCycleExercise
@@ -219,18 +235,22 @@ function MovementTimingPhaseReviewSection({
       {synthesizedLimitedEvidence ? (
         <p className="mt-2 rounded-[5px] border border-[#EF9F27]/25 bg-[#EF9F27]/5 px-2.5 py-2 text-[10px] leading-relaxed text-[#D1D5DB]">
           <span className="font-medium text-[#EF9F27]">
-            {synthesizedStepUp
-              ? STEP_UP_LIMITED_MOTION_EVIDENCE_LABEL
-              : synthesizedHeelRaise
-                ? HEEL_RAISE_LIMITED_MOTION_EVIDENCE_LABEL
-                : MINI_SQUAT_LIMITED_MOTION_EVIDENCE_LABEL}
+            {synthesizedLateralStep
+              ? LATERAL_STEP_LIMITED_MOTION_EVIDENCE_LABEL
+              : synthesizedStepUp
+                ? STEP_UP_LIMITED_MOTION_EVIDENCE_LABEL
+                : synthesizedHeelRaise
+                  ? HEEL_RAISE_LIMITED_MOTION_EVIDENCE_LABEL
+                  : MINI_SQUAT_LIMITED_MOTION_EVIDENCE_LABEL}
             .{" "}
           </span>
-          {synthesizedStepUp
-            ? STEP_UP_CYCLE_TIMING_ESTIMATED_NOTE
-            : synthesizedHeelRaise
-              ? HEEL_RAISE_CYCLE_TIMING_ESTIMATED_NOTE
-              : MINI_SQUAT_CYCLE_TIMING_ESTIMATED_NOTE}
+          {synthesizedLateralStep
+            ? LATERAL_STEP_CYCLE_TIMING_ESTIMATED_NOTE
+            : synthesizedStepUp
+              ? STEP_UP_CYCLE_TIMING_ESTIMATED_NOTE
+              : synthesizedHeelRaise
+                ? HEEL_RAISE_CYCLE_TIMING_ESTIMATED_NOTE
+                : MINI_SQUAT_CYCLE_TIMING_ESTIMATED_NOTE}
         </p>
       ) : null}
 
@@ -578,7 +598,8 @@ function KinesiologyInsightSection({ report }: { report: MotionAnalysisReport })
 }
 
 function CaptureEvidenceSection({ report }: { report: MotionAnalysisReport }) {
-  const motionPilot = report.smtPilot ?? report.msPilot ?? report.hrPilot ?? report.suPilot;
+  const motionPilot =
+    report.smtPilot ?? report.msPilot ?? report.hrPilot ?? report.suPilot ?? report.lsPilot;
   const polishedReport = isStsPolishedReport(report);
   const captureTimingLabels = polishedReport
     ? resolveCaptureEvidenceTimingLabels(
@@ -725,7 +746,8 @@ function StsPolishedReportBody({ report }: { report: MotionAnalysisReport }) {
     report.smtPilot?.clinicianFlags ??
       report.msPilot?.clinicianFlags ??
       report.hrPilot?.clinicianFlags ??
-      report.suPilot?.clinicianFlags,
+      report.suPilot?.clinicianFlags ??
+      report.lsPilot?.clinicianFlags,
   );
   const expandedReviewFocus =
     report.movementQualityReviewFocusDisplay ??

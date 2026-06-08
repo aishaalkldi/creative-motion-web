@@ -41,6 +41,9 @@ import {
   buildHeelRaiseBiomechanicalContributionReview,
 } from "@/app/lib/cv/heel-raise-biomechanical-contribution-review";
 import {
+  buildLateralStepBiomechanicalContributionReview,
+} from "@/app/lib/cv/lateral-step-biomechanical-contribution-review";
+import {
   buildStepUpBiomechanicalContributionReview,
 } from "@/app/lib/cv/step-up-biomechanical-contribution-review";
 import {
@@ -65,6 +68,19 @@ export {
   STEP_UP_CYCLE_TIMING_ESTIMATED_NOTE,
   STEP_UP_LIMITED_MOTION_EVIDENCE_LABEL,
 } from "@/app/lib/cv/step-up-motion-pilot-record";
+import {
+  buildLateralStepMotionPilotRecord,
+  type LsPilotEvidenceMode,
+} from "@/app/lib/cv/lateral-step-motion-pilot-record";
+export type { LsPilotEvidenceMode } from "@/app/lib/cv/lateral-step-motion-pilot-record";
+export {
+  LATERAL_STEP_CYCLE_TIMING_ESTIMATED_NOTE,
+  LATERAL_STEP_LIMITED_MOTION_EVIDENCE_LABEL,
+} from "@/app/lib/cv/lateral-step-motion-pilot-record";
+import {
+  buildLateralStepMovementQualitySignals,
+  lateralStepSignalsToMovementQuality,
+} from "@/app/lib/cv/lateral-step-movement-quality-signals";
 import {
   buildStepUpMovementQualitySignals,
   stepUpSignalsToMovementQuality,
@@ -153,6 +169,9 @@ export type MotionAnalysisPhaseRatios = Partial<
     | "step_ascent"
     | "top_position"
     | "step_descent"
+    | "lateral_shift"
+    | "step_out"
+    | "return_to_center"
     | "rest"
     | "unknown",
     number
@@ -187,6 +206,7 @@ export type MotionAnalysisSmtPilotSummary = MotionAnalysisMotionPilotSummary;
 export type MotionAnalysisMsPilotSummary = MotionAnalysisMotionPilotSummary;
 export type MotionAnalysisHrPilotSummary = MotionAnalysisMotionPilotSummary;
 export type MotionAnalysisSuPilotSummary = MotionAnalysisMotionPilotSummary;
+export type MotionAnalysisLsPilotSummary = MotionAnalysisMotionPilotSummary;
 
 export type MotionAnalysisReport = {
   sessionDurationSeconds: number;
@@ -203,6 +223,9 @@ export type MotionAnalysisReport = {
   suPilot: MotionAnalysisSuPilotSummary | null;
   /** Whether suPilot came from motion_quality or was estimated from rep count + duration. */
   suPilotEvidenceMode: SuPilotEvidenceMode | null;
+  lsPilot: MotionAnalysisLsPilotSummary | null;
+  /** Whether lsPilot came from motion_quality or was estimated from rep count + duration. */
+  lsPilotEvidenceMode: LsPilotEvidenceMode | null;
   kinesiologyContext: ExerciseKinesiologyContext | null;
   reportMode: MotionAnalysisReportMode;
   reportHeader: MotionAnalysisReportHeader | null;
@@ -313,6 +336,14 @@ export function parseSuPilotSummary(
   return parseMotionPilotSummary(suPilot as Record<string, unknown>);
 }
 
+export function parseLsPilotSummary(
+  motionQuality: CvMotionQualityPayload | null | undefined,
+): MotionAnalysisLsPilotSummary | null {
+  const lsPilot = motionQuality?.lsPilot;
+  if (!lsPilot || typeof lsPilot !== "object") return null;
+  return parseMotionPilotSummary(lsPilot as Record<string, unknown>);
+}
+
 function synthesizeMsPilotSummary(input: {
   sessionDurationSeconds: number;
   completedReps: number;
@@ -400,6 +431,35 @@ function synthesizeSuPilotSummary(input: {
   return parseMotionPilotSummary(record as unknown as Record<string, unknown>);
 }
 
+function synthesizeLsPilotSummary(input: {
+  sessionDurationSeconds: number;
+  completedReps: number;
+  trackingSignal: string | null;
+  movementDetected: boolean;
+}): MotionAnalysisLsPilotSummary | null {
+  if (input.completedReps <= 0 && input.sessionDurationSeconds <= 0) return null;
+
+  const record = buildLateralStepMotionPilotRecord({
+    metrics: {
+      exerciseId: "lateral-step",
+      repCount: input.completedReps,
+      sessionDurationS: input.sessionDurationSeconds,
+      trackingQuality:
+        input.trackingSignal === "good" ||
+        input.trackingSignal === "fair" ||
+        input.trackingSignal === "poor"
+          ? input.trackingSignal
+          : "unknown",
+      movementDetected: input.movementDetected,
+      framesWithPose: 0,
+      framesTotal: 0,
+    },
+    completeReps: input.completedReps,
+  });
+
+  return parseMotionPilotSummary(record as unknown as Record<string, unknown>);
+}
+
 function parsePhaseRatios(value: unknown): MotionAnalysisPhaseRatios | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const allowed = new Set([
@@ -413,6 +473,9 @@ function parsePhaseRatios(value: unknown): MotionAnalysisPhaseRatios | null {
     "step_ascent",
     "top_position",
     "step_descent",
+    "lateral_shift",
+    "step_out",
+    "return_to_center",
     "rest",
     "unknown",
   ]);
@@ -648,7 +711,25 @@ export function buildMotionAnalysisReport(
         ? "persisted"
         : "synthesized"
       : null;
-  const motionPilot = smtPilot ?? msPilot ?? hrPilot ?? suPilot;
+  const persistedLsPilot =
+    exerciseId === "lateral-step" ? parseLsPilotSummary(input.motionQuality) : null;
+  const lsPilot =
+    exerciseId === "lateral-step"
+      ? persistedLsPilot ??
+        synthesizeLsPilotSummary({
+          sessionDurationSeconds,
+          completedReps,
+          trackingSignal,
+          movementDetected,
+        })
+      : null;
+  const lsPilotEvidenceMode: LsPilotEvidenceMode | null =
+    exerciseId === "lateral-step" && lsPilot
+      ? persistedLsPilot
+        ? "persisted"
+        : "synthesized"
+      : null;
+  const motionPilot = smtPilot ?? msPilot ?? hrPilot ?? suPilot ?? lsPilot;
   const kinesiologyContext = resolveExerciseKinesiologyContext(exerciseId);
   const summaryLabel = resolveMotionAnalysisSummaryLabel({
     trackingSignal,
@@ -729,6 +810,21 @@ export function buildMotionAnalysisReport(
         })
       : null;
 
+  const lateralStepMovementQuality =
+    exerciseId === "lateral-step"
+      ? buildLateralStepMovementQualitySignals({
+          exerciseId,
+          evidenceMode: lsPilotEvidenceMode ?? undefined,
+          repTimings: lsPilot?.repTimings ?? null,
+          phaseRatios: lsPilot?.phaseRatios ?? null,
+          completeReps: lsPilot?.completeReps ?? completedReps,
+          unclearReps: lsPilot?.unclearReps ?? 0,
+          clinicianFlags: lsPilot?.clinicianFlags ?? null,
+          trackingQuality: trackingSignal,
+          summaryLabel,
+        })
+      : null;
+
   const movementQuality =
     stsMovementQuality ??
     (miniSquatMovementQuality
@@ -739,6 +835,9 @@ export function buildMotionAnalysisReport(
       : null) ??
     (stepUpMovementQuality
       ? stepUpSignalsToMovementQuality(stepUpMovementQuality)
+      : null) ??
+    (lateralStepMovementQuality
+      ? lateralStepSignalsToMovementQuality(lateralStepMovementQuality)
       : null);
 
   const stsBiomechanicalReview = buildBiomechanicalContributionReview({
@@ -797,11 +896,27 @@ export function buildMotionAnalysisReport(
         })
       : null;
 
+  const lateralStepBiomechanicalReview =
+    exerciseId === "lateral-step"
+      ? buildLateralStepBiomechanicalContributionReview({
+          exerciseId,
+          evidenceMode: lsPilotEvidenceMode ?? undefined,
+          phaseRatios: lsPilot?.phaseRatios ?? null,
+          movementQuality: lateralStepMovementQuality,
+          clinicianFlags: lsPilot?.clinicianFlags ?? null,
+          kinesiologyContext,
+          trackingQuality: trackingSignal,
+          summaryLabel,
+          visibilityRatios: lsPilot?.visibilityRatios ?? null,
+        })
+      : null;
+
   const biomechanicalContributionReview =
     stsBiomechanicalReview ??
     miniSquatBiomechanicalReview ??
     heelRaiseBiomechanicalReview ??
-    stepUpBiomechanicalReview;
+    stepUpBiomechanicalReview ??
+    lateralStepBiomechanicalReview;
 
   const reportDraft: MotionAnalysisReport = {
     sessionDurationSeconds,
@@ -815,6 +930,8 @@ export function buildMotionAnalysisReport(
     hrPilotEvidenceMode,
     suPilot,
     suPilotEvidenceMode,
+    lsPilot,
+    lsPilotEvidenceMode,
     kinesiologyContext,
     reportMode: interpretation.reportMode,
     reportHeader: interpretation.reportHeader,
@@ -846,14 +963,16 @@ export function buildMotionAnalysisReport(
     exerciseId === "sit-to-stand" ||
     exerciseId === "mini-squat" ||
     exerciseId === "heel-raise" ||
-    exerciseId === "step-up"
+    exerciseId === "step-up" ||
+    exerciseId === "lateral-step"
       ? resolveStsTimingMetricLabels(motionPilot?.phaseRatios ?? null)
       : null;
   const movementQualityReviewFocusDisplay =
     (exerciseId === "sit-to-stand" ||
       exerciseId === "mini-squat" ||
       exerciseId === "heel-raise" ||
-      exerciseId === "step-up") &&
+      exerciseId === "step-up" ||
+      exerciseId === "lateral-step") &&
     movementQuality
       ? filterSemanticallyDuplicatePrompts(movementQuality.clinicianReviewFocus, [
           ...(interpretation.reviewNext ?? []).map((item) => item.text),
@@ -873,6 +992,8 @@ export function buildMotionAnalysisReport(
     hrPilotEvidenceMode,
     suPilot,
     suPilotEvidenceMode,
+    lsPilot,
+    lsPilotEvidenceMode,
     kinesiologyContext,
     reportMode: interpretation.reportMode,
     reportHeader: interpretation.reportHeader,
@@ -903,6 +1024,7 @@ export function hasDisplayableMotionAnalysisReport(
       report.msPilot != null ||
       report.hrPilot != null ||
       report.suPilot != null ||
+      report.lsPilot != null ||
       report.kinesiologyContext != null ||
       report.reportHeader != null ||
       report.sessionDurationSeconds > 0 ||
