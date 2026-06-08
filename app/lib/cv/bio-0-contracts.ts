@@ -264,19 +264,39 @@ export type PatientCvCopy = {
   /** Pre-tracking camera setup wizard. */
   setupWizardTitle: string;
   setupExerciseHint: string;
+  setupExerciseTips: string[];
+  setupPreCaptureBullets: string[];
   setupCheckBodyVisible: string;
+  setupCheckHipKneeAnkleVisible: string;
+  setupCheckWristShoulderVisible: string;
+  setupCheckFeetVisible: string;
   setupCheckCorrectDistance: string;
   setupCheckFeetAnklesVisible: string;
   setupCheckLightingAcceptable: string;
+  setupCheckFullBodyInFrame: string;
+  setupCheckTrackingStable: string;
+  setupTrackingStableProgress: (seconds: number, targetSeconds: number) => string;
   setupStateReadyToStart: string;
   setupStateMoveBack: string;
   setupStateMoveCloser: string;
   setupStateImproveLighting: string;
   setupStateShowFeetAnkles: string;
   setupStateAdjustCameraAngle: string;
+  setupStartTracking: string;
   setupStartAnyway: string;
   setupStartAnywayWarning: string;
   setupCheckingCamera: string;
+  setupReachDirectionCue: string;
+  setupGuidanceMoveFarther: string;
+  setupGuidanceStepIntoFrame: string;
+  setupGuidanceImproveLighting: string;
+  setupGuidanceFeetVisible: string;
+  setupGuidanceReachArmInFrame: string;
+  setupGuidanceAdjustPosition: string;
+  /** Short privacy note shown before camera access. */
+  setupPrivacyMicroConsent: string;
+  /** Shown after the patient stops camera tracking. */
+  sessionCompleteConfirmation: string;
 };
 
 /* ── Patient-safe CV copy (EN/AR) — PatientCvCapture ─────────────────────── */
@@ -311,38 +331,86 @@ const PATIENT_LIVE_SIGNAL_COPY_AR = {
 
 const PATIENT_SETUP_WIZARD_COPY_EN = {
   setupWizardTitle: "Camera setup",
+  setupPreCaptureBullets: [
+    "Stand here, step back, or move closer until your full body fits in frame.",
+    "Keep your feet and target joints inside the camera view.",
+    "Use good, even lighting — avoid strong backlight.",
+  ],
   setupCheckBodyVisible: "Body visible",
+  setupCheckHipKneeAnkleVisible: "Hips, knees, and ankles visible",
+  setupCheckWristShoulderVisible: "Shoulder and wrist visible",
+  setupCheckFeetVisible: "Feet visible",
   setupCheckCorrectDistance: "Correct distance",
   setupCheckFeetAnklesVisible: "Feet and ankles visible",
   setupCheckLightingAcceptable: "Lighting acceptable",
+  setupCheckFullBodyInFrame: "Full body in frame",
+  setupCheckTrackingStable: "Tracking stable",
+  setupTrackingStableProgress: (seconds: number, targetSeconds: number) =>
+    `Hold steady — ${Math.min(seconds, targetSeconds).toFixed(0)} / ${targetSeconds}s`,
   setupStateReadyToStart: "Ready to start",
   setupStateMoveBack: "Move back",
   setupStateMoveCloser: "Move closer",
   setupStateImproveLighting: "Improve lighting",
   setupStateShowFeetAnkles: "Show feet and ankles",
   setupStateAdjustCameraAngle: "Adjust camera angle",
-  setupStartAnyway: "Start anyway",
+  setupStartTracking: "Start tracking",
+  setupStartAnyway: "Start anyway — limited tracking",
   setupStartAnywayWarning:
     "Camera setup is not ideal. Tracking may miss reps or feel less reliable.",
   setupCheckingCamera: "Checking camera setup…",
+  setupReachDirectionCue: "Reach forward — keep your arm inside the frame",
+  setupGuidanceMoveFarther: "Move farther from the camera",
+  setupGuidanceStepIntoFrame: "Step into frame so your body is visible",
+  setupGuidanceImproveLighting: "Improve lighting or reduce backlight",
+  setupGuidanceFeetVisible: "Make sure your feet are visible",
+  setupGuidanceReachArmInFrame: "Keep your reaching arm inside the frame",
+  setupGuidanceAdjustPosition: "Adjust your position for a clearer view",
+  setupPrivacyMicroConsent:
+    "Camera is optional. No video or image is stored. Your therapist only sees derived movement numbers.",
+  sessionCompleteConfirmation:
+    "Well done — your session is complete. Your therapist will review your results soon.",
 } as const;
 
 const PATIENT_SETUP_WIZARD_COPY_AR = {
   setupWizardTitle: "إعداد الكاميرا",
+  setupPreCaptureBullets: [
+    "قف هنا أو ابتعد أو اقترب حتى يظهر جسمك بالكامل في الإطار.",
+    "أبقِ قدميك والمفاصل المستهدفة داخل عرض الكاميرا.",
+    "استخدم إضاءة جيدة ومتساوية — تجنّب الإضاءة الخلفية القوية.",
+  ],
   setupCheckBodyVisible: "الجسم ظاهر",
+  setupCheckHipKneeAnkleVisible: "الوركان والركبتان والكاحلان ظاهرون",
+  setupCheckWristShoulderVisible: "الكتف والمعصم ظاهران",
+  setupCheckFeetVisible: "القدمان ظاهرتان",
   setupCheckCorrectDistance: "المسافة مناسبة",
   setupCheckFeetAnklesVisible: "القدمان والكاحلان ظاهران",
   setupCheckLightingAcceptable: "الإضاءة مناسبة",
+  setupCheckFullBodyInFrame: "الجسم بالكامل داخل الإطار",
+  setupCheckTrackingStable: "التتبّع مستقر",
+  setupTrackingStableProgress: (seconds: number, targetSeconds: number) =>
+    `اثبت — ${Math.min(seconds, targetSeconds).toFixed(0)} / ${targetSeconds} ث`,
   setupStateReadyToStart: "جاهز للبدء",
   setupStateMoveBack: "ابتعد",
   setupStateMoveCloser: "اقترب",
   setupStateImproveLighting: "حسّن الإضاءة",
   setupStateShowFeetAnkles: "أظهر القدمين والكاحلين",
   setupStateAdjustCameraAngle: "عدّل زاوية الكاميرا",
-  setupStartAnyway: "ابدأ على أي حال",
+  setupStartTracking: "ابدأ التتبّع",
+  setupStartAnyway: "ابدأ على أي حال — تتبّع محدود",
   setupStartAnywayWarning:
     "إعداد الكاميرا ليس مثالياً. قد يفوت التتبّع بعض التكرارات أو يكون أقل موثوقية.",
   setupCheckingCamera: "جاري فحص إعداد الكاميرا…",
+  setupReachDirectionCue: "امتد للأمام — أبقِ ذراعك داخل الإطار",
+  setupGuidanceMoveFarther: "ابتعد عن الكاميرا",
+  setupGuidanceStepIntoFrame: "ادخل الإطار حتى يظهر جسمك",
+  setupGuidanceImproveLighting: "حسّن الإضاءة أو قلّل الإضاءة الخلفية",
+  setupGuidanceFeetVisible: "تأكد من ظهور قدميك",
+  setupGuidanceReachArmInFrame: "أبقِ ذراع الوصول داخل الإطار",
+  setupGuidanceAdjustPosition: "عدّل وضعيتك لرؤية أوضح",
+  setupPrivacyMicroConsent:
+    "الكاميرا اختيارية. لا يتم حفظ أي فيديو أو صورة. يصل للمعالج فقط أرقام الحركة المشتقة.",
+  sessionCompleteConfirmation:
+    "أحسنت — اكتملت جلستك. سيراجع معالجك نتائجك قريبًا.",
 } as const;
 
 const PATIENT_SETUP_EXERCISE_HINTS: Record<
@@ -350,38 +418,130 @@ const PATIENT_SETUP_EXERCISE_HINTS: Record<
   Record<PatientExerciseLanguage, string>
 > = {
   "sit-to-stand": {
-    en: "Show the chair and your full body.",
-    ar: "أظهر الكرسي وجسمك بالكامل.",
+    en: "Place your phone 1.5 meters in front of you. Make sure your full body is visible from head to feet. Sit on a stable chair.",
+    ar: "ضع الهاتف أمامك على بُعد 1.5 متر. تأكد أن جسمك كاملًا داخل الإطار من الرأس إلى القدم. اجلس على كرسي ثابت.",
   },
   "mini-squat": {
-    en: "Stand with your full body visible.",
-    ar: "قف مع ظهور جسمك بالكامل.",
+    en: "Place your phone in front of you. Make sure your feet and knees are clearly visible.",
+    ar: "ضع الهاتف أمامك على بُعد مناسب. تأكد أن قدميك وركبتيك ظاهرة بوضوح.",
   },
   "single-leg-stance": {
-    en: "Stand near support with your full body visible.",
-    ar: "قف قرب الدعم مع ظهور جسمك بالكامل.",
+    en: "Place your phone in front of you. Stand near a wall or chair for safety.",
+    ar: "ضع الهاتف أمامك. قف بجانب حائط أو كرسي للأمان.",
   },
   "heel-raise": {
-    en: "Stand at a slight 45° angle with both ankles visible.",
-    ar: "قف بزاوية 45° تقريباً مع ظهور الكاحلين معاً.",
+    en: "Place your phone in front or slightly to the side. Make sure your feet and ankles are clearly visible.",
+    ar: "ضع الهاتف أمامك أو بجانبك. تأكد أن القدمين والكاحلين ظاهرين بوضوح.",
   },
   "step-up": {
-    en: "Stand facing the step with your full body and hips visible.",
-    ar: "قف مواجهاً للدرجة مع ظهور جسمك ووركيك بالكامل.",
+    en: "Place your phone where the step/platform and lower body are visible.",
+    ar: "ضع الهاتف أمامك بزاوية يظهر فيها السلم أو المنصة والجزء السفلي من الجسم.",
   },
   "lateral-step": {
-    en: "Stand with your full body visible for lateral stepping.",
-    ar: "قف مع ظهور جسمك بالكامل للخطوة الجانبية.",
+    en: "Make sure you have enough side space and both feet stay inside the frame.",
+    ar: "تأكد أن لديك مساحة جانبية كافية وأن القدمين ظاهرتان داخل الإطار.",
   },
   "functional-reach": {
-    en: "Stand arm's length from support with shoulders and reaching arm visible.",
-    ar: "قف على مسافة ذراع من الدعم مع ظهور الكتفين وذراع الوصول.",
+    en: "Stand side-on if needed. Make sure your shoulder and hand stay inside the frame during the reach.",
+    ar: "قف بشكل جانبي إذا لزم الأمر. تأكد أن الكتف واليد داخل الإطار أثناء الوصول للأمام.",
+  },
+};
+
+const PATIENT_SETUP_EXERCISE_TIPS: Record<
+  PatientCvExerciseId,
+  Record<PatientExerciseLanguage, readonly string[]>
+> = {
+  "sit-to-stand": {
+    en: [
+      "Keep the chair visible in frame.",
+      "Use a full body side or front angle.",
+      "Hips and knees must stay visible.",
+    ],
+    ar: [
+      "أبقِ الكرسي ظاهراً في الإطار.",
+      "استخدم زاوية جانبية أو أمامية للجسم بالكامل.",
+      "يجب أن يبقى الوركان والركبتان ظاهرين.",
+    ],
+  },
+  "mini-squat": {
+    en: [
+      "Show your full lower body.",
+      "Keep both feet visible.",
+      "Use a front-facing camera angle.",
+    ],
+    ar: [
+      "أظهر الجزء السفلي من جسمك بالكامل.",
+      "أبقِ القدمين ظاهرتين.",
+      "استخدم زاوية كاميرا أمامية.",
+    ],
+  },
+  "single-leg-stance": {
+    en: [
+      "Show your full body in a stable frame.",
+      "Keep both feet visible before lifting one leg.",
+      "Stand near support if you need balance help.",
+    ],
+    ar: [
+      "أظهر جسمك بالكامل في إطار ثابت.",
+      "أبقِ القدمين ظاهرتين قبل رفع إحداهما.",
+      "قف قرب الدعم إذا احتجت مساعدة في التوازن.",
+    ],
+  },
+  "heel-raise": {
+    en: [
+      "Frame feet and ankles clearly.",
+      "Use a side or front lower-body view.",
+      "Do not stand too close to the camera.",
+    ],
+    ar: [
+      "أظهر القدمين والكاحلين بوضوح.",
+      "استخدم منظراً جانبياً أو أمامياً للجزء السفلي.",
+      "لا تقف قريباً جداً من الكاميرا.",
+    ],
+  },
+  "step-up": {
+    en: [
+      "Keep the step or platform visible.",
+      "Show your full lower body.",
+      "Face the step with hips and knees in view.",
+    ],
+    ar: [
+      "أبقِ الدرجة أو المنصة ظاهرة.",
+      "أظهر الجزء السفلي من جسمك بالكامل.",
+      "واجه الدرجة مع ظهور الوركين والركبتين.",
+    ],
+  },
+  "lateral-step": {
+    en: [
+      "Leave enough side space for stepping.",
+      "Keep both feet visible.",
+      "Use a stable, full-body frame.",
+    ],
+    ar: [
+      "اترك مساحة جانبية كافية للخطوة.",
+      "أبقِ القدمين ظاهرتين.",
+      "استخدم إطاراً ثابتاً للجسم بالكامل.",
+    ],
+  },
+  "functional-reach": {
+    en: [
+      "Shoulder and wrist must stay visible.",
+      "Stand side-on if needed for reach space.",
+      "Reach forward — keep your arm inside the frame.",
+    ],
+    ar: [
+      "يجب أن يبقى الكتف والمعصم ظاهرين.",
+      "قف جانبياً إن احتجت مساحة للوصول.",
+      "امتد للأمام — أبقِ ذراعك داخل الإطار.",
+    ],
   },
 };
 
 type PatientCvCopyBase = Omit<
   PatientCvCopy,
-  keyof typeof PATIENT_SETUP_WIZARD_COPY_EN | "setupExerciseHint"
+  | keyof typeof PATIENT_SETUP_WIZARD_COPY_EN
+  | "setupExerciseHint"
+  | "setupExerciseTips"
 >;
 
 const PATIENT_STS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = {
@@ -404,7 +564,7 @@ const PATIENT_STS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = 
     stopTracking: "Stop tracking",
     repsCounted: (n) => `Reps counted: ${n}`,
     movementDetectedYes: "Movement detected",
-    movementDetectedNo: "Movement not detected — adjust camera angle",
+    movementDetectedNo: "Movement not detected — step into frame or adjust distance",
     trackingSignalLabel: "Tracking signal",
     trackingGood: "Tracking signal: Good",
     trackingFair: "Tracking signal: Fair — results may vary",
@@ -436,7 +596,7 @@ const PATIENT_STS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = 
     almostReadyLabel: "Almost ready — adjust your phone slightly",
     adjustPhoneBodyChairLabel:
       "Adjust phone position so your body and chair are visible",
-    poseNotDetectedLabel: "Pose not detected — adjust your phone",
+    poseNotDetectedLabel: "Step into frame — make sure your body is visible",
     tryAgainLabel: "Try again",
     hipLandmarksHint:
       "Wait until the points appear on your shoulders and hips before standing.",
@@ -471,7 +631,7 @@ const PATIENT_STS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = 
     stopTracking: "إيقاف التتبّع",
     repsCounted: (n) => `التكرارات المحسوبة: ${n}`,
     movementDetectedYes: "تم اكتشاف الحركة",
-    movementDetectedNo: "لم تُكتشف الحركة — عدّل زاوية الكاميرا",
+    movementDetectedNo: "لم تُكتشف الحركة — ادخل الإطار أو عدّل المسافة",
     trackingSignalLabel: "إشارة التتبّع",
     trackingGood: "إشارة التتبّع: جيدة",
     trackingFair: "إشارة التتبّع: متوسطة — قد تختلف النتائج",
@@ -501,7 +661,7 @@ const PATIENT_STS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = 
     cameraReadyLabel: "الكاميرا جاهزة ✓",
     almostReadyLabel: "يكاد يكون جاهزاً — عدّل الهاتف قليلاً",
     adjustPhoneBodyChairLabel: "عدّل موضع الهاتف حتى يظهر جسمك والكرسي",
-    poseNotDetectedLabel: "لم تُكتشف الوضعية — عدّل الهاتف",
+    poseNotDetectedLabel: "ادخل الإطار — تأكد من ظهور جسمك",
     tryAgainLabel: "حاول مرة أخرى",
     hipLandmarksHint: "انتظر حتى تظهر النقاط على الكتفين والوركين قبل الوقوف.",
     framingGoodDistance: "المسافة مناسبة",
@@ -533,7 +693,7 @@ const PATIENT_MINI_SQUAT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyB
     stopTracking: "Stop tracking",
     repsCounted: (n) => `Reps counted: ${n}`,
     movementDetectedYes: "Movement detected",
-    movementDetectedNo: "Movement not detected — adjust camera angle",
+    movementDetectedNo: "Movement not detected — step into frame or adjust distance",
     trackingSignalLabel: "Tracking signal",
     trackingGood: "Tracking signal: Good",
     trackingFair: "Tracking signal: Fair — results may vary",
@@ -563,7 +723,7 @@ const PATIENT_MINI_SQUAT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyB
     cameraReadyLabel: "Camera ready ✓",
     almostReadyLabel: "Almost ready — adjust your phone slightly",
     adjustPhoneBodyChairLabel: "Adjust phone position so your body is visible",
-    poseNotDetectedLabel: "Pose not detected — adjust your phone",
+    poseNotDetectedLabel: "Step into frame — make sure your body is visible",
     tryAgainLabel: "Try again",
     hipLandmarksHint: "Wait until the points appear on your shoulders and hips before squatting.",
     framingGoodDistance: "Good distance",
@@ -591,7 +751,7 @@ const PATIENT_MINI_SQUAT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyB
     stopTracking: "إيقاف التتبّع",
     repsCounted: (n) => `العدات المحسوبة: ${n}`,
     movementDetectedYes: "تم اكتشاف الحركة",
-    movementDetectedNo: "لم تُكتشف الحركة — عدّل زاوية الكاميرا",
+    movementDetectedNo: "لم تُكتشف الحركة — ادخل الإطار أو عدّل المسافة",
     trackingSignalLabel: "إشارة التتبّع",
     trackingGood: "إشارة التتبّع: جيدة",
     trackingFair: "إشارة التتبّع: متوسطة — قد تختلف النتائج",
@@ -621,7 +781,7 @@ const PATIENT_MINI_SQUAT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyB
     cameraReadyLabel: "الكاميرا جاهزة ✓",
     almostReadyLabel: "يكاد يكون جاهزاً — عدّل الهاتف قليلاً",
     adjustPhoneBodyChairLabel: "عدّل موضع الهاتف حتى يظهر جسمك",
-    poseNotDetectedLabel: "لم تُكتشف الوضعية — عدّل الهاتف",
+    poseNotDetectedLabel: "ادخل الإطار — تأكد من ظهور جسمك",
     tryAgainLabel: "حاول مرة أخرى",
     hipLandmarksHint: "انتظر حتى تظهر النقاط على الكتفين والوركين قبل القرفصاء.",
     framingGoodDistance: "المسافة مناسبة",
@@ -725,7 +885,7 @@ const PATIENT_SLS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = 
     cameraReadyLabel: "Camera ready ✓",
     almostReadyLabel: "Almost ready — adjust your phone slightly",
     adjustPhoneBodyChairLabel: "Adjust phone position so your full body is visible",
-    poseNotDetectedLabel: "Pose not detected — adjust your phone",
+    poseNotDetectedLabel: "Step into frame — make sure your body is visible",
     tryAgainLabel: "Try again",
     hipLandmarksHint:
       "Wait until points appear on shoulders, hips, and ankles before lifting your foot.",
@@ -791,7 +951,7 @@ const PATIENT_SLS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = 
     cameraReadyLabel: "الكاميرا جاهزة ✓",
     almostReadyLabel: "يكاد يكون جاهزاً — عدّل الهاتف قليلاً",
     adjustPhoneBodyChairLabel: "عدّل موضع الهاتف حتى يظهر جسمك بالكامل",
-    poseNotDetectedLabel: "لم تُكتشف الوضعية — عدّل الهاتف",
+    poseNotDetectedLabel: "ادخل الإطار — تأكد من ظهور جسمك",
     tryAgainLabel: "حاول مرة أخرى",
     hipLandmarksHint:
       "انتظر حتى تظهر النقاط على الكتفين والوركين والكاحلين قبل رفع القدم.",
@@ -828,7 +988,7 @@ const PATIENT_HEEL_RAISE_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyB
     stopTracking: "Stop tracking",
     repsCounted: (n) => `Reps counted: ${n}`,
     movementDetectedYes: "Movement detected",
-    movementDetectedNo: "Movement not detected — adjust camera angle",
+    movementDetectedNo: "Movement not detected — step into frame or adjust distance",
     trackingSignalLabel: "Tracking signal",
     trackingGood: "Tracking signal: Good",
     trackingFair: "Tracking signal: Fair — results may vary",
@@ -860,7 +1020,7 @@ const PATIENT_HEEL_RAISE_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyB
     cameraReadyLabel: "Camera ready ✓",
     almostReadyLabel: "Almost ready — adjust your phone slightly",
     adjustPhoneBodyChairLabel: "Adjust phone position so your body and ankles are visible",
-    poseNotDetectedLabel: "Pose not detected — adjust your phone",
+    poseNotDetectedLabel: "Step into frame — make sure your body is visible",
     tryAgainLabel: "Try again",
     hipLandmarksHint:
       "Wait until points appear on your shoulders, hips, and ankles before rising onto your toes.",
@@ -891,7 +1051,7 @@ const PATIENT_HEEL_RAISE_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyB
     stopTracking: "إيقاف التتبّع",
     repsCounted: (n) => `التكرارات المحسوبة: ${n}`,
     movementDetectedYes: "تم اكتشاف الحركة",
-    movementDetectedNo: "لم تُكتشف الحركة — عدّل زاوية الكاميرا",
+    movementDetectedNo: "لم تُكتشف الحركة — ادخل الإطار أو عدّل المسافة",
     trackingSignalLabel: "إشارة التتبّع",
     trackingGood: "إشارة التتبّع: جيدة",
     trackingFair: "إشارة التتبّع: متوسطة — قد تختلف النتائج",
@@ -923,7 +1083,7 @@ const PATIENT_HEEL_RAISE_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyB
     cameraReadyLabel: "الكاميرا جاهزة ✓",
     almostReadyLabel: "يكاد يكون جاهزاً — عدّل الهاتف قليلاً",
     adjustPhoneBodyChairLabel: "عدّل موضع الهاتف حتى يظهر جسمك والكاحلان",
-    poseNotDetectedLabel: "لم تُكتشف الوضعية — عدّل الهاتف",
+    poseNotDetectedLabel: "ادخل الإطار — تأكد من ظهور جسمك",
     tryAgainLabel: "حاول مرة أخرى",
     hipLandmarksHint:
       "انتظر حتى تظهر النقاط على الكتفين والوركين والكاحلين قبل الرفع على أطراف القدم.",
@@ -969,7 +1129,7 @@ const PATIENT_STEP_UP_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase
     stopTracking: "Stop tracking",
     repsCounted: (n) => `Reps counted: ${n}`,
     movementDetectedYes: "Movement detected",
-    movementDetectedNo: "Movement not detected — adjust camera angle",
+    movementDetectedNo: "Movement not detected — step into frame or adjust distance",
     trackingSignalLabel: "Tracking signal",
     trackingGood: "Tracking signal: Good",
     trackingFair: "Tracking signal: Fair — results may vary",
@@ -1001,7 +1161,7 @@ const PATIENT_STEP_UP_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase
     cameraReadyLabel: "Camera ready ✓",
     almostReadyLabel: "Almost ready — adjust your phone slightly",
     adjustPhoneBodyChairLabel: "Adjust phone position so your body and hips are visible",
-    poseNotDetectedLabel: "Pose not detected — adjust your phone",
+    poseNotDetectedLabel: "Step into frame — make sure your body is visible",
     tryAgainLabel: "Try again",
     hipLandmarksHint:
       "Wait until points appear on your shoulders and hips before stepping onto the platform.",
@@ -1032,7 +1192,7 @@ const PATIENT_STEP_UP_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase
     stopTracking: "إيقاف التتبّع",
     repsCounted: (n) => `التكرارات المحسوبة: ${n}`,
     movementDetectedYes: "تم اكتشاف الحركة",
-    movementDetectedNo: "لم تُكتشف الحركة — عدّل زاوية الكاميرا",
+    movementDetectedNo: "لم تُكتشف الحركة — ادخل الإطار أو عدّل المسافة",
     trackingSignalLabel: "إشارة التتبّع",
     trackingGood: "إشارة التتبّع: جيدة",
     trackingFair: "إشارة التتبّع: متوسطة — قد تختلف النتائج",
@@ -1064,7 +1224,7 @@ const PATIENT_STEP_UP_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase
     cameraReadyLabel: "الكاميرا جاهزة ✓",
     almostReadyLabel: "يكاد يكون جاهزاً — عدّل الهاتف قليلاً",
     adjustPhoneBodyChairLabel: "عدّل موضع الهاتف حتى يظهر جسمك ووركاك",
-    poseNotDetectedLabel: "لم تُكتشف الوضعية — عدّل الهاتف",
+    poseNotDetectedLabel: "ادخل الإطار — تأكد من ظهور جسمك",
     tryAgainLabel: "حاول مرة أخرى",
     hipLandmarksHint:
       "انتظر حتى تظهر النقاط على الكتفين والوركين قبل الصعود على الدرجة.",
@@ -1218,6 +1378,7 @@ export function patientCvCopy(
   const setupCopy =
     lang === "ar" ? PATIENT_SETUP_WIZARD_COPY_AR : PATIENT_SETUP_WIZARD_COPY_EN;
   const setupExerciseHint = PATIENT_SETUP_EXERCISE_HINTS[exerciseId][lang];
+  const setupExerciseTips = [...PATIENT_SETUP_EXERCISE_TIPS[exerciseId][lang]];
 
   let base: PatientCvCopyBase;
   if (exerciseId === "mini-squat") base = PATIENT_MINI_SQUAT_CV_COPY[lang];
@@ -1238,7 +1399,13 @@ export function patientCvCopy(
     };
   }
 
-  return { ...base, ...setupCopy, setupExerciseHint };
+  return {
+    ...base,
+    ...setupCopy,
+    setupPreCaptureBullets: [...setupCopy.setupPreCaptureBullets],
+    setupExerciseHint,
+    setupExerciseTips,
+  };
 }
 
 /** Shared prototype / clinician disclaimer strings (CV Lab + future patient). */

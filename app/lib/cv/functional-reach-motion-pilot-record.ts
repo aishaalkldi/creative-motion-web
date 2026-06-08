@@ -229,11 +229,17 @@ function dominantTrackingSignal(
   return entries[0]![0] as CvTrackingQuality | "lost";
 }
 
-function buildClinicianFlagsFromSummary(summary: FunctionalReachSessionMotionSummary): string[] {
+function buildClinicianFlagsFromSummary(
+  summary: FunctionalReachSessionMotionSummary,
+  extraClinicianFlags?: string[],
+): string[] {
   const flags = new Set<string>(summary.captureFlags);
   if (summary.unclearRepCount > 0) flags.add("unclear_reps_recorded");
   if (summary.interruptions.poseLossEventCount > 0) flags.add("pose_tracking_interrupted");
   for (const flag of buildPhaseDetectionFlags(summary.phaseRatios, summary.completeRepCount)) {
+    flags.add(flag);
+  }
+  for (const flag of extraClinicianFlags ?? []) {
     flags.add(flag);
   }
   return [...flags].sort();
@@ -243,6 +249,7 @@ export type BuildFunctionalReachMotionPilotRecordFromSummaryInput = {
   summary: FunctionalReachSessionMotionSummary;
   metrics: FunctionalReachDerivedMetrics;
   snapshotCount: number;
+  extraClinicianFlags?: string[];
 };
 
 export function buildFunctionalReachMotionPilotRecordFromSummary(
@@ -271,7 +278,7 @@ export function buildFunctionalReachMotionPilotRecordFromSummary(
       knee: clampPct(summary.visibilityAssist.kneeVisiblePct),
       ankle: clampPct(summary.visibilityAssist.ankleVisiblePct),
     },
-    clinicianFlags: buildClinicianFlagsFromSummary(summary),
+    clinicianFlags: buildClinicianFlagsFromSummary(summary, input.extraClinicianFlags),
     reviewRequired: true,
     reviewReason: "derived_functional_reach_motion_evidence",
     disclaimer:

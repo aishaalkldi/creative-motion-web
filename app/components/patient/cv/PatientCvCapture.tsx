@@ -124,6 +124,16 @@ import {
   resolveLiveBodySignal,
   type LiveBodySignal,
 } from "@/app/lib/cv/pose-landmark-overlay";
+import { PatientCvSetupPanel } from "@/app/components/patient/cv/PatientCvSetupPanel";
+import {
+  CAPTURE_SETUP_LIMITED_FLAG,
+  evaluateCaptureReadiness,
+  resolveCaptureSetupGuidance,
+  shouldFlagCaptureSetupLimited,
+  updateStableTrackingState,
+  type CaptureSetupGuidance,
+  type StableTrackingState,
+} from "@/app/lib/cv/patient-cv-capture-readiness";
 import {
   collectPatientCameraDiagnostics,
   isVideoPreviewRenderable,
@@ -436,6 +446,8 @@ export function PatientCvCapture({
   const [movementDetected, setMovementDetected] = useState(false);
   const [baselineCalibrating, setBaselineCalibrating] = useState(false);
   const [stanceLeg, setStanceLeg] = useState<StanceLeg | null>(null);
+  const [trackingConfirmed, setTrackingConfirmed] = useState(false);
+  const [stableSeconds, setStableSeconds] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -456,16 +468,31 @@ export function PatientCvCapture({
   const suTimelineRefs = useRef(createStepUpTimelineCaptureRefs()).current;
   const frTimelineRefs = useRef(createFunctionalReachTimelineCaptureRefs()).current;
   const lsTimelineRefs = useRef(createLateralStepTimelineCaptureRefs()).current;
+  const trackingConfirmedRef = useRef(false);
+  const stableTrackingRef = useRef<StableTrackingState>({
+    stableSinceMs: null,
+    stableSeconds: 0,
+  });
+  const captureSetupLimitedRef = useRef(false);
+
+  useEffect(() => {
+    trackingConfirmedRef.current = trackingConfirmed;
+  }, [trackingConfirmed]);
 
   useEffect(() => {
     onMetricsUpdateRef.current = onMetricsUpdate;
   }, [onMetricsUpdate]);
+
+  const setupLimitedFlags = useCallback((): string[] | undefined => {
+    return captureSetupLimitedRef.current ? [CAPTURE_SETUP_LIMITED_FLAG] : undefined;
+  }, []);
 
   useEffect(() => {
     setCvDebugEnabled(isPatientCvDebugEnabled());
   }, []);
 
   const reportMetrics = useCallback(() => {
+    if (!trackingConfirmedRef.current) return;
     const detector = detectorRef.current;
     if (!detector) return;
     if (!detector.isPreviewActive() && !trackingStopped) return;
@@ -498,7 +525,23 @@ export function PatientCvCapture({
         setBaselineCalibrating,
         setFramesTotal,
       });
+      if (!trackingConfirmedRef.current) {
+        const readinessEvaluation = evaluateCaptureReadiness(
+          exerciseId,
+          snapshot,
+          stableTrackingRef.current.stableSeconds,
+        );
+        const nextStable = updateStableTrackingState(
+          stableTrackingRef.current,
+          readinessEvaluation.minimumMet,
+          performance.now(),
+        );
+        stableTrackingRef.current = nextStable;
+        setStableSeconds(nextStable.stableSeconds);
+      }
+
       if (!snapshot.previewActive && !trackingStopped) return;
+      if (!trackingConfirmedRef.current) return;
       if (exerciseId === "sit-to-stand") {
         recordStsMotionTimelineTick(
           exerciseId,
@@ -726,9 +769,10 @@ export function PatientCvCapture({
       summary,
       metrics,
       snapshotCount: stsTimelineRefs.lastFinalizeSnapshotCount.current ?? 0,
+      extraClinicianFlags: setupLimitedFlags(),
     });
     return buildMotionQualityWithStsPilot(record);
-  }, [exerciseId, stsTimelineRefs]);
+  }, [exerciseId, stsTimelineRefs, setupLimitedFlags]);
 
   const buildHeelRaisePilotMotionQuality = useCallback((): CvMotionQualityPayload | null => {
     if (exerciseId !== "heel-raise" || !isHeelRaiseMotionPilotEnabled(exerciseId)) {
@@ -744,9 +788,10 @@ export function PatientCvCapture({
       summary,
       metrics,
       snapshotCount: hrTimelineRefs.lastFinalizeSnapshotCount.current ?? 0,
+      extraClinicianFlags: setupLimitedFlags(),
     });
     return buildMotionQualityWithHrPilot(record);
-  }, [exerciseId, hrTimelineRefs]);
+  }, [exerciseId, hrTimelineRefs, setupLimitedFlags]);
 
   const buildStepUpPilotMotionQuality = useCallback((): CvMotionQualityPayload | null => {
     if (exerciseId !== "step-up" || !isStepUpMotionPilotEnabled(exerciseId)) {
@@ -762,9 +807,10 @@ export function PatientCvCapture({
       summary,
       metrics,
       snapshotCount: suTimelineRefs.lastFinalizeSnapshotCount.current ?? 0,
+      extraClinicianFlags: setupLimitedFlags(),
     });
     return buildMotionQualityWithSuPilot(record);
-  }, [exerciseId, suTimelineRefs]);
+  }, [exerciseId, suTimelineRefs, setupLimitedFlags]);
 
   const buildFunctionalReachPilotMotionQuality = useCallback((): CvMotionQualityPayload | null => {
     if (exerciseId !== "functional-reach" || !isFunctionalReachMotionPilotEnabled(exerciseId)) {
@@ -780,9 +826,10 @@ export function PatientCvCapture({
       summary,
       metrics,
       snapshotCount: frTimelineRefs.lastFinalizeSnapshotCount.current ?? 0,
+      extraClinicianFlags: setupLimitedFlags(),
     });
     return buildMotionQualityWithFrPilot(record);
-  }, [exerciseId, frTimelineRefs]);
+  }, [exerciseId, frTimelineRefs, setupLimitedFlags]);
 
   const buildLateralStepPilotMotionQuality = useCallback((): CvMotionQualityPayload | null => {
     if (exerciseId !== "lateral-step" || !isLateralStepMotionPilotEnabled(exerciseId)) {
@@ -798,9 +845,10 @@ export function PatientCvCapture({
       summary,
       metrics,
       snapshotCount: lsTimelineRefs.lastFinalizeSnapshotCount.current ?? 0,
+      extraClinicianFlags: setupLimitedFlags(),
     });
     return buildMotionQualityWithLsPilot(record);
-  }, [exerciseId, lsTimelineRefs]);
+  }, [exerciseId, lsTimelineRefs, setupLimitedFlags]);
 
   const buildMotionPilotRecordFlush = useCallback((): CvMotionQualityPayload | null => {
     return (
@@ -825,11 +873,12 @@ export function PatientCvCapture({
   }, [onRegisterStsPilotRecordFlush, buildMotionPilotRecordFlush]);
 
   useEffect(() => {
+    if (!trackingConfirmed) return;
     if (!previewActive && !trackingStopped) return;
     reportMetrics();
     const id = setInterval(reportMetrics, METRICS_REPORT_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [previewActive, trackingStopped, reportMetrics]);
+  }, [trackingConfirmed, previewActive, trackingStopped, reportMetrics]);
 
   const skipCameraWithoutSave = useCallback(() => {
     const detector = detectorRef.current;
@@ -896,6 +945,7 @@ export function PatientCvCapture({
     }
     detector.stop();
     setCameraLive(false);
+    setTrackingStopped(true);
     flushMetricsForSave();
     syncFromDetector(detector.getSnapshot());
     stopInProgressRef.current = false;
@@ -926,6 +976,38 @@ export function PatientCvCapture({
           : exerciseId === "single-leg-stance"
             ? mapSingleLegStanceStartError
             : mapSitToStandStartError;
+
+  const beginMotionTimelines = useCallback(() => {
+    beginStsMotionTimeline(exerciseId, stsTimelineRefs);
+    beginHeelRaiseMotionTimeline(exerciseId, hrTimelineRefs);
+    beginStepUpMotionTimeline(exerciseId, suTimelineRefs);
+    beginFunctionalReachMotionTimeline(exerciseId, frTimelineRefs);
+    beginLateralStepMotionTimeline(exerciseId, lsTimelineRefs);
+  }, [exerciseId, stsTimelineRefs, hrTimelineRefs, suTimelineRefs, frTimelineRefs, lsTimelineRefs]);
+
+  const confirmStartTracking = useCallback(
+    (startedWithOverride: boolean) => {
+      if (trackingConfirmedRef.current) return;
+      const detector = detectorRef.current;
+      if (!detector?.isPreviewActive()) return;
+
+      const snapshot = detector.getSnapshot() as CvDetectorSnapshot;
+      const evaluation = evaluateCaptureReadiness(
+        exerciseId,
+        snapshot,
+        stableTrackingRef.current.stableSeconds,
+      );
+      captureSetupLimitedRef.current = shouldFlagCaptureSetupLimited(
+        startedWithOverride,
+        evaluation,
+      );
+      beginMotionTimelines();
+      setTrackingConfirmed(true);
+      syncFromDetector(snapshot);
+      reportMetrics();
+    },
+    [exerciseId, beginMotionTimelines, syncFromDetector, reportMetrics],
+  );
 
   const startCameraTracking = useCallback(async () => {
     const detector = detectorRef.current;
@@ -959,16 +1041,10 @@ export function PatientCvCapture({
         throw new Error(PATIENT_CAMERA_NO_FRAMES_ERROR);
       }
       setCameraLive(true);
-      beginStsMotionTimeline(exerciseId, stsTimelineRefs);
-      beginHeelRaiseMotionTimeline(exerciseId, hrTimelineRefs);
-      beginStepUpMotionTimeline(exerciseId, suTimelineRefs);
-      beginFunctionalReachMotionTimeline(exerciseId, frTimelineRefs);
-      beginLateralStepMotionTimeline(exerciseId, lsTimelineRefs);
-      reportMetrics();
       auditPreviewLayers("after-detector-start", video, canvas, previewContainerRef.current, {
         cameraLive: true,
         previewActive: detector.isPreviewActive(),
-        cameraPhase: "tracking",
+        cameraPhase: "setup",
       });
     } catch (err) {
       detector.stop();
@@ -985,14 +1061,8 @@ export function PatientCvCapture({
     loading,
     cameraLive,
     syncFromDetector,
-    reportMetrics,
     mapStartError,
     exerciseId,
-    stsTimelineRefs,
-    hrTimelineRefs,
-    suTimelineRefs,
-    frTimelineRefs,
-    lsTimelineRefs,
   ]);
 
   const holdExercise = isHoldCvExercise(exerciseId);
@@ -1025,6 +1095,10 @@ export function PatientCvCapture({
   useEffect(() => {
     setCameraLive(false);
     setTrackingStopped(false);
+    setTrackingConfirmed(false);
+    setStableSeconds(0);
+    stableTrackingRef.current = { stableSinceMs: null, stableSeconds: 0 };
+    captureSetupLimitedRef.current = false;
     setError(null);
   }, [exerciseId, stanceLeg]);
 
@@ -1130,6 +1204,10 @@ export function PatientCvCapture({
     setError(null);
     setTrackingError(null);
     setNoVideoFrames(false);
+    setTrackingConfirmed(false);
+    setStableSeconds(0);
+    stableTrackingRef.current = { stableSinceMs: null, stableSeconds: 0 };
+    captureSetupLimitedRef.current = false;
     lastReportedRepRef.current = -1;
     lastReportedHoldRef.current = -1;
     stopInProgressRef.current = false;
@@ -1141,7 +1219,7 @@ export function PatientCvCapture({
     if (loading && initPhase === "model") return copy.loadingPoseModel;
     if (loading && initPhase === "camera") return copy.startingCamera;
     if (trackingStopped) return copy.stopTracking;
-    if (trackingStatus === "pose-lost") return copy.poseNotDetectedLabel;
+    if (trackingStatus === "pose-lost") return copy.setupGuidanceStepIntoFrame;
     if (bodyFramingState === "checking" || poseReadiness === "checking") {
       return copy.checkingCameraPosition;
     }
@@ -1199,7 +1277,52 @@ export function PatientCvCapture({
         ? "bg-amber-500"
         : "bg-[#9CA3AF]";
 
-  const showSessionStats = cameraLive && (previewActive || trackingStopped);
+  const captureReadiness = evaluateCaptureReadiness(
+    exerciseId,
+    {
+      trackingStatus,
+      trackingQuality,
+      poseReadiness,
+      bodyFramingState,
+      previewActive,
+    },
+    stableSeconds,
+  );
+
+  const setupGuidanceCopy = (guidance: CaptureSetupGuidance): string => {
+    switch (guidance) {
+      case "move_farther":
+        return copy.setupGuidanceMoveFarther;
+      case "step_into_frame":
+        return copy.setupGuidanceStepIntoFrame;
+      case "improve_lighting":
+        return copy.setupGuidanceImproveLighting;
+      case "show_feet":
+        return copy.setupGuidanceFeetVisible;
+      case "keep_reach_arm_in_frame":
+        return copy.setupGuidanceReachArmInFrame;
+      case "ready":
+        return copy.setupStateReadyToStart;
+      default:
+        return copy.setupGuidanceAdjustPosition;
+    }
+  };
+
+  const movementNotDetectedLabel =
+    !movementDetected && trackingConfirmed
+      ? setupGuidanceCopy(
+          resolveCaptureSetupGuidance(exerciseId, {
+            trackingStatus,
+            trackingQuality,
+            poseReadiness,
+            bodyFramingState,
+            previewActive,
+          }),
+        )
+      : copy.movementDetectedNo;
+
+  const showSessionStats =
+    trackingConfirmed && cameraLive && (previewActive || trackingStopped);
 
   if (skipped) {
     return null;
@@ -1234,6 +1357,9 @@ export function PatientCvCapture({
           </ul>
           <p className="text-[#6B7280]">{copy.consentSecureNote}</p>
           <p className="text-[#6B7280]">{copy.consentDerivedNote}</p>
+          <p className="rounded-[6px] border border-[#D1E7DE] bg-[#F0FAF6] px-3 py-2 text-[12px] font-medium text-[#374151]">
+            {copy.setupPrivacyMicroConsent}
+          </p>
           <p className="text-[11px] text-[#9CA3AF]">{copy.therapistReviewOnly}</p>
         </div>
         <div className="mt-4 flex flex-col gap-2">
@@ -1303,12 +1429,16 @@ export function PatientCvCapture({
       dir={textDir}
       lang={language}
     >
-      <p className="text-[11px] text-[#6B7280]">{copy.moveComfortably}</p>
-      <p className="mt-2 text-[12px] leading-relaxed text-[#374151]">{copy.framingInstruction}</p>
-      <p className="mt-1 text-[12px] leading-relaxed text-[#374151]">{copy.movementInstruction}</p>
-      <p className="mt-1 text-[11px] text-[#6B7280]">{copy.hipLandmarksHint}</p>
+      {trackingConfirmed ? (
+        <>
+          <p className="text-[11px] text-[#6B7280]">{copy.moveComfortably}</p>
+          <p className="mt-2 text-[12px] leading-relaxed text-[#374151]">{copy.framingInstruction}</p>
+          <p className="mt-1 text-[12px] leading-relaxed text-[#374151]">{copy.movementInstruction}</p>
+          <p className="mt-1 text-[11px] text-[#6B7280]">{copy.hipLandmarksHint}</p>
+        </>
+      ) : null}
 
-      {(loading || (!previewActive && !cameraLive && !error)) && (
+      {(loading || (!previewActive && !cameraLive && !error && !trackingConfirmed)) && (
         <p className="mt-2 text-[12px] font-medium text-[#6B7280]">
           {loading ? loadingLabel : copy.setupCheckingCamera}
         </p>
@@ -1382,7 +1512,22 @@ export function PatientCvCapture({
         </div>
       )}
 
-      {previewActive && !trackingStopped && (
+      {!trackingConfirmed ? (
+        <PatientCvSetupPanel
+          copy={copy}
+          arClass={arClass}
+          textDir={textDir}
+          checks={captureReadiness.checks}
+          primaryGuidance={captureReadiness.primaryGuidance}
+          canStartTracking={captureReadiness.canStartTracking}
+          stableSeconds={stableSeconds}
+          previewActive={previewActive}
+          onStartTracking={() => confirmStartTracking(false)}
+          onStartAnyway={() => confirmStartTracking(true)}
+        />
+      ) : null}
+
+      {trackingConfirmed && previewActive && !trackingStopped && (
         <button
           type="button"
           disabled={stopInProgressRef.current}
@@ -1394,9 +1539,13 @@ export function PatientCvCapture({
       )}
 
       {trackingStopped && (
-        <p className="mt-3 text-[12px] font-medium text-[#374151]" role="status">
-          {copy.stopTracking}
-        </p>
+        <div
+          className="mt-3 rounded-[8px] border border-[#D1E7DE] bg-[#F0FAF6] px-3.5 py-3 text-[13px] font-medium leading-relaxed text-[#0A0F1A]"
+          role="status"
+          aria-live="polite"
+        >
+          {copy.sessionCompleteConfirmation}
+        </div>
       )}
 
       {showReadinessActions && (
@@ -1445,7 +1594,7 @@ export function PatientCvCapture({
           ) : null}
 
           <p className="text-[12px] text-[#6B7280]">
-            {movementDetected ? copy.movementDetectedYes : copy.movementDetectedNo}
+            {movementDetected ? copy.movementDetectedYes : movementNotDetectedLabel}
           </p>
 
           <p className="text-[10px] leading-relaxed text-[#9CA3AF]">{copy.prototypeNotice}</p>
