@@ -13,11 +13,12 @@ import {
   type SingleLegStanceHoldConfig,
 } from "@/app/lib/cv/single-leg-stance-detector";
 
-/** Patient-portal CV allowlist. Heel-raise detector remains for lab/tests; patient CV disabled until validated (PR51). */
+/** Patient-portal CV allowlist — Sports Knee Foundation CV-assisted exercises. */
 export const CV_Y1_ENABLED_EXERCISE_IDS = [
   "sit-to-stand",
   "mini-squat",
   "single-leg-stance",
+  "heel-raise",
 ] as const;
 
 export type CvY1ExerciseId = (typeof CV_Y1_ENABLED_EXERCISE_IDS)[number];
@@ -26,6 +27,48 @@ export function isCvEnabledExercise(exerciseId: string | undefined | null): bool
   if (!exerciseId?.trim()) return false;
   const normalized = exerciseId.trim().toLowerCase();
   return (CV_Y1_ENABLED_EXERCISE_IDS as readonly string[]).includes(normalized);
+}
+
+export type PatientCvDetectorKind =
+  | "sit-to-stand"
+  | "mini-squat"
+  | "single-leg-stance"
+  | "heel-raise";
+
+/** Resolve which patient-portal detector must run — never fall through to STS for heel-raise. */
+export function resolvePatientCvDetectorKind(
+  exerciseId: CvY1ExerciseId,
+): PatientCvDetectorKind {
+  switch (exerciseId) {
+    case "mini-squat":
+      return "mini-squat";
+    case "single-leg-stance":
+      return "single-leg-stance";
+    case "heel-raise":
+      return "heel-raise";
+    default:
+      return "sit-to-stand";
+  }
+}
+
+/** Heel raise hrPilot timeline + detector wiring (PR67b). */
+export const PATIENT_HEEL_RAISE_MOTION_PILOT_ENABLED = true;
+
+export function isHeelRaiseMotionPilotEnabled(exerciseId: CvY1ExerciseId): boolean {
+  return exerciseId === "heel-raise" && PATIENT_HEEL_RAISE_MOTION_PILOT_ENABLED;
+}
+
+/**
+ * True when patient portal has a dedicated detector branch wired (not allowlist-only).
+ * Used to gate CV UI and Sports Knee cvAssisted metadata.
+ */
+export function isPatientCvCaptureWired(exerciseId: string | undefined | null): boolean {
+  if (!isCvEnabledExercise(exerciseId)) return false;
+  const normalized = exerciseId!.trim().toLowerCase() as CvY1ExerciseId;
+  if (normalized === "heel-raise") {
+    return isHeelRaiseMotionPilotEnabled("heel-raise");
+  }
+  return true;
 }
 
 export const CV_PATIENT_PROTOTYPE_VERSION = "y1";
@@ -117,6 +160,7 @@ export const PATIENT_HEEL_RAISE_POSE_SHELL = {
   uiFrameUpdateInterval: DEFAULT_STS_CONFIG.uiFrameUpdateInterval,
   landmarkDotColor: DEFAULT_STS_CONFIG.landmarkDotColor,
   lowerBodyLandmarkIndices: DEFAULT_STS_CONFIG.lowerBodyLandmarkIndices,
+  prototypeVersion: "cv-y4-heel-raise",
   landmarksOverlayOnly: true,
 } as const;
 

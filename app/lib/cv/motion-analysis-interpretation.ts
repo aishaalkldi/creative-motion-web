@@ -37,6 +37,24 @@ const STS_PHASE_LABELS: Readonly<Record<string, string>> = {
   unknown: "Unknown",
 };
 
+const MINI_SQUAT_PHASE_LABELS: Readonly<Record<string, string>> = {
+  standing: "Standing",
+  lowering: "Lowering",
+  bottom: "Bottom position",
+  rising: "Rising",
+  rest: "Rest / transition",
+  unknown: "Unknown",
+};
+
+const HEEL_RAISE_PHASE_LABELS: Readonly<Record<string, string>> = {
+  standing: "Standing / baseline",
+  rising: "Rising",
+  peak_raise: "Peak raise",
+  lowering: "Lowering",
+  rest: "Rest / transition",
+  unknown: "Unknown",
+};
+
 const UNKNOWN_PHASE_HIGH_PCT = 25;
 const REST_PHASE_HIGH_PCT = 40;
 const RETURNING_PHASE_LOW_PCT = 15;
@@ -173,7 +191,12 @@ function formatExerciseId(exerciseId: string): string {
 function phaseLabel(phaseId: string, kinesiology: ExerciseKinesiologyContext | null): string {
   const fromKinesiology = kinesiology?.movementPhases.find((phase) => phase.id === phaseId);
   if (fromKinesiology) return fromKinesiology.label;
-  return STS_PHASE_LABELS[phaseId] ?? formatExerciseId(phaseId);
+  return (
+    HEEL_RAISE_PHASE_LABELS[phaseId] ??
+    MINI_SQUAT_PHASE_LABELS[phaseId] ??
+    STS_PHASE_LABELS[phaseId] ??
+    formatExerciseId(phaseId)
+  );
 }
 
 function buildMetricSummary(input: BuildMotionAnalysisInterpretationInput): string | null {
@@ -185,8 +208,18 @@ function buildMetricSummary(input: BuildMotionAnalysisInterpretationInput): stri
     const parts: string[] = [];
     if (input.smtPilot.completeReps > 0) {
       const strictComplete =
-        input.exerciseId === "sit-to-stand" &&
-        isStrictPhaseCompletenessFromPilot(input.smtPilot);
+        (input.exerciseId === "sit-to-stand" ||
+          input.exerciseId === "mini-squat" ||
+          input.exerciseId === "heel-raise") &&
+        isStrictPhaseCompletenessFromPilot(input.smtPilot) &&
+        (input.exerciseId !== "mini-squat" ||
+          ((input.smtPilot.phaseRatios?.lowering ?? 0) >= 5 &&
+            (input.smtPilot.phaseRatios?.bottom ?? 0) >= 5 &&
+            (input.smtPilot.phaseRatios?.rising ?? 0) >= 5)) &&
+        (input.exerciseId !== "heel-raise" ||
+          ((input.smtPilot.phaseRatios?.rising ?? 0) >= 5 &&
+            (input.smtPilot.phaseRatios?.peak_raise ?? 0) >= 5 &&
+            (input.smtPilot.phaseRatios?.lowering ?? 0) >= 5));
       const cycleLabel = formatStsCycleCountLabel(
         input.smtPilot.completeReps,
         strictComplete,
@@ -318,6 +351,64 @@ function observationsFromPhaseRatios(
     observations.push({
       id: "sts_brief_rising",
       text: "A brief rising phase relative to standing was captured — clinician may review rise initiation and trunk strategy.",
+    });
+  }
+
+  const loweringPct = phaseRatios.lowering ?? 0;
+  const bottomPct = phaseRatios.bottom ?? 0;
+
+  if (exerciseId === "mini-squat" && loweringPct > 0 && loweringPct < RETURNING_PHASE_LOW_PCT) {
+    observations.push({
+      id: "ms_low_lowering",
+      text: "Camera-derived evidence suggests the lowering phase may be under-represented in capture; clinician may review squat depth visually.",
+    });
+  }
+
+  if (exerciseId === "mini-squat" && bottomPct > 0 && bottomPct < 10) {
+    observations.push({
+      id: "ms_brief_bottom",
+      text: "A brief bottom position relative to capture was noted — clinician may review squat depth and pause strategy.",
+    });
+  }
+
+  if (
+    exerciseId === "mini-squat" &&
+    risingPct > 0 &&
+    risingPct < RISING_PHASE_LOW_PCT &&
+    standingPct > 40
+  ) {
+    observations.push({
+      id: "ms_brief_rising",
+      text: "A brief rising phase relative to standing was captured — clinician may review trunk strategy during ascent.",
+    });
+  }
+
+  const peakRaisePct = phaseRatios.peak_raise ?? 0;
+  const heelLoweringPct = phaseRatios.lowering ?? 0;
+
+  if (exerciseId === "heel-raise" && heelLoweringPct > 0 && heelLoweringPct < RETURNING_PHASE_LOW_PCT) {
+    observations.push({
+      id: "hr_low_lowering",
+      text: "Camera-derived evidence suggests the lowering phase may be under-represented in capture; clinician may review lowering control visually.",
+    });
+  }
+
+  if (exerciseId === "heel-raise" && peakRaisePct > 0 && peakRaisePct < 10) {
+    observations.push({
+      id: "hr_brief_peak",
+      text: "A brief peak raise position relative to capture was noted — clinician may review heel raise height visually.",
+    });
+  }
+
+  if (
+    exerciseId === "heel-raise" &&
+    risingPct > 0 &&
+    risingPct < RISING_PHASE_LOW_PCT &&
+    standingPct > 40
+  ) {
+    observations.push({
+      id: "hr_brief_rising",
+      text: "A brief rising phase relative to standing was captured — clinician may review heel raise height during ascent.",
     });
   }
 
@@ -523,6 +614,21 @@ const REVIEW_ITEM_MAP: Record<
     text: "Clinician may review rest intervals and whether pacing matched the prescribed session structure.",
     category: "movement_pattern",
     priority: 7,
+  },
+  ms_low_lowering: {
+    text: "Clinician may review squat depth directly — lowering was under-represented in capture.",
+    category: "movement_pattern",
+    priority: 4,
+  },
+  ms_brief_bottom: {
+    text: "Clinician may review bottom position hold and squat depth strategy during the clinical encounter.",
+    category: "movement_pattern",
+    priority: 5,
+  },
+  ms_brief_rising: {
+    text: "Clinician may review trunk strategy during ascent — rising phase was brief in capture.",
+    category: "movement_pattern",
+    priority: 6,
   },
 };
 

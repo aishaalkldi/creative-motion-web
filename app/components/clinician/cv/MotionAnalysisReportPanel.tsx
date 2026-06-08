@@ -16,7 +16,19 @@ import {
   trackingSignalDotTone,
 } from "@/app/lib/cv/motion-analysis-report";
 import {
+  HEEL_RAISE_CYCLE_TIMING_ESTIMATED_NOTE,
+  HEEL_RAISE_LIMITED_MOTION_EVIDENCE_LABEL,
+} from "@/app/lib/cv/heel-raise-motion-pilot-record";
+import {
+  MINI_SQUAT_CYCLE_TIMING_ESTIMATED_NOTE,
+  MINI_SQUAT_LIMITED_MOTION_EVIDENCE_LABEL,
+} from "@/app/lib/cv/mini-squat-motion-pilot-record";
+import {
   buildCaptureFlagsSummary,
+  hasPersistedHeelRaisePhaseRatios,
+  hasPersistedMiniSquatPhaseRatios,
+  isSynthesizedHeelRaiseEvidence,
+  isSynthesizedMiniSquatEvidence,
   isStsPolishedReport,
   MOVEMENT_TIMING_PHASE_REVIEW_SUBTITLE,
   MOVEMENT_TIMING_PHASE_REVIEW_TITLE,
@@ -166,7 +178,25 @@ function MovementTimingPhaseReviewSection({
   const movementQuality = report.movementQuality;
   if (!movementQuality) return null;
 
+  const exerciseId =
+    report.sessionSummary?.exerciseId ?? report.kinesiologyContext?.exerciseId ?? null;
+  const isMiniSquat = exerciseId === "mini-squat";
+  const isHeelRaise = exerciseId === "heel-raise";
+  const isRepCycleExercise = isMiniSquat || isHeelRaise;
+  const synthesizedMiniSquat = isSynthesizedMiniSquatEvidence(report);
+  const synthesizedHeelRaise = isSynthesizedHeelRaiseEvidence(report);
+  const synthesizedLimitedEvidence = synthesizedMiniSquat || synthesizedHeelRaise;
+  const showMiniSquatPhaseRatios = isMiniSquat && hasPersistedMiniSquatPhaseRatios(report);
+  const showHeelRaisePhaseRatios = isHeelRaise && hasPersistedHeelRaisePhaseRatios(report);
+  const showRepCyclePhaseRatios = showMiniSquatPhaseRatios || showHeelRaisePhaseRatios;
   const timingLabels = report.timingMetricLabels ?? DEFAULT_TIMING_LABELS;
+  const completionLabel = isRepCycleExercise ? "Cycle detection clarity" : "Completion clarity";
+  const secondaryPhaseLabel = isRepCycleExercise
+    ? "Observed lowering phase"
+    : "Observed returning phase";
+  const averageTimingLabel = synthesizedLimitedEvidence
+    ? "Estimated avg cycle interval"
+    : timingLabels.average;
 
   return (
     <div className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5">
@@ -175,60 +205,85 @@ function MovementTimingPhaseReviewSection({
         {MOVEMENT_TIMING_PHASE_REVIEW_SUBTITLE}
       </p>
 
-      <div className="mt-2 grid gap-2 sm:grid-cols-3">
-        <PilotMetric
-          label={timingLabels.average}
-          value={formatNullableSeconds(movementQuality.averageRepTimeSec)}
-        />
-        <PilotMetric
-          label={timingLabels.fastest}
-          value={formatNullableSeconds(movementQuality.fastestRepTimeSec)}
-        />
-        <PilotMetric
-          label={timingLabels.slowest}
-          value={formatNullableSeconds(movementQuality.slowestRepTimeSec)}
-        />
-      </div>
+      {synthesizedLimitedEvidence ? (
+        <p className="mt-2 rounded-[5px] border border-[#EF9F27]/25 bg-[#EF9F27]/5 px-2.5 py-2 text-[10px] leading-relaxed text-[#D1D5DB]">
+          <span className="font-medium text-[#EF9F27]">
+            {synthesizedHeelRaise
+              ? HEEL_RAISE_LIMITED_MOTION_EVIDENCE_LABEL
+              : MINI_SQUAT_LIMITED_MOTION_EVIDENCE_LABEL}
+            .{" "}
+          </span>
+          {synthesizedHeelRaise
+            ? HEEL_RAISE_CYCLE_TIMING_ESTIMATED_NOTE
+            : MINI_SQUAT_CYCLE_TIMING_ESTIMATED_NOTE}
+        </p>
+      ) : null}
 
       <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        <PilotMetric
+          label={averageTimingLabel}
+          value={formatNullableSeconds(movementQuality.averageRepTimeSec)}
+        />
+        {!synthesizedLimitedEvidence ? (
+          <>
+            <PilotMetric
+              label={timingLabels.fastest}
+              value={formatNullableSeconds(movementQuality.fastestRepTimeSec)}
+            />
+            <PilotMetric
+              label={timingLabels.slowest}
+              value={formatNullableSeconds(movementQuality.slowestRepTimeSec)}
+            />
+          </>
+        ) : null}
+      </div>
+
+      <div className={`mt-2 grid gap-2 ${synthesizedLimitedEvidence ? "sm:grid-cols-1" : "sm:grid-cols-3"}`}>
+        {!synthesizedLimitedEvidence ? (
+          <div className="rounded-[5px] border border-[#1E2D42] bg-[#070D16] px-2.5 py-2">
+            <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">Pacing consistency</p>
+            <p className="mt-0.5 text-xs">
+              <QualityLabel label={movementQuality.pacingConsistency} />
+            </p>
+          </div>
+        ) : null}
+        {showRepCyclePhaseRatios || !isRepCycleExercise ? (
+          <div className="rounded-[5px] border border-[#1E2D42] bg-[#070D16] px-2.5 py-2">
+            <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">Phase consistency</p>
+            <p className="mt-0.5 text-xs">
+              <QualityLabel label={movementQuality.phaseConsistency} />
+            </p>
+          </div>
+        ) : null}
         <div className="rounded-[5px] border border-[#1E2D42] bg-[#070D16] px-2.5 py-2">
-          <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">Pacing consistency</p>
-          <p className="mt-0.5 text-xs">
-            <QualityLabel label={movementQuality.pacingConsistency} />
-          </p>
-        </div>
-        <div className="rounded-[5px] border border-[#1E2D42] bg-[#070D16] px-2.5 py-2">
-          <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">Phase consistency</p>
-          <p className="mt-0.5 text-xs">
-            <QualityLabel label={movementQuality.phaseConsistency} />
-          </p>
-        </div>
-        <div className="rounded-[5px] border border-[#1E2D42] bg-[#070D16] px-2.5 py-2">
-          <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">Completion clarity</p>
+          <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">{completionLabel}</p>
           <p className="mt-0.5 text-xs">
             <QualityLabel label={movementQuality.completionClarity} />
           </p>
         </div>
       </div>
 
-      <div className="mt-2 grid gap-2 sm:grid-cols-2">
-        <PilotMetric
-          label="Observed standing phase"
-          value={
-            movementQuality.observedStandingPhaseRatio !== null
-              ? `${movementQuality.observedStandingPhaseRatio}%`
-              : "—"
-          }
-        />
-        <PilotMetric
-          label="Observed returning phase"
-          value={
-            movementQuality.observedReturningPhaseRatio !== null
-              ? `${movementQuality.observedReturningPhaseRatio}%`
-              : "—"
-          }
-        />
-      </div>
+      {showRepCyclePhaseRatios ||
+      (!isRepCycleExercise && movementQuality.observedStandingPhaseRatio !== null) ? (
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <PilotMetric
+            label="Observed standing phase"
+            value={
+              movementQuality.observedStandingPhaseRatio !== null
+                ? `${movementQuality.observedStandingPhaseRatio}%`
+                : "—"
+            }
+          />
+          <PilotMetric
+            label={secondaryPhaseLabel}
+            value={
+              movementQuality.observedReturningPhaseRatio !== null
+                ? `${movementQuality.observedReturningPhaseRatio}%`
+                : "—"
+            }
+          />
+        </div>
+      ) : null}
 
       {!compact && movementQuality.qualitySignals.length > 0 ? (
         <div className="mt-2">
@@ -508,19 +563,19 @@ function KinesiologyInsightSection({ report }: { report: MotionAnalysisReport })
 }
 
 function CaptureEvidenceSection({ report }: { report: MotionAnalysisReport }) {
-  const smtPilot = report.smtPilot;
-  const stsPolished = isStsPolishedReport(report);
-  const captureTimingLabels = stsPolished
+  const motionPilot = report.smtPilot ?? report.msPilot ?? report.hrPilot;
+  const polishedReport = isStsPolishedReport(report);
+  const captureTimingLabels = polishedReport
     ? resolveCaptureEvidenceTimingLabels(
         report.timingMetricLabels,
-        smtPilot?.phaseRatios ?? null,
+        motionPilot?.phaseRatios ?? null,
       )
     : null;
-  const cycleMetricLabel = stsPolished
+  const cycleMetricLabel = polishedReport
     ? resolveCaptureEvidenceCycleMetricLabel(report)
     : "Complete reps";
 
-  if (smtPilot) {
+  if (motionPilot) {
     return (
       <details className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2">
         <summary className="cursor-pointer list-none text-[10px] font-semibold uppercase tracking-[0.06em] text-[#9CA3AF] marker:content-none [&::-webkit-details-marker]:hidden">
@@ -528,49 +583,49 @@ function CaptureEvidenceSection({ report }: { report: MotionAnalysisReport }) {
         </summary>
 
         <div className="mt-2 space-y-2 border-t border-[#1E2D42] pt-2">
-          {smtPilot.showReviewBanner ? (
+          {motionPilot.showReviewBanner ? (
             <p className="rounded-[5px] border border-[#EF9F27]/35 bg-[#EF9F27]/10 px-2.5 py-2 text-[10px] font-medium leading-relaxed text-[#EF9F27]">
               {MOTION_ANALYSIS_REVIEW_BANNER}
             </p>
           ) : null}
 
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            <PilotMetric label="Snapshots" value={String(smtPilot.snapshotCount)} />
-            <PilotMetric label={cycleMetricLabel} value={String(smtPilot.completeReps)} />
-            <PilotMetric label="Unclear reps" value={String(smtPilot.unclearReps)} />
+            <PilotMetric label="Snapshots" value={String(motionPilot.snapshotCount)} />
+            <PilotMetric label={cycleMetricLabel} value={String(motionPilot.completeReps)} />
+            <PilotMetric label="Unclear cycles" value={String(motionPilot.unclearReps)} />
           </div>
-          <TrackingSignalRow signal={smtPilot.trackingSignal} />
+          <TrackingSignalRow signal={motionPilot.trackingSignal} />
 
-          {smtPilot.repTimings ? (
+          {motionPilot.repTimings ? (
             <div className="grid grid-cols-3 gap-2">
               <PilotMetric
                 label={captureTimingLabels?.average ?? "Avg rep"}
-                value={formatNullableSeconds(smtPilot.repTimings.avgS)}
+                value={formatNullableSeconds(motionPilot.repTimings.avgS)}
               />
               <PilotMetric
                 label={captureTimingLabels?.fastest ?? "Fastest rep"}
-                value={formatNullableSeconds(smtPilot.repTimings.fastestS)}
+                value={formatNullableSeconds(motionPilot.repTimings.fastestS)}
               />
               <PilotMetric
                 label={captureTimingLabels?.slowest ?? "Slowest rep"}
-                value={formatNullableSeconds(smtPilot.repTimings.slowestS)}
+                value={formatNullableSeconds(motionPilot.repTimings.slowestS)}
               />
             </div>
           ) : null}
 
-          {smtPilot.visibilityRatios ? (
+          {motionPilot.visibilityRatios ? (
             <div className="grid grid-cols-3 gap-2">
-              <PilotMetric label="Hip visible" value={`${smtPilot.visibilityRatios.hip}%`} />
-              <PilotMetric label="Knee visible" value={`${smtPilot.visibilityRatios.knee}%`} />
-              <PilotMetric label="Ankle visible" value={`${smtPilot.visibilityRatios.ankle}%`} />
+              <PilotMetric label="Hip visible" value={`${motionPilot.visibilityRatios.hip}%`} />
+              <PilotMetric label="Knee visible" value={`${motionPilot.visibilityRatios.knee}%`} />
+              <PilotMetric label="Ankle visible" value={`${motionPilot.visibilityRatios.ankle}%`} />
             </div>
           ) : null}
 
-          {smtPilot.clinicianFlags && smtPilot.clinicianFlags.length > 0 ? (
+          {motionPilot.clinicianFlags && motionPilot.clinicianFlags.length > 0 ? (
             <div className="rounded-[5px] border border-[#1E2D42] bg-[#070D16] px-2.5 py-2">
               <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">Capture flags</p>
               <ul className="mt-1 list-inside list-disc space-y-0.5 text-[10px] text-[#D1D5DB]">
-                {smtPilot.clinicianFlags.map((flag) => (
+                {motionPilot.clinicianFlags.map((flag) => (
                   <li key={flag} className="capitalize">
                     {flag.replace(/_/g, " ")}
                   </li>
@@ -651,7 +706,11 @@ function CaptureEvidenceSection({ report }: { report: MotionAnalysisReport }) {
 function StsPolishedReportBody({ report }: { report: MotionAnalysisReport }) {
   const isLegacy = report.reportMode === "legacy";
   const clinicalObservations = report.clinicalObservations;
-  const captureFlagsSummary = buildCaptureFlagsSummary(report.smtPilot?.clinicianFlags);
+  const captureFlagsSummary = buildCaptureFlagsSummary(
+    report.smtPilot?.clinicianFlags ??
+      report.msPilot?.clinicianFlags ??
+      report.hrPilot?.clinicianFlags,
+  );
   const expandedReviewFocus =
     report.movementQualityReviewFocusDisplay ??
     report.movementQuality?.clinicianReviewFocus ??

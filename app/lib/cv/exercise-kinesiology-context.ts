@@ -73,10 +73,10 @@ const SIT_TO_STAND: ExerciseKinesiologyContext = {
 const MINI_SQUAT: ExerciseKinesiologyContext = {
   exerciseId: "mini-squat",
   primaryMuscles: [
-    "Quadriceps (closed-chain knee extensors)",
-    "Gluteus maximus and medius",
-    "Hamstrings (co-contraction for stability)",
-    "Gastrocnemius / soleus (ankle stability)",
+    "Quadriceps",
+    "Gluteus maximus",
+    "Gluteus medius",
+    "Core stabilizers",
   ],
   movementPhases: [
     {
@@ -85,35 +85,40 @@ const MINI_SQUAT: ExerciseKinesiologyContext = {
       description: "Upright stance with feet shoulder-width; weight through mid-foot and heels.",
     },
     {
-      id: "descent",
-      label: "Descent",
-      description: "Hip and knee flexion to partial depth (typically 30–45° knee flexion).",
+      id: "lowering",
+      label: "Lowering",
+      description: "Hip and knee flexion toward partial squat depth.",
     },
     {
-      id: "bottom_hold",
-      label: "Bottom hold",
-      description: "Brief pause at prescribed depth before ascent.",
+      id: "bottom",
+      label: "Bottom position",
+      description: "Brief hold or transition at prescribed partial depth before ascent.",
     },
     {
-      id: "ascent",
-      label: "Ascent",
+      id: "rising",
+      label: "Rising",
       description: "Knee and hip extension returning to upright without harsh locking.",
+    },
+    {
+      id: "rest",
+      label: "Rest / transition",
+      description: "Brief pause between squat cycles or repositioning between reps.",
     },
   ],
   expectedPatterns: [
-    "Torso stays relatively tall; limited excessive forward lean at partial depth.",
-    "Knees track over toes without medial collapse.",
-    "Heels stay in contact with floor throughout the range.",
-    "Tempo is controlled — no bouncing at the bottom.",
+    "Squat depth stays within clinician-prescribed partial range across repetitions.",
+    "Knee control maintained during descent and ascent — alignment cannot be confirmed from camera data alone.",
+    "Trunk strategy stays relatively controlled without excessive collapse at partial depth.",
+    "Lower-limb loading appears consistent across cycles — pacing may be worth clinician review.",
   ],
   functionalTransfer:
-    "Stair negotiation, lifting from floor height, sport-ready loading, and patellofemoral load tolerance in daily tasks.",
+    "Stair negotiation, lifting from floor height, and controlled lower-limb loading in daily tasks.",
   clinicianObservationGuide: [
-    "Observe depth consistency across reps relative to clinician-prescribed range.",
-    "Note knee valgus, heel lift, or trunk collapse during descent or ascent.",
-    "Compare left-right weight distribution if visible in capture framing.",
-    "Review whether patient stays within partial range versus drifting deeper.",
-    "Use assistive rep counts and visibility notes only — not automated movement quality scores.",
+    "Review squat depth consistency across repetitions relative to prescribed range.",
+    "Observe knee alignment during descent and ascent — assistive capture cannot confirm valgus or varus.",
+    "Note trunk strategy and whether forward lean changes across cycles.",
+    "Review pacing consistency between squat cycles.",
+    "Use assistive cycle counts and visibility notes only — not automated movement quality scores.",
   ],
 };
 
@@ -164,16 +169,70 @@ const SINGLE_LEG_STANCE: ExerciseKinesiologyContext = {
   ],
 };
 
+const HEEL_RAISE: ExerciseKinesiologyContext = {
+  exerciseId: "heel-raise",
+  primaryMuscles: [
+    "Gastrocnemius",
+    "Soleus",
+    "Tibialis posterior / ankle stabilizers",
+    "Intrinsic foot stabilizers",
+  ],
+  movementPhases: [
+    {
+      id: "standing",
+      label: "Standing / baseline",
+      description: "Heels on ground; upright stance with weight through mid-foot before lift.",
+    },
+    {
+      id: "rising",
+      label: "Rising",
+      description: "Controlled plantarflexion lifting heels off the floor.",
+    },
+    {
+      id: "peak_raise",
+      label: "Peak raise",
+      description: "Top of heel raise — brief hold or transition at highest comfortable height.",
+    },
+    {
+      id: "lowering",
+      label: "Lowering",
+      description: "Controlled eccentric lowering of heels back to floor without dropping.",
+    },
+    {
+      id: "rest",
+      label: "Rest / transition",
+      description: "Brief pause between heel raise cycles or repositioning between reps.",
+    },
+  ],
+  expectedPatterns: [
+    "Controlled heel lift with even weight between feet when prescribed bilaterally.",
+    "Controlled lowering without rushing or bouncing at the bottom.",
+    "Ankle stability maintained — excessive inversion or eversion cannot be confirmed from camera data alone.",
+    "Balance and foot control appear steady across cycles — pacing may be worth clinician review.",
+  ],
+  functionalTransfer:
+    "Push-off in gait, running readiness, jumping preparation, stair climbing, and calf endurance for daily mobility.",
+  clinicianObservationGuide: [
+    "Review heel raise height consistency across repetitions relative to prescribed range.",
+    "Observe lowering control during descent — assistive capture cannot confirm eccentric strength.",
+    "Note ankle stability and foot quietness during plantarflexion.",
+    "Review pacing consistency between heel raise cycles.",
+    "Calf strength cannot be confirmed from camera data alone — correlate with clinical assessment.",
+  ],
+};
+
 const KINESIOLOGY_BY_EXERCISE: Readonly<Record<string, ExerciseKinesiologyContext>> = {
   "sit-to-stand": SIT_TO_STAND,
   "mini-squat": MINI_SQUAT,
   "single-leg-stance": SINGLE_LEG_STANCE,
+  "heel-raise": HEEL_RAISE,
 };
 
 export const KINESIOLOGY_CONTEXT_EXERCISE_IDS = [
   "sit-to-stand",
   "mini-squat",
   "single-leg-stance",
+  "heel-raise",
 ] as const;
 
 export type KinesiologyContextExerciseId = (typeof KINESIOLOGY_CONTEXT_EXERCISE_IDS)[number];

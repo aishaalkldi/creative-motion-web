@@ -185,7 +185,7 @@ describe("resolveMotionAnalysisSummaryLabel", () => {
 describe("resolveExerciseKinesiologyContext", () => {
   it("returns context for supported exercises only", () => {
     assert.equal(resolveExerciseKinesiologyContext("mini-squat")?.exerciseId, "mini-squat");
-    assert.equal(resolveExerciseKinesiologyContext("heel-raise"), null);
+    assert.equal(resolveExerciseKinesiologyContext("heel-raise")?.exerciseId, "heel-raise");
     assert.equal(resolveExerciseKinesiologyContext(null), null);
   });
 });
@@ -481,7 +481,7 @@ describe("clinical interpretation layer", () => {
     assert.equal(report.movementQuality.completionClarity, "Clear");
   });
 
-  it("provides session summary without smtPilot for kinesiology exercises", () => {
+  it("provides mini squat intelligence from synthesized motion evidence", () => {
     const report = buildMotionAnalysisReport({
       exerciseId: "mini-squat",
       sessionDurationS: 8,
@@ -492,10 +492,11 @@ describe("clinical interpretation layer", () => {
 
     assert.equal(report.sessionSummary?.exerciseLabel, "Mini Squat");
     assert.equal(report.phaseInterpretation, null);
-    assert.equal(report.clinicalObservations, null);
+    assert.ok(report.msPilot);
     assert.ok(report.kinesiologyContext);
     assert.ok(report.reviewNext && report.reviewNext.length > 0);
-    assert.equal(report.movementQuality, null);
+    assert.ok(report.movementQuality);
+    assert.ok(report.executiveSummary);
   });
 });
 
@@ -973,9 +974,35 @@ describe("biomechanical contribution review", () => {
     assert.ok(report.biomechanicalContributionReview.muscleDemandContext.length >= 4);
   });
 
-  it("returns null for non-STS exercises", () => {
+  it("builds mini squat biomechanical review from synthesized evidence", () => {
     const report = buildMotionAnalysisReport({
       exerciseId: "mini-squat",
+      sessionDurationS: 8,
+      repCount: 2,
+      trackingQuality: "fair",
+      movementDetected: true,
+    });
+
+    assert.ok(report.biomechanicalContributionReview);
+    assertSafeLanguage(report.biomechanicalContributionReview);
+  });
+
+  it("builds heel raise biomechanical review from synthesized evidence", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "heel-raise",
+      sessionDurationS: 8,
+      repCount: 2,
+      trackingQuality: "fair",
+      movementDetected: true,
+    });
+
+    assert.ok(report.biomechanicalContributionReview);
+    assertSafeLanguage(report.biomechanicalContributionReview);
+  });
+
+  it("returns null for exercises without intelligence support", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "functional-reach",
       sessionDurationS: 8,
       repCount: 2,
       trackingQuality: "fair",
@@ -1239,5 +1266,330 @@ describe("report evidence label alignment", () => {
       ["Clinician may review pacing consistency across reps during the clinical encounter."],
     );
     assert.deepEqual(filtered, ["Confirm terminal standing posture visually."]);
+  });
+});
+
+describe("mini squat intelligence v1", () => {
+  function enrichedMiniSquatReport(
+    overrides: {
+      phaseRatios?: Record<string, number>;
+      repTimings?: { avgS: number; fastestS: number; slowestS: number };
+      clinicianFlags?: string[];
+      repCount?: number;
+      sessionDurationS?: number;
+    } = {},
+  ) {
+    return buildMotionAnalysisReport({
+      exerciseId: "mini-squat",
+      sessionDurationS: overrides.sessionDurationS ?? 15,
+      repCount: overrides.repCount ?? 4,
+      trackingQuality: "good",
+      movementDetected: true,
+      motionQuality: {
+        msPilot: {
+          pilotVersion: "msm-1",
+          isPilot: true,
+          exerciseId: "mini-squat",
+          snapshotCount: 12,
+          durationS: overrides.sessionDurationS ?? 15,
+          repCount: overrides.repCount ?? 4,
+          completeReps: overrides.repCount ?? 4,
+          unclearReps: 0,
+          trackingSignal: "good",
+          movementDetected: true,
+          phaseRatios: overrides.phaseRatios ?? {
+            standing: 18,
+            lowering: 22,
+            bottom: 16,
+            rising: 24,
+            rest: 12,
+            unknown: 8,
+          },
+          repTimings: overrides.repTimings ?? {
+            avgS: 3.2,
+            fastestS: 2.8,
+            slowestS: 3.8,
+          },
+          visibilityRatios: { hip: 90, knee: 88, ankle: 84 },
+          clinicianFlags: overrides.clinicianFlags ?? [],
+          reviewRequired: true,
+          reviewReason: "derived_mini_squat_motion_evidence",
+          disclaimer: "Assistive only.",
+        },
+      },
+    });
+  }
+
+  it("builds polished mini squat intelligence report", () => {
+    const report = enrichedMiniSquatReport();
+    assert.equal(report.kinesiologyContext?.exerciseId, "mini-squat");
+    assert.ok(report.msPilot);
+    assert.ok(report.executiveSummary);
+    assert.ok(report.movementQuality);
+    assert.ok(report.biomechanicalContributionReview);
+    assert.ok(report.biomechanicalContributionReviewCompact);
+    assert.equal(report.timingMetricLabels?.average, "Average cycle interval");
+    assert.ok(hasDisplayableMotionAnalysisReport(report));
+  });
+
+  it("includes mini squat phase model in phase interpretation", () => {
+    const report = enrichedMiniSquatReport();
+    const phaseIds = (report.phaseInterpretation ?? []).map((phase) => phase.phaseId);
+    assert.ok(phaseIds.includes("lowering"));
+    assert.ok(phaseIds.includes("bottom"));
+    assert.ok(phaseIds.includes("rising"));
+  });
+
+  it("synthesizes msPilot from session metrics when motion_quality is absent", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "mini-squat",
+      sessionDurationS: 12,
+      repCount: 3,
+      trackingQuality: "fair",
+      movementDetected: true,
+    });
+    assert.ok(report.msPilot);
+    assert.equal(report.msPilot!.completeReps, 3);
+    assert.equal(report.msPilot!.repTimings?.avgS, 4);
+    assert.ok(report.movementQuality);
+  });
+
+  it("uses safe biomechanical review prompts without pathology labels", () => {
+    const report = enrichedMiniSquatReport({
+      repTimings: { avgS: 3.5, fastestS: 2.0, slowestS: 5.0 },
+    });
+    const prompts = report.biomechanicalContributionReview?.clinicianReviewPrompts ?? [];
+    const joined = prompts.join(" ").toLowerCase();
+    assert.ok(joined.includes("squat depth"));
+    assert.ok(joined.includes("knee alignment"));
+    assert.ok(!joined.includes("weak quadriceps"));
+    assert.ok(!joined.includes("valgus detected"));
+  });
+
+  it("updates kinesiology context for expected movement strategy", () => {
+    const context = resolveExerciseKinesiologyContext("mini-squat");
+    assert.ok(context);
+    assert.deepEqual(context!.primaryMuscles, [
+      "Quadriceps",
+      "Gluteus maximus",
+      "Gluteus medius",
+      "Core stabilizers",
+    ]);
+    assert.ok(
+      context!.expectedPatterns.some((pattern) => /squat depth/i.test(pattern)),
+    );
+  });
+
+  it("marks synthesized msPilot and avoids implying phase detection", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "mini-squat",
+      sessionDurationS: 12,
+      repCount: 3,
+      trackingQuality: "fair",
+      movementDetected: true,
+    });
+
+    assert.equal(report.msPilotEvidenceMode, "synthesized");
+    assert.equal(report.phaseInterpretation, null);
+    assert.equal(report.movementQuality?.observedReturningPhaseRatio, null);
+    assert.ok(
+      report.executiveSummary?.lines.some((line) =>
+        line.includes("Limited motion evidence"),
+      ),
+    );
+    assert.ok(
+      report.executiveSummary?.lines.some((line) =>
+        line.includes("Cycle timing estimated from session duration and detected reps"),
+      ),
+    );
+    assert.ok(
+      !report.executiveSummary?.lines.some((line) => /phase consistency/i.test(line)),
+    );
+    const bioText = (report.biomechanicalContributionReview?.clinicianReviewPrompts ?? []).join(
+      " ",
+    ).toLowerCase();
+    assert.ok(!bioText.includes("valgus detected"));
+    assert.ok(!bioText.includes("weak quadriceps"));
+    assert.ok(!bioText.includes("poor knee"));
+  });
+
+  it("shows phase percentages only for persisted msPilot phase ratios", () => {
+    const report = enrichedMiniSquatReport();
+    assert.equal(report.msPilotEvidenceMode, "persisted");
+    assert.ok(report.phaseInterpretation && report.phaseInterpretation.length > 0);
+    assert.ok(report.movementQuality?.observedReturningPhaseRatio !== null);
+  });
+});
+
+describe("heel raise movement intelligence report (PR67)", () => {
+  function enrichedHeelRaiseReport(
+    overrides: {
+      phaseRatios?: Record<string, number>;
+      repTimings?: { avgS: number; fastestS: number; slowestS: number };
+      clinicianFlags?: string[];
+      repCount?: number;
+      sessionDurationS?: number;
+    } = {},
+  ) {
+    return buildMotionAnalysisReport({
+      exerciseId: "heel-raise",
+      sessionDurationS: overrides.sessionDurationS ?? 15,
+      repCount: overrides.repCount ?? 4,
+      trackingQuality: "good",
+      movementDetected: true,
+      motionQuality: {
+        hrPilot: {
+          pilotVersion: "hrm-1",
+          isPilot: true,
+          exerciseId: "heel-raise",
+          snapshotCount: 12,
+          durationS: overrides.sessionDurationS ?? 15,
+          repCount: overrides.repCount ?? 4,
+          completeReps: overrides.repCount ?? 4,
+          unclearReps: 0,
+          trackingSignal: "good",
+          movementDetected: true,
+          phaseRatios: overrides.phaseRatios ?? {
+            standing: 20,
+            rising: 18,
+            peak_raise: 14,
+            lowering: 22,
+            rest: 14,
+            unknown: 12,
+          },
+          repTimings: overrides.repTimings ?? {
+            avgS: 3.2,
+            fastestS: 2.8,
+            slowestS: 3.8,
+          },
+          visibilityRatios: { hip: 88, knee: 86, ankle: 92 },
+          clinicianFlags: overrides.clinicianFlags ?? [],
+          reviewRequired: true,
+          reviewReason: "derived_heel_raise_motion_evidence",
+          disclaimer: "Assistive only.",
+        },
+      },
+    });
+  }
+
+  it("builds polished heel raise intelligence report", () => {
+    const report = enrichedHeelRaiseReport();
+    assert.equal(report.kinesiologyContext?.exerciseId, "heel-raise");
+    assert.ok(report.hrPilot);
+    assert.ok(report.executiveSummary);
+    assert.ok(report.movementQuality);
+    assert.ok(report.biomechanicalContributionReview);
+    assert.ok(report.biomechanicalContributionReviewCompact);
+    assert.equal(report.timingMetricLabels?.average, "Average cycle interval");
+    assert.ok(hasDisplayableMotionAnalysisReport(report));
+  });
+
+  it("includes heel raise phase model in phase interpretation", () => {
+    const report = enrichedHeelRaiseReport();
+    const phaseIds = (report.phaseInterpretation ?? []).map((phase) => phase.phaseId);
+    assert.ok(phaseIds.includes("rising"));
+    assert.ok(phaseIds.includes("peak_raise"));
+    assert.ok(phaseIds.includes("lowering"));
+    const peakLabel = (report.phaseInterpretation ?? []).find(
+      (phase) => phase.phaseId === "peak_raise",
+    )?.phaseLabel;
+    assert.equal(peakLabel, "Peak raise");
+  });
+
+  it("synthesizes hrPilot from session metrics when motion_quality is absent", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "heel-raise",
+      sessionDurationS: 12,
+      repCount: 3,
+      trackingQuality: "fair",
+      movementDetected: true,
+    });
+    assert.ok(report.hrPilot);
+    assert.equal(report.hrPilot!.completeReps, 3);
+    assert.equal(report.hrPilot!.repTimings?.avgS, 4);
+    assert.ok(report.movementQuality);
+  });
+
+  it("uses safe biomechanical review prompts without pathology labels", () => {
+    const report = enrichedHeelRaiseReport({
+      repTimings: { avgS: 3.5, fastestS: 2.0, slowestS: 5.0 },
+    });
+    const prompts = report.biomechanicalContributionReview?.clinicianReviewPrompts ?? [];
+    const joined = prompts.join(" ").toLowerCase();
+    assert.ok(joined.includes("heel raise height"));
+    assert.ok(joined.includes("lowering control"));
+    assert.ok(!joined.includes("calf weakness"));
+    assert.ok(!joined.includes("achilles"));
+    assert.ok(!joined.includes("return-to-sport"));
+    assert.ok(!joined.includes("treatment recommendation"));
+  });
+
+  it("updates kinesiology context for expected movement strategy", () => {
+    const context = resolveExerciseKinesiologyContext("heel-raise");
+    assert.ok(context);
+    assert.deepEqual(context!.primaryMuscles, [
+      "Gastrocnemius",
+      "Soleus",
+      "Tibialis posterior / ankle stabilizers",
+      "Intrinsic foot stabilizers",
+    ]);
+    assert.ok(
+      context!.expectedPatterns.some((pattern) => /controlled heel lift/i.test(pattern)),
+    );
+    assert.ok(/push-off in gait/i.test(context!.functionalTransfer));
+  });
+
+  it("marks synthesized hrPilot and avoids implying phase detection", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "heel-raise",
+      sessionDurationS: 12,
+      repCount: 3,
+      trackingQuality: "fair",
+      movementDetected: true,
+    });
+
+    assert.equal(report.hrPilotEvidenceMode, "synthesized");
+    assert.equal(report.phaseInterpretation, null);
+    assert.equal(report.movementQuality?.observedReturningPhaseRatio, null);
+    assert.ok(
+      report.executiveSummary?.lines.some((line) =>
+        line.includes("Limited motion evidence"),
+      ),
+    );
+    assert.ok(
+      report.executiveSummary?.lines.some((line) =>
+        line.includes("Cycle timing estimated from session duration and detected reps"),
+      ),
+    );
+    assert.ok(
+      !report.executiveSummary?.lines.some((line) => /phase consistency/i.test(line)),
+    );
+    const bioText = (report.biomechanicalContributionReview?.clinicianReviewPrompts ?? []).join(
+      " ",
+    ).toLowerCase();
+    assert.ok(!bioText.includes("calf weakness"));
+    assert.ok(!bioText.includes("achilles pathology"));
+    assert.ok(!bioText.includes("instability diagnosis"));
+  });
+
+  it("shows phase percentages only for persisted hrPilot phase ratios", () => {
+    const report = enrichedHeelRaiseReport();
+    assert.equal(report.hrPilotEvidenceMode, "persisted");
+    assert.ok(report.phaseInterpretation && report.phaseInterpretation.length > 0);
+    assert.ok(report.movementQuality?.observedReturningPhaseRatio !== null);
+  });
+
+  it("supports manual fallback for legacy sessions without motion_quality", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "heel-raise",
+      sessionDurationS: 8,
+      repCount: 2,
+      trackingQuality: "good",
+      movementDetected: true,
+    });
+    assert.equal(report.completedReps, 2);
+    assert.equal(report.hrPilotEvidenceMode, "synthesized");
+    assert.ok(report.movementTimeline.some((item) => item.label === "Repetitions recorded"));
+    assert.ok(hasDisplayableMotionAnalysisReport(report));
   });
 });

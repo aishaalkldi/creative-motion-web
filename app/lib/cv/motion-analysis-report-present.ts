@@ -11,8 +11,23 @@ import type {
   MotionAnalysisReviewNextItem,
   MotionAnalysisSmtPilotSummary,
 } from "@/app/lib/cv/motion-analysis-report";
+import {
+  HEEL_RAISE_CYCLE_TIMING_ESTIMATED_NOTE,
+  HEEL_RAISE_LIMITED_MOTION_EVIDENCE_LABEL,
+} from "@/app/lib/cv/heel-raise-motion-pilot-record";
+import {
+  MINI_SQUAT_CYCLE_TIMING_ESTIMATED_NOTE,
+  MINI_SQUAT_LIMITED_MOTION_EVIDENCE_LABEL,
+} from "@/app/lib/cv/mini-squat-motion-pilot-record";
 
 const STS_EXERCISE_ID = "sit-to-stand";
+const MINI_SQUAT_EXERCISE_ID = "mini-squat";
+const HEEL_RAISE_EXERCISE_ID = "heel-raise";
+const POLISHED_INTELLIGENCE_EXERCISE_IDS = new Set([
+  STS_EXERCISE_ID,
+  MINI_SQUAT_EXERCISE_ID,
+  HEEL_RAISE_EXERCISE_ID,
+]);
 const MEANINGFUL_PHASE_PCT = 5;
 
 export const MOVEMENT_TIMING_PHASE_REVIEW_TITLE = "Movement timing & phase review";
@@ -65,6 +80,54 @@ export function isStrictStsPhaseCompleteness(
   movementQuality: MovementQualitySignals | null | undefined,
 ): boolean {
   if (!isStrictPhaseCompletenessFromPilot(smtPilot)) return false;
+  if (movementQuality?.phaseConsistency === "Incomplete") return false;
+  if (movementQuality?.completionClarity === "Unclear") return false;
+  return true;
+}
+
+export function isStrictMiniSquatPhaseCompleteness(
+  msPilot: MotionAnalysisSmtPilotSummary | null | undefined,
+  movementQuality: MovementQualitySignals | null | undefined,
+): boolean {
+  if (!msPilot?.phaseRatios) return false;
+  if (msPilot.unclearReps > 0) return false;
+  if (hasFlag(msPilot.clinicianFlags, "incomplete_cycle")) return false;
+
+  const ratios = msPilot.phaseRatios;
+  const lowering = ratios.lowering ?? 0;
+  const bottom = ratios.bottom ?? 0;
+  const rising = ratios.rising ?? 0;
+
+  const phasesComplete =
+    lowering >= MEANINGFUL_PHASE_PCT &&
+    bottom >= MEANINGFUL_PHASE_PCT &&
+    rising >= MEANINGFUL_PHASE_PCT;
+
+  if (!phasesComplete) return false;
+  if (movementQuality?.phaseConsistency === "Incomplete") return false;
+  if (movementQuality?.completionClarity === "Unclear") return false;
+  return true;
+}
+
+export function isStrictHeelRaisePhaseCompleteness(
+  hrPilot: MotionAnalysisSmtPilotSummary | null | undefined,
+  movementQuality: MovementQualitySignals | null | undefined,
+): boolean {
+  if (!hrPilot?.phaseRatios) return false;
+  if (hrPilot.unclearReps > 0) return false;
+  if (hasFlag(hrPilot.clinicianFlags, "incomplete_cycle")) return false;
+
+  const ratios = hrPilot.phaseRatios;
+  const rising = ratios.rising ?? 0;
+  const peakRaise = ratios.peak_raise ?? 0;
+  const lowering = ratios.lowering ?? 0;
+
+  const phasesComplete =
+    rising >= MEANINGFUL_PHASE_PCT &&
+    peakRaise >= MEANINGFUL_PHASE_PCT &&
+    lowering >= MEANINGFUL_PHASE_PCT;
+
+  if (!phasesComplete) return false;
   if (movementQuality?.phaseConsistency === "Incomplete") return false;
   if (movementQuality?.completionClarity === "Unclear") return false;
   return true;
@@ -159,6 +222,22 @@ export function filterSemanticallyDuplicatePrompts(
 export function resolveCaptureEvidenceCycleMetricLabel(
   report: MotionAnalysisReport,
 ): string {
+  const exerciseId =
+    report.sessionSummary?.exerciseId ?? report.kinesiologyContext?.exerciseId ?? null;
+  if (exerciseId === MINI_SQUAT_EXERCISE_ID) {
+    const strictComplete = isStrictMiniSquatPhaseCompleteness(
+      report.msPilot,
+      report.movementQuality,
+    );
+    return strictComplete ? "Complete cycles" : "Camera-detected cycles";
+  }
+  if (exerciseId === HEEL_RAISE_EXERCISE_ID) {
+    const strictComplete = isStrictHeelRaisePhaseCompleteness(
+      report.hrPilot,
+      report.movementQuality,
+    );
+    return strictComplete ? "Complete cycles" : "Camera-detected cycles";
+  }
   const strictComplete = isStrictStsPhaseCompleteness(
     report.smtPilot,
     report.movementQuality,
@@ -217,7 +296,7 @@ export function buildBiomechanicalContributionReviewCompact(
   };
 }
 
-function keyPhaseFinding(
+function keyStsPhaseFinding(
   movementQuality: MovementQualitySignals | null | undefined,
   phaseRatios: MotionAnalysisPhaseRatios | null | undefined,
 ): string | null {
@@ -245,6 +324,60 @@ function keyPhaseFinding(
   return "Phase distribution limited — clinician may assess movement visually.";
 }
 
+function keyMiniSquatPhaseFinding(
+  movementQuality: MovementQualitySignals | null | undefined,
+  phaseRatios: MotionAnalysisPhaseRatios | null | undefined,
+): string | null {
+  if (movementQuality?.phaseConsistency && movementQuality.phaseConsistency !== "Insufficient data") {
+    const lowering = phaseRatios?.lowering ?? movementQuality.observedReturningPhaseRatio ?? null;
+    const bottom = phaseRatios?.bottom ?? null;
+    if (lowering !== null && lowering < 15) {
+      return `Lowering phase under-represented (${lowering}% of snapshots) — clinician may review squat depth visually.`;
+    }
+    if (bottom !== null && bottom < 10) {
+      return `Bottom position brief relative to capture (${bottom}% of snapshots).`;
+    }
+    return `Phase consistency: ${movementQuality.phaseConsistency.toLowerCase()} across captured snapshots.`;
+  }
+
+  if (phaseRatios) {
+    const lowering = phaseRatios.lowering ?? 0;
+    const rising = phaseRatios.rising ?? 0;
+    if (lowering > 0 || rising > 0) {
+      return `Lowering ${lowering}% · Rising ${rising}% of captured snapshots.`;
+    }
+  }
+
+  return "Phase distribution limited — clinician may assess squat pattern visually.";
+}
+
+function keyHeelRaisePhaseFinding(
+  movementQuality: MovementQualitySignals | null | undefined,
+  phaseRatios: MotionAnalysisPhaseRatios | null | undefined,
+): string | null {
+  if (movementQuality?.phaseConsistency && movementQuality.phaseConsistency !== "Insufficient data") {
+    const lowering = phaseRatios?.lowering ?? movementQuality.observedReturningPhaseRatio ?? null;
+    const peakRaise = phaseRatios?.peak_raise ?? null;
+    if (lowering !== null && lowering < 15) {
+      return `Lowering phase under-represented (${lowering}% of snapshots) — clinician may review lowering control visually.`;
+    }
+    if (peakRaise !== null && peakRaise < 10) {
+      return `Peak raise position brief relative to capture (${peakRaise}% of snapshots).`;
+    }
+    return `Phase consistency: ${movementQuality.phaseConsistency.toLowerCase()} across captured snapshots.`;
+  }
+
+  if (phaseRatios) {
+    const rising = phaseRatios.rising ?? 0;
+    const lowering = phaseRatios.lowering ?? 0;
+    if (rising > 0 || lowering > 0) {
+      return `Rising ${rising}% · Lowering ${lowering}% of captured snapshots.`;
+    }
+  }
+
+  return "Phase distribution limited — clinician may assess heel raise pattern visually.";
+}
+
 function keyPacingFinding(
   movementQuality: MovementQualitySignals | null | undefined,
 ): string | null {
@@ -264,6 +397,8 @@ function trackingConfidenceLine(report: MotionAnalysisReport): string {
   const signal =
     report.reportHeader?.trackingLabel ??
     report.smtPilot?.trackingSignal ??
+    report.msPilot?.trackingSignal ??
+    report.hrPilot?.trackingSignal ??
     report.sessionSummary?.trackingSignal ??
     null;
   const confidence = report.reportHeader?.confidenceLabel ?? "Assistive confidence not recorded";
@@ -282,28 +417,51 @@ export function buildMotionAnalysisExecutiveSummary(
     report.sessionSummary?.exerciseId ??
     report.kinesiologyContext?.exerciseId ??
     null;
-  if (exerciseId !== STS_EXERCISE_ID) return null;
+  if (!exerciseId || !POLISHED_INTELLIGENCE_EXERCISE_IDS.has(exerciseId)) return null;
 
   const lines: string[] = [];
-  const completeReps = report.smtPilot?.completeReps ?? report.completedReps;
-  const strictComplete = isStrictStsPhaseCompleteness(
-    report.smtPilot,
-    report.movementQuality,
-  );
+  const motionPilot = report.smtPilot ?? report.msPilot ?? report.hrPilot;
+  const completeReps = motionPilot?.completeReps ?? report.completedReps;
+  const synthesizedMiniSquat = isSynthesizedMiniSquatEvidence(report);
+  const synthesizedHeelRaise = isSynthesizedHeelRaiseEvidence(report);
+  const synthesizedLimitedEvidence = synthesizedMiniSquat || synthesizedHeelRaise;
+  const strictComplete =
+    exerciseId === MINI_SQUAT_EXERCISE_ID
+      ? !synthesizedMiniSquat &&
+        isStrictMiniSquatPhaseCompleteness(report.msPilot, report.movementQuality)
+      : exerciseId === HEEL_RAISE_EXERCISE_ID
+        ? !synthesizedHeelRaise &&
+          isStrictHeelRaisePhaseCompleteness(report.hrPilot, report.movementQuality)
+        : isStrictStsPhaseCompleteness(report.smtPilot, report.movementQuality);
   const cycleLabel = formatStsCycleCountLabel(completeReps, strictComplete);
   if (cycleLabel) {
     lines.push(cycleLabel.charAt(0).toUpperCase() + cycleLabel.slice(1) + " recorded.");
   }
 
+  if (synthesizedMiniSquat) {
+    lines.push(MINI_SQUAT_LIMITED_MOTION_EVIDENCE_LABEL + ".");
+    lines.push(MINI_SQUAT_CYCLE_TIMING_ESTIMATED_NOTE);
+  } else if (synthesizedHeelRaise) {
+    lines.push(HEEL_RAISE_LIMITED_MOTION_EVIDENCE_LABEL + ".");
+    lines.push(HEEL_RAISE_CYCLE_TIMING_ESTIMATED_NOTE);
+  }
+
   lines.push(trackingConfidenceLine(report));
 
-  const phaseFinding = keyPhaseFinding(report.movementQuality, report.smtPilot?.phaseRatios);
-  if (phaseFinding) lines.push(phaseFinding);
+  if (!synthesizedLimitedEvidence) {
+    const phaseFinding =
+      exerciseId === MINI_SQUAT_EXERCISE_ID
+        ? keyMiniSquatPhaseFinding(report.movementQuality, report.msPilot?.phaseRatios ?? null)
+        : exerciseId === HEEL_RAISE_EXERCISE_ID
+          ? keyHeelRaisePhaseFinding(report.movementQuality, report.hrPilot?.phaseRatios ?? null)
+          : keyStsPhaseFinding(report.movementQuality, report.smtPilot?.phaseRatios ?? null);
+    if (phaseFinding) lines.push(phaseFinding);
 
-  const pacingFinding = keyPacingFinding(report.movementQuality);
-  if (pacingFinding) lines.push(pacingFinding);
+    const pacingFinding = keyPacingFinding(report.movementQuality);
+    if (pacingFinding) lines.push(pacingFinding);
+  }
 
-  if (report.reportHeader?.reviewRequired || report.smtPilot?.showReviewBanner) {
+  if (report.reportHeader?.reviewRequired || motionPilot?.showReviewBanner) {
     lines.push("Clinician review required — camera-assisted data only.");
   }
 
@@ -311,10 +469,44 @@ export function buildMotionAnalysisExecutiveSummary(
   return trimmed.length > 0 ? { lines: trimmed } : null;
 }
 
-export function isStsPolishedReport(report: MotionAnalysisReport): boolean {
+export function isPolishedIntelligenceReport(report: MotionAnalysisReport): boolean {
   const exerciseId =
     report.sessionSummary?.exerciseId ??
     report.kinesiologyContext?.exerciseId ??
     null;
-  return exerciseId === STS_EXERCISE_ID && report.reportMode !== "minimal";
+  return (
+    exerciseId != null &&
+    POLISHED_INTELLIGENCE_EXERCISE_IDS.has(exerciseId) &&
+    report.reportMode !== "minimal"
+  );
+}
+
+export function isStsPolishedReport(report: MotionAnalysisReport): boolean {
+  return isPolishedIntelligenceReport(report);
+}
+
+export function hasPersistedMiniSquatPhaseRatios(report: MotionAnalysisReport): boolean {
+  if (report.msPilotEvidenceMode !== "persisted") return false;
+  const ratios = report.msPilot?.phaseRatios;
+  return (
+    ratios != null &&
+    Object.values(ratios).some((ratio) => typeof ratio === "number" && ratio > 0)
+  );
+}
+
+export function isSynthesizedMiniSquatEvidence(report: MotionAnalysisReport): boolean {
+  return report.msPilotEvidenceMode === "synthesized";
+}
+
+export function hasPersistedHeelRaisePhaseRatios(report: MotionAnalysisReport): boolean {
+  if (report.hrPilotEvidenceMode !== "persisted") return false;
+  const ratios = report.hrPilot?.phaseRatios;
+  return (
+    ratios != null &&
+    Object.values(ratios).some((ratio) => typeof ratio === "number" && ratio > 0)
+  );
+}
+
+export function isSynthesizedHeelRaiseEvidence(report: MotionAnalysisReport): boolean {
+  return report.hrPilotEvidenceMode === "synthesized";
 }

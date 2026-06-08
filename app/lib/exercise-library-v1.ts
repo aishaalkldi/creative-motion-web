@@ -3,6 +3,7 @@
  * Stable exerciseId slugs map to future DB rows and CV measurement targets.
  */
 
+import { isPatientCvCaptureWired } from "@/app/lib/cv/cv-patient-config";
 import {
   SPORTS_KNEE_FOUNDATION_CLINICAL_V1,
   SPORTS_KNEE_FOUNDATION_EXERCISE_IDS,
@@ -38,6 +39,10 @@ function sportsKneeClinicalToLibraryEntry(
     progressionCriteria: clinical.progressionCriteria,
     regressionCriteria: clinical.regressionCriteria,
     futureCvMeasurementTarget: clinical.futureCvMeasurementTarget,
+    cvAssisted:
+      clinical.cvAssisted && isPatientCvCaptureWired(clinical.exerciseId)
+        ? true
+        : undefined,
     libraryVersion: "v1",
     clinicalGoalAr: clinical.clinicalGoal.ar,
     commonMistakes: clinical.commonMistakes.en,
@@ -108,6 +113,8 @@ export type ExerciseLibraryEntryV1 = {
   progressionCriteria: string;
   regressionCriteria: string;
   futureCvMeasurementTarget?: string;
+  /** Patient-portal camera assist available (manual fallback retained). */
+  cvAssisted?: boolean;
   libraryVersion: "v1";
   /** Arabic clinical / functional goal (Sports Knee Foundation and extended entries) */
   clinicalGoalAr?: string;

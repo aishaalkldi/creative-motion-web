@@ -23,6 +23,7 @@ import {
   type HeelRaiseRepConfig,
 } from "@/app/lib/cv/heel-raise-detector";
 import type { PoseLandmark } from "@/app/lib/cv/sagittal-hip-rep-core";
+import { heelRaiseStandPhaseFromRepPhase } from "@/app/lib/cv/heel-raise-stand-phase";
 import {
   PATIENT_CAMERA_NO_FRAMES_ERROR,
   releaseMediaStream,
@@ -135,6 +136,7 @@ export class HeelRaisePoseDetector {
 
   getSnapshot(): HeelRaisePoseDetectorSnapshot {
     const engine = this.repEngine.getSnapshot();
+    const standPhase = heelRaiseStandPhaseFromRepPhase(engine.repPhase);
     return {
       trackingStatus: this.repEngineStarted
         ? mapEngineTrackingStatus(engine.trackingStatus)
@@ -145,6 +147,7 @@ export class HeelRaisePoseDetector {
       poseReadiness: this.poseReadiness,
       bodyFramingState: this.repEngineStarted ? engine.bodyFramingState : this.bodyFramingState,
       repCount: engine.repCount,
+      standPhase,
       sessionSeconds: engine.sessionSeconds,
       movementDetected: engine.movementDetected,
       framesWithPose: engine.framesWithPose,
