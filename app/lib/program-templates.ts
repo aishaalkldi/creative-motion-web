@@ -10,6 +10,10 @@ import {
   getLibraryExerciseById,
   type BodyRegion,
 } from "@/app/lib/exercise-library-v1";
+import {
+  buildMoveBetterPerformanceV1PilotSessions,
+  MOVE_BETTER_PERFORMANCE_V1,
+} from "@/app/lib/move-better-performance-v1";
 import type { StoredExercise } from "@/app/lib/exercise-prescription";
 import {
   prescribedFromLibrary,
@@ -755,6 +759,36 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     patientFriendlyGoal:
       "Build knee strength and stability for standing, squatting, stepping, and balancing over 6 sessions. Report pain and effort honestly — your therapist reviews progress and decides next steps. This plan does not clear you to return to sport.",
     sessions: buildSportsKneeFoundationV1Sessions(),
+  },
+
+  {
+    id: MOVE_BETTER_PERFORMANCE_V1.id,
+    title: MOVE_BETTER_PERFORMANCE_V1.name,
+    conditionArea: "General fitness",
+    level: "Performance",
+    programGoal: MOVE_BETTER_PERFORMANCE_V1.tagline,
+    conditionCategory: "General public fitness / standing movement",
+    bodyRegion: "general",
+    durationWeeks: MOVE_BETTER_PERFORMANCE_V1.totalWeeks,
+    sessionsPerWeek: MOVE_BETTER_PERFORMANCE_V1.sessionsPerWeek,
+    suitableFor:
+      "General public adults who can stand safely for short intervals without equipment. Suitable for deconditioned or time-limited users seeking a structured 20-minute movement routine.",
+    notSuitableFor:
+      "Acute injury, unresolved balance instability, or medical restrictions to standing exercise without clinician clearance. Not a clinical rehabilitation prescription.",
+    phaseGoal:
+      "Week 1 foundation: build standing movement confidence with 45 s work / 15 s rest intervals. Week 2 performance: same exercises with 45 s work / 10 s rest.",
+    expectedResponse:
+      "Improved standing tolerance, movement rhythm, and session completion confidence. Optional movement checks are for progress comparison only — not clinical assessment.",
+    safetyNotes:
+      "Stop if sharp pain, dizziness, or loss of balance occurs. This program does not provide diagnosis, progression advice, or quality scores. Movement checks are optional and not part of the main workout.",
+    redFlags:
+      "Severe dizziness, chest pain, or inability to weight-bear. Seek medical review before continuing.",
+    reviewCriteria:
+      "Optional clinician review if assigning to patients with known MSK conditions. Program is designed for general-public use without mandatory clinical review.",
+    clinicianUseNote:
+      "Fitness program template — not a clinical prescription. Review exercise selection and dose before assigning to patients with medical history. Gamification metadata is prepared but not yet implemented in the patient portal.",
+    patientFriendlyGoal: MOVE_BETTER_PERFORMANCE_V1.tagline,
+    sessions: buildMoveBetterPerformanceV1PilotSessions(),
   },
 
   defineExpandedProgram({
