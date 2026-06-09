@@ -262,6 +262,24 @@ export function shouldFlagCaptureSetupLimited(
   return startedWithOverride || !evaluation.allRequiredMet;
 }
 
+/** True when setup preview should auto-promote to active tracking (PR72). */
+export function shouldAutoStartCapture(input: {
+  previewActive: boolean;
+  trackingConfirmed: boolean;
+  canStartTracking: boolean;
+}): boolean {
+  return (
+    input.previewActive &&
+    !input.trackingConfirmed &&
+    input.canStartTracking
+  );
+}
+
+/** Motion timelines and rep metrics only record after tracking is confirmed. */
+export function shouldRecordCaptureTimeline(trackingConfirmed: boolean): boolean {
+  return trackingConfirmed;
+}
+
 export function mergeClinicianFlags(
   base: string[],
   extra?: string[] | null,

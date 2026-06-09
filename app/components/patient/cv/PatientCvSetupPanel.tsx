@@ -17,8 +17,7 @@ type PatientCvSetupPanelProps = {
   canStartTracking: boolean;
   stableSeconds: number;
   previewActive: boolean;
-  onStartTracking: () => void;
-  onStartAnyway: () => void;
+  onContinueAnyway: () => void;
 };
 
 function checkLabel(copy: PatientCvCopy, id: CaptureReadinessCheckId): string {
@@ -70,8 +69,7 @@ export function PatientCvSetupPanel({
   canStartTracking,
   stableSeconds,
   previewActive,
-  onStartTracking,
-  onStartAnyway,
+  onContinueAnyway,
 }: PatientCvSetupPanelProps) {
   const requiredChecks = checks.filter((c) => c.required);
   const showOverride = previewActive && !canStartTracking;
@@ -150,31 +148,20 @@ export function PatientCvSetupPanel({
         <p className="mt-2 text-[12px] text-[#6B7280]">{copy.setupCheckingCamera}</p>
       )}
 
-      <div className="mt-4 flex flex-col gap-2">
-        <button
-          type="button"
-          disabled={!previewActive || !canStartTracking}
-          onClick={onStartTracking}
-          className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] bg-[#1D9E75] text-[14px] font-bold text-white transition hover:bg-[#179165] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {copy.setupStartTracking}
-        </button>
-
-        {showOverride ? (
-          <>
-            <button
-              type="button"
-              onClick={onStartAnyway}
-              className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-amber-300 bg-amber-50 text-[14px] font-semibold text-amber-900 transition hover:border-amber-400"
-            >
-              {copy.setupStartAnyway}
-            </button>
-            <p className="text-[11px] leading-relaxed text-[#6B7280]">
-              {copy.setupStartAnywayWarning}
-            </p>
-          </>
-        ) : null}
-      </div>
+      {showOverride ? (
+        <div className="mt-4 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={onContinueAnyway}
+            className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-amber-300 bg-amber-50 text-[14px] font-semibold text-amber-900 transition hover:border-amber-400"
+          >
+            {copy.setupStartAnyway}
+          </button>
+          <p className="text-[11px] leading-relaxed text-[#6B7280]">
+            {copy.setupStartAnywayWarning}
+          </p>
+        </div>
+      ) : null}
     </div>
   );
 }
