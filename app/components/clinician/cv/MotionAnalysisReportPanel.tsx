@@ -36,6 +36,10 @@ import {
   MINI_SQUAT_LIMITED_MOTION_EVIDENCE_LABEL,
 } from "@/app/lib/cv/mini-squat-motion-pilot-record";
 import {
+  NO_TIMELINE_SNAPSHOTS_CLINICIAN_NOTE,
+  NO_TIMELINE_SNAPSHOTS_FLAG,
+} from "@/app/lib/cv/patient-cv-capture-reliability";
+import {
   buildCaptureFlagsSummary,
   hasPersistedFunctionalReachPhaseRatios,
   hasPersistedHeelRaisePhaseRatios,
@@ -685,6 +689,13 @@ function CaptureEvidenceSection({ report }: { report: MotionAnalysisReport }) {
                 ))}
               </ul>
             </div>
+          ) : null}
+
+          {motionPilot.snapshotCount === 0 ||
+          motionPilot.clinicianFlags?.includes(NO_TIMELINE_SNAPSHOTS_FLAG) ? (
+            <p className="rounded-[5px] border border-amber-500/35 bg-amber-500/10 px-2.5 py-2 text-[10px] font-medium leading-relaxed text-amber-200">
+              {NO_TIMELINE_SNAPSHOTS_CLINICIAN_NOTE}
+            </p>
           ) : null}
 
           {report.movementTimeline.length > 0 ? (
