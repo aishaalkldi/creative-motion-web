@@ -298,6 +298,8 @@ export type PatientCvCopy = {
   setupPrivacyMicroConsent: string;
   /** Shown after the patient stops camera tracking. */
   sessionCompleteConfirmation: string;
+  /** Shown when tracking is active but timeline snapshots stay at zero. */
+  captureReliabilityNoDataWarning: string;
 };
 
 /* ── Patient-safe CV copy (EN/AR) — PatientCvCapture ─────────────────────── */
@@ -371,6 +373,8 @@ const PATIENT_SETUP_WIZARD_COPY_EN = {
     "Camera is optional. No video or image is stored. Your therapist only sees derived movement numbers.",
   sessionCompleteConfirmation:
     "Well done — your session is complete. Your therapist will review your results soon.",
+  captureReliabilityNoDataWarning:
+    "Camera is on, but movement data is not being captured. Please adjust your position.",
 } as const;
 
 const PATIENT_SETUP_WIZARD_COPY_AR = {
@@ -414,6 +418,8 @@ const PATIENT_SETUP_WIZARD_COPY_AR = {
     "الكاميرا اختيارية. لا يتم حفظ أي فيديو أو صورة. يصل للمعالج فقط أرقام الحركة المشتقة.",
   sessionCompleteConfirmation:
     "أحسنت — اكتملت جلستك. سيراجع معالجك نتائجك قريبًا.",
+  captureReliabilityNoDataWarning:
+    "الكاميرا تعمل، لكن بيانات الحركة لا تُسجَّل. يُرجى تعديل وضعيتك.",
 } as const;
 
 const PATIENT_SETUP_EXERCISE_HINTS: Record<
