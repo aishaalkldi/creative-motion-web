@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import {
   patientCvCopy,
   type PatientCvDerivedMetrics,
@@ -124,6 +133,11 @@ import {
   resolveLiveBodySignal,
   type LiveBodySignal,
 } from "@/app/lib/cv/pose-landmark-overlay";
+import {
+  CameraHUD,
+  type CameraHudMode,
+  type CameraHudTrackingSignal,
+} from "@/app/components/patient/cv/CameraHUD";
 import { PatientCvCaptureReliabilityPanel } from "@/app/components/patient/cv/PatientCvCaptureReliabilityPanel";
 import { PatientCvSetupPanel } from "@/app/components/patient/cv/PatientCvSetupPanel";
 import {
@@ -176,6 +190,19 @@ function isHoldCvExercise(exerciseId: CvY1ExerciseId): boolean {
   return exerciseId === "single-leg-stance";
 }
 
+function resolveCameraHudMode(exerciseId: CvY1ExerciseId): CameraHudMode {
+  if (exerciseId === "single-leg-stance") return "hold";
+  if (exerciseId === "functional-reach") return "reach";
+  if (exerciseId === "step-up" || exerciseId === "lateral-step") return "cycles";
+  return "reps";
+}
+
+function mapTrackingSignal(
+  trackingQuality: SitToStandTrackingQuality | null,
+): CameraHudTrackingSignal {
+  return trackingQuality ?? "none";
+}
+
 type CvDetectorSnapshot =
   | SitToStandDetectorSnapshot
   | MiniSquatDetectorSnapshot
@@ -202,7 +229,41 @@ type PatientCameraPreviewStackProps = {
   canvasHeight: number;
   ariaLabel: string;
   loadingHint?: string | null;
+  overlay?: ReactNode;
 };
+
+type PatientCameraVideoLayerProps = {
+  videoRef: RefObject<HTMLVideoElement | null>;
+  canvasRef: RefObject<HTMLCanvasElement | null>;
+  canvasWidth: number;
+  canvasHeight: number;
+};
+
+const PatientCameraVideoLayer = memo(function PatientCameraVideoLayer({
+  videoRef,
+  canvasRef,
+  canvasWidth,
+  canvasHeight,
+}: PatientCameraVideoLayerProps) {
+  return (
+    <>
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        className="block h-full w-full object-cover"
+      />
+      <canvas
+        ref={canvasRef}
+        width={canvasWidth}
+        height={canvasHeight}
+        aria-hidden
+        className="pointer-events-none absolute inset-0 h-full w-full"
+      />
+    </>
+  );
+});
 
 function auditPreviewLayers(
   label: string,
@@ -281,6 +342,7 @@ function PatientCameraPreviewStack({
   canvasHeight,
   ariaLabel,
   loadingHint,
+  overlay,
 }: PatientCameraPreviewStackProps) {
   return (
     <div
@@ -289,21 +351,13 @@ function PatientCameraPreviewStack({
       style={{ aspectRatio: `${canvasWidth} / ${canvasHeight}` }}
       aria-label={ariaLabel}
     >
-      <video
-        ref={videoRef}
-        autoPlay
-        muted
-        playsInline
-        className="block h-full w-full object-cover"
+      <PatientCameraVideoLayer
+        videoRef={videoRef}
+        canvasRef={canvasRef}
+        canvasWidth={canvasWidth}
+        canvasHeight={canvasHeight}
       />
-      {/* Transparent landmark overlay — video stays visible underneath (PR #33 fix) */}
-      <canvas
-        ref={canvasRef}
-        width={canvasWidth}
-        height={canvasHeight}
-        aria-hidden
-        className="pointer-events-none absolute inset-0 h-full w-full"
-      />
+      {overlay}
       {loadingHint ? (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60 px-4 text-center text-[12px] font-medium text-white">
           {loadingHint}
@@ -335,6 +389,8 @@ export type PatientCvCaptureProps = {
   language: PatientExerciseLanguage;
   arClass?: string;
   textDir?: "rtl" | "ltr";
+  /** Prescribed rep/cycle/reach target — shown on live HUD when set. */
+  target?: number;
   onMetricsUpdate?: (metrics: PatientCvDerivedMetrics) => void;
   onSkipped?: () => void;
   onRegisterMetricsFlush?: (flush: () => void) => void;
@@ -426,6 +482,7 @@ export function PatientCvCapture({
   language,
   arClass = "",
   textDir = "ltr",
+  target,
   onMetricsUpdate,
   onSkipped,
   onRegisterMetricsFlush,
@@ -461,6 +518,7 @@ export function PatientCvCapture({
   const [detectorPhase, setDetectorPhase] = useState("—");
   const [showNoSnapshotWarning, setShowNoSnapshotWarning] = useState(false);
   const [reliabilityTick, setReliabilityTick] = useState(0);
+  const [lastRepAccepted, setLastRepAccepted] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -498,6 +556,12 @@ export function PatientCvCapture({
   useEffect(() => {
     trackingConfirmedRef.current = trackingConfirmed;
   }, [trackingConfirmed]);
+
+  useEffect(() => {
+    if (!lastRepAccepted) return;
+    const id = window.setTimeout(() => setLastRepAccepted(false), 1_500);
+    return () => window.clearTimeout(id);
+  }, [lastRepAccepted]);
 
   useEffect(() => {
     onMetricsUpdateRef.current = onMetricsUpdate;
@@ -639,6 +703,9 @@ export function PatientCvCapture({
         return;
       }
       if (snapshot.repCount !== prevRep) {
+        if (prevRep >= 0 && snapshot.repCount > prevRep) {
+          setLastRepAccepted(true);
+        }
         lastReportedRepRef.current = snapshot.repCount;
         reportMetrics();
       }
@@ -1199,6 +1266,7 @@ export function PatientCvCapture({
     setLastMovementEvent("—");
     setDetectorPhase("—");
     setShowNoSnapshotWarning(false);
+    setLastRepAccepted(false);
     stableTrackingRef.current = { stableSinceMs: null, stableSeconds: 0 };
     captureSetupLimitedRef.current = false;
     trackingConfirmedAtMsRef.current = null;
@@ -1342,6 +1410,7 @@ export function PatientCvCapture({
     setLastMovementEvent("—");
     setDetectorPhase("—");
     setShowNoSnapshotWarning(false);
+    setLastRepAccepted(false);
     stableTrackingRef.current = { stableSinceMs: null, stableSeconds: 0 };
     captureSetupLimitedRef.current = false;
     trackingConfirmedAtMsRef.current = null;
@@ -1466,6 +1535,11 @@ export function PatientCvCapture({
 
   const showSessionStats =
     trackingConfirmed && cameraLive && (previewActive || trackingStopped);
+
+  const showCameraHud =
+    trackingConfirmed && previewActive && !trackingStopped && cameraLive;
+
+  const cameraHudMode = resolveCameraHudMode(exerciseId);
 
   const captureReliabilityState = buildPatientCvCaptureReliabilityState({
     cameraActive: cameraLive || previewActive,
@@ -1630,6 +1704,20 @@ export function PatientCvCapture({
         canvasHeight={CANVAS_HEIGHT}
         ariaLabel={copy.consentTitle}
         loadingHint={previewLoadingHint}
+        overlay={
+          showCameraHud ? (
+            <CameraHUD
+              mode={cameraHudMode}
+              count={repCount}
+              target={target}
+              trackingSignal={mapTrackingSignal(trackingQuality)}
+              sessionSeconds={sessionSeconds}
+              holdSeconds={holdExercise ? sessionSeconds : undefined}
+              lastRepAccepted={lastRepAccepted}
+              isRtl={textDir === "rtl"}
+            />
+          ) : null
+        }
       />
 
       {noVideoFrames && (
