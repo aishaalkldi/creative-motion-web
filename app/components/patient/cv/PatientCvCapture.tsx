@@ -447,6 +447,7 @@ export function PatientCvCapture({
   const [baselineCalibrating, setBaselineCalibrating] = useState(false);
   const [stanceLeg, setStanceLeg] = useState<StanceLeg | null>(null);
   const [trackingConfirmed, setTrackingConfirmed] = useState(false);
+  const [trackingStartedAutomatically, setTrackingStartedAutomatically] = useState(false);
   const [stableSeconds, setStableSeconds] = useState(0);
 
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -1002,12 +1003,44 @@ export function PatientCvCapture({
         evaluation,
       );
       beginMotionTimelines();
+      trackingConfirmedRef.current = true;
       setTrackingConfirmed(true);
       syncFromDetector(snapshot);
       reportMetrics();
     },
     [exerciseId, beginMotionTimelines, syncFromDetector, reportMetrics],
   );
+
+  useEffect(() => {
+    if (trackingConfirmed || trackingStopped || !previewActive) return;
+
+    const evaluation = evaluateCaptureReadiness(
+      exerciseId,
+      {
+        trackingStatus,
+        trackingQuality,
+        poseReadiness,
+        bodyFramingState,
+        previewActive,
+      },
+      stableSeconds,
+    );
+    if (!evaluation.canStartTracking) return;
+
+    setTrackingStartedAutomatically(true);
+    confirmStartTracking(false);
+  }, [
+    trackingConfirmed,
+    trackingStopped,
+    previewActive,
+    exerciseId,
+    trackingStatus,
+    trackingQuality,
+    poseReadiness,
+    bodyFramingState,
+    stableSeconds,
+    confirmStartTracking,
+  ]);
 
   const startCameraTracking = useCallback(async () => {
     const detector = detectorRef.current;
@@ -1096,6 +1129,7 @@ export function PatientCvCapture({
     setCameraLive(false);
     setTrackingStopped(false);
     setTrackingConfirmed(false);
+    setTrackingStartedAutomatically(false);
     setStableSeconds(0);
     stableTrackingRef.current = { stableSinceMs: null, stableSeconds: 0 };
     captureSetupLimitedRef.current = false;
@@ -1205,6 +1239,7 @@ export function PatientCvCapture({
     setTrackingError(null);
     setNoVideoFrames(false);
     setTrackingConfirmed(false);
+    setTrackingStartedAutomatically(false);
     setStableSeconds(0);
     stableTrackingRef.current = { stableSinceMs: null, stableSeconds: 0 };
     captureSetupLimitedRef.current = false;
@@ -1522,9 +1557,21 @@ export function PatientCvCapture({
           canStartTracking={captureReadiness.canStartTracking}
           stableSeconds={stableSeconds}
           previewActive={previewActive}
-          onStartTracking={() => confirmStartTracking(false)}
-          onStartAnyway={() => confirmStartTracking(true)}
+          onContinueAnyway={() => {
+            setTrackingStartedAutomatically(false);
+            confirmStartTracking(true);
+          }}
         />
+      ) : null}
+
+      {trackingConfirmed && trackingStartedAutomatically && !trackingStopped ? (
+        <p
+          className="mt-3 rounded-[6px] border border-[#D1E7DE] bg-[#F0FAF6] px-3 py-2 text-[12px] font-semibold text-[#1D9E75]"
+          role="status"
+          aria-live="polite"
+        >
+          {copy.setupTrackingStartedAutomatically}
+        </p>
       ) : null}
 
       {trackingConfirmed && previewActive && !trackingStopped && (

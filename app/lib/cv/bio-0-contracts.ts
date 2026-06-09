@@ -283,6 +283,7 @@ export type PatientCvCopy = {
   setupStateShowFeetAnkles: string;
   setupStateAdjustCameraAngle: string;
   setupStartTracking: string;
+  setupTrackingStartedAutomatically: string;
   setupStartAnyway: string;
   setupStartAnywayWarning: string;
   setupCheckingCamera: string;
@@ -354,7 +355,8 @@ const PATIENT_SETUP_WIZARD_COPY_EN = {
   setupStateShowFeetAnkles: "Show feet and ankles",
   setupStateAdjustCameraAngle: "Adjust camera angle",
   setupStartTracking: "Start tracking",
-  setupStartAnyway: "Start anyway — limited tracking",
+  setupTrackingStartedAutomatically: "Tracking started automatically",
+  setupStartAnyway: "Continue anyway — limited tracking",
   setupStartAnywayWarning:
     "Camera setup is not ideal. Tracking may miss reps or feel less reliable.",
   setupCheckingCamera: "Checking camera setup…",
@@ -396,7 +398,8 @@ const PATIENT_SETUP_WIZARD_COPY_AR = {
   setupStateShowFeetAnkles: "أظهر القدمين والكاحلين",
   setupStateAdjustCameraAngle: "عدّل زاوية الكاميرا",
   setupStartTracking: "ابدأ التتبّع",
-  setupStartAnyway: "ابدأ على أي حال — تتبّع محدود",
+  setupTrackingStartedAutomatically: "بدأ التتبّع تلقائياً",
+  setupStartAnyway: "المتابعة على أي حال — تتبّع محدود",
   setupStartAnywayWarning:
     "إعداد الكاميرا ليس مثالياً. قد يفوت التتبّع بعض التكرارات أو يكون أقل موثوقية.",
   setupCheckingCamera: "جاري فحص إعداد الكاميرا…",

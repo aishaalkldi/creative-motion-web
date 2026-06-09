@@ -11,7 +11,9 @@ import {
   evaluateCaptureReadinessChecks,
   requiredReadinessChecksForExercise,
   resolveCaptureSetupGuidance,
+  shouldAutoStartCapture,
   shouldFlagCaptureSetupLimited,
+  shouldRecordCaptureTimeline,
   updateStableTrackingState,
 } from "./patient-cv-capture-readiness";
 import type { CaptureReadinessSnapshot } from "./patient-cv-capture-readiness";
@@ -97,13 +99,68 @@ describe("updateStableTrackingState", () => {
   });
 });
 
+describe("shouldAutoStartCapture (PR72)", () => {
+  it("auto-starts after 3s readiness when preview is active", () => {
+    const evaluation = evaluateCaptureReadiness(
+      "mini-squat",
+      READY_SNAPSHOT,
+      CAPTURE_READINESS_STABLE_SECONDS,
+    );
+    assert.equal(evaluation.canStartTracking, true);
+    assert.equal(
+      shouldAutoStartCapture({
+        previewActive: true,
+        trackingConfirmed: false,
+        canStartTracking: evaluation.canStartTracking,
+      }),
+      true,
+    );
+  });
+
+  it("does not auto-start before 3s stability", () => {
+    const evaluation = evaluateCaptureReadiness("mini-squat", READY_SNAPSHOT, 2);
+    assert.equal(
+      shouldAutoStartCapture({
+        previewActive: true,
+        trackingConfirmed: false,
+        canStartTracking: evaluation.canStartTracking,
+      }),
+      false,
+    );
+  });
+
+  it("does not auto-start once tracking is already confirmed", () => {
+    assert.equal(
+      shouldAutoStartCapture({
+        previewActive: true,
+        trackingConfirmed: true,
+        canStartTracking: true,
+      }),
+      false,
+    );
+  });
+});
+
+describe("shouldRecordCaptureTimeline (PR72)", () => {
+  it("blocks timeline recording before tracking is confirmed", () => {
+    assert.equal(shouldRecordCaptureTimeline(false), false);
+    assert.equal(shouldRecordCaptureTimeline(true), true);
+  });
+});
+
 describe("shouldFlagCaptureSetupLimited", () => {
-  it("flags override starts", () => {
+  it("flags continue-anyway override starts", () => {
     const evaluation = evaluateCaptureReadiness("sit-to-stand", READY_SNAPSHOT, 3);
     assert.equal(
       shouldFlagCaptureSetupLimited(true, evaluation),
       true,
     );
+  });
+
+  it("flags continue-anyway even when readiness is partial", () => {
+    const evaluation = evaluateCaptureReadiness("heel-raise", READY_SNAPSHOT, 1);
+    assert.equal(evaluation.canStartTracking, false);
+    assert.equal(shouldFlagCaptureSetupLimited(true, evaluation), true);
   });
 
   it("does not flag fully ready starts", () => {
