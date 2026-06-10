@@ -6,9 +6,11 @@ import type { ResolvedExerciseView } from "@/app/lib/exercise-resolve";
 import { getLibraryExerciseById } from "@/app/lib/exercise-library-v1";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import { ExerciseMediaArea } from "@/app/components/patient/ExerciseMediaArea";
+import { isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
 import {
   formatBodyRegionForPatient,
   formatExerciseProgress,
+  guidedSessionUi,
   sessionExerciseFlowUi,
   sessionExerciseUi,
 } from "@/app/lib/patient-portal-ui";
@@ -87,7 +89,11 @@ export function PatientExerciseSessionCard({
 }: PatientExerciseSessionCardProps) {
   const flowUi = sessionExerciseFlowUi(lang);
   const cardUi = sessionExerciseUi(lang);
+  const guidedUi = guidedSessionUi(lang);
   const libraryEntry = getLibraryExerciseById(view.exerciseId);
+  const showManualCvNote =
+    !isCvEnabledExercise(view.exerciseId) &&
+    (step === "preview" || step === "active");
   const bodyRegion = formatBodyRegionForPatient(lang, libraryEntry?.bodyRegion);
 
   const hasSets = view.sets != null && view.sets > 0;
@@ -130,6 +136,14 @@ export function PatientExerciseSessionCard({
       {showTopProgress ? (
         <p className="text-center text-[12px] font-semibold text-[#1D9E75]">
           {formatExerciseProgress(lang, exerciseIndex + 1, totalExercises)}
+        </p>
+      ) : null}
+
+      {showManualCvNote ? (
+        <p
+          className={`rounded-[12px] border border-[#E2E8E5] bg-[#F9FAFB] px-4 py-3 text-[13px] leading-relaxed text-[#6B7280] ${arClass}`}
+        >
+          {guidedUi.manualExerciseNoCv}
         </p>
       ) : null}
 

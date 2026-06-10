@@ -417,6 +417,7 @@ export default function SessionPlayerPage() {
           arClass={arClass}
           textDir={textDir}
           restSeconds={restSeconds}
+          restPhaseKey={`${sessionId}-${exerciseIndex}`}
           nextExerciseName={nextExerciseView.name}
           nextExerciseIndex={exerciseIndex + 1}
           totalExercises={total}

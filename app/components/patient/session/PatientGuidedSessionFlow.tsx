@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { ResolvedExerciseView } from "@/app/lib/exercise-resolve";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
@@ -241,6 +241,7 @@ export function GuidedSessionRestScreen({
   arClass,
   textDir,
   restSeconds,
+  restPhaseKey,
   nextExerciseName,
   nextExerciseIndex,
   totalExercises,
@@ -250,12 +251,34 @@ export function GuidedSessionRestScreen({
   arClass: string;
   textDir: "ltr" | "rtl";
   restSeconds: number | null;
+  /** Resets countdown when entering a new rest step */
+  restPhaseKey: string;
   nextExerciseName: string;
   nextExerciseIndex: number;
   totalExercises: number;
   onContinue: () => void;
 }) {
   const ui = guidedSessionUi(lang);
+  const hasCountdown = restSeconds != null && restSeconds > 0;
+  const [secondsLeft, setSecondsLeft] = useState(() =>
+    hasCountdown ? Math.max(0, Math.floor(restSeconds!)) : 0,
+  );
+
+  useEffect(() => {
+    if (!hasCountdown) {
+      setSecondsLeft(0);
+      return;
+    }
+
+    const start = Math.max(0, Math.floor(restSeconds!));
+    setSecondsLeft(start);
+
+    const timer = window.setInterval(() => {
+      setSecondsLeft((current) => (current <= 0 ? 0 : current - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [hasCountdown, restSeconds, restPhaseKey]);
 
   return (
     <div className={`space-y-6 ${arClass}`} dir={textDir}>
@@ -275,12 +298,25 @@ export function GuidedSessionRestScreen({
           {ui.restTitle}
         </h2>
         <p className="mt-2 text-[15px] leading-relaxed text-[#6B7280]">{ui.restSubtitle}</p>
-        <p className="mt-3 text-[14px] font-semibold text-[#1D9E75]">
-          {restSeconds != null && restSeconds > 0
-            ? ui.restRecommended(restSeconds)
-            : ui.restDefaultHint}
-        </p>
-        <p className="mt-2 text-[13px] text-[#9CA3AF]">{ui.restTakeYourTime}</p>
+
+        {hasCountdown ? (
+          <div className="mt-5" aria-live="polite" aria-atomic="true">
+            {secondsLeft > 0 ? (
+              <p
+                className="text-[40px] font-bold leading-tight text-[#1D9E75]"
+                style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
+              >
+                {ui.restCountdownSeconds(secondsLeft)}
+              </p>
+            ) : (
+              <p className="text-[18px] font-semibold text-[#1D9E75]">{ui.restReadyForNext}</p>
+            )}
+          </div>
+        ) : (
+          <p className="mt-3 text-[14px] font-semibold text-[#1D9E75]">{ui.restDefaultHint}</p>
+        )}
+
+        <p className="mt-3 text-[13px] text-[#9CA3AF]">{ui.restTakeYourTime}</p>
       </section>
 
       <section
