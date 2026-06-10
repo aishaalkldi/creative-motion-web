@@ -13,9 +13,10 @@ import {
   type ExerciseCardStep,
 } from "@/app/components/patient/PatientExerciseSessionCard";
 import {
+  GUIDED_PRIMARY_BTN,
   GuidedSessionAlreadyCompleteScreen,
   GuidedSessionCompleteScreen,
-  GuidedSessionExerciseProgressLabel,
+  GuidedSessionExerciseHero,
   GuidedSessionRestScreen,
   GuidedSessionShell,
   GuidedSessionStartScreen,
@@ -437,10 +438,10 @@ export default function SessionPlayerPage() {
         totalExercises={total}
         showProgress
       >
-        <div className="space-y-5">
-          <div className="rounded-[20px] border border-[#D1E7DE] bg-[#F0FAF6] px-5 py-5 text-center">
-            <p className="text-[17px] font-bold text-[#0A0F1A]">{flowUi.sessionWrapUpTitle}</p>
-            <p className="mt-2 text-[14px] text-[#374151]">
+        <div className="space-y-6 pb-4">
+          <div className="rounded-[20px] border border-[#D1E7DE] bg-[#F0FAF6] px-5 py-6 text-center">
+            <p className="text-[18px] font-bold text-[#0A0F1A]">{flowUi.sessionWrapUpTitle}</p>
+            <p className="mt-2 text-[14px] leading-relaxed text-[#374151]">
               {guidedUi.greatWork} {flowUi.takeYourTime}
             </p>
           </div>
@@ -485,7 +486,7 @@ export default function SessionPlayerPage() {
             type="button"
             onClick={handleSubmitSession}
             disabled={effortScore === null || painAfter === null || completing}
-            className="flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-[#1D9E75] text-[16px] font-bold text-white shadow-[0_10px_24px_rgba(29,158,117,0.35)] transition hover:bg-[#179165] disabled:cursor-not-allowed disabled:opacity-40"
+            className={GUIDED_PRIMARY_BTN}
           >
             {completing ? shellUi.saving : shellUi.completeSession}
           </button>
@@ -520,17 +521,18 @@ export default function SessionPlayerPage() {
       totalExercises={total}
       showProgress
     >
-      <GuidedSessionExerciseProgressLabel
+      <GuidedSessionExerciseHero
         lang={patientLanguage}
+        arClass={arClass}
+        textDir={textDir}
         exerciseIndex={exerciseIndex}
         total={total}
+        view={currentView}
       />
 
-      <div className="rounded-[14px] border border-[#D1E7DE] bg-[#F0FAF6] px-4 py-3">
-        <p className={`text-[13px] leading-relaxed text-[#374151] ${arClass}`}>
-          {sessionExerciseUi(patientLanguage).safetyBanner}
-        </p>
-      </div>
+      <p className={`rounded-[12px] border border-[#D1E7DE] bg-[#F0FAF6] px-4 py-3 text-[12px] leading-relaxed text-[#374151] ${arClass}`}>
+        {sessionExerciseUi(patientLanguage).safetyBanner}
+      </p>
 
       <PatientExerciseSessionCard
         lang={patientLanguage}
@@ -550,6 +552,7 @@ export default function SessionPlayerPage() {
         onRegisterCvMetricsFlush={registerMetricsFlush}
         onRegisterStsPilotBeforeSave={registerStsPilotBeforeSave}
         onRegisterStsPilotRecordFlush={registerStsPilotRecordFlush}
+        showTopProgress={false}
       />
 
       {exerciseStep === "done" && cvSaveNotice && (
@@ -562,16 +565,12 @@ export default function SessionPlayerPage() {
       )}
 
       {exerciseStep === "done" && (
-        <button
-          type="button"
-          onClick={handleProceedFromExercise}
-          className="flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-[#1D9E75] text-[16px] font-bold text-white shadow-[0_10px_24px_rgba(29,158,117,0.35)] transition hover:bg-[#179165]"
-        >
-          {!isLast ? guidedUi.proceedFromExercise : flowUi.continueToFinish}
+        <button type="button" onClick={handleProceedFromExercise} className={GUIDED_PRIMARY_BTN}>
+          {!isLast ? guidedUi.proceedToRest : guidedUi.proceedToFinish}
         </button>
       )}
 
-      <p className={`text-center text-[11px] italic text-[#9CA3AF] ${arClass}`}>
+      <p className={`pb-2 text-center text-[11px] italic text-[#9CA3AF] ${arClass}`}>
         {focusUi.exerciseSafetyReminder}
       </p>
     </GuidedSessionShell>

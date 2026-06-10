@@ -1114,11 +1114,16 @@ export type GuidedSessionUi = {
   restDefaultHint: string;
   nextExercisePreview: string;
   continueToNext: string;
-  proceedFromExercise: string;
+  proceedToRest: string;
+  proceedToFinish: string;
+  yourInstructions: string;
+  exercisesCompletedCount: (count: number) => string;
+  viewProgress: string;
   sessionCompleteTitle: string;
   sessionCompleteBody: string;
   greatWork: string;
   safetyReminder: string;
+  restTakeYourTime: string;
 };
 
 const GUIDED_SESSION: Record<PatientPortalLanguage, GuidedSessionUi> = {
@@ -1136,12 +1141,18 @@ const GUIDED_SESSION: Record<PatientPortalLanguage, GuidedSessionUi> = {
     restRecommended: (seconds) => `Suggested rest: ${seconds} seconds`,
     restDefaultHint: "Take a short break before your next exercise.",
     nextExercisePreview: "Up next",
-    continueToNext: "Continue to next exercise",
-    proceedFromExercise: "Continue",
+    continueToNext: "Next exercise",
+    proceedToRest: "Take a rest",
+    proceedToFinish: "Finish session",
+    yourInstructions: "Your instructions",
+    exercisesCompletedCount: (count) =>
+      `${count} exercise${count === 1 ? "" : "s"} completed`,
+    viewProgress: "View progress",
     sessionCompleteTitle: "Session complete!",
     sessionCompleteBody: "You finished every exercise in this session.",
     greatWork: "Great work today.",
     safetyReminder: "Stop if you feel sharp pain or unusual symptoms.",
+    restTakeYourTime: "Take your time — continue when you feel ready.",
   },
   ar: {
     startEyebrow: "جاهز عندما تكون أنت",
@@ -1157,12 +1168,18 @@ const GUIDED_SESSION: Record<PatientPortalLanguage, GuidedSessionUi> = {
     restRecommended: (seconds) => `راحة مقترحة: ${seconds} ثانية`,
     restDefaultHint: "خذ استراحة قصيرة قبل التمرين التالي.",
     nextExercisePreview: "التالي",
-    continueToNext: "متابعة للتمرين التالي",
-    proceedFromExercise: "متابعة",
+    continueToNext: "التمرين التالي",
+    proceedToRest: "خذ راحة",
+    proceedToFinish: "إنهاء الجلسة",
+    yourInstructions: "تعليماتك",
+    exercisesCompletedCount: (count) =>
+      count === 1 ? "تمرين واحد مكتمل" : `${count} تمارين مكتملة`,
+    viewProgress: "عرض التقدّم",
     sessionCompleteTitle: "اكتملت الجلسة!",
     sessionCompleteBody: "أنهيت كل تمارين هذه الجلسة.",
     greatWork: "عمل رائع اليوم.",
     safetyReminder: "توقّف عند ألم حاد أو أعراض غير معتادة.",
+    restTakeYourTime: "خذ وقتك — تابع عندما تكون مستعدًا.",
   },
 };
 

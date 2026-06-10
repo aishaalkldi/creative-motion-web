@@ -33,6 +33,8 @@ type PatientExerciseSessionCardProps = {
   onRegisterCvMetricsFlush?: (flush: () => void) => void;
   onRegisterStsPilotBeforeSave?: (beforeSave: () => void) => void;
   onRegisterStsPilotRecordFlush?: (flush: () => CvMotionQualityPayload | null) => void;
+  /** Guided session shell renders its own progress header */
+  showTopProgress?: boolean;
 };
 
 function DoseTile({
@@ -81,6 +83,7 @@ export function PatientExerciseSessionCard({
   onRegisterCvMetricsFlush,
   onRegisterStsPilotBeforeSave,
   onRegisterStsPilotRecordFlush,
+  showTopProgress = true,
 }: PatientExerciseSessionCardProps) {
   const flowUi = sessionExerciseFlowUi(lang);
   const cardUi = sessionExerciseUi(lang);
@@ -124,9 +127,11 @@ export function PatientExerciseSessionCard({
       dir={textDir}
       lang={lang}
     >
-      <p className="text-center text-[12px] font-semibold text-[#1D9E75]">
-        {formatExerciseProgress(lang, exerciseIndex + 1, totalExercises)}
-      </p>
+      {showTopProgress ? (
+        <p className="text-center text-[12px] font-semibold text-[#1D9E75]">
+          {formatExerciseProgress(lang, exerciseIndex + 1, totalExercises)}
+        </p>
+      ) : null}
 
       <div className="overflow-hidden rounded-[10px] border border-[#E2E8E5] bg-white">
         <ExerciseMediaArea
