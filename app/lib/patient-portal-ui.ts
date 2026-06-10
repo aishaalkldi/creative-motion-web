@@ -1125,6 +1125,7 @@ export type GuidedSessionUi = {
   safetyReminder: string;
   restTakeYourTime: string;
   restSecondsRemaining: (seconds: number) => string;
+  restCountdownSeconds: (seconds: number) => string;
   restReadyForNext: string;
   manualExerciseNoCv: string;
 };
@@ -1158,6 +1159,8 @@ const GUIDED_SESSION: Record<PatientPortalLanguage, GuidedSessionUi> = {
     restTakeYourTime: "Take your time — continue when you feel ready.",
     restSecondsRemaining: (seconds) =>
       `${seconds} second${seconds === 1 ? "" : "s"} remaining`,
+    restCountdownSeconds: (seconds) =>
+      `${seconds} second${seconds === 1 ? "" : "s"}`,
     restReadyForNext: "Ready for the next exercise",
     manualExerciseNoCv:
       "Camera tracking is not available for this exercise yet. Follow the instructions and complete it manually.",
@@ -1190,6 +1193,8 @@ const GUIDED_SESSION: Record<PatientPortalLanguage, GuidedSessionUi> = {
     restTakeYourTime: "خذ وقتك — تابع عندما تكون مستعدًا.",
     restSecondsRemaining: (seconds) =>
       seconds === 1 ? "ثانية واحدة متبقية" : `${seconds} ثوانٍ متبقية`,
+    restCountdownSeconds: (seconds) =>
+      seconds === 1 ? "ثانية واحدة" : `${seconds} ثوانٍ`,
     restReadyForNext: "جاهز للتمرين التالي",
     manualExerciseNoCv:
       "التتبع بالكاميرا غير متاح لهذا التمرين حاليًا. اتبع التعليمات وأكمل التمرين يدويًا.",

@@ -241,6 +241,7 @@ export function GuidedSessionRestScreen({
   arClass,
   textDir,
   restSeconds,
+  restPhaseKey,
   nextExerciseName,
   nextExerciseIndex,
   totalExercises,
@@ -250,6 +251,8 @@ export function GuidedSessionRestScreen({
   arClass: string;
   textDir: "ltr" | "rtl";
   restSeconds: number | null;
+  /** Resets countdown when entering a new rest step */
+  restPhaseKey: string;
   nextExerciseName: string;
   nextExerciseIndex: number;
   totalExercises: number;
@@ -257,7 +260,9 @@ export function GuidedSessionRestScreen({
 }) {
   const ui = guidedSessionUi(lang);
   const hasCountdown = restSeconds != null && restSeconds > 0;
-  const [secondsLeft, setSecondsLeft] = useState(hasCountdown ? restSeconds! : 0);
+  const [secondsLeft, setSecondsLeft] = useState(() =>
+    hasCountdown ? Math.max(0, Math.floor(restSeconds!)) : 0,
+  );
 
   useEffect(() => {
     if (!hasCountdown) {
@@ -265,13 +270,15 @@ export function GuidedSessionRestScreen({
       return;
     }
 
-    setSecondsLeft(restSeconds!);
+    const start = Math.max(0, Math.floor(restSeconds!));
+    setSecondsLeft(start);
+
     const timer = window.setInterval(() => {
-      setSecondsLeft((current) => Math.max(0, current - 1));
+      setSecondsLeft((current) => (current <= 0 ? 0 : current - 1));
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [hasCountdown, restSeconds, nextExerciseIndex]);
+  }, [hasCountdown, restSeconds, restPhaseKey]);
 
   return (
     <div className={`space-y-6 ${arClass}`} dir={textDir}>
@@ -293,24 +300,16 @@ export function GuidedSessionRestScreen({
         <p className="mt-2 text-[15px] leading-relaxed text-[#6B7280]">{ui.restSubtitle}</p>
 
         {hasCountdown ? (
-          <div className="mt-5" aria-live="polite">
+          <div className="mt-5" aria-live="polite" aria-atomic="true">
             {secondsLeft > 0 ? (
-              <>
-                <p
-                  className="text-[48px] font-bold leading-none text-[#1D9E75]"
-                  style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
-                >
-                  {secondsLeft}
-                </p>
-                <p className="mt-2 text-[14px] font-semibold text-[#1D9E75]">
-                  {ui.restSecondsRemaining(secondsLeft)}
-                </p>
-                <p className="mt-1 text-[12px] text-[#9CA3AF]">
-                  {ui.restRecommended(restSeconds!)}
-                </p>
-              </>
+              <p
+                className="text-[40px] font-bold leading-tight text-[#1D9E75]"
+                style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
+              >
+                {ui.restCountdownSeconds(secondsLeft)}
+              </p>
             ) : (
-              <p className="text-[16px] font-semibold text-[#1D9E75]">{ui.restReadyForNext}</p>
+              <p className="text-[18px] font-semibold text-[#1D9E75]">{ui.restReadyForNext}</p>
             )}
           </div>
         ) : (
