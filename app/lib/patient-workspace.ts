@@ -41,6 +41,48 @@ export function resolveWorkspaceProgramKind(plan: PatientPlanData): ProgressProg
   });
 }
 
+export type WeeklyActivityDay = {
+  label: string;
+  active: boolean;
+  isToday: boolean;
+};
+
+function startOfLocalDayKey(d: Date): string {
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+}
+
+const WEEKDAY_SHORT_EN = ["S", "M", "T", "W", "T", "F", "S"];
+const WEEKDAY_SHORT_AR = ["ح", "ن", "ث", "ر", "خ", "ج", "س"];
+
+export function buildWeeklyActivityStrip(
+  logs: SessionLogEntry[],
+  lang: "en" | "ar",
+): WeeklyActivityDay[] {
+  const activeKeys = new Set<string>();
+  for (const log of logs) {
+    if (!log.completedAt) continue;
+    activeKeys.add(startOfLocalDayKey(new Date(log.completedAt)));
+  }
+
+  const today = new Date();
+  const todayKey = startOfLocalDayKey(today);
+  const labels = lang === "ar" ? WEEKDAY_SHORT_AR : WEEKDAY_SHORT_EN;
+  const days: WeeklyActivityDay[] = [];
+
+  for (let offset = 6; offset >= 0; offset -= 1) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - offset);
+    const key = startOfLocalDayKey(d);
+    days.push({
+      label: labels[d.getDay()] ?? "",
+      active: activeKeys.has(key),
+      isToday: key === todayKey,
+    });
+  }
+
+  return days;
+}
+
 export function buildWorkspaceHomePreview(
   plan: PatientPlanData,
   logs: SessionLogEntry[],
@@ -59,6 +101,7 @@ export function buildWorkspaceHomePreview(
     stats,
     view,
     nextSession,
+    weeklyActivity: buildWeeklyActivityStrip(logs, lang),
     completedCount: view.completedSessions,
     totalCount: view.totalSessions,
     progressPercent: view.progressPercent,

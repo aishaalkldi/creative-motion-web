@@ -942,6 +942,17 @@ export type WorkspaceUi = {
   preparingSchedule: string;
   viewAchievements: string;
   viewRecentSessions: string;
+  heroRecoveryTagline: string;
+  heroPerformanceTagline: string;
+  weeklyActivityTitle: string;
+  weeklyActivitySubtitle: string;
+  nextSessionReady: string;
+  nextSessionDoneToday: string;
+  programProgressLabel: string;
+  startSessionCta: string;
+  sessionsLeft: (remaining: number) => string;
+  recentEmptyFriendly: string;
+  providerCardSubtitle: string;
 };
 
 const WORKSPACE: Record<PatientPortalLanguage, WorkspaceUi> = {
@@ -1001,6 +1012,18 @@ const WORKSPACE: Record<PatientPortalLanguage, WorkspaceUi> = {
     preparingSchedule: "Your provider is preparing your session schedule.",
     viewAchievements: "See all achievements",
     viewRecentSessions: "See recent sessions",
+    heroRecoveryTagline: "Your recovery journey, one session at a time.",
+    heroPerformanceTagline: "Train smarter. Move better. Feel stronger.",
+    weeklyActivityTitle: "This week",
+    weeklyActivitySubtitle: "Days you showed up",
+    nextSessionReady: "You're ready — let's keep the momentum going.",
+    nextSessionDoneToday: "Great work today. Rest up and come back when you're ready.",
+    programProgressLabel: "Program progress",
+    startSessionCta: "Start session",
+    sessionsLeft: (remaining) =>
+      `${remaining} session${remaining === 1 ? "" : "s"} to go`,
+    recentEmptyFriendly: "Your completed sessions will appear here.",
+    providerCardSubtitle: "Supporting your program",
   },
   ar: {
     navHome: "الرئيسية",
@@ -1056,6 +1079,18 @@ const WORKSPACE: Record<PatientPortalLanguage, WorkspaceUi> = {
     preparingSchedule: "مقدّم الرعاية يجهّز جدول جلساتك.",
     viewAchievements: "عرض كل الإنجازات",
     viewRecentSessions: "عرض الجلسات الأخيرة",
+    heroRecoveryTagline: "رحلة تعافيك، جلسة بجلسة.",
+    heroPerformanceTagline: "تدرّب بذكاء. تحرّك أفضل. اشعر بقوة أكبر.",
+    weeklyActivityTitle: "هذا الأسبوع",
+    weeklyActivitySubtitle: "أيام حضورك",
+    nextSessionReady: "أنت جاهز — واصل الزخم.",
+    nextSessionDoneToday: "عمل رائع اليوم. استرح وعد عندما تكون مستعدًا.",
+    programProgressLabel: "تقدّم البرنامج",
+    startSessionCta: "بدء الجلسة",
+    sessionsLeft: (remaining) =>
+      remaining === 1 ? "جلسة واحدة متبقية" : `${remaining} جلسات متبقية`,
+    recentEmptyFriendly: "ستظهر جلساتك المكتملة هنا.",
+    providerCardSubtitle: "يدعم برنامجك",
   },
 };
 
