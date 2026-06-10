@@ -887,6 +887,182 @@ export function progressPortalV1Ui(lang: PatientPortalLanguage): ProgressPortalV
   return PROGRESS_PORTAL_V1[lang];
 }
 
+/* ── Patient Workspace App Shell (PR77) ───────────────────────────────────── */
+
+export type WorkspaceUi = {
+  navHome: string;
+  navSessions: string;
+  navProgress: string;
+  navProfile: string;
+  recoveryHome: string;
+  performanceHome: string;
+  homeGreeting: (name: string) => string;
+  currentProgram: string;
+  todaySession: string;
+  nextSession: string;
+  startSession: string;
+  viewAllSessions: string;
+  viewFullProgress: string;
+  progressSummary: string;
+  quickStatsPreview: string;
+  achievementsPreview: string;
+  recentActivityPreview: string;
+  providerClinic: string;
+  movementCheckTitle: string;
+  movementCheckSubtitle: string;
+  movementCheckEmpty: string;
+  latestResult: string;
+  bestResult: string;
+  beforeVsLatest: string;
+  functionalReachLabel: string;
+  singleLegStanceLabel: string;
+  reachesUnit: (count: number) => string;
+  holdSecondsUnit: (seconds: number) => string;
+  sessionsPageTitle: string;
+  sessionsPageSubtitle: string;
+  sessionHistorySummary: string;
+  sessionHistoryCount: (completed: number, total: number) => string;
+  sessionStatusCompleted: string;
+  sessionStatusNext: string;
+  sessionStatusLocked: string;
+  profileTitle: string;
+  profileSubtitle: string;
+  patientName: string;
+  memberSince: string;
+  planStatus: string;
+  planStatusPreparing: string;
+  planStatusActive: string;
+  planStatusComplete: string;
+  languageLabel: string;
+  languageEn: string;
+  languageAr: string;
+  secureLinkNote: string;
+  supportNote: string;
+  noSessionsYet: string;
+  preparingSchedule: string;
+  viewAchievements: string;
+  viewRecentSessions: string;
+};
+
+const WORKSPACE: Record<PatientPortalLanguage, WorkspaceUi> = {
+  en: {
+    navHome: "Home",
+    navSessions: "Sessions",
+    navProgress: "Progress",
+    navProfile: "Profile",
+    recoveryHome: "Recovery Home",
+    performanceHome: "Performance Home",
+    homeGreeting: (name) => `Welcome back, ${name}`,
+    currentProgram: "Current program",
+    todaySession: "Today's session",
+    nextSession: "Next session",
+    startSession: "Start session",
+    viewAllSessions: "View all sessions",
+    viewFullProgress: "View full progress",
+    progressSummary: "Progress summary",
+    quickStatsPreview: "Quick stats",
+    achievementsPreview: "Achievements",
+    recentActivityPreview: "Recent activity",
+    providerClinic: "Your provider",
+    movementCheckTitle: "Movement check",
+    movementCheckSubtitle: "Your latest movement results. For progress comparison only.",
+    movementCheckEmpty: "Complete a movement check during a session to see results here.",
+    latestResult: "Latest",
+    bestResult: "Best",
+    beforeVsLatest: "Before → latest",
+    functionalReachLabel: "Functional reach",
+    singleLegStanceLabel: "Balance hold",
+    reachesUnit: (count) => `${count} reach${count === 1 ? "" : "es"}`,
+    holdSecondsUnit: (seconds) => `${seconds} sec hold`,
+    sessionsPageTitle: "Your sessions",
+    sessionsPageSubtitle: "Follow your plan one session at a time.",
+    sessionHistorySummary: "Session history",
+    sessionHistoryCount: (completed, total) =>
+      `${completed} of ${total} session${total === 1 ? "" : "s"} completed`,
+    sessionStatusCompleted: "Completed",
+    sessionStatusNext: "Up next",
+    sessionStatusLocked: "Locked",
+    profileTitle: "Your profile",
+    profileSubtitle: "Your program details and secure access.",
+    patientName: "Name",
+    memberSince: "Member since",
+    planStatus: "Plan status",
+    planStatusPreparing: "Schedule preparing",
+    planStatusActive: "Active",
+    planStatusComplete: "Complete",
+    languageLabel: "Language",
+    languageEn: "English",
+    languageAr: "Arabic",
+    secureLinkNote:
+      "You access this workspace through your secure personal link. No password is required.",
+    supportNote:
+      "If you have questions about your program, contact your provider or clinic.",
+    noSessionsYet: "No sessions scheduled yet.",
+    preparingSchedule: "Your provider is preparing your session schedule.",
+    viewAchievements: "See all achievements",
+    viewRecentSessions: "See recent sessions",
+  },
+  ar: {
+    navHome: "الرئيسية",
+    navSessions: "الجلسات",
+    navProgress: "التقدّم",
+    navProfile: "الملف",
+    recoveryHome: "صفحة التعافي",
+    performanceHome: "صفحة الأداء",
+    homeGreeting: (name) => `مرحبًا بعودتك، ${name}`,
+    currentProgram: "البرنامج الحالي",
+    todaySession: "جلسة اليوم",
+    nextSession: "الجلسة التالية",
+    startSession: "بدء الجلسة",
+    viewAllSessions: "عرض كل الجلسات",
+    viewFullProgress: "عرض التقدّم الكامل",
+    progressSummary: "ملخص التقدّم",
+    quickStatsPreview: "إحصاءات سريعة",
+    achievementsPreview: "الإنجازات",
+    recentActivityPreview: "النشاط الأخير",
+    providerClinic: "مقدّم الرعاية",
+    movementCheckTitle: "فحص الحركة",
+    movementCheckSubtitle: "أحدث نتائج حركتك. للمقارنة فقط وليس تقييمًا سريريًا.",
+    movementCheckEmpty: "أكمل فحص حركة خلال جلسة لعرض النتائج هنا.",
+    latestResult: "الأحدث",
+    bestResult: "الأفضل",
+    beforeVsLatest: "قبل ← الأحدث",
+    functionalReachLabel: "الوصول الوظيفي",
+    singleLegStanceLabel: "ثبات التوازن",
+    reachesUnit: (count) => (count === 1 ? "وصول واحد" : `${count} وصولات`),
+    holdSecondsUnit: (seconds) => `ثبات ${seconds} ث`,
+    sessionsPageTitle: "جلساتك",
+    sessionsPageSubtitle: "اتبع خطتك جلسة بجلسة.",
+    sessionHistorySummary: "سجل الجلسات",
+    sessionHistoryCount: (completed, total) => `أكملت ${completed} من ${total} جلسات`,
+    sessionStatusCompleted: "مكتملة",
+    sessionStatusNext: "التالي",
+    sessionStatusLocked: "مقفلة",
+    profileTitle: "ملفك",
+    profileSubtitle: "تفاصيل برنامجك والوصول الآمن.",
+    patientName: "الاسم",
+    memberSince: "عضو منذ",
+    planStatus: "حالة الخطة",
+    planStatusPreparing: "جاري تجهيز الجدول",
+    planStatusActive: "نشطة",
+    planStatusComplete: "مكتملة",
+    languageLabel: "اللغة",
+    languageEn: "الإنجليزية",
+    languageAr: "العربية",
+    secureLinkNote:
+      "تصل إلى مساحة العمل هذه عبر رابطك الشخصي الآمن. لا حاجة لكلمة مرور.",
+    supportNote: "للأسئلة حول برنامجك، تواصل مع مقدّم الرعاية أو العيادة.",
+    noSessionsYet: "لا توجد جلسات مجدولة بعد.",
+    preparingSchedule: "مقدّم الرعاية يجهّز جدول جلساتك.",
+    viewAchievements: "عرض كل الإنجازات",
+    viewRecentSessions: "عرض الجلسات الأخيرة",
+  },
+};
+
+export function workspaceUi(lang: PatientPortalLanguage): WorkspaceUi {
+  return WORKSPACE[lang];
+}
+
 export function tokenLayoutUi(lang: PatientPortalLanguage): TokenLayoutUi {
   return TOKEN_LAYOUT[lang];
 }

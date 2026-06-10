@@ -5,6 +5,7 @@ import { PatientLanguageProvider, usePatientLanguage } from "@/app/components/pa
 import { PatientLanguageToggle } from "@/app/components/patient/PatientLanguageToggle";
 import { PatientSafetyNotice } from "@/app/components/patient/PatientSafetyNotice";
 import { TrustFooter } from "@/app/components/trust/TrustFooter";
+import { PatientWorkspaceNav } from "@/app/components/patient/workspace/PatientWorkspaceNav";
 import { tokenLayoutUi, trustFooterUi } from "@/app/lib/patient-portal-ui";
 
 export default function PatientTokenLayout({ children }: { children: React.ReactNode }) {
@@ -48,15 +49,17 @@ function PatientTokenLayoutShell({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
 
-      <main className="mx-auto max-w-[680px] px-6 py-8 md:px-8">
+      <main className="mx-auto max-w-[680px] px-6 py-8 pb-28 md:px-8">
         {children}
         <PatientSafetyNotice />
       </main>
 
+      <PatientWorkspaceNav />
+
       <TrustFooter
         variant="light"
         labels={trustFooterUi(language)}
-        className="mx-auto max-w-[680px] px-6 pb-8 md:px-8"
+        className="mx-auto max-w-[680px] px-6 pb-28 md:px-8"
       />
     </div>
   );
