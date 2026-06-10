@@ -780,6 +780,113 @@ export function progressPageUi(lang: PatientPortalLanguage): ProgressPageUi {
   return PROGRESS_PAGE[lang];
 }
 
+/* ── Progress Portal v1 (PR76) ─────────────────────────────────────────────── */
+
+export type ProgressPortalV1Ui = {
+  backToPlan: string;
+  pageTitle: string;
+  pageSubtitle: string;
+  recoveryProgress: string;
+  performanceProgress: string;
+  progressHeroGreeting: (name: string) => string;
+  sessionsStat: string;
+  activeDaysStat: string;
+  completionStat: string;
+  effortStat: string;
+  effortNotYet: string;
+  quickStatsTitle: string;
+  activeProgramTitle: string;
+  activeProgramSubtitle: string;
+  nextSessionLabel: string;
+  startNextSession: string;
+  exerciseHighlightsTitle: string;
+  exerciseHighlightsEmpty: string;
+  practicedInSessions: (count: number) => string;
+  achievementsTitle: string;
+  achievementsSubtitle: string;
+  achievementLocked: string;
+  recentSessionsTitle: string;
+  recentSessionsEmpty: string;
+  howYouFelt: string;
+  yourEffort: string;
+  safetyFooter: string;
+  noteFromTherapist: string;
+  weekOfProgram: (week: number, total: number) => string;
+};
+
+const PROGRESS_PORTAL_V1: Record<PatientPortalLanguage, ProgressPortalV1Ui> = {
+  en: {
+    backToPlan: "← Back to my plan",
+    pageTitle: "Your progress",
+    pageSubtitle: "A friendly look at the sessions you have completed so far.",
+    recoveryProgress: "Recovery Progress",
+    performanceProgress: "Performance Progress",
+    progressHeroGreeting: (name) => `Nice work, ${name}`,
+    sessionsStat: "Sessions",
+    activeDaysStat: "Active days (7d)",
+    completionStat: "Completion",
+    effortStat: "Avg. effort",
+    effortNotYet: "Not yet recorded",
+    quickStatsTitle: "Quick stats",
+    activeProgramTitle: "Your active program",
+    activeProgramSubtitle: "Keep going at your own pace.",
+    nextSessionLabel: "Up next",
+    startNextSession: "Start next session",
+    exerciseHighlightsTitle: "Exercise highlights",
+    exerciseHighlightsEmpty: "Complete a session to see which exercises you have practiced most.",
+    practicedInSessions: (count) =>
+      `Practiced in ${count} session${count === 1 ? "" : "s"}`,
+    achievementsTitle: "Achievements",
+    achievementsSubtitle: "Small wins along the way.",
+    achievementLocked: "Keep going to unlock",
+    recentSessionsTitle: "Recent sessions",
+    recentSessionsEmpty: "Your recent sessions will show up here after you complete one.",
+    howYouFelt: "How you felt",
+    yourEffort: "Your effort",
+    safetyFooter:
+      "Stop if you feel sharp pain, dizziness, or unusual symptoms. Contact your therapist if symptoms worsen.",
+    noteFromTherapist: "Note from your therapist",
+    weekOfProgram: (week, total) => `Week ${week} of ${total}`,
+  },
+  ar: {
+    backToPlan: "← العودة إلى خطتي",
+    pageTitle: "تقدّمك",
+    pageSubtitle: "نظرة ودّية على الجلسات التي أكملتها حتى الآن.",
+    recoveryProgress: "تقدّم التعافي",
+    performanceProgress: "تقدّم الأداء",
+    progressHeroGreeting: (name) => `عمل رائع، ${name}`,
+    sessionsStat: "الجلسات",
+    activeDaysStat: "أيام نشطة (7)",
+    completionStat: "الإكمال",
+    effortStat: "متوسط الجهد",
+    effortNotYet: "لم يُسجَّل بعد",
+    quickStatsTitle: "إحصاءات سريعة",
+    activeProgramTitle: "برنامجك الحالي",
+    activeProgramSubtitle: "واصل على وتيرتك الخاصة.",
+    nextSessionLabel: "التالي",
+    startNextSession: "بدء الجلسة التالية",
+    exerciseHighlightsTitle: "أبرز التمارين",
+    exerciseHighlightsEmpty: "أكمل جلسة لترى التمارين التي تتدرّب عليها أكثر.",
+    practicedInSessions: (count) =>
+      count === 1 ? "تم التمرين في جلسة واحدة" : `تم التمرين في ${count} جلسات`,
+    achievementsTitle: "إنجازات",
+    achievementsSubtitle: "انتصارات صغيرة على الطريق.",
+    achievementLocked: "واصل لفتح هذا الإنجاز",
+    recentSessionsTitle: "الجلسات الأخيرة",
+    recentSessionsEmpty: "ستظهر جلساتك الأخيرة هنا بعد إكمال جلسة.",
+    howYouFelt: "شعورك",
+    yourEffort: "جهدك",
+    safetyFooter:
+      "توقّف عند ألم حاد أو دوخة أو أعراض غير معتادة. تواصل مع معالجك إذا زادت الأعراض.",
+    noteFromTherapist: "ملاحظة من معالجك",
+    weekOfProgram: (week, total) => `الأسبوع ${week} من ${total}`,
+  },
+};
+
+export function progressPortalV1Ui(lang: PatientPortalLanguage): ProgressPortalV1Ui {
+  return PROGRESS_PORTAL_V1[lang];
+}
+
 export function tokenLayoutUi(lang: PatientPortalLanguage): TokenLayoutUi {
   return TOKEN_LAYOUT[lang];
 }
