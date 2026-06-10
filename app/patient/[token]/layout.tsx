@@ -25,7 +25,7 @@ function PatientTokenLayoutShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div
-      className={`min-h-screen bg-[#F4F6F5] ${arClass}`}
+      className={`min-h-screen bg-[#EEF2F0] ${arClass}`}
       dir={textDir}
       style={{ fontFamily: "var(--font-inter, ui-sans-serif, sans-serif)" }}
     >

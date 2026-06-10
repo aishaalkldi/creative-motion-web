@@ -31,7 +31,7 @@ export function PatientMovementCheckCard({ view, lang, arClass, textDir }: Props
 
   return (
     <section
-      className={`rounded-[10px] border border-[#E2E8E5] bg-white p-5 ${arClass}`}
+      className={`rounded-[20px] border border-[#E2E8E5] bg-white p-5 shadow-[0_8px_30px_rgba(10,15,26,0.06)] ${arClass}`}
       dir={textDir}
     >
       <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#374151]">
