@@ -54,6 +54,8 @@ export type PatientPlanData = {
   patientRehabFocus: string;
   /** Explicit patient-friendly goal from plan metadata, if set by clinician */
   patientFriendlyGoal: string | null;
+  /** Pilot template id when plan was created from a program template */
+  programTemplateId: string | null;
   sessionsPerWeek: number;
   totalWeeks: number | null;
   /** Clinician note visible to the patient */
@@ -196,6 +198,7 @@ export async function GET(req: NextRequest) {
     phaseGoal:       sd?.phaseGoal ?? "",
     patientRehabFocus: resolvePatientRehabFocus(sd, sd?.phaseGoal, patientLanguage),
     patientFriendlyGoal: programMeta.patientFriendlyGoal ?? null,
+    programTemplateId: programMeta.programTemplateId ?? null,
     sessionsPerWeek: sd?.sessionsPerWeek ?? 3,
     totalWeeks:      plan.total_weeks ?? null,
     clinicianNotes:  plan.clinician_note ?? "",
