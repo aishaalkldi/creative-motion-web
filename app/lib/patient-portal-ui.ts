@@ -1098,6 +1098,78 @@ export function workspaceUi(lang: PatientPortalLanguage): WorkspaceUi {
   return WORKSPACE[lang];
 }
 
+/* ── Guided session flow (PR79) ────────────────────────────────────────────── */
+
+export type GuidedSessionUi = {
+  startEyebrow: string;
+  startTitle: (sessionTitle: string) => string;
+  startSubtitle: string;
+  exercisesReady: (count: number) => string;
+  firstUpLabel: string;
+  beginSession: string;
+  backToDashboard: string;
+  restTitle: string;
+  restSubtitle: string;
+  restRecommended: (seconds: number) => string;
+  restDefaultHint: string;
+  nextExercisePreview: string;
+  continueToNext: string;
+  proceedFromExercise: string;
+  sessionCompleteTitle: string;
+  sessionCompleteBody: string;
+  greatWork: string;
+  safetyReminder: string;
+};
+
+const GUIDED_SESSION: Record<PatientPortalLanguage, GuidedSessionUi> = {
+  en: {
+    startEyebrow: "Ready when you are",
+    startTitle: (sessionTitle) => sessionTitle,
+    startSubtitle: "One exercise at a time. Move at your own pace.",
+    exercisesReady: (count) =>
+      `${count} exercise${count === 1 ? "" : "s"} in this session`,
+    firstUpLabel: "First up",
+    beginSession: "Begin session",
+    backToDashboard: "Back to dashboard",
+    restTitle: "Rest",
+    restSubtitle: "Breathe, hydrate, and get ready for what's next.",
+    restRecommended: (seconds) => `Suggested rest: ${seconds} seconds`,
+    restDefaultHint: "Take a short break before your next exercise.",
+    nextExercisePreview: "Up next",
+    continueToNext: "Continue to next exercise",
+    proceedFromExercise: "Continue",
+    sessionCompleteTitle: "Session complete!",
+    sessionCompleteBody: "You finished every exercise in this session.",
+    greatWork: "Great work today.",
+    safetyReminder: "Stop if you feel sharp pain or unusual symptoms.",
+  },
+  ar: {
+    startEyebrow: "جاهز عندما تكون أنت",
+    startTitle: (sessionTitle) => sessionTitle,
+    startSubtitle: "تمرين واحد في كل مرة. تحرّك على وتيرتك.",
+    exercisesReady: (count) =>
+      count === 1 ? "تمرين واحد في هذه الجلسة" : `${count} تمارين في هذه الجلسة`,
+    firstUpLabel: "أول تمرين",
+    beginSession: "بدء الجلسة",
+    backToDashboard: "العودة للوحة الرئيسية",
+    restTitle: "راحة",
+    restSubtitle: "تنفّس، رطّب جسمك، واستعد لما يلي.",
+    restRecommended: (seconds) => `راحة مقترحة: ${seconds} ثانية`,
+    restDefaultHint: "خذ استراحة قصيرة قبل التمرين التالي.",
+    nextExercisePreview: "التالي",
+    continueToNext: "متابعة للتمرين التالي",
+    proceedFromExercise: "متابعة",
+    sessionCompleteTitle: "اكتملت الجلسة!",
+    sessionCompleteBody: "أنهيت كل تمارين هذه الجلسة.",
+    greatWork: "عمل رائع اليوم.",
+    safetyReminder: "توقّف عند ألم حاد أو أعراض غير معتادة.",
+  },
+};
+
+export function guidedSessionUi(lang: PatientPortalLanguage): GuidedSessionUi {
+  return GUIDED_SESSION[lang];
+}
+
 export function tokenLayoutUi(lang: PatientPortalLanguage): TokenLayoutUi {
   return TOKEN_LAYOUT[lang];
 }
