@@ -50,15 +50,6 @@ export function PatientProgressPortal({
 
   return (
     <div className={`space-y-5 ${arClass}`} dir={textDir}>
-      <div>
-        <Link
-          href={`/patient/${token}`}
-          className="text-[12px] font-semibold text-[#9CA3AF] transition hover:text-[#374151]"
-        >
-          {ui.backToPlan}
-        </Link>
-      </div>
-
       {/* 1 — Progress Hero */}
       <section className="overflow-hidden rounded-[12px] border border-[#D1E7DE] bg-gradient-to-br from-[#F0FAF6] to-white p-5">
         <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]">
@@ -280,17 +271,6 @@ export function PatientProgressPortal({
           </div>
         )}
       </section>
-
-      {plan.clinicianNotes?.trim() ? (
-        <section className="rounded-[10px] border border-[#E2E8E5] bg-white p-5">
-          <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#374151]">
-            {ui.noteFromTherapist}
-          </p>
-          <p className="mt-2 text-[13px] leading-relaxed text-[#374151]" dir="auto">
-            {plan.clinicianNotes}
-          </p>
-        </section>
-      ) : null}
 
       <p className="rounded-[8px] border border-[#E2E8E5] bg-[#F9FAFB] px-3.5 py-3 text-[12px] leading-relaxed text-[#6B7280]">
         {ui.safetyFooter}
