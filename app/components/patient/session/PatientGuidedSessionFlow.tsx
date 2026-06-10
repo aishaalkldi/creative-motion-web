@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import type { ResolvedExerciseView } from "@/app/lib/exercise-resolve";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
@@ -256,6 +256,22 @@ export function GuidedSessionRestScreen({
   onContinue: () => void;
 }) {
   const ui = guidedSessionUi(lang);
+  const hasCountdown = restSeconds != null && restSeconds > 0;
+  const [secondsLeft, setSecondsLeft] = useState(hasCountdown ? restSeconds! : 0);
+
+  useEffect(() => {
+    if (!hasCountdown) {
+      setSecondsLeft(0);
+      return;
+    }
+
+    setSecondsLeft(restSeconds!);
+    const timer = window.setInterval(() => {
+      setSecondsLeft((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [hasCountdown, restSeconds, nextExerciseIndex]);
 
   return (
     <div className={`space-y-6 ${arClass}`} dir={textDir}>
@@ -275,12 +291,33 @@ export function GuidedSessionRestScreen({
           {ui.restTitle}
         </h2>
         <p className="mt-2 text-[15px] leading-relaxed text-[#6B7280]">{ui.restSubtitle}</p>
-        <p className="mt-3 text-[14px] font-semibold text-[#1D9E75]">
-          {restSeconds != null && restSeconds > 0
-            ? ui.restRecommended(restSeconds)
-            : ui.restDefaultHint}
-        </p>
-        <p className="mt-2 text-[13px] text-[#9CA3AF]">{ui.restTakeYourTime}</p>
+
+        {hasCountdown ? (
+          <div className="mt-5" aria-live="polite">
+            {secondsLeft > 0 ? (
+              <>
+                <p
+                  className="text-[48px] font-bold leading-none text-[#1D9E75]"
+                  style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+                >
+                  {secondsLeft}
+                </p>
+                <p className="mt-2 text-[14px] font-semibold text-[#1D9E75]">
+                  {ui.restSecondsRemaining(secondsLeft)}
+                </p>
+                <p className="mt-1 text-[12px] text-[#9CA3AF]">
+                  {ui.restRecommended(restSeconds!)}
+                </p>
+              </>
+            ) : (
+              <p className="text-[16px] font-semibold text-[#1D9E75]">{ui.restReadyForNext}</p>
+            )}
+          </div>
+        ) : (
+          <p className="mt-3 text-[14px] font-semibold text-[#1D9E75]">{ui.restDefaultHint}</p>
+        )}
+
+        <p className="mt-3 text-[13px] text-[#9CA3AF]">{ui.restTakeYourTime}</p>
       </section>
 
       <section

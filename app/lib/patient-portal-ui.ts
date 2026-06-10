@@ -1124,6 +1124,9 @@ export type GuidedSessionUi = {
   greatWork: string;
   safetyReminder: string;
   restTakeYourTime: string;
+  restSecondsRemaining: (seconds: number) => string;
+  restReadyForNext: string;
+  manualExerciseNoCv: string;
 };
 
 const GUIDED_SESSION: Record<PatientPortalLanguage, GuidedSessionUi> = {
@@ -1153,6 +1156,11 @@ const GUIDED_SESSION: Record<PatientPortalLanguage, GuidedSessionUi> = {
     greatWork: "Great work today.",
     safetyReminder: "Stop if you feel sharp pain or unusual symptoms.",
     restTakeYourTime: "Take your time — continue when you feel ready.",
+    restSecondsRemaining: (seconds) =>
+      `${seconds} second${seconds === 1 ? "" : "s"} remaining`,
+    restReadyForNext: "Ready for the next exercise",
+    manualExerciseNoCv:
+      "Camera tracking is not available for this exercise yet. Follow the instructions and complete it manually.",
   },
   ar: {
     startEyebrow: "جاهز عندما تكون أنت",
@@ -1180,6 +1188,11 @@ const GUIDED_SESSION: Record<PatientPortalLanguage, GuidedSessionUi> = {
     greatWork: "عمل رائع اليوم.",
     safetyReminder: "توقّف عند ألم حاد أو أعراض غير معتادة.",
     restTakeYourTime: "خذ وقتك — تابع عندما تكون مستعدًا.",
+    restSecondsRemaining: (seconds) =>
+      seconds === 1 ? "ثانية واحدة متبقية" : `${seconds} ثوانٍ متبقية`,
+    restReadyForNext: "جاهز للتمرين التالي",
+    manualExerciseNoCv:
+      "التتبع بالكاميرا غير متاح لهذا التمرين حاليًا. اتبع التعليمات وأكمل التمرين يدويًا.",
   },
 };
 
