@@ -1040,6 +1040,102 @@ describe("biomechanical contribution review", () => {
   });
 });
 
+describe("STS biomechanical flags v1 (PR83)", () => {
+  it("attaches STS flags when evidence integrity is sufficient", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "sit-to-stand",
+      sessionDurationS: 12,
+      repCount: 3,
+      trackingQuality: "good",
+      movementDetected: true,
+      motionQuality: {
+        smtPilot: {
+          pilotVersion: "smt-1",
+          isPilot: true,
+          exerciseId: "sit-to-stand",
+          snapshotCount: 8,
+          durationS: 12,
+          repCount: 3,
+          completeReps: 3,
+          unclearReps: 0,
+          trackingSignal: "good",
+          movementDetected: true,
+          phaseRatios: {
+            seated: 15,
+            rising: 8,
+            standing: 55,
+            returning: 6,
+            rest: 16,
+          },
+          repTimings: { avgS: 2.6, fastestS: 1.2, slowestS: 4.1 },
+          visibilityRatios: { hip: 88, knee: 85, ankle: 82 },
+          clinicianFlags: [],
+          reviewRequired: true,
+          reviewReason: "derived_motion_timeline_pilot",
+          disclaimer: "Assistive motion capture for clinician review only.",
+        },
+      },
+    });
+
+    assert.equal(report.evidenceIntegrity?.sufficientForBiomechanicalInterpretation, true);
+    assert.ok(report.stsBiomechanicalFlags);
+    assert.ok(report.stsBiomechanicalFlags!.flags.length > 0);
+    assert.ok(
+      report.stsBiomechanicalFlags!.flags.some(
+        (f) =>
+          f.id === "possible_forward_trunk_flexion" ||
+          f.id === "possible_fast_uncontrolled_lowering",
+      ),
+    );
+  });
+
+  it("suppresses STS flags when evidence integrity is limited", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "sit-to-stand",
+      sessionDurationS: 12,
+      repCount: 4,
+      trackingQuality: "good",
+      movementDetected: true,
+      motionQuality: {
+        smtPilot: {
+          pilotVersion: "smt-1",
+          isPilot: true,
+          exerciseId: "sit-to-stand",
+          snapshotCount: 0,
+          durationS: 12,
+          repCount: 4,
+          completeReps: 4,
+          unclearReps: 0,
+          trackingSignal: "good",
+          movementDetected: true,
+          phaseRatios: { rising: 30, standing: 70 },
+          repTimings: { avgS: 2.5, fastestS: 2, slowestS: 3 },
+          visibilityRatios: { hip: 88, knee: 85, ankle: 82 },
+          clinicianFlags: [],
+          reviewRequired: true,
+          reviewReason: "derived_motion_timeline_pilot",
+          disclaimer: "Assistive motion capture for clinician review only.",
+        },
+      },
+    });
+
+    assert.equal(report.evidenceIntegrity?.sufficientForBiomechanicalInterpretation, false);
+    assert.equal(report.stsBiomechanicalFlags, null);
+  });
+
+  it("does not attach STS flags to non-STS exercises", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "heel-raise",
+      sessionDurationS: 8,
+      repCount: 2,
+      trackingQuality: "fair",
+      movementDetected: true,
+    });
+
+    assert.equal(report.stsBiomechanicalFlags, null);
+  });
+});
+
 describe("report readability polish", () => {
   function enrichedStsReport(
     overrides: {

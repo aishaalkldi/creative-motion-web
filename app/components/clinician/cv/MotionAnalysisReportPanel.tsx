@@ -7,6 +7,7 @@ import type {
   MotionAnalysisSummaryLabel,
   MotionAnalysisTimingMetricLabels,
 } from "@/app/lib/cv/motion-analysis-report";
+import type { StsBiomechanicalFlagConfidence } from "@/app/lib/cv/sts-biomechanical-flags";
 import {
   formatMotionAnalysisTrackingSignal,
   MOTION_ANALYSIS_CAMERA_DISCLAIMER,
@@ -368,6 +369,54 @@ function MovementTimingPhaseReviewSection({
           </ul>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+const STS_FLAG_CONFIDENCE_CLASS: Record<StsBiomechanicalFlagConfidence, string> = {
+  high: "border-[#1D9E75]/35 bg-[#1D9E75]/10 text-[#5DCAA5]",
+  medium: "border-[#EF9F27]/35 bg-[#EF9F27]/10 text-[#EF9F27]",
+  low: "border-[#1E2D42] bg-[#070D16] text-[#9CA3AF]",
+};
+
+function StsBiomechanicalFlagsSection({ report }: { report: MotionAnalysisReport }) {
+  const stsFlags = report.stsBiomechanicalFlags;
+  if (!stsFlags || stsFlags.flags.length === 0) return null;
+
+  return (
+    <div className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5">
+      <SectionHeading>Sit-to-Stand movement observations</SectionHeading>
+      <p className="mt-1 text-[9px] leading-relaxed text-[#6B7280]">{stsFlags.sectionNote}</p>
+
+      <ul className="mt-2.5 space-y-2.5">
+        {stsFlags.flags.map((flag) => (
+          <li
+            key={flag.id}
+            className="rounded-[5px] border border-[#1E2D42] bg-[#070D16] px-2.5 py-2"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[11px] font-semibold text-[#F9FAFB]">{flag.title}</p>
+              <span
+                className={`rounded-[4px] border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider ${STS_FLAG_CONFIDENCE_CLASS[flag.confidence]}`}
+              >
+                {flag.confidence} confidence
+              </span>
+              <span className="rounded-[4px] border border-[#EF9F27]/35 bg-[#EF9F27]/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#EF9F27]">
+                Clinician review required
+              </span>
+            </div>
+            <p className="mt-1.5 text-[10px] leading-relaxed text-[#D1D5DB]">
+              <span className="font-medium text-[#9CA3AF]">Observed pattern: </span>
+              {flag.observedPattern}
+            </p>
+            <p className="mt-1 text-[10px] leading-relaxed text-[#9CA3AF]">
+              <span className="font-medium text-[#6B7280]">Flagged because: </span>
+              {flag.flaggedBecause}
+            </p>
+            <p className="mt-1 text-[9px] italic text-[#6B7280]">{flag.disclaimer}</p>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -830,6 +879,7 @@ function StsPolishedReportBody({ report }: { report: MotionAnalysisReport }) {
       ) : null}
 
       <MovementTimingPhaseReviewSection report={report} compact />
+      <StsBiomechanicalFlagsSection report={report} />
       <BiomechanicalContributionSection report={report} compact />
       <ReviewNextSection report={report} />
 
@@ -909,6 +959,7 @@ function LegacyReportBody({ report }: { report: MotionAnalysisReport }) {
       <EvidenceIntegrityBanner report={report} />
       <ClinicalSnapshotSection report={report} isLegacy={isLegacy} />
       <MovementTimingPhaseReviewSection report={report} />
+      <StsBiomechanicalFlagsSection report={report} />
       <BiomechanicalContributionSection report={report} />
       <PhaseInterpretationSection report={report} isLegacy={isLegacy} />
 
