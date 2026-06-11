@@ -396,6 +396,12 @@ export type PatientCvCaptureProps = {
   onRegisterMetricsFlush?: (flush: () => void) => void;
   onRegisterStsPilotBeforeSave?: (beforeSave: () => void) => void;
   onRegisterStsPilotRecordFlush?: (flush: () => CvMotionQualityPayload | null) => void;
+  onCaptureReadinessChange?: (payload: {
+    primaryGuidance: CaptureSetupGuidance;
+    canStartTracking: boolean;
+    minimumMet: boolean;
+    previewActive: boolean;
+  }) => void;
 };
 
 function canvasSizeForExercise(exerciseId: CvY1ExerciseId): {
@@ -488,6 +494,7 @@ export function PatientCvCapture({
   onRegisterMetricsFlush,
   onRegisterStsPilotBeforeSave,
   onRegisterStsPilotRecordFlush,
+  onCaptureReadinessChange,
 }: PatientCvCaptureProps) {
   const copy = patientCvCopy(language, exerciseId);
   const { canvasWidth: CANVAS_WIDTH, canvasHeight: CANVAS_HEIGHT } =
@@ -1500,6 +1507,21 @@ export function PatientCvCapture({
     },
     stableSeconds,
   );
+
+  useEffect(() => {
+    onCaptureReadinessChange?.({
+      primaryGuidance: captureReadiness.primaryGuidance,
+      canStartTracking: captureReadiness.canStartTracking,
+      minimumMet: captureReadiness.minimumMet,
+      previewActive,
+    });
+  }, [
+    onCaptureReadinessChange,
+    captureReadiness.primaryGuidance,
+    captureReadiness.canStartTracking,
+    captureReadiness.minimumMet,
+    previewActive,
+  ]);
 
   const setupGuidanceCopy = (guidance: CaptureSetupGuidance): string => {
     switch (guidance) {

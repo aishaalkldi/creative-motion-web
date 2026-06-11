@@ -5,6 +5,7 @@ import type { PatientCvDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import { PatientCvCapture } from "@/app/components/patient/cv/PatientCvCapture";
 import { isPatientCvCaptureWired, type CvY1ExerciseId } from "@/app/lib/cv/cv-patient-config";
+import type { CaptureSetupGuidance } from "@/app/lib/cv/patient-cv-capture-readiness";
 import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
 import { patientExerciseGuideImage } from "@/app/lib/exercise-guide-media";
 import { exerciseMediaUi } from "@/app/lib/patient-portal-ui";
@@ -25,6 +26,12 @@ export type ExerciseMediaAreaProps = {
   onRegisterCvMetricsFlush?: (flush: () => void) => void;
   onRegisterStsPilotBeforeSave?: (beforeSave: () => void) => void;
   onRegisterStsPilotRecordFlush?: (flush: () => CvMotionQualityPayload | null) => void;
+  onCaptureReadinessChange?: (payload: {
+    primaryGuidance: CaptureSetupGuidance;
+    canStartTracking: boolean;
+    minimumMet: boolean;
+    previewActive: boolean;
+  }) => void;
 };
 
 type VisualRegion =
@@ -419,6 +426,7 @@ export function ExerciseMediaArea({
   onRegisterCvMetricsFlush,
   onRegisterStsPilotBeforeSave,
   onRegisterStsPilotRecordFlush,
+  onCaptureReadinessChange,
 }: ExerciseMediaAreaProps) {
   const ui = exerciseMediaUi(language);
   const resolvedMedia = mediaUrl?.trim() || null;
@@ -443,6 +451,7 @@ export function ExerciseMediaArea({
           onRegisterMetricsFlush={onRegisterCvMetricsFlush}
           onRegisterStsPilotBeforeSave={onRegisterStsPilotBeforeSave}
           onRegisterStsPilotRecordFlush={onRegisterStsPilotRecordFlush}
+          onCaptureReadinessChange={onCaptureReadinessChange}
         />
       )}
 

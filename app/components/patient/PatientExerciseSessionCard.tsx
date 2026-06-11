@@ -1,18 +1,29 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import type { PatientCvDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
 import type { ResolvedExerciseView } from "@/app/lib/exercise-resolve";
 import { getLibraryExerciseById } from "@/app/lib/exercise-library-v1";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import { ExerciseMediaArea } from "@/app/components/patient/ExerciseMediaArea";
-import { isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
+import {
+  PatientGuidedCvReadinessBanner,
+  PatientGuidedCvSetupCard,
+} from "@/app/components/patient/session/PatientGuidedCvSetupCard";
+import {
+  isCvEnabledExercise,
+  isPatientCvCaptureWired,
+} from "@/app/lib/cv/cv-patient-config";
+import type { CaptureSetupGuidance } from "@/app/lib/cv/patient-cv-capture-readiness";
 import {
   formatBodyRegionForPatient,
   formatExerciseProgress,
   guidedSessionUi,
+  resolvePatientCvReadinessDisplay,
   sessionExerciseFlowUi,
   sessionExerciseUi,
+  type PatientCvReadinessDisplayState,
 } from "@/app/lib/patient-portal-ui";
 
 export type ExerciseCardStep = "preview" | "active" | "done";
@@ -94,6 +105,29 @@ export function PatientExerciseSessionCard({
   const showManualCvNote =
     !isCvEnabledExercise(view.exerciseId) &&
     (step === "preview" || step === "active");
+  const showCvSetupCard =
+    isCvEnabledExercise(view.exerciseId) && step === "preview";
+  const showCvReadinessBanner =
+    isPatientCvCaptureWired(view.exerciseId) && step === "active";
+  const [cvReadinessState, setCvReadinessState] =
+    useState<PatientCvReadinessDisplayState | null>(null);
+
+  useEffect(() => {
+    setCvReadinessState(null);
+  }, [view.exerciseId, step]);
+
+  const handleCaptureReadinessChange = useCallback(
+    (payload: {
+      primaryGuidance: CaptureSetupGuidance;
+      canStartTracking: boolean;
+      minimumMet: boolean;
+      previewActive: boolean;
+    }) => {
+      setCvReadinessState(resolvePatientCvReadinessDisplay(payload));
+    },
+    [],
+  );
+
   const bodyRegion = formatBodyRegionForPatient(lang, libraryEntry?.bodyRegion);
 
   const hasSets = view.sets != null && view.sets > 0;
@@ -147,6 +181,23 @@ export function PatientExerciseSessionCard({
         </p>
       ) : null}
 
+      {showCvSetupCard ? (
+        <PatientGuidedCvSetupCard
+          lang={lang}
+          arClass={arClass}
+          textDir={textDir}
+        />
+      ) : null}
+
+      {showCvReadinessBanner && cvReadinessState ? (
+        <PatientGuidedCvReadinessBanner
+          lang={lang}
+          arClass={arClass}
+          textDir={textDir}
+          state={cvReadinessState}
+        />
+      ) : null}
+
       <div className="overflow-hidden rounded-[10px] border border-[#E2E8E5] bg-white">
         <ExerciseMediaArea
           exerciseId={view.exerciseId}
@@ -163,6 +214,7 @@ export function PatientExerciseSessionCard({
           onRegisterCvMetricsFlush={onRegisterCvMetricsFlush}
           onRegisterStsPilotBeforeSave={onRegisterStsPilotBeforeSave}
           onRegisterStsPilotRecordFlush={onRegisterStsPilotRecordFlush}
+          onCaptureReadinessChange={handleCaptureReadinessChange}
         />
 
         <div className="space-y-4 p-5">

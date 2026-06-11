@@ -3,6 +3,7 @@ import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 
 import type { CvSaveOutcome } from "@/app/lib/cv/cv-save-outcome";
 import { isHoldClassCvExercise } from "@/app/lib/cv/cv-metrics-display";
+import type { CaptureSetupGuidance } from "@/app/lib/cv/patient-cv-capture-readiness";
 import type { CvSaveResult } from "@/app/hooks/useCvSessionCapture";
 
 export type PatientPortalLanguage = PatientExerciseLanguage;
@@ -1096,6 +1097,133 @@ const WORKSPACE: Record<PatientPortalLanguage, WorkspaceUi> = {
 
 export function workspaceUi(lang: PatientPortalLanguage): WorkspaceUi {
   return WORKSPACE[lang];
+}
+
+/* ── Camera setup & tracking readiness (PR81) ─────────────────────────────── */
+
+export type PatientCvReadinessDisplayState =
+  | "ready_to_track"
+  | "move_back_slightly"
+  | "keep_full_body_visible"
+  | "improve_lighting"
+  | "limited_camera_evidence";
+
+export type CameraReadinessUi = {
+  setupCardTitle: string;
+  setupCardSubtitle: string;
+  setupBullets: string[];
+  floorGuideAreaLabel: string;
+  floorGuideHint: string;
+  assistiveEvidenceNote: string;
+  clinicianReviewNote: string;
+  manualFallbackHint: string;
+  liveReadinessEyebrow: string;
+  readyToTrack: string;
+  moveBackSlightly: string;
+  keepFullBodyVisible: string;
+  improveLighting: string;
+  limitedCameraEvidence: string;
+};
+
+const CAMERA_READINESS: Record<PatientPortalLanguage, CameraReadinessUi> = {
+  en: {
+    setupCardTitle: "Camera setup before tracking",
+    setupCardSubtitle:
+      "A quick check helps the camera capture clearer movement evidence for your therapist to review.",
+    setupBullets: [
+      "Keep your full body visible from head to feet",
+      "Use good, even lighting — avoid strong backlight",
+      "Hold the phone steady or rest it on a stable surface",
+      "Stand or sit far enough back so head and feet stay in frame",
+      "Position yourself in the guide area shown below when you start",
+    ],
+    floorGuideAreaLabel: "Guide area",
+    floorGuideHint:
+      "Stand or sit so your full body fits inside the guide area — not a calibration, just positioning help.",
+    assistiveEvidenceNote:
+      "Camera tracking provides assistive movement evidence only. It does not judge correct or incorrect form.",
+    clinicianReviewNote:
+      "Your therapist reviews all results. This is not a diagnosis.",
+    manualFallbackHint:
+      "You can still complete this exercise manually if camera evidence is limited.",
+    liveReadinessEyebrow: "Camera readiness",
+    readyToTrack: "Ready to track",
+    moveBackSlightly: "Move back slightly",
+    keepFullBodyVisible: "Keep full body visible",
+    improveLighting: "Improve lighting",
+    limitedCameraEvidence: "Limited camera evidence",
+  },
+  ar: {
+    setupCardTitle: "إعداد الكاميرا قبل التتبع",
+    setupCardSubtitle:
+      "فحص سريع يساعد الكاميرا على التقاط دليل حركة أوضح لمراجعة معالجك.",
+    setupBullets: [
+      "أبقِ جسمك كاملًا ظاهرًا من الرأس إلى القدمين",
+      "استخدم إضاءة جيدة ومتساوية — تجنّب الضوء الخلفي القوي",
+      "ثبّت الهاتف أو ضعه على سطح مستقر",
+      "قف أو اجلس بعيدًا بما يكفي ليبقى الرأس والقدمان في الإطار",
+      "ضع نفسك في منطقة الإرشاد أدناه عند البدء",
+    ],
+    floorGuideAreaLabel: "منطقة الإرشاد",
+    floorGuideHint:
+      "قف أو اجلس بحيث يتسع جسمك كاملًا داخل منطقة الإرشاد — ليست معايرة، بل مساعدة للوضعية فقط.",
+    assistiveEvidenceNote:
+      "التتبع بالكاميرا يقدّم دليل حركة مساعدًا فقط. لا يحكم على صحة أو خطأ الأداء.",
+    clinicianReviewNote:
+      "معالجك يراجع كل النتائج. هذا ليس تشخيصًا.",
+    manualFallbackHint:
+      "يمكنك إكمال التمرين يدويًا حتى لو كان دليل الكاميرا محدودًا.",
+    liveReadinessEyebrow: "جاهزية الكاميرا",
+    readyToTrack: "جاهز للتتبع",
+    moveBackSlightly: "تراجع قليلًا للخلف",
+    keepFullBodyVisible: "أبقِ الجسم كاملًا ظاهرًا",
+    improveLighting: "حسّن الإضاءة",
+    limitedCameraEvidence: "دليل كاميرا محدود",
+  },
+};
+
+export function cameraReadinessUi(lang: PatientPortalLanguage): CameraReadinessUi {
+  return CAMERA_READINESS[lang];
+}
+
+export function readinessStateLabel(
+  lang: PatientPortalLanguage,
+  state: PatientCvReadinessDisplayState,
+): string {
+  const ui = cameraReadinessUi(lang);
+  switch (state) {
+    case "ready_to_track":
+      return ui.readyToTrack;
+    case "move_back_slightly":
+      return ui.moveBackSlightly;
+    case "keep_full_body_visible":
+      return ui.keepFullBodyVisible;
+    case "improve_lighting":
+      return ui.improveLighting;
+    case "limited_camera_evidence":
+      return ui.limitedCameraEvidence;
+    default:
+      return ui.keepFullBodyVisible;
+  }
+}
+
+/** Map existing capture guidance signals to patient-facing readiness labels. */
+export function resolvePatientCvReadinessDisplay(input: {
+  primaryGuidance: CaptureSetupGuidance;
+  canStartTracking: boolean;
+  minimumMet: boolean;
+  previewActive: boolean;
+}): PatientCvReadinessDisplayState | null {
+  const { primaryGuidance, canStartTracking, minimumMet, previewActive } = input;
+  if (!previewActive) return null;
+  if (!minimumMet) return "limited_camera_evidence";
+  if (primaryGuidance === "ready" && canStartTracking) return "ready_to_track";
+  if (primaryGuidance === "ready" && !canStartTracking) {
+    return "limited_camera_evidence";
+  }
+  if (primaryGuidance === "move_farther") return "move_back_slightly";
+  if (primaryGuidance === "improve_lighting") return "improve_lighting";
+  return "keep_full_body_visible";
 }
 
 /* ── Guided session flow (PR79) ────────────────────────────────────────────── */
