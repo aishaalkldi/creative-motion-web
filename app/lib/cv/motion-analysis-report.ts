@@ -126,9 +126,14 @@ import {
   evaluateCvEvidenceIntegrity,
   type CvEvidenceIntegrityGate,
 } from "@/app/lib/cv/cv-evidence-integrity-gate";
+import {
+  buildStsBiomechanicalFlags,
+  type StsBiomechanicalFlagsResult,
+} from "@/app/lib/cv/sts-biomechanical-flags";
 
 export type { BiomechanicalContributionReview } from "@/app/lib/cv/biomechanical-contribution-review";
 export type { CvEvidenceIntegrityGate } from "@/app/lib/cv/cv-evidence-integrity-gate";
+export type { StsBiomechanicalFlagsResult } from "@/app/lib/cv/sts-biomechanical-flags";
 export type { MovementQualitySignals } from "@/app/lib/cv/movement-quality-signals";
 export type {
   BiomechanicalContributionReviewCompact,
@@ -271,6 +276,7 @@ export type MotionAnalysisReport = {
   timingMetricLabels: MotionAnalysisTimingMetricLabels | null;
   movementQualityReviewFocusDisplay: string[] | null;
   evidenceIntegrity: CvEvidenceIntegrityGate | null;
+  stsBiomechanicalFlags: StsBiomechanicalFlagsResult | null;
 };
 
 export type BuildMotionAnalysisReportInput = {
@@ -1057,6 +1063,16 @@ export function buildMotionAnalysisReport(
       ? biomechanicalContributionReviewRaw
       : null;
 
+  const stsBiomechanicalFlags =
+    exerciseId === "sit-to-stand"
+      ? buildStsBiomechanicalFlags({
+          exerciseId,
+          evidenceIntegrity,
+          smtPilot,
+          movementQuality: stsMovementQuality,
+        })
+      : null;
+
   const reportDraft: MotionAnalysisReport = {
     sessionDurationSeconds,
     completedReps,
@@ -1091,6 +1107,7 @@ export function buildMotionAnalysisReport(
     timingMetricLabels: null,
     movementQualityReviewFocusDisplay: null,
     evidenceIntegrity,
+    stsBiomechanicalFlags,
   };
 
   const executiveSummary = buildMotionAnalysisExecutiveSummary(reportDraft);
@@ -1158,6 +1175,7 @@ export function buildMotionAnalysisReport(
     timingMetricLabels,
     movementQualityReviewFocusDisplay,
     evidenceIntegrity,
+    stsBiomechanicalFlags,
   };
 }
 
