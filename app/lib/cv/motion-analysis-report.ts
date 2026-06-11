@@ -130,10 +130,15 @@ import {
   buildStsBiomechanicalFlags,
   type StsBiomechanicalFlagsResult,
 } from "@/app/lib/cv/sts-biomechanical-flags";
+import {
+  buildPosturalAlignmentProxy,
+  type PosturalAlignmentProxyResult,
+} from "@/app/lib/cv/postural-alignment-proxy";
 
 export type { BiomechanicalContributionReview } from "@/app/lib/cv/biomechanical-contribution-review";
 export type { CvEvidenceIntegrityGate } from "@/app/lib/cv/cv-evidence-integrity-gate";
 export type { StsBiomechanicalFlagsResult } from "@/app/lib/cv/sts-biomechanical-flags";
+export type { PosturalAlignmentProxyResult } from "@/app/lib/cv/postural-alignment-proxy";
 export type { MovementQualitySignals } from "@/app/lib/cv/movement-quality-signals";
 export type {
   BiomechanicalContributionReviewCompact,
@@ -277,6 +282,7 @@ export type MotionAnalysisReport = {
   movementQualityReviewFocusDisplay: string[] | null;
   evidenceIntegrity: CvEvidenceIntegrityGate | null;
   stsBiomechanicalFlags: StsBiomechanicalFlagsResult | null;
+  posturalAlignmentProxy: PosturalAlignmentProxyResult | null;
 };
 
 export type BuildMotionAnalysisReportInput = {
@@ -1073,6 +1079,13 @@ export function buildMotionAnalysisReport(
         })
       : null;
 
+  const posturalAlignmentProxy = buildPosturalAlignmentProxy({
+    exerciseId,
+    evidenceIntegrity,
+    motionPilot,
+    movementQuality,
+  });
+
   const reportDraft: MotionAnalysisReport = {
     sessionDurationSeconds,
     completedReps,
@@ -1108,6 +1121,7 @@ export function buildMotionAnalysisReport(
     movementQualityReviewFocusDisplay: null,
     evidenceIntegrity,
     stsBiomechanicalFlags,
+    posturalAlignmentProxy,
   };
 
   const executiveSummary = buildMotionAnalysisExecutiveSummary(reportDraft);
@@ -1176,6 +1190,7 @@ export function buildMotionAnalysisReport(
     movementQualityReviewFocusDisplay,
     evidenceIntegrity,
     stsBiomechanicalFlags,
+    posturalAlignmentProxy,
   };
 }
 

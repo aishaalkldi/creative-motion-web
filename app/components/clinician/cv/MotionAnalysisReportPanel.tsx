@@ -9,6 +9,10 @@ import type {
 } from "@/app/lib/cv/motion-analysis-report";
 import type { StsBiomechanicalFlagConfidence } from "@/app/lib/cv/sts-biomechanical-flags";
 import {
+  POSTURAL_ALIGNMENT_PROXY_DISCLAIMER,
+  POSTURAL_ALIGNMENT_PROXY_LABEL,
+} from "@/app/lib/cv/postural-alignment-proxy";
+import {
   formatMotionAnalysisTrackingSignal,
   MOTION_ANALYSIS_CAMERA_DISCLAIMER,
   MOTION_ANALYSIS_REPORT_TITLE,
@@ -378,6 +382,47 @@ const STS_FLAG_CONFIDENCE_CLASS: Record<StsBiomechanicalFlagConfidence, string> 
   medium: "border-[#EF9F27]/35 bg-[#EF9F27]/10 text-[#EF9F27]",
   low: "border-[#1E2D42] bg-[#070D16] text-[#9CA3AF]",
 };
+
+function PosturalAlignmentProxySection({ report }: { report: MotionAnalysisReport }) {
+  const alignment = report.posturalAlignmentProxy;
+  if (!alignment || alignment.suppressed || alignment.observations.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <SectionHeading>{POSTURAL_ALIGNMENT_PROXY_LABEL}</SectionHeading>
+        <span className="rounded-[4px] border border-[#1E2D42] bg-[#070D16] px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#9CA3AF]">
+          Estimated proxy
+        </span>
+        <span className="rounded-[4px] border border-[#EF9F27]/35 bg-[#EF9F27]/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-[#EF9F27]">
+          Clinician review required
+        </span>
+      </div>
+      <p className="mt-1 text-[9px] leading-relaxed text-[#6B7280]">
+        {alignment.sectionNote || POSTURAL_ALIGNMENT_PROXY_DISCLAIMER}
+      </p>
+
+      <ul className="mt-2.5 space-y-2.5">
+        {alignment.observations.map((observation) => (
+          <li
+            key={observation.id}
+            className="rounded-[5px] border border-[#1E2D42] bg-[#070D16] px-2.5 py-2"
+          >
+            <p className="text-[11px] font-semibold text-[#F9FAFB]">{observation.pattern}</p>
+            {observation.phaseContext ? (
+              <p className="mt-1 text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">
+                Phase context: {observation.phaseContext}
+              </p>
+            ) : null}
+            <p className="mt-1.5 text-[10px] leading-relaxed text-[#D1D5DB]">{observation.rationale}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 function StsBiomechanicalFlagsSection({ report }: { report: MotionAnalysisReport }) {
   const stsFlags = report.stsBiomechanicalFlags;
@@ -880,6 +925,7 @@ function StsPolishedReportBody({ report }: { report: MotionAnalysisReport }) {
 
       <MovementTimingPhaseReviewSection report={report} compact />
       <StsBiomechanicalFlagsSection report={report} />
+      <PosturalAlignmentProxySection report={report} />
       <BiomechanicalContributionSection report={report} compact />
       <ReviewNextSection report={report} />
 
@@ -960,6 +1006,7 @@ function LegacyReportBody({ report }: { report: MotionAnalysisReport }) {
       <ClinicalSnapshotSection report={report} isLegacy={isLegacy} />
       <MovementTimingPhaseReviewSection report={report} />
       <StsBiomechanicalFlagsSection report={report} />
+      <PosturalAlignmentProxySection report={report} />
       <BiomechanicalContributionSection report={report} />
       <PhaseInterpretationSection report={report} isLegacy={isLegacy} />
 
