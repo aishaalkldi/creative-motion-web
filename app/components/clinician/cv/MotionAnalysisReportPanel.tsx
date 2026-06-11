@@ -40,6 +40,12 @@ import {
   NO_TIMELINE_SNAPSHOTS_FLAG,
 } from "@/app/lib/cv/patient-cv-capture-reliability";
 import {
+  CV_EVIDENCE_CLINICIAN_REVIEW_NOTE,
+  CV_EVIDENCE_LIMITED_HEADLINE,
+  CV_EVIDENCE_REP_ASSISTIVE_NOTE,
+  CV_EVIDENCE_UNABLE_JOINT_NOTE,
+} from "@/app/lib/cv/cv-evidence-integrity-gate";
+import {
   buildCaptureFlagsSummary,
   hasPersistedFunctionalReachPhaseRatios,
   hasPersistedHeelRaisePhaseRatios,
@@ -618,6 +624,30 @@ function KinesiologyInsightSection({ report }: { report: MotionAnalysisReport })
   );
 }
 
+function EvidenceIntegrityBanner({ report }: { report: MotionAnalysisReport }) {
+  const gate = report.evidenceIntegrity;
+  if (!gate || gate.sufficientForBiomechanicalInterpretation) return null;
+
+  return (
+    <div className="rounded-[6px] border border-amber-500/35 bg-amber-500/10 px-3 py-2.5">
+      <SectionHeading>Evidence integrity</SectionHeading>
+      <p className="mt-1.5 text-[11px] font-semibold leading-relaxed text-amber-200">
+        {gate.headline ?? CV_EVIDENCE_LIMITED_HEADLINE}
+      </p>
+      <ul className="mt-2 list-inside list-disc space-y-1 text-[10px] leading-relaxed text-[#D1D5DB]">
+        <li>{gate.jointAssessmentNote ?? CV_EVIDENCE_UNABLE_JOINT_NOTE}</li>
+        {gate.repCountNote ? <li>{gate.repCountNote ?? CV_EVIDENCE_REP_ASSISTIVE_NOTE}</li> : null}
+        <li>{gate.clinicianReviewNote ?? CV_EVIDENCE_CLINICIAN_REVIEW_NOTE}</li>
+        <li>Camera-assisted data only — not clinically validated. No diagnosis or automatic recommendation.</li>
+      </ul>
+      <p className="mt-2 text-[9px] leading-relaxed text-[#9CA3AF]">
+        Rep count and camera signal are separate: reps remain assistive movement metrics; joint-level
+        interpretation is not supported for this capture.
+      </p>
+    </div>
+  );
+}
+
 function CaptureEvidenceSection({ report }: { report: MotionAnalysisReport }) {
   const motionPilot =
     report.smtPilot ?? report.msPilot ?? report.hrPilot ?? report.suPilot ?? report.lsPilot ?? report.frPilot;
@@ -786,6 +816,7 @@ function StsPolishedReportBody({ report }: { report: MotionAnalysisReport }) {
   return (
     <>
       <ReportHeaderStrip report={report} />
+      <EvidenceIntegrityBanner report={report} />
 
       {report.executiveSummary ? (
         <div className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5">
@@ -875,6 +906,7 @@ function LegacyReportBody({ report }: { report: MotionAnalysisReport }) {
   return (
     <>
       <ReportHeaderStrip report={report} />
+      <EvidenceIntegrityBanner report={report} />
       <ClinicalSnapshotSection report={report} isLegacy={isLegacy} />
       <MovementTimingPhaseReviewSection report={report} />
       <BiomechanicalContributionSection report={report} />
