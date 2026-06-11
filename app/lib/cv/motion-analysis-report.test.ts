@@ -1136,6 +1136,98 @@ describe("STS biomechanical flags v1 (PR83)", () => {
   });
 });
 
+describe("postural alignment proxy layer", () => {
+  it("attaches proxy observations for STS when evidence is sufficient", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "sit-to-stand",
+      sessionDurationS: 12,
+      repCount: 3,
+      trackingQuality: "good",
+      movementDetected: true,
+      motionQuality: {
+        smtPilot: {
+          pilotVersion: "smt-1",
+          isPilot: true,
+          exerciseId: "sit-to-stand",
+          snapshotCount: 8,
+          durationS: 12,
+          repCount: 3,
+          completeReps: 3,
+          unclearReps: 0,
+          trackingSignal: "good",
+          movementDetected: true,
+          phaseRatios: {
+            seated: 15,
+            rising: 8,
+            standing: 55,
+            returning: 6,
+            rest: 16,
+          },
+          repTimings: { avgS: 2.6, fastestS: 1.2, slowestS: 4.1 },
+          visibilityRatios: { hip: 88, knee: 85, ankle: 82 },
+          clinicianFlags: [],
+          reviewRequired: true,
+          reviewReason: "derived_motion_timeline_pilot",
+          disclaimer: "Assistive motion capture for clinician review only.",
+        },
+      },
+    });
+
+    assert.ok(report.posturalAlignmentProxy);
+    assert.equal(report.posturalAlignmentProxy!.suppressed, false);
+    assert.ok(report.posturalAlignmentProxy!.observations.length > 0);
+    assert.match(
+      report.posturalAlignmentProxy!.sectionNote,
+      /not center of mass/i,
+    );
+  });
+
+  it("suppresses postural alignment proxy when evidence integrity is limited", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "sit-to-stand",
+      sessionDurationS: 12,
+      repCount: 4,
+      trackingQuality: "good",
+      movementDetected: true,
+      motionQuality: {
+        smtPilot: {
+          pilotVersion: "smt-1",
+          isPilot: true,
+          exerciseId: "sit-to-stand",
+          snapshotCount: 0,
+          durationS: 12,
+          repCount: 4,
+          completeReps: 4,
+          unclearReps: 0,
+          trackingSignal: "good",
+          movementDetected: true,
+          phaseRatios: { rising: 30, standing: 70 },
+          repTimings: { avgS: 2.5, fastestS: 2, slowestS: 3 },
+          visibilityRatios: { hip: 88, knee: 85, ankle: 82 },
+          clinicianFlags: [],
+          reviewRequired: true,
+          reviewReason: "derived_motion_timeline_pilot",
+          disclaimer: "Assistive motion capture for clinician review only.",
+        },
+      },
+    });
+
+    assert.equal(report.posturalAlignmentProxy, null);
+  });
+
+  it("does not attach postural alignment proxy to unsupported exercises", () => {
+    const report = buildMotionAnalysisReport({
+      exerciseId: "quad-set",
+      sessionDurationS: 8,
+      repCount: 10,
+      trackingQuality: "good",
+      movementDetected: true,
+    });
+
+    assert.equal(report.posturalAlignmentProxy, null);
+  });
+});
+
 describe("report readability polish", () => {
   function enrichedStsReport(
     overrides: {
