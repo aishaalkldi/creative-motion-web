@@ -5,6 +5,12 @@
  */
 
 import { isHoldClassCvExercise } from "@/app/lib/cv/cv-metrics-display";
+import type { CvEvidenceIntegrityGate } from "@/app/lib/cv/cv-evidence-integrity-gate";
+import {
+  CV_EVIDENCE_LIMITED_HEADLINE,
+  CV_EVIDENCE_REP_ASSISTIVE_NOTE,
+  CV_EVIDENCE_UNABLE_JOINT_NOTE,
+} from "@/app/lib/cv/cv-evidence-integrity-gate";
 import type { ExerciseKinesiologyContext } from "@/app/lib/cv/exercise-kinesiology-context";
 import {
   formatStsCycleCountLabel,
@@ -185,6 +191,7 @@ export type BuildMotionAnalysisInterpretationInput = {
   trackingSignal: string | null;
   smtPilot: MotionAnalysisSmtPilotSummary | null;
   kinesiologyContext: ExerciseKinesiologyContext | null;
+  evidenceIntegrity?: CvEvidenceIntegrityGate | null;
 };
 
 const CONFIDENCE_LABELS: Record<MotionAnalysisConfidenceLevel, string> = {
@@ -274,9 +281,22 @@ function buildMetricSummary(input: BuildMotionAnalysisInterpretationInput): stri
     if (input.smtPilot.unclearReps > 0) {
       parts.push(`${input.smtPilot.unclearReps} unclear cycle(s)`);
     }
-    if (parts.length > 0) return parts.join(" · ");
+    if (parts.length > 0) {
+      const summary = parts.join(" · ");
+      if (
+        input.evidenceIntegrity &&
+        !input.evidenceIntegrity.sufficientForBiomechanicalInterpretation &&
+        input.evidenceIntegrity.repCountNote
+      ) {
+        return `${summary} · ${input.evidenceIntegrity.repCountNote}`;
+      }
+      return summary;
+    }
   }
   if (input.completedReps > 0) {
+    if (input.evidenceIntegrity && !input.evidenceIntegrity.sufficientForBiomechanicalInterpretation) {
+      return `${input.completedReps} assistive rep count (${CV_EVIDENCE_REP_ASSISTIVE_NOTE.toLowerCase()})`;
+    }
     return `${input.completedReps} assistive rep count`;
   }
   if (input.sessionDurationSeconds > 0) {
@@ -672,13 +692,51 @@ function dedupeObservations(
   return result;
 }
 
+function buildEvidenceIntegrityObservations(
+  evidenceIntegrity: CvEvidenceIntegrityGate | null | undefined,
+): MotionAnalysisClinicalObservation[] {
+  if (!evidenceIntegrity || evidenceIntegrity.sufficientForBiomechanicalInterpretation) {
+    return [];
+  }
+
+  const observations: MotionAnalysisClinicalObservation[] = [
+    {
+      id: "evidence_integrity_limited",
+      text: `${CV_EVIDENCE_LIMITED_HEADLINE} — ${CV_EVIDENCE_UNABLE_JOINT_NOTE}.`,
+    },
+  ];
+
+  if (evidenceIntegrity.repCountNote) {
+    observations.push({
+      id: "evidence_integrity_rep_assistive",
+      text: evidenceIntegrity.repCountNote,
+    });
+  }
+
+  observations.push({
+    id: "evidence_integrity_clinician_review",
+    text: evidenceIntegrity.clinicianReviewNote,
+  });
+
+  return observations;
+}
+
 export function buildClinicalObservations(
   input: BuildMotionAnalysisInterpretationInput,
 ): MotionAnalysisClinicalObservation[] | null {
+  const integrityObservations = buildEvidenceIntegrityObservations(input.evidenceIntegrity);
+  if (
+    input.evidenceIntegrity &&
+    !input.evidenceIntegrity.sufficientForBiomechanicalInterpretation
+  ) {
+    return integrityObservations.length > 0 ? integrityObservations : null;
+  }
+
   const smtPilot = input.smtPilot;
   const trackingSignal = smtPilot?.trackingSignal ?? input.trackingSignal;
 
   const observations = dedupeObservations([
+    ...integrityObservations,
     ...observationsFromPhaseRatios(smtPilot?.phaseRatios, input.exerciseId),
     ...observationsFromRepTimings(smtPilot?.repTimings),
     ...observationsFromVisibility(smtPilot?.visibilityRatios),
@@ -925,6 +983,13 @@ export function resolveReportMode(
 export function resolveConfidenceLevel(
   input: BuildMotionAnalysisInterpretationInput,
 ): MotionAnalysisConfidenceLevel {
+  if (
+    input.evidenceIntegrity &&
+    !input.evidenceIntegrity.sufficientForBiomechanicalInterpretation
+  ) {
+    return "limited";
+  }
+
   const tracking = input.smtPilot?.trackingSignal ?? input.trackingSignal;
   const visibility = input.smtPilot?.visibilityRatios;
   const unknownPct = input.smtPilot?.phaseRatios?.unknown ?? 0;
@@ -994,7 +1059,11 @@ export function buildReportHeader(
 
 function interpretationSupportLevel(
   confidence: MotionAnalysisConfidenceLevel,
+  evidenceIntegrity: CvEvidenceIntegrityGate | null | undefined,
 ): MotionAnalysisClinicalSnapshot["interpretationSupport"] {
+  if (evidenceIntegrity && !evidenceIntegrity.sufficientForBiomechanicalInterpretation) {
+    return "limited";
+  }
   if (confidence === "high" || confidence === "moderate") return "supported";
   if (confidence === "low") return "moderate";
   return "limited";
@@ -1002,7 +1071,19 @@ function interpretationSupportLevel(
 
 function interpretationSupportNote(
   level: MotionAnalysisClinicalSnapshot["interpretationSupport"],
+  evidenceIntegrity: CvEvidenceIntegrityGate | null | undefined,
 ): string {
+  if (evidenceIntegrity && !evidenceIntegrity.sufficientForBiomechanicalInterpretation) {
+    const parts = [evidenceIntegrity.headline];
+    if (evidenceIntegrity.jointAssessmentNote) {
+      parts.push(evidenceIntegrity.jointAssessmentNote);
+    }
+    if (evidenceIntegrity.repCountNote) {
+      parts.push(evidenceIntegrity.repCountNote);
+    }
+    parts.push(evidenceIntegrity.clinicianReviewNote);
+    return parts.join(" · ");
+  }
   if (level === "supported") {
     return "Capture quality appears adequate for assistive phase and timing review, with clinician verification.";
   }
@@ -1031,16 +1112,19 @@ export function buildClinicalSnapshot(
   if (!header) return null;
 
   const confidence = resolveConfidenceLevel(input);
-  const support = interpretationSupportLevel(confidence);
+  const support = interpretationSupportLevel(confidence, input.evidenceIntegrity);
   const metricPart = header.metricLabel ? ` — ${header.metricLabel}` : "";
   const durationPart =
     input.sessionDurationSeconds > 0 ? ` over ${input.sessionDurationSeconds}s assistive capture` : "";
 
   return {
     movementCaptured: `${header.exerciseLabel}${metricPart}${durationPart}.`,
-    phasesDetected: phasesDetectedSummary(phaseInterpretation),
+    phasesDetected:
+      input.evidenceIntegrity?.sufficientForBiomechanicalInterpretation === false
+        ? null
+        : phasesDetectedSummary(phaseInterpretation),
     interpretationSupport: support,
-    interpretationSupportNote: interpretationSupportNote(support),
+    interpretationSupportNote: interpretationSupportNote(support, input.evidenceIntegrity),
     keyObservations: (clinicalObservations ?? [])
       .slice(0, MAX_KEY_OBSERVATIONS)
       .map((obs) => obs.text),
@@ -1114,10 +1198,10 @@ export function buildMotionAnalysisInterpretation(
 ): MotionAnalysisInterpretation {
   const reportMode = resolveReportMode(input);
   const sessionSummary = buildSessionSummary(input);
-  const phaseInterpretation = buildPhaseInterpretation(
-    input.smtPilot?.phaseRatios,
-    input.kinesiologyContext,
-  );
+  const phaseInterpretation =
+    input.evidenceIntegrity?.sufficientForBiomechanicalInterpretation === false
+      ? null
+      : buildPhaseInterpretation(input.smtPilot?.phaseRatios, input.kinesiologyContext);
   const clinicalObservations = buildClinicalObservations(input);
   const reviewNext = buildReviewNext(input, clinicalObservations);
   const reportHeader = buildReportHeader(input);

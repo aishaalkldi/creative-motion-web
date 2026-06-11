@@ -122,8 +122,13 @@ import {
   type MovementQualitySignals,
 } from "@/app/lib/cv/movement-quality-signals";
 import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
+import {
+  evaluateCvEvidenceIntegrity,
+  type CvEvidenceIntegrityGate,
+} from "@/app/lib/cv/cv-evidence-integrity-gate";
 
 export type { BiomechanicalContributionReview } from "@/app/lib/cv/biomechanical-contribution-review";
+export type { CvEvidenceIntegrityGate } from "@/app/lib/cv/cv-evidence-integrity-gate";
 export type { MovementQualitySignals } from "@/app/lib/cv/movement-quality-signals";
 export type {
   BiomechanicalContributionReviewCompact,
@@ -265,6 +270,7 @@ export type MotionAnalysisReport = {
   biomechanicalContributionReviewCompact: BiomechanicalContributionReviewCompact | null;
   timingMetricLabels: MotionAnalysisTimingMetricLabels | null;
   movementQualityReviewFocusDisplay: string[] | null;
+  evidenceIntegrity: CvEvidenceIntegrityGate | null;
 };
 
 export type BuildMotionAnalysisReportInput = {
@@ -809,6 +815,12 @@ export function buildMotionAnalysisReport(
         : "synthesized"
       : null;
   const motionPilot = smtPilot ?? msPilot ?? hrPilot ?? suPilot ?? lsPilot ?? frPilot;
+  const evidenceSynthesized =
+    msPilotEvidenceMode === "synthesized" ||
+    hrPilotEvidenceMode === "synthesized" ||
+    suPilotEvidenceMode === "synthesized" ||
+    lsPilotEvidenceMode === "synthesized" ||
+    frPilotEvidenceMode === "synthesized";
   const kinesiologyContext = resolveExerciseKinesiologyContext(exerciseId);
   const summaryLabel = resolveMotionAnalysisSummaryLabel({
     trackingSignal,
@@ -821,6 +833,15 @@ export function buildMotionAnalysisReport(
       ? input.recordedAt.trim()
       : null;
 
+  const evidenceIntegrity = evaluateCvEvidenceIntegrity({
+    exerciseId,
+    completedReps,
+    trackingSignal,
+    summaryLabel,
+    motionPilot,
+    evidenceSynthesized,
+  });
+
   const interpretation = buildMotionAnalysisInterpretation({
     exerciseId,
     recordedAt,
@@ -831,6 +852,7 @@ export function buildMotionAnalysisReport(
     trackingSignal,
     smtPilot: motionPilot,
     kinesiologyContext,
+    evidenceIntegrity,
   });
 
   const stsMovementQuality = buildMovementQualitySignals({
@@ -1023,13 +1045,17 @@ export function buildMotionAnalysisReport(
         })
       : null;
 
-  const biomechanicalContributionReview =
+  const biomechanicalContributionReviewRaw =
     stsBiomechanicalReview ??
     miniSquatBiomechanicalReview ??
     heelRaiseBiomechanicalReview ??
     stepUpBiomechanicalReview ??
     lateralStepBiomechanicalReview ??
     functionalReachBiomechanicalReview;
+  const biomechanicalContributionReview =
+    evidenceIntegrity.sufficientForBiomechanicalInterpretation
+      ? biomechanicalContributionReviewRaw
+      : null;
 
   const reportDraft: MotionAnalysisReport = {
     sessionDurationSeconds,
@@ -1064,6 +1090,7 @@ export function buildMotionAnalysisReport(
     biomechanicalContributionReviewCompact: null,
     timingMetricLabels: null,
     movementQualityReviewFocusDisplay: null,
+    evidenceIntegrity,
   };
 
   const executiveSummary = buildMotionAnalysisExecutiveSummary(reportDraft);
@@ -1130,6 +1157,7 @@ export function buildMotionAnalysisReport(
     biomechanicalContributionReviewCompact,
     timingMetricLabels,
     movementQualityReviewFocusDisplay,
+    evidenceIntegrity,
   };
 }
 

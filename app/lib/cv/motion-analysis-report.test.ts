@@ -415,20 +415,17 @@ describe("clinical interpretation layer", () => {
     assert.equal(report.movementQuality.observedReturningPhaseRatio, 10);
   });
 
-  it("flags partial visibility in clinical observations", () => {
+  it("flags partial visibility with evidence integrity gate", () => {
     const report = enrichedStsReport({
       visibilityRatios: { hip: 40, knee: 35, ankle: 30 },
       phaseRatios: { standing: 70, rising: 30 },
       repTimings: { avgS: 2, fastestS: 2, slowestS: 2.2 },
     });
 
-    assert.ok(report.clinicalObservations?.some((obs) => obs.id === "visibility_all_low"));
-    assert.ok(
-      report.reviewNext?.some((item) =>
-        item.text.toLowerCase().includes("re-capturing") ||
-        item.text.toLowerCase().includes("framing"),
-      ),
-    );
+    assert.equal(report.evidenceIntegrity?.status, "unable_to_assess");
+    assert.equal(report.biomechanicalContributionReview, null);
+    assert.equal(report.clinicalSnapshot?.interpretationSupport, "limited");
+    assert.ok(report.clinicalObservations?.some((obs) => obs.id === "evidence_integrity_limited"));
   });
 
   it("flags high unknown phase ratio", () => {
@@ -437,9 +434,52 @@ describe("clinical interpretation layer", () => {
       repTimings: { avgS: 2, fastestS: 2, slowestS: 2.1 },
     });
 
-    assert.ok(report.clinicalObservations?.some((obs) => obs.id === "high_unknown_phase"));
+    assert.equal(report.evidenceIntegrity?.status, "limited");
+    assert.equal(report.evidenceIntegrity?.sufficientForBiomechanicalInterpretation, false);
+    assert.equal(report.clinicalSnapshot?.interpretationSupport, "limited");
+    assert.equal(report.biomechanicalContributionReview, null);
+    assert.ok(report.clinicalObservations?.some((obs) => obs.id === "evidence_integrity_limited"));
+  });
+
+  it("gates interpretation when snapshots are zero despite recorded reps", () => {
+    const regated = buildMotionAnalysisReport({
+      exerciseId: "sit-to-stand",
+      sessionDurationS: 12,
+      repCount: 4,
+      trackingQuality: "good",
+      movementDetected: true,
+      motionQuality: {
+        smtPilot: {
+          pilotVersion: "smt-1",
+          isPilot: true,
+          exerciseId: "sit-to-stand",
+          snapshotCount: 0,
+          durationS: 12,
+          repCount: 4,
+          completeReps: 4,
+          unclearReps: 0,
+          trackingSignal: "good",
+          movementDetected: true,
+          phaseRatios: { seated: 10, rising: 30, standing: 50, returning: 10 },
+          repTimings: { avgS: 2.5, fastestS: 2, slowestS: 3 },
+          visibilityRatios: { hip: 88, knee: 85, ankle: 82 },
+          clinicianFlags: [],
+          reviewRequired: true,
+          reviewReason: "derived_motion_timeline_pilot",
+          disclaimer: "Assistive motion capture for clinician review only.",
+        },
+      },
+    });
+
+    assert.equal(regated.evidenceIntegrity?.status, "unable_to_assess");
+    assert.equal(regated.evidenceIntegrity?.sufficientForBiomechanicalInterpretation, false);
+    assert.equal(regated.clinicalSnapshot?.interpretationSupport, "limited");
+    assert.notEqual(regated.clinicalSnapshot?.interpretationSupport, "moderate");
+    assert.equal(regated.reportHeader?.confidenceLevel, "limited");
+    assert.equal(regated.biomechanicalContributionReview, null);
+    assert.equal(regated.phaseInterpretation, null);
     assert.ok(
-      report.reviewNext?.some((item) => item.text.toLowerCase().includes("framing")),
+      regated.clinicalSnapshot?.interpretationSupportNote?.includes("Rep count is assistive only"),
     );
   });
 
@@ -471,7 +511,8 @@ describe("clinical interpretation layer", () => {
 
     assert.equal(report.sessionSummary?.exerciseLabel, "Sit-to-Stand");
     assert.equal(report.phaseInterpretation, null);
-    assert.equal(report.clinicalObservations, null);
+    assert.equal(report.evidenceIntegrity?.status, "limited");
+    assert.ok(report.clinicalObservations?.some((obs) => obs.id === "evidence_integrity_limited"));
     assert.ok(report.reviewNext && report.reviewNext.length > 0);
     assert.ok(report.kinesiologyContext);
     assert.ok(report.smtPilot);
@@ -575,11 +616,9 @@ describe("movement intelligence report v3", () => {
       visibilityRatios: { hip: 35, knee: 30, ankle: 25 },
       trackingQuality: "fair",
     });
-    assert.equal(report.reportHeader?.confidenceLevel, "low");
-    assert.ok(report.clinicalSnapshot?.keyObservations.length);
-    assert.ok(
-      report.clinicalObservations?.some((obs) => obs.id === "visibility_all_low"),
-    );
+    assert.equal(report.reportHeader?.confidenceLevel, "limited");
+    assert.equal(report.evidenceIntegrity?.sufficientForBiomechanicalInterpretation, false);
+    assert.ok(report.clinicalObservations?.some((obs) => obs.id === "evidence_integrity_limited"));
   });
 
   it("flags high unknown phase in clinical snapshot", () => {
@@ -587,8 +626,9 @@ describe("movement intelligence report v3", () => {
       phaseRatios: { unknown: 40, standing: 35, rising: 25 },
     });
     assert.equal(report.reportHeader?.confidenceLevel, "limited");
-    assert.ok(report.clinicalObservations?.some((obs) => obs.id === "high_unknown_phase"));
-    assert.ok(report.clinicalSnapshot?.phasesDetected?.includes("Unknown"));
+    assert.equal(report.clinicalSnapshot?.interpretationSupport, "limited");
+    assert.equal(report.phaseInterpretation, null);
+    assert.ok(report.clinicalObservations?.some((obs) => obs.id === "evidence_integrity_limited"));
   });
 
   it("uses legacy mode for old smtPilot without enrichment", () => {
@@ -620,7 +660,8 @@ describe("movement intelligence report v3", () => {
 
     assert.equal(report.reportMode, "legacy");
     assert.equal(report.phaseInterpretation, null);
-    assert.equal(report.clinicalObservations, null);
+    assert.equal(report.evidenceIntegrity?.status, "limited");
+    assert.ok(report.clinicalObservations?.some((obs) => obs.id === "evidence_integrity_limited"));
     assert.ok(report.reportHeader);
     assert.ok(report.clinicalSnapshot);
     assert.ok(report.kinesiologyInsight);
@@ -707,9 +748,15 @@ describe("STS phase detection pipeline", () => {
       motionQuality: buildMotionQualityWithStsPilot(pilot),
     });
 
-    assert.ok(report.phaseInterpretation?.some((p) => p.phaseId === "rising"));
-    assert.ok(report.phaseInterpretation?.some((p) => p.phaseId === "standing"));
-    assert.ok(report.phaseInterpretation?.some((p) => p.phaseId === "returning"));
+    if (report.evidenceIntegrity?.sufficientForBiomechanicalInterpretation) {
+      assert.ok(report.phaseInterpretation?.some((p) => p.phaseId === "rising"));
+      assert.ok(report.phaseInterpretation?.some((p) => p.phaseId === "standing"));
+      assert.ok(report.phaseInterpretation?.some((p) => p.phaseId === "returning"));
+    } else {
+      assert.equal(report.phaseInterpretation, null);
+      assert.equal(report.biomechanicalContributionReview, null);
+      assert.ok(report.evidenceIntegrity?.reasons.length);
+    }
     assert.ok(report.smtPilot?.repTimings?.avgS);
     assert.ok(hasDisplayableMotionAnalysisReport(report));
   });
@@ -897,25 +944,18 @@ describe("biomechanical contribution review", () => {
     );
   });
 
-  it("adds incomplete-cycle prompts when flagged", () => {
+  it("suppresses biomechanical review when incomplete-cycle evidence is flagged", () => {
     const report = stsReport({
       clinicianFlags: ["incomplete_cycle"],
       phaseRatios: { seated: 30, rising: 20, standing: 35, returning: 0, rest: 15 },
     });
 
-    assert.ok(report.biomechanicalContributionReview);
-    assertSafeLanguage(report.biomechanicalContributionReview);
-    assert.ok(
-      report.biomechanicalContributionReview.reviewFlags.includes("incomplete_cycle"),
-    );
-    assert.ok(
-      report.biomechanicalContributionReview.clinicianReviewPrompts.some((item) =>
-        item.toLowerCase().includes("incomplete cycles"),
-      ),
-    );
+    assert.equal(report.biomechanicalContributionReview, null);
+    assert.equal(report.evidenceIntegrity?.sufficientForBiomechanicalInterpretation, false);
+    assert.ok(report.evidenceIntegrity?.reasons.includes("phase_evidence_incomplete_or_unclear"));
   });
 
-  it("flags limited visibility sessions", () => {
+  it("suppresses biomechanical review for limited visibility sessions", () => {
     const report = stsReport({
       trackingQuality: "poor",
       visibilityRatios: { hip: 40, knee: 35, ankle: 30 },
@@ -923,19 +963,12 @@ describe("biomechanical contribution review", () => {
       repTimings: { avgS: 2, fastestS: 2, slowestS: 2.2 },
     });
 
-    assert.ok(report.biomechanicalContributionReview);
-    assertSafeLanguage(report.biomechanicalContributionReview);
-    assert.ok(
-      report.biomechanicalContributionReview.reviewFlags.includes("limited_visibility"),
-    );
-    assert.ok(
-      report.biomechanicalContributionReview.clinicianReviewPrompts.some((item) =>
-        item.toLowerCase().includes("limited camera visibility"),
-      ),
-    );
+    assert.equal(report.biomechanicalContributionReview, null);
+    assert.equal(report.evidenceIntegrity?.status, "unable_to_assess");
+    assert.equal(report.clinicalSnapshot?.interpretationSupport, "limited");
   });
 
-  it("falls back safely for legacy STS sessions without phase enrichment", () => {
+  it("gates legacy STS sessions without phase enrichment", () => {
     const report = buildMotionAnalysisReport({
       exerciseId: "sit-to-stand",
       sessionDurationS: 10,
@@ -961,20 +994,12 @@ describe("biomechanical contribution review", () => {
       },
     });
 
-    assert.ok(report.biomechanicalContributionReview);
-    assertSafeLanguage(report.biomechanicalContributionReview);
-    assert.ok(
-      report.biomechanicalContributionReview.reviewFlags.includes("legacy_phase_data_missing"),
-    );
-    assert.ok(
-      report.biomechanicalContributionReview.observedMovementPattern.some((item) =>
-        item.toLowerCase().includes("phase distribution not available"),
-      ),
-    );
-    assert.ok(report.biomechanicalContributionReview.muscleDemandContext.length >= 4);
+    assert.equal(report.biomechanicalContributionReview, null);
+    assert.equal(report.evidenceIntegrity?.status, "limited");
+    assert.ok(report.clinicalObservations?.some((obs) => obs.id === "evidence_integrity_limited"));
   });
 
-  it("builds mini squat biomechanical review from synthesized evidence", () => {
+  it("suppresses biomechanical review for synthesized mini squat evidence", () => {
     const report = buildMotionAnalysisReport({
       exerciseId: "mini-squat",
       sessionDurationS: 8,
@@ -983,11 +1008,12 @@ describe("biomechanical contribution review", () => {
       movementDetected: true,
     });
 
-    assert.ok(report.biomechanicalContributionReview);
-    assertSafeLanguage(report.biomechanicalContributionReview);
+    assert.equal(report.biomechanicalContributionReview, null);
+    assert.equal(report.evidenceIntegrity?.status, "unable_to_assess");
+    assert.equal(report.msPilotEvidenceMode, "synthesized");
   });
 
-  it("builds heel raise biomechanical review from synthesized evidence", () => {
+  it("suppresses biomechanical review for synthesized heel raise evidence", () => {
     const report = buildMotionAnalysisReport({
       exerciseId: "heel-raise",
       sessionDurationS: 8,
@@ -996,8 +1022,9 @@ describe("biomechanical contribution review", () => {
       movementDetected: true,
     });
 
-    assert.ok(report.biomechanicalContributionReview);
-    assertSafeLanguage(report.biomechanicalContributionReview);
+    assert.equal(report.biomechanicalContributionReview, null);
+    assert.equal(report.evidenceIntegrity?.status, "unable_to_assess");
+    assert.equal(report.hrPilotEvidenceMode, "synthesized");
   });
 
   it("returns null for exercises without intelligence support", () => {
