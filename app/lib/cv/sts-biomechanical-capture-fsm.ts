@@ -75,10 +75,18 @@ export type StsBiomechanicalCaptureConfig = {
   debounceFrames: number;
   /** Faster standing confirmation — brief peaks still count (PR87). */
   standingDebounceFrames: number;
+  /** Faster return transition after standing (PR88). */
+  returningDebounceFrames: number;
   /** Hip-Y band below seat confirm before entering rising. */
   risingEnterEpsilon: number;
   /** Hysteresis above stand confirm before entering returning. */
   returnHysteresis: number;
+  /** Minimum gap between returnTrigger and seatConfirm (PR88). */
+  returnSeatGap: number;
+  /** Tolerance below seatConfirm for seated-return confirmation (PR88). */
+  seatedReturnTolerance: number;
+  /** Min hip descent from stand peak to infer return motion (PR88). */
+  returnDescentFraction: number;
   /** Fraction of primary delta for stand confirm (lower = more tolerant). */
   standConfirmDeltaFraction: number;
   /** Min hip rise vs baseline to treat peak as standing-like when hold is brief. */
@@ -95,10 +103,14 @@ export const DEFAULT_STS_BIOMECH_CAPTURE_CONFIG: StsBiomechanicalCaptureConfig =
   minCompleteCycleMs: 650,
   debounceFrames: 3,
   standingDebounceFrames: 2,
+  returningDebounceFrames: 2,
   risingEnterEpsilon: 0.01,
   returnHysteresis: 0.012,
+  returnSeatGap: 0.008,
+  seatedReturnTolerance: 0.008,
+  returnDescentFraction: 0.4,
   standConfirmDeltaFraction: 0.72,
-  minPeakDisplacementFraction: 0.95,
+  minPeakDisplacementFraction: 0.98,
   minStrongBaselineSamples: 12,
 };
 
@@ -252,21 +264,27 @@ export function resolveStsAdaptiveThresholds(
     captureConfig.standConfirmDeltaFraction;
   const standConfirm = seatedBaseline - scaledPrimary;
   const seatConfirm = seatedBaseline - resetDelta;
-  const standToSeatGap = Math.max(0, seatConfirm - standConfirm);
-  const returnTrigger = round3(
+  const orderedSeatConfirm = Math.max(seatConfirm, standConfirm + captureConfig.returnSeatGap);
+  const standToSeatGap = Math.max(0, orderedSeatConfirm - standConfirm);
+  const rawReturnTrigger =
     standConfirm +
-      Math.max(
-        captureConfig.returnHysteresis * 0.5,
-        standToSeatGap * 0.35,
-      ),
+    Math.max(
+      captureConfig.returnHysteresis * 0.5,
+      standToSeatGap * 0.25,
+    );
+  const returnTrigger = round3(
+    Math.max(
+      standConfirm + 0.002,
+      Math.min(rawReturnTrigger, orderedSeatConfirm - captureConfig.returnSeatGap),
+    ),
   );
 
   return {
     seatedBaseline: round3(seatedBaseline),
-    riseTrigger: round3(seatConfirm - captureConfig.risingEnterEpsilon),
+    riseTrigger: round3(orderedSeatConfirm - captureConfig.risingEnterEpsilon),
     standConfirm: round3(standConfirm),
     returnTrigger,
-    seatConfirm: round3(seatConfirm),
+    seatConfirm: round3(orderedSeatConfirm),
     riseDelta: round3(scaledPrimary),
     resetDelta: round3(resetDelta),
     calibrationQuality,
@@ -488,6 +506,84 @@ export class StsBiomechanicalCaptureFsm {
     return displacement >= thresholds.riseDelta * this.captureConfig.minPeakDisplacementFraction;
   }
 
+  private isDescendingFromStand(
+    attempt: ActiveAttempt,
+    hipY: number,
+    thresholds: StsAdaptiveThresholds,
+  ): boolean {
+    if (!attempt.standingReached || attempt.standingStartMs == null) return false;
+    const descentFromPeak = hipY - attempt.minHipY;
+    return (
+      descentFromPeak >= thresholds.resetDelta * this.captureConfig.returnDescentFraction &&
+      hipY > thresholds.returnTrigger
+    );
+  }
+
+  private isReturnMotionActive(
+    attempt: ActiveAttempt,
+    hipY: number,
+    smoothed: number,
+    thresholds: StsAdaptiveThresholds,
+  ): boolean {
+    return (
+      smoothed > thresholds.returnTrigger ||
+      hipY > thresholds.returnTrigger ||
+      this.isDescendingFromStand(attempt, hipY, thresholds)
+    );
+  }
+
+  private isNearSeatedReturn(
+    hipY: number,
+    smoothed: number,
+    thresholds: StsAdaptiveThresholds,
+  ): boolean {
+    const nearSeatedY =
+      thresholds.seatedBaseline -
+      thresholds.resetDelta * (0.5 + this.captureConfig.seatedReturnTolerance);
+    const band = Math.max(thresholds.returnTrigger + 0.003, nearSeatedY);
+    return smoothed >= band || hipY >= band;
+  }
+
+  private finalizeSeatedReturn(
+    state: StsBiomechanicalCaptureState,
+    input: StsBiomechanicalCaptureTickInput,
+    thresholds: StsAdaptiveThresholds,
+  ): void {
+    if (!this.active) return;
+
+    this.active.returningDetected = true;
+    this.active.returningStartMs = this.active.returningStartMs ?? input.nowMs;
+    this.active.seatedReturnReached = true;
+
+    const duration = input.nowMs - this.active.startTimeMs;
+    const peakReached =
+      this.active.standingReached || this.peakDisplacementMet(this.active, thresholds);
+
+    let attemptType: StsAttemptType;
+    let reason: string | null = null;
+
+    if (!this.active.risingDetected) {
+      attemptType = "partial";
+      reason = "Seated return confirmed but rising evidence was incomplete.";
+    } else if (!peakReached) {
+      attemptType = "partial";
+      reason = "Return confirmed but standing-like peak was not reached.";
+    } else if (duration < this.captureConfig.minCompleteCycleMs) {
+      attemptType = "unclear";
+      reason = "Cycle duration was too brief for a supported complete attempt.";
+    } else {
+      attemptType = "complete";
+    }
+
+    this.finalizeActiveAttempt(state, input.nowMs, attemptType, reason);
+    if (attemptType === "complete") {
+      state.repCount += 1;
+      state.lastRepCompleteMs = input.nowMs;
+    }
+    state.phase = "seated";
+    state.seatedStreak = 0;
+  }
+
   private tickRising(
     state: StsBiomechanicalCaptureState,
     input: StsBiomechanicalCaptureTickInput,
@@ -543,9 +639,10 @@ export class StsBiomechanicalCaptureFsm {
 
     const returnFromRise =
       this.peakDisplacementMet(this.active, thresholds) &&
-      (smoothed > thresholds.returnTrigger || input.hipY > thresholds.returnTrigger);
+      this.isReturnMotionActive(this.active, input.hipY, smoothed, thresholds);
     state.returningStreak = nextStreak(state.returningStreak, returnFromRise);
-    if (state.returningStreak >= debounce) {
+    const returningDebounce = this.captureConfig.returningDebounceFrames;
+    if (state.returningStreak >= returningDebounce) {
       this.active.standingReached = true;
       this.active.standingStartMs = this.active.standingStartMs ?? input.nowMs;
       this.active.returningDetected = true;
@@ -580,15 +677,34 @@ export class StsBiomechanicalCaptureFsm {
       return;
     }
 
-    const returnCondition =
-      smoothed > thresholds.returnTrigger || input.hipY > thresholds.returnTrigger;
+    const returnCondition = this.isReturnMotionActive(
+      this.active,
+      input.hipY,
+      smoothed,
+      thresholds,
+    );
     state.returningStreak = nextStreak(state.returningStreak, returnCondition);
 
-    if (state.returningStreak >= debounce) {
+    const returningDebounce = this.captureConfig.returningDebounceFrames;
+    if (state.returningStreak >= returningDebounce) {
       this.active.returningDetected = true;
       this.active.returningStartMs = input.nowMs;
       state.phase = "returning";
       state.returningStreak = 0;
+      state.seatedStreak = 0;
+      return;
+    }
+
+    if (
+      this.active.standingReached &&
+      this.isNearSeatedReturn(input.hipY, smoothed, thresholds)
+    ) {
+      state.seatedStreak = nextStreak(state.seatedStreak, true);
+      if (state.seatedStreak >= returningDebounce) {
+        this.finalizeSeatedReturn(state, input, thresholds);
+      }
+    } else {
+      state.seatedStreak = 0;
     }
   }
 
@@ -617,39 +733,16 @@ export class StsBiomechanicalCaptureFsm {
       return;
     }
 
-    const seatedCondition =
-      smoothed >= thresholds.seatConfirm || input.hipY >= thresholds.seatConfirm;
+    const seatedCondition = this.isNearSeatedReturn(
+      input.hipY,
+      smoothed,
+      thresholds,
+    );
     state.seatedStreak = nextStreak(state.seatedStreak, seatedCondition);
 
-    if (state.seatedStreak >= debounce) {
-      this.active.seatedReturnReached = true;
-      const duration = input.nowMs - this.active.startTimeMs;
-      const peakReached =
-        this.active.standingReached || this.peakDisplacementMet(this.active, thresholds);
-
-      let attemptType: StsAttemptType;
-      let reason: string | null = null;
-
-      if (!this.active.risingDetected || !this.active.returningDetected) {
-        attemptType = "partial";
-        reason = "Return confirmed but phase transition evidence was incomplete.";
-      } else if (!peakReached) {
-        attemptType = "partial";
-        reason = "Return confirmed but standing-like peak was not reached.";
-      } else if (duration < this.captureConfig.minCompleteCycleMs) {
-        attemptType = "unclear";
-        reason = "Cycle duration was too brief for a supported complete attempt.";
-      } else {
-        attemptType = "complete";
-      }
-
-      this.finalizeActiveAttempt(state, input.nowMs, attemptType, reason);
-      if (attemptType === "complete") {
-        state.repCount += 1;
-        state.lastRepCompleteMs = input.nowMs;
-      }
-      state.phase = "seated";
-      state.seatedStreak = 0;
+    const seatedDebounce = this.captureConfig.returningDebounceFrames;
+    if (state.seatedStreak >= seatedDebounce) {
+      this.finalizeSeatedReturn(state, input, thresholds);
     }
   }
 
