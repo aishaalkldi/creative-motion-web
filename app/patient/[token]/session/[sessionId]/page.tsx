@@ -77,7 +77,7 @@ export default function SessionPlayerPage() {
 
   const [session, setSession] = useState<PatientSession | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const { plan, isPlanLoading } = usePatientPlan();
+  const { plan, isPlanLoading, refreshPlan } = usePatientPlan();
   const { language: patientLanguage, isArabic, textDir, arClass } = usePatientLanguage();
   const [phase, setPhase] = useState<SessionPhase>("start");
   const [exerciseStep, setExerciseStep] = useState<ExerciseCardStep>("preview");
@@ -292,6 +292,7 @@ export default function SessionPlayerPage() {
         painAfter,
         exercisesCompleted: total,
       });
+      await refreshPlan();
     } catch (err) {
       setCompleteError(err instanceof Error ? err.message : shellUi.saveError);
       setCompleting(false);

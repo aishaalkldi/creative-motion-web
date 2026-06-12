@@ -17,6 +17,7 @@ import {
   readStoredPatientLanguage,
   writeStoredPatientLanguage,
 } from "@/app/lib/patient-language-preference";
+import { dispatchPatientPortalRefresh } from "@/app/lib/patient-portal-refresh";
 import { portalTextDir } from "@/app/lib/patient-portal-ui";
 
 const arabicFont = IBM_Plex_Sans_Arabic({
@@ -35,6 +36,8 @@ type PatientPortalContextValue = {
   textDir: "rtl" | "ltr";
   arClass: string;
   isPlanLoading: boolean;
+  isRefreshingPlan: boolean;
+  refreshPlan: () => Promise<boolean>;
 };
 
 const PatientPortalContext = createContext<PatientPortalContextValue | null>(null);
@@ -49,8 +52,38 @@ export function PatientLanguageProvider({
   const router = useRouter();
   const [plan, setPlan] = useState<PatientPlanData | null | undefined>(undefined);
   const [planLoadError, setPlanLoadError] = useState<"load" | "connection" | "">("");
+  const [isRefreshingPlan, setIsRefreshingPlan] = useState(false);
   const [language, setLanguageState] = useState<PatientExerciseLanguage>("en");
   const [assignedBy, setAssignedBy] = useState("");
+
+  const refreshPlan = useCallback(async (): Promise<boolean> => {
+    if (!token) return false;
+
+    setIsRefreshingPlan(true);
+    try {
+      const res = await fetch(`/api/patient/plan?token=${encodeURIComponent(token)}`);
+      if (res.status === 404 || res.status === 403) {
+        router.replace("/patient/invalid");
+        return false;
+      }
+      if (!res.ok) {
+        setPlanLoadError("load");
+        return false;
+      }
+
+      const data = (await res.json()) as PatientPlanData;
+      setPlan(data);
+      setPlanLoadError("");
+      if (data.assignedBy) setAssignedBy(data.assignedBy);
+      dispatchPatientPortalRefresh();
+      return true;
+    } catch {
+      setPlanLoadError("connection");
+      return false;
+    } finally {
+      setIsRefreshingPlan(false);
+    }
+  }, [token, router]);
 
   useEffect(() => {
     if (!token) {
@@ -114,8 +147,22 @@ export function PatientLanguageProvider({
       textDir,
       arClass,
       isPlanLoading,
+      isRefreshingPlan,
+      refreshPlan,
     }),
-    [plan, planLoadError, language, setLanguage, assignedBy, isArabic, textDir, arClass, isPlanLoading],
+    [
+      plan,
+      planLoadError,
+      language,
+      setLanguage,
+      assignedBy,
+      isArabic,
+      textDir,
+      arClass,
+      isPlanLoading,
+      isRefreshingPlan,
+      refreshPlan,
+    ],
   );
 
   return (
