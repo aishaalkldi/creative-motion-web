@@ -26,6 +26,7 @@ import {
   LAB_STEP_UP_REP_CONFIG,
   type StepUpRepConfig,
 } from "@/app/lib/cv/step-up-detector";
+import { PATIENT_STS_BIOMECH_CAPTURE_CONFIG } from "@/app/lib/cv/sts-biomechanical-capture-fsm";
 import {
   LAB_SLS_HOLD_CONFIG,
   type SingleLegStanceHoldConfig,
@@ -179,6 +180,7 @@ export const PATIENT_STS_CONFIG: SitToStandCvConfig = {
   landmarksOverlayOnly: true,
   motionTimelineEnabled: true,
   stsBiomechanicalCaptureV2: true,
+  stsBiomechCaptureConfig: PATIENT_STS_BIOMECH_CAPTURE_CONFIG,
 };
 
 /**
@@ -224,8 +226,9 @@ export const PATIENT_HEEL_RAISE_POSE_SHELL = {
 export const PATIENT_HEEL_RAISE_REP_CONFIG: HeelRaiseRepConfig = {
   ...LAB_HEEL_RAISE_REP_CONFIG,
   baselineDurationMs: 3_000,
+  baselinePrimaryDelta: 0.035,
   minMsBetweenReps: 800,
-  minAnkleVisibility: 0.3,
+  minAnkleVisibility: 0.28,
   minSaveDurationS: CV_MIN_SAVE_DURATION_S,
 };
 

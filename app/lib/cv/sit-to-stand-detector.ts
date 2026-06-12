@@ -32,10 +32,12 @@ import {
 } from "@/app/lib/cv/sagittal-hip-rep-core";
 import {
   createStsBiomechanicalCaptureState,
+  DEFAULT_STS_BIOMECH_CAPTURE_CONFIG,
   resetStsBiomechanicalCaptureState,
   StsBiomechanicalCaptureFsm,
   stsCapturePhaseToStandPhase,
   type StsAttemptSummary,
+  type StsBiomechanicalCaptureConfig,
   type StsBiomechanicalCaptureState,
   type StsCapturePhase,
 } from "@/app/lib/cv/sts-biomechanical-capture-fsm";
@@ -415,7 +417,10 @@ export class SitToStandDetector {
       return;
     }
     if (!this.stsCaptureFsm) {
-      this.stsCaptureFsm = new StsBiomechanicalCaptureFsm(this.repBaselineConfig());
+      this.stsCaptureFsm = new StsBiomechanicalCaptureFsm(
+        this.repBaselineConfig(),
+        this.resolveStsBiomechCaptureConfig(),
+      );
     }
     if (!this.stsCaptureState) {
       this.stsCaptureState = createStsBiomechanicalCaptureState();
@@ -528,6 +533,10 @@ export class SitToStandDetector {
       return baselineConfigFromMiniSquat(this.config);
     }
     return baselineConfigFromSts(this.config);
+  }
+
+  private resolveStsBiomechCaptureConfig(): StsBiomechanicalCaptureConfig {
+    return this.config.stsBiomechCaptureConfig ?? DEFAULT_STS_BIOMECH_CAPTURE_CONFIG;
   }
 
   private buildRepState(): SagittalHipRepState {

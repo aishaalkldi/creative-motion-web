@@ -4,6 +4,7 @@
  */
 
 import type { BodyFramingProfileId } from "@/app/lib/cv/body-framing-profiles";
+import type { StsBiomechanicalCaptureConfig } from "@/app/lib/cv/sts-biomechanical-capture-fsm";
 import { isCvMotionPilotWiredForCopy } from "@/app/lib/cv/cv-patient-motion-pilot-flags";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 
@@ -170,6 +171,8 @@ export type SitToStandCvConfig = {
   motionTimelineEnabled?: boolean;
   /** PR86: full-cycle STS biomechanical capture FSM (patient baseline rise mode). */
   stsBiomechanicalCaptureV2?: boolean;
+  /** PR87: optional FSM tuning overrides (patient home-camera tolerance). */
+  stsBiomechCaptureConfig?: StsBiomechanicalCaptureConfig;
   /** Patient portal: rise = Sit-to-Stand, drop = Mini Squat (default rise). */
   repPolarity?: "rise" | "drop";
   /** Metrics payload exercise id (default sit-to-stand). */

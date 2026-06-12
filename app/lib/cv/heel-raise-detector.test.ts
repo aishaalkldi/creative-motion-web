@@ -5,7 +5,9 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { PATIENT_HEEL_RAISE_REP_CONFIG } from "@/app/lib/cv/cv-patient-config";
 import {
+  anklesMeetMinVisibility,
   computeAnkleMidY,
   HeelRaiseDetector,
   HeelRaiseRepCounter,
@@ -216,5 +218,54 @@ describe("HeelRaiseDetector", () => {
     detector.driveFrame(mockHeelRaiseLandmarks(BASELINE_ANKLE), 0);
     const snap = detector.getSnapshot();
     assert.notEqual(snap.bodyFramingState, "checking");
+  });
+});
+
+describe("HeelRaiseRepCounter — PR87 patient tuning", () => {
+  it("counts smaller but clear heel raise with patient config", () => {
+    const counter = new HeelRaiseRepCounter(PATIENT_HEEL_RAISE_REP_CONFIG);
+    counter.baselineAnkleY = BASELINE_ANKLE;
+    counter.driveFrame(BASELINE_ANKLE, 0, TORSO);
+    counter.driveFrame(0.775, 800, TORSO);
+    counter.driveFrame(0.775, 816, TORSO);
+    counter.driveFrame(BASELINE_ANKLE, 1_600, TORSO);
+    assert.equal(counter.repCount, 1);
+  });
+
+  it("does not count tiny ankle jitter with patient config", () => {
+    const counter = new HeelRaiseRepCounter(PATIENT_HEEL_RAISE_REP_CONFIG);
+    counter.baselineAnkleY = BASELINE_ANKLE;
+    counter.driveFrame(BASELINE_ANKLE, 0, TORSO);
+    counter.driveFrame(0.805, 400, TORSO);
+    counter.driveFrame(BASELINE_ANKLE, 1_200, TORSO);
+    assert.equal(counter.repCount, 0);
+  });
+});
+
+describe("HeelRaiseDetector — PR87 visibility gate", () => {
+  it("skips frames when ankle visibility is below patient minimum", () => {
+    const landmarks = mockHeelRaiseLandmarks(BASELINE_ANKLE, 0.25);
+    assert.equal(
+      anklesMeetMinVisibility(landmarks, PATIENT_HEEL_RAISE_REP_CONFIG.minAnkleVisibility),
+      false,
+    );
+
+    const detector = new HeelRaiseDetector(PATIENT_HEEL_RAISE_REP_CONFIG);
+    detector.startSession(0);
+    for (let t = 0; t < 2_000; t += 100) {
+      detector.driveFrame(mockHeelRaiseLandmarks(BASELINE_ANKLE, 0.25), t);
+    }
+    assert.equal(detector.getSnapshot().framesWithPose, 0);
+    assert.equal(detector.getDerivedMetrics().repCount, 0);
+  });
+
+  it("counts lift/lower cycle with patient config after baseline", () => {
+    const detector = new HeelRaiseDetector(PATIENT_HEEL_RAISE_REP_CONFIG);
+    runDetectorBaseline(detector, 0);
+    for (let t = 2_600; t <= 4_200; t += 100) {
+      const ankleY = t < 3_400 ? BASELINE_ANKLE : t < 4_000 ? 0.775 : BASELINE_ANKLE;
+      detector.driveFrame(mockHeelRaiseLandmarks(ankleY, 0.65), t);
+    }
+    assert.equal(detector.getDerivedMetrics().repCount, 1);
   });
 });
