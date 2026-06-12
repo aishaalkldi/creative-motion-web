@@ -893,6 +893,11 @@ export function PatientCvCapture({
     if (!detector) return null;
     const metrics = detector.getDerivedMetrics();
     if (metrics.exerciseId !== "sit-to-stand") return null;
+    const attemptSummaries =
+      "getStsAttemptSummaries" in detector &&
+      typeof detector.getStsAttemptSummaries === "function"
+        ? detector.getStsAttemptSummaries()
+        : [];
     const record = buildStsMotionPilotRecord({
       summary,
       metrics,
@@ -900,6 +905,7 @@ export function PatientCvCapture({
       extraClinicianFlags: buildExtraClinicianFlags(
         stsTimelineRefs.lastFinalizeSnapshotCount.current ?? 0,
       ),
+      attemptSummaries,
     });
     return buildMotionQualityWithStsPilot(record);
   }, [exerciseId, stsTimelineRefs, buildExtraClinicianFlags]);

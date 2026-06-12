@@ -31,6 +31,15 @@ import {
   type SagittalHipRepState,
 } from "@/app/lib/cv/sagittal-hip-rep-core";
 import {
+  createStsBiomechanicalCaptureState,
+  resetStsBiomechanicalCaptureState,
+  StsBiomechanicalCaptureFsm,
+  stsCapturePhaseToStandPhase,
+  type StsAttemptSummary,
+  type StsBiomechanicalCaptureState,
+  type StsCapturePhase,
+} from "@/app/lib/cv/sts-biomechanical-capture-fsm";
+import {
   createRepTemporalSmoothingState,
   resetRepTemporalSmoothingState,
 } from "@/app/lib/cv/rep-temporal-smoothing";
@@ -81,6 +90,8 @@ export type SitToStandDetectorSnapshot = {
   isBaselineCalibrating: boolean;
   /** Derived stand/rest polarity from hip rep FSM (rise: down=seated, up=standing). STS only. */
   standPhase?: "up" | "down";
+  /** PR86: temporal capture phase when biomechanical capture v2 is active. */
+  capturePhase?: StsCapturePhase;
 };
 
 type PoseLandmarkerInstance = {
@@ -316,6 +327,9 @@ export class SitToStandDetector {
   private repQualityFsm: RepQualityFsm | null = null;
   private repQualitySessionStartedMs = 0;
   private repQualityLastSummary: SessionMotionSummary | null = null;
+  /** PR86: full-cycle STS attempt segmentation (derived scalars only). */
+  private stsCaptureFsm: StsBiomechanicalCaptureFsm | null = null;
+  private stsCaptureState: StsBiomechanicalCaptureState | null = null;
 
   constructor(
     callbacks: SitToStandDetectorCallbacks,
@@ -341,7 +355,27 @@ export class SitToStandDetector {
       trackingError: this.trackingError,
       isBaselineCalibrating: this.isBaselineCalibrating,
       standPhase: this.standPhase,
+      capturePhase: this.stsCaptureState?.phase,
     };
+  }
+
+  /** PR86 — in-memory attempt summaries for clinician motion pilot (no landmarks). */
+  getStsAttemptSummaries(): readonly StsAttemptSummary[] {
+    return this.stsCaptureState?.attempts ?? [];
+  }
+
+  /** Finalize open STS capture attempts before timeline/pilot save. */
+  finalizeStsBiomechCaptureForSave(): void {
+    this.finalizeStsBiomechCaptureSession();
+  }
+
+  private usesStsBiomechanicalCaptureV2(): boolean {
+    return (
+      Boolean(this.config.stsBiomechanicalCaptureV2) &&
+      (this.config.repPolarity ?? "rise") === "rise" &&
+      this.usesBaselineRepCounting() &&
+      (this.config.metricsExerciseId ?? "sit-to-stand") === "sit-to-stand"
+    );
   }
 
   private usesBaselineRepCounting(): boolean {
@@ -363,6 +397,29 @@ export class SitToStandDetector {
     this.poseReadiness = this.usesReadiness() ? "checking" : "ready";
     this.bodyFramingState = this.usesReadiness() ? "checking" : "good_distance";
     resetRepTemporalSmoothingState(this.repTemporal);
+    this.resetStsBiomechCaptureState();
+  }
+
+  private resetStsBiomechCaptureState(): void {
+    this.stsCaptureFsm = null;
+    if (this.stsCaptureState) {
+      resetStsBiomechanicalCaptureState(this.stsCaptureState);
+    }
+    this.stsCaptureState = null;
+  }
+
+  private syncStsBiomechCapture(): void {
+    if (!this.usesStsBiomechanicalCaptureV2()) {
+      this.stsCaptureFsm = null;
+      this.stsCaptureState = null;
+      return;
+    }
+    if (!this.stsCaptureFsm) {
+      this.stsCaptureFsm = new StsBiomechanicalCaptureFsm(this.repBaselineConfig());
+    }
+    if (!this.stsCaptureState) {
+      this.stsCaptureState = createStsBiomechanicalCaptureState();
+    }
   }
 
   private bodyFramingProfile() {
@@ -383,7 +440,12 @@ export class SitToStandDetector {
   }
 
   private canCollectBaseline(): boolean {
-    if (!this.usesBaselineRepCounting() || this.baselineHipY !== null) return false;
+    if (!this.usesBaselineRepCounting()) return false;
+    if (this.usesStsBiomechanicalCaptureV2()) {
+      if (!this.usesReadiness()) return true;
+      return this.poseReadiness === "ready" || this.poseReadiness === "partial";
+    }
+    if (this.baselineHipY !== null) return false;
     if (!this.usesReadiness()) return true;
     return (
       (this.poseReadiness === "ready" || this.poseReadiness === "partial") &&
@@ -396,11 +458,18 @@ export class SitToStandDetector {
     if (this.poseReadiness === "checking" || this.poseReadiness === "not_ready") {
       return false;
     }
-    if (this.usesBaselineRepCounting() && this.baselineHipY === null) return false;
+    if (
+      this.usesBaselineRepCounting() &&
+      !this.usesStsBiomechanicalCaptureV2() &&
+      this.baselineHipY === null
+    ) {
+      return false;
+    }
     return true;
   }
 
   private maybeStartBaselineWindow(nowMs: number): void {
+    if (this.usesStsBiomechanicalCaptureV2()) return;
     if (
       !this.usesBaselineRepCounting() ||
       this.baselineHipY !== null ||
@@ -635,7 +704,43 @@ export class SitToStandDetector {
     });
   }
 
-  private updateRepCountFromHipY(hipY: number, nowMs: number, torsoSpan: number | null): void {
+  private updateRepCountFromHipY(
+    hipY: number,
+    nowMs: number,
+    torsoSpan: number | null,
+    landmarks?: PoseLandmark[],
+  ): void {
+    if (this.usesStsBiomechanicalCaptureV2()) {
+      this.syncStsBiomechCapture();
+      const captureState = this.stsCaptureState;
+      const captureFsm = this.stsCaptureFsm;
+      if (!captureState || !captureFsm) return;
+
+      const hipVisibilitySum =
+        landmarks != null
+          ? (landmarks[23]?.visibility ?? 0) + (landmarks[24]?.visibility ?? 0)
+          : 1.2;
+
+      captureFsm.tick(captureState, {
+        hipY,
+        nowMs,
+        torsoSpan,
+        canCollectBaseline: this.canCollectBaseline() || captureState.phase === "calibrating",
+        canCount: this.canIncrementReps(),
+        posePresent: true,
+        hipVisibilitySum,
+      });
+
+      this.repCount = captureState.repCount;
+      this.standPhase = stsCapturePhaseToStandPhase(captureState.phase);
+      this.isBaselineCalibrating = captureState.isBaselineCalibrating;
+      this.baselineHipY = captureState.seatedBaseline;
+      this.baselineWindowEndMs = captureState.baselineWindowEndMs;
+      this.baselineSamples = captureState.baselineSamples;
+      this.lastRepAtMs = captureState.lastRepCompleteMs;
+      return;
+    }
+
     const state = this.buildRepState();
 
     if (this.usesBaselineRepCounting()) {
@@ -759,9 +864,23 @@ export class SitToStandDetector {
     this.trackingQuality = null;
     this.initPhase = null;
     this.trackingError = null;
+    this.finalizeStsBiomechCaptureSession();
     this.finalizeRepQualitySession();
     this.resetBaselineState();
     this.emit();
+  }
+
+  private finalizeStsBiomechCaptureSession(nowMs?: number): void {
+    if (!this.usesStsBiomechanicalCaptureV2() || !this.stsCaptureFsm || !this.stsCaptureState) {
+      return;
+    }
+    const sessionNow =
+      nowMs ??
+      (this.trackingStartedAtMs > 0
+        ? performance.now() - this.trackingStartedAtMs
+        : 0);
+    this.stsCaptureFsm.finalizeSession(this.stsCaptureState, sessionNow);
+    this.repCount = this.stsCaptureState.repCount;
   }
 
   async start(video: HTMLVideoElement, canvas: HTMLCanvasElement): Promise<void> {
@@ -870,7 +989,7 @@ export class SitToStandDetector {
         const checkMs = this.config.readinessCheckMs ?? 2_000;
         this.readinessCheckEndMs = this.trackingStartedAtMs + checkMs;
         this.poseReadiness = "checking";
-      } else if (this.usesBaselineRepCounting()) {
+      } else if (this.usesBaselineRepCounting() && !this.usesStsBiomechanicalCaptureV2()) {
         const durationMs = this.config.baselineDurationMs ?? 2_000;
         this.baselineWindowEndMs = this.trackingStartedAtMs + durationMs;
         this.isBaselineCalibrating = true;
@@ -936,7 +1055,7 @@ export class SitToStandDetector {
             const torsoSpan = computeTorsoSpan(landmarks);
             const nowMs = performance.now();
             this.updatePoseReadiness(nowMs, landmarks);
-            this.updateRepCountFromHipY(hipY, nowMs, torsoSpan);
+            this.updateRepCountFromHipY(hipY, nowMs, torsoSpan, landmarks);
             this.tickRepQualityFsm(landmarks, hipY, nowMs, torsoSpan);
 
             if (this.config.readinessEnabled) {

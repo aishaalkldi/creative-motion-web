@@ -134,6 +134,7 @@ import {
   buildPosturalAlignmentProxy,
   type PosturalAlignmentProxyResult,
 } from "@/app/lib/cv/postural-alignment-proxy";
+import type { StsMotionPilotAttemptSummary } from "@/app/lib/cv/sts-motion-pilot-record";
 
 export type { BiomechanicalContributionReview } from "@/app/lib/cv/biomechanical-contribution-review";
 export type { CvEvidenceIntegrityGate } from "@/app/lib/cv/cv-evidence-integrity-gate";
@@ -283,6 +284,7 @@ export type MotionAnalysisReport = {
   evidenceIntegrity: CvEvidenceIntegrityGate | null;
   stsBiomechanicalFlags: StsBiomechanicalFlagsResult | null;
   posturalAlignmentProxy: PosturalAlignmentProxyResult | null;
+  stsAttemptSummaries: StsMotionPilotAttemptSummary[] | null;
 };
 
 export type BuildMotionAnalysisReportInput = {
@@ -1086,6 +1088,13 @@ export function buildMotionAnalysisReport(
     movementQuality,
   });
 
+  const stsAttemptSummaries =
+    exerciseId === "sit-to-stand" &&
+    Array.isArray(input.motionQuality?.smtPilot?.attemptSummaries) &&
+    input.motionQuality.smtPilot.attemptSummaries.length > 0
+      ? input.motionQuality.smtPilot.attemptSummaries
+      : null;
+
   const reportDraft: MotionAnalysisReport = {
     sessionDurationSeconds,
     completedReps,
@@ -1122,6 +1131,7 @@ export function buildMotionAnalysisReport(
     evidenceIntegrity,
     stsBiomechanicalFlags,
     posturalAlignmentProxy,
+    stsAttemptSummaries,
   };
 
   const executiveSummary = buildMotionAnalysisExecutiveSummary(reportDraft);
@@ -1191,6 +1201,7 @@ export function buildMotionAnalysisReport(
     evidenceIntegrity,
     stsBiomechanicalFlags,
     posturalAlignmentProxy,
+    stsAttemptSummaries,
   };
 }
 

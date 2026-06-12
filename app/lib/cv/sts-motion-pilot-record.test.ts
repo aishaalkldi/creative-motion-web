@@ -72,6 +72,7 @@ describe("buildStsMotionPilotRecord", () => {
     assert.deepEqual(record.visibilityRatios, { hip: 80, knee: 75, ankle: 70 });
     assert.ok(record.clinicianFlags.includes("short_cycle"));
     assert.ok(record.clinicianFlags.includes("unclear_reps_recorded"));
+    assert.ok(record.attemptSummaries);
     assert.deepEqual(
       [...STS_PILOT_RECORD_ALLOWED_TOP_LEVEL_KEYS].sort(),
       Object.keys(record).sort(),

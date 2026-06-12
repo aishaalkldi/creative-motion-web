@@ -180,6 +180,25 @@ function isStsMotionPilotRecord(value: unknown): value is StsMotionPilotRecord {
   if (!r.clinicianFlags.every((flag) => typeof flag === "string" && flag.length > 0)) {
     return false;
   }
+  if (r.attemptSummaries !== undefined) {
+    if (!Array.isArray(r.attemptSummaries)) return false;
+    for (const attempt of r.attemptSummaries) {
+      if (!attempt || typeof attempt !== "object" || Array.isArray(attempt)) return false;
+      const a = attempt as Record<string, unknown>;
+      if (!Number.isInteger(a.attemptIndex) || (a.attemptIndex as number) < 1) return false;
+      if (a.attemptType !== "complete" && a.attemptType !== "partial" && a.attemptType !== "unclear") {
+        return false;
+      }
+      if (typeof a.risingDetected !== "boolean") return false;
+      if (typeof a.standingReached !== "boolean") return false;
+      if (typeof a.returningDetected !== "boolean") return false;
+      if (typeof a.seatedReturnReached !== "boolean") return false;
+      if (a.confidence !== "high" && a.confidence !== "medium" && a.confidence !== "low") {
+        return false;
+      }
+      if (a.reason !== null && typeof a.reason !== "string") return false;
+    }
+  }
   return findForbiddenKeysInStsPilotRecord(r as StsMotionPilotRecord).length === 0;
 }
 

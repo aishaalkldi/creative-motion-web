@@ -178,6 +178,7 @@ export const PATIENT_STS_CONFIG: SitToStandCvConfig = {
   bodyFramingProfileId: "seated-rise",
   landmarksOverlayOnly: true,
   motionTimelineEnabled: true,
+  stsBiomechanicalCaptureV2: true,
 };
 
 /**

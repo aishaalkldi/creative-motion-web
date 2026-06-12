@@ -383,6 +383,47 @@ const STS_FLAG_CONFIDENCE_CLASS: Record<StsBiomechanicalFlagConfidence, string> 
   low: "border-[#1E2D42] bg-[#070D16] text-[#9CA3AF]",
 };
 
+function StsMovementAttemptsSection({ report }: { report: MotionAnalysisReport }) {
+  const attempts = report.stsAttemptSummaries;
+  if (!attempts || attempts.length === 0) return null;
+
+  const labelForType = (type: string): string => {
+    if (type === "complete") return "Complete movement attempt";
+    if (type === "partial") return "Partial movement attempt";
+    return "Unclear attempt";
+  };
+
+  return (
+    <div className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5">
+      <SectionHeading>Sit-to-Stand movement attempts</SectionHeading>
+      <p className="mt-1 text-[9px] leading-relaxed text-[#6B7280]">
+        Camera-assisted movement evidence only — not a clinical score. Clinician review required.
+      </p>
+      <ul className="mt-2.5 space-y-2.5">
+        {attempts.map((attempt) => (
+          <li
+            key={attempt.attemptIndex}
+            className="rounded-[5px] border border-[#1E2D42] bg-[#070D16] px-2.5 py-2"
+          >
+            <p className="text-[11px] font-semibold text-[#F9FAFB]">
+              {labelForType(attempt.attemptType)} #{attempt.attemptIndex}
+            </p>
+            <ul className="mt-1.5 list-inside list-disc space-y-1 text-[10px] leading-snug text-[#D1D5DB]">
+              <li>Rising detected: {attempt.risingDetected ? "yes" : "no"}</li>
+              <li>Standing phase confirmed: {attempt.standingReached ? "yes" : "no"}</li>
+              <li>Returning detected: {attempt.returningDetected ? "yes" : "no"}</li>
+              <li>Seated return confirmed: {attempt.seatedReturnReached ? "yes" : "no"}</li>
+            </ul>
+            {attempt.reason ? (
+              <p className="mt-1.5 text-[10px] leading-relaxed text-[#9CA3AF]">{attempt.reason}</p>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function PosturalAlignmentProxySection({ report }: { report: MotionAnalysisReport }) {
   const alignment = report.posturalAlignmentProxy;
   if (!alignment || alignment.suppressed || alignment.observations.length === 0) {
@@ -925,6 +966,7 @@ function StsPolishedReportBody({ report }: { report: MotionAnalysisReport }) {
 
       <MovementTimingPhaseReviewSection report={report} compact />
       <StsBiomechanicalFlagsSection report={report} />
+      <StsMovementAttemptsSection report={report} />
       <PosturalAlignmentProxySection report={report} />
       <BiomechanicalContributionSection report={report} compact />
       <ReviewNextSection report={report} />
@@ -1006,6 +1048,7 @@ function LegacyReportBody({ report }: { report: MotionAnalysisReport }) {
       <ClinicalSnapshotSection report={report} isLegacy={isLegacy} />
       <MovementTimingPhaseReviewSection report={report} />
       <StsBiomechanicalFlagsSection report={report} />
+      <StsMovementAttemptsSection report={report} />
       <PosturalAlignmentProxySection report={report} />
       <BiomechanicalContributionSection report={report} />
       <PhaseInterpretationSection report={report} isLegacy={isLegacy} />

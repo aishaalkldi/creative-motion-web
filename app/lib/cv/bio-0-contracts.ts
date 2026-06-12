@@ -168,6 +168,8 @@ export type SitToStandCvConfig = {
   repTimeoutMs?: number;
   /** SMT-1: in-memory 1 Hz timeline + session summary (browser only; never POSTed). */
   motionTimelineEnabled?: boolean;
+  /** PR86: full-cycle STS biomechanical capture FSM (patient baseline rise mode). */
+  stsBiomechanicalCaptureV2?: boolean;
   /** Patient portal: rise = Sit-to-Stand, drop = Mini Squat (default rise). */
   repPolarity?: "rise" | "drop";
   /** Metrics payload exercise id (default sit-to-stand). */
