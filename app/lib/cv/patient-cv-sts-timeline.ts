@@ -24,6 +24,7 @@ import {
   type StsPhaseClassifierState,
 } from "@/app/lib/cv/sts-phase-classifier";
 import { buildStsTimelineTickFromCaptureState } from "@/app/lib/cv/sts-timeline-tick-builder";
+import type { StsAttemptSummary } from "@/app/lib/cv/sts-biomechanical-capture-fsm";
 
 export type RefBox<T> = { current: T };
 
@@ -82,6 +83,8 @@ export function recordStsMotionTimelineTick(
 
 export type StsTimelineMetricsSource = {
   getDerivedMetrics(): PatientCvDerivedMetrics;
+  getStsAttemptSummaries?: () => readonly StsAttemptSummary[];
+  finalizeStsBiomechCaptureForSave?: () => void;
 };
 
 /**
@@ -112,9 +115,12 @@ export function finalizeStsMotionTimelineCapture(
   if (!acc) return null;
 
   const snapshotCount = acc.getSnapshotCount();
+  metricsSource.finalizeStsBiomechCaptureForSave?.();
+  const attemptSummaries = metricsSource.getStsAttemptSummaries?.() ?? [];
   const { summary } = finalizeStsMotionTimelineSummary({
     accumulator: acc,
     legacyRepCount: legacyRepCountFromDerivedMetrics(metricsSource.getDerivedMetrics()),
+    attemptSummaries,
   });
 
   refs.lastFinalizeSnapshotCount.current = snapshotCount;

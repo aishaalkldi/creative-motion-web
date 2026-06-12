@@ -5,6 +5,7 @@
 
 import type { MotionSnapshot } from "@/app/lib/cv/motion-summary-types";
 import type { SitToStandDetectorSnapshot } from "@/app/lib/cv/sit-to-stand-detector";
+import { stsCapturePhaseToMovementPhase } from "@/app/lib/cv/sts-biomechanical-capture-fsm";
 
 /** Consecutive pose-lost ticks before labeling unknown (brief drops stay on last stable phase). */
 export const STS_POSE_LOST_UNKNOWN_MIN_TICKS = 8;
@@ -65,6 +66,14 @@ export function classifyStsMovementPhase(
   snap: SitToStandDetectorSnapshot,
   state: StsPhaseClassifierState,
 ): MotionSnapshot["movementPhase"] {
+  if (snap.capturePhase) {
+    const phase = stsCapturePhaseToMovementPhase(snap.capturePhase);
+    state.prevStandPhase = snap.standPhase ?? state.prevStandPhase;
+    state.prevRepCount = snap.repCount;
+    if (phase !== "unknown") state.lastStablePhase = phase;
+    return phase;
+  }
+
   const early = resolveStsRestOrUnknownPhase(snap, state);
   if (early) {
     state.prevStandPhase = snap.standPhase ?? state.prevStandPhase;

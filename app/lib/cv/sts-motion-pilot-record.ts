@@ -12,6 +12,7 @@ import type { StepUpMotionPilotRecord } from "@/app/lib/cv/step-up-motion-pilot-
 import type { MiniSquatMotionPilotRecord } from "@/app/lib/cv/mini-squat-motion-pilot-record";
 import { findForbiddenKeysInSummaryPayload } from "@/app/lib/cv/motion-summary-types";
 import type { SessionMotionSummary } from "@/app/lib/cv/motion-summary-types";
+import type { StsAttemptSummary } from "@/app/lib/cv/sts-biomechanical-capture-fsm";
 
 export const STS_MOTION_PILOT_VERSION = "smt-1" as const;
 
@@ -29,6 +30,19 @@ export type StsMotionPilotVisibilityRatios = {
   hip: number;
   knee: number;
   ankle: number;
+};
+
+export type StsMotionPilotAttemptSummary = {
+  attemptIndex: number;
+  attemptType: "complete" | "partial" | "unclear";
+  risingDetected: boolean;
+  standingReached: boolean;
+  returningDetected: boolean;
+  seatedReturnReached: boolean;
+  phaseDurationsMs: StsAttemptSummary["phaseDurationsMs"];
+  hipVerticalDisplacement: number | null;
+  confidence: StsAttemptSummary["confidence"];
+  reason: string | null;
 };
 
 export type StsMotionPilotRecord = {
@@ -49,6 +63,7 @@ export type StsMotionPilotRecord = {
   reviewRequired: true;
   reviewReason: string;
   disclaimer: string;
+  attemptSummaries?: StsMotionPilotAttemptSummary[];
 };
 
 export const STS_PILOT_RECORD_ALLOWED_TOP_LEVEL_KEYS = [
@@ -69,6 +84,7 @@ export const STS_PILOT_RECORD_ALLOWED_TOP_LEVEL_KEYS = [
   "reviewRequired",
   "reviewReason",
   "disclaimer",
+  "attemptSummaries",
 ] as const satisfies readonly (keyof StsMotionPilotRecord)[];
 
 export type BuildStsMotionPilotRecordInput = {
@@ -76,7 +92,36 @@ export type BuildStsMotionPilotRecordInput = {
   metrics: SitToStandDerivedMetrics;
   snapshotCount: number;
   extraClinicianFlags?: string[];
+  attemptSummaries?: readonly StsAttemptSummary[];
 };
+
+function toPilotAttemptSummary(
+  attempt: StsAttemptSummary,
+): StsMotionPilotAttemptSummary {
+  return {
+    attemptIndex: attempt.attemptIndex,
+    attemptType: attempt.attemptType,
+    risingDetected: attempt.risingDetected,
+    standingReached: attempt.standingReached,
+    returningDetected: attempt.returningDetected,
+    seatedReturnReached: attempt.seatedReturnReached,
+    phaseDurationsMs: attempt.phaseDurationsMs,
+    hipVerticalDisplacement: attempt.hipVerticalDisplacement,
+    confidence: attempt.confidence,
+    reason: attempt.reason,
+  };
+}
+
+function buildAttemptClinicianFlags(
+  attempts: readonly StsAttemptSummary[],
+): string[] {
+  const flags: string[] = [];
+  const partial = attempts.filter((a) => a.attemptType === "partial").length;
+  const unclear = attempts.filter((a) => a.attemptType === "unclear").length;
+  if (partial > 0) flags.push("partial_movement_attempts_recorded");
+  if (unclear > 0) flags.push("unclear_movement_attempts_recorded");
+  return flags;
+}
 
 function dominantTrackingSignal(
   distribution: SessionMotionSummary["trackingQualityDistribution"],
@@ -158,6 +203,9 @@ export function buildStsMotionPilotRecord(
 ): StsMotionPilotRecord {
   const { summary, metrics, snapshotCount } = input;
 
+  const attemptSummaries = input.attemptSummaries ?? [];
+  const pilotAttempts = attemptSummaries.map(toPilotAttemptSummary);
+
   return {
     pilotVersion: STS_MOTION_PILOT_VERSION,
     isPilot: true,
@@ -180,11 +228,15 @@ export function buildStsMotionPilotRecord(
       knee: clampPct(summary.visibilityAssist.kneeVisiblePct),
       ankle: clampPct(summary.visibilityAssist.ankleVisiblePct),
     },
-    clinicianFlags: buildClinicianFlags(summary, input.extraClinicianFlags),
+    clinicianFlags: buildClinicianFlags(summary, [
+      ...(input.extraClinicianFlags ?? []),
+      ...buildAttemptClinicianFlags(attemptSummaries),
+    ]),
     reviewRequired: true,
     reviewReason: "derived_motion_timeline_pilot",
     disclaimer:
       "Assistive motion capture for clinician review only. Not a clinical score or diagnosis.",
+    attemptSummaries: pilotAttempts.length > 0 ? pilotAttempts : [],
   };
 }
 

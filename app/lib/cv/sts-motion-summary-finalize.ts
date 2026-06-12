@@ -10,10 +10,13 @@ import {
 } from "@/app/lib/cv/motion-summary-types";
 import { buildStsSessionMotionSummary } from "@/app/lib/cv/sts-motion-summary-builder";
 import { deriveStsRepTimingRecordsFromSnapshots } from "@/app/lib/cv/sts-rep-records-from-snapshots";
+import { deriveStsRepTimingRecordsFromAttempts } from "@/app/lib/cv/sts-attempt-records";
+import type { StsAttemptSummary } from "@/app/lib/cv/sts-biomechanical-capture-fsm";
 
 export type StsMotionSummaryFinalizeInput = {
   accumulator: MotionTimelineAccumulator;
   legacyRepCount: number;
+  attemptSummaries?: readonly StsAttemptSummary[];
   capturedAt?: string;
 };
 
@@ -26,7 +29,10 @@ export function finalizeStsMotionTimelineSummary(
   input: StsMotionSummaryFinalizeInput,
 ): StsMotionSummaryFinalizeResult {
   const snapshots = input.accumulator.getSnapshots();
-  const repRecords = deriveStsRepTimingRecordsFromSnapshots(snapshots);
+  const repRecords =
+    input.attemptSummaries && input.attemptSummaries.length > 0
+      ? deriveStsRepTimingRecordsFromAttempts(input.attemptSummaries)
+      : deriveStsRepTimingRecordsFromSnapshots(snapshots);
 
   const summary = buildStsSessionMotionSummary({
     snapshots,
