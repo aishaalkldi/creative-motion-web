@@ -24,3 +24,20 @@ Add to **Vercel → Project → Settings → Environment Variables**:
 | `OPENAI_API_KEY` | Yes (Arabic translation) | Required for clinician AI-assisted English translation on Arabic assessment reports. Add to `.env.local` for local testing and to Vercel Production. If unset, the report shows **Translation is not configured yet**. Never commit the key. |
 
 Do not commit real contact values or API keys to the repo.
+
+## Health / migration readiness
+
+After setting env vars and applying migrations `001`–`009`, verify the pilot schema:
+
+```bash
+curl -s https://your-deployment.vercel.app/api/health/supabase | jq
+```
+
+Response fields:
+
+- `status`: `ok` (all checks pass), `degraded` (connected but a table failed), `error` (env or connection failure)
+- `env`: booleans only — never secret values
+- `tables`: per-table `ok` / `error` (with safe `code` such as `missing_table`)
+- `checkedAt`: ISO timestamp
+
+HTTP `503` when `status` is `error`; `200` for `ok` or `degraded`.
