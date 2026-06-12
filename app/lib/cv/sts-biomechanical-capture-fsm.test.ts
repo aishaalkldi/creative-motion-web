@@ -112,6 +112,28 @@ describe("resolveStsAdaptiveThresholds", () => {
     assert.ok(thresholds.standConfirm < thresholds.seatedBaseline);
     assert.ok(thresholds.seatConfirm < thresholds.seatedBaseline);
     assert.ok(thresholds.riseTrigger < thresholds.seatConfirm);
+    assert.ok(thresholds.returnTrigger < thresholds.seatConfirm);
+    assert.ok(thresholds.returnTrigger > thresholds.standConfirm);
+  });
+
+  it("keeps returnTrigger below seatConfirm when stand band is narrow (PR88)", () => {
+    const narrowConfig = baselineConfigFromSts({
+      baselineStandDelta: 0.03,
+      baselineResetDelta: 0.03,
+      baselineScaleByTorso: true,
+      baselineStandDeltaRatio: 0.08,
+      baselineResetDeltaRatio: 0.08,
+      baselineStandDeltaMin: 0.02,
+      baselineResetDeltaMin: 0.015,
+    });
+    const thresholds = resolveStsAdaptiveThresholds(
+      0.55,
+      narrowConfig,
+      0.22,
+      "limited",
+      CAPTURE_CONFIG,
+    );
+    assert.ok(thresholds.returnTrigger < thresholds.seatConfirm);
   });
 });
 
@@ -168,7 +190,7 @@ describe("StsBiomechanicalCaptureFsm", () => {
 
     tickSequence(fsm, state, [
       ...frames(400, 3, 0.54, 40),
-      ...frames(520, 3, 0.501, 40),
+      ...frames(520, 3, 0.502, 40),
       ...frames(640, 4, 0.54, 40),
     ]);
 
@@ -309,7 +331,7 @@ describe("StsBiomechanicalCaptureFsm — PR87 home-camera tolerance", () => {
 
     tickSequence(fsm, state, [
       ...frames(400, 3, 0.54, 40),
-      ...frames(520, 3, 0.501, 40),
+      ...frames(520, 3, 0.502, 40),
       ...frames(640, 4, 0.54, 40),
     ]);
 
@@ -329,7 +351,7 @@ describe("StsBiomechanicalCaptureFsm — PR87 home-camera tolerance", () => {
 
     tickSequence(fsm, state, [
       ...frames(400, 3, 0.54, 40),
-      ...frames(520, 3, 0.501, 40),
+      ...frames(520, 3, 0.502, 40),
       ...frames(640, 4, 0.54, 40),
       ...homeStsCycle(1_200),
     ]);
@@ -341,5 +363,129 @@ describe("StsBiomechanicalCaptureFsm — PR87 home-camera tolerance", () => {
         state.attempts[0]!.attemptType === "unclear",
     );
     assert.equal(state.attempts[1]!.attemptType, "complete");
+  });
+});
+
+describe("StsBiomechanicalCaptureFsm — PR88 returning / seated-return", () => {
+  const HOME_CONFIG = {
+    ...PATIENT_STS_BIOMECH_CAPTURE_CONFIG,
+    minCompleteCycleMs: 500,
+    minMsBetweenReps: 400,
+    baselineDurationMs: 100,
+  };
+
+  it("counts complete rep when standing is confirmed then hipY returns to baseline", () => {
+    const fsm = new StsBiomechanicalCaptureFsm(BASELINE_CONFIG, HOME_CONFIG);
+    const state = createStsBiomechanicalCaptureState();
+    calibrate(fsm, state);
+
+    tickSequence(fsm, state, homeStsCycle(400));
+
+    assert.equal(state.repCount, 1);
+    assert.equal(state.attempts[0]!.attemptType, "complete");
+    assert.equal(state.attempts[0]!.standingReached, true);
+    assert.equal(state.attempts[0]!.returningDetected, true);
+    assert.equal(state.attempts[0]!.seatedReturnReached, true);
+  });
+
+  it("detects returning after standing hold then seated descent", () => {
+    const fsm = new StsBiomechanicalCaptureFsm(BASELINE_CONFIG, HOME_CONFIG);
+    const state = createStsBiomechanicalCaptureState();
+    calibrate(fsm, state);
+
+    tickSequence(fsm, state, [
+      ...frames(400, 4, 0.54, 40),
+      ...frames(600, 4, 0.49, 50),
+      ...frames(820, 3, 0.47, 50),
+      ...frames(970, 8, 0.47, 50),
+      ...frames(1_320, 5, 0.54, 50),
+    ]);
+
+    assert.equal(state.repCount, 1);
+    assert.equal(state.attempts[0]!.returningDetected, true);
+    assert.equal(state.attempts[0]!.seatedReturnReached, true);
+  });
+
+  it("counts complete rep with narrow stand/seat band (returnTrigger clamp)", () => {
+    const narrowBaseline = baselineConfigFromSts({
+      baselineStandDelta: 0.03,
+      baselineResetDelta: 0.03,
+      baselineScaleByTorso: true,
+      baselineStandDeltaRatio: 0.08,
+      baselineResetDeltaRatio: 0.08,
+      baselineStandDeltaMin: 0.02,
+      baselineResetDeltaMin: 0.015,
+      minMsBetweenReps: 400,
+      fallbackSeatedHipY: 0.55,
+    });
+    const fsm = new StsBiomechanicalCaptureFsm(narrowBaseline, HOME_CONFIG);
+    const state = createStsBiomechanicalCaptureState();
+    calibrate(fsm, state);
+
+    tickSequence(fsm, state, [
+      ...frames(400, 4, 0.54, 40),
+      ...frames(600, 4, 0.51, 50),
+      ...frames(820, 3, 0.49, 50),
+      ...frames(970, 6, 0.49, 50),
+      ...frames(1_270, 5, 0.54, 50),
+    ]);
+
+    assert.equal(state.repCount, 1);
+    assert.equal(state.attempts[0]!.attemptType, "complete");
+    assert.equal(state.attempts[0]!.returningDetected, true);
+    assert.equal(state.attempts[0]!.seatedReturnReached, true);
+  });
+
+  it("does not count partial rise without standing", () => {
+    const fsm = new StsBiomechanicalCaptureFsm(BASELINE_CONFIG, HOME_CONFIG);
+    const state = createStsBiomechanicalCaptureState();
+    calibrate(fsm, state);
+
+    tickSequence(fsm, state, [
+      ...frames(400, 3, 0.54, 40),
+      ...frames(520, 3, 0.502, 40),
+      ...frames(640, 4, 0.54, 40),
+    ]);
+
+    assert.equal(state.repCount, 0);
+    assert.equal(state.attempts[0]!.standingReached, false);
+    assert.equal(state.attempts[0]!.returningDetected, false);
+  });
+
+  it("keeps standing-without-return as partial", () => {
+    const fsm = new StsBiomechanicalCaptureFsm(BASELINE_CONFIG, HOME_CONFIG);
+    const state = createStsBiomechanicalCaptureState();
+    calibrate(fsm, state);
+
+    tickSequence(fsm, state, [
+      ...frames(400, 4, 0.54, 40),
+      ...frames(600, 4, 0.49, 50),
+      ...frames(820, 10, 0.47, 50),
+    ]);
+    fsm.finalizeSession(state, 2_000);
+
+    assert.equal(state.repCount, 0);
+    assert.equal(state.attempts[0]!.attemptType, "partial");
+    assert.equal(state.attempts[0]!.standingReached, true);
+    assert.equal(state.attempts[0]!.returningDetected, false);
+    assert.equal(state.attempts[0]!.seatedReturnReached, false);
+  });
+
+  it("does not count seated jitter as rep", () => {
+    const fsm = new StsBiomechanicalCaptureFsm(BASELINE_CONFIG, HOME_CONFIG);
+    const state = createStsBiomechanicalCaptureState();
+    calibrate(fsm, state);
+
+    tickSequence(
+      fsm,
+      state,
+      Array.from({ length: 30 }, (_, i) => ({
+        hipY: 0.54 + (i % 2 === 0 ? 0.004 : -0.004),
+        nowMs: 400 + i * 40,
+      })),
+    );
+
+    assert.equal(state.repCount, 0);
+    assert.equal(state.attempts.length, 0);
   });
 });
