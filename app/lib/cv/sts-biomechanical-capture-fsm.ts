@@ -73,10 +73,16 @@ export type StsBiomechanicalCaptureConfig = {
   attemptTimeoutMs: number;
   minCompleteCycleMs: number;
   debounceFrames: number;
+  /** Faster standing confirmation — brief peaks still count (PR87). */
+  standingDebounceFrames: number;
   /** Hip-Y band below seat confirm before entering rising. */
   risingEnterEpsilon: number;
   /** Hysteresis above stand confirm before entering returning. */
   returnHysteresis: number;
+  /** Fraction of primary delta for stand confirm (lower = more tolerant). */
+  standConfirmDeltaFraction: number;
+  /** Min hip rise vs baseline to treat peak as standing-like when hold is brief. */
+  minPeakDisplacementFraction: number;
   /** Minimum baseline samples for strong calibration. */
   minStrongBaselineSamples: number;
 };
@@ -86,11 +92,19 @@ export const DEFAULT_STS_BIOMECH_CAPTURE_CONFIG: StsBiomechanicalCaptureConfig =
   fallbackSeatedHipY: 0.55,
   minMsBetweenReps: 800,
   attemptTimeoutMs: 15_000,
-  minCompleteCycleMs: 900,
-  debounceFrames: 4,
-  risingEnterEpsilon: 0.012,
-  returnHysteresis: 0.015,
+  minCompleteCycleMs: 650,
+  debounceFrames: 3,
+  standingDebounceFrames: 2,
+  risingEnterEpsilon: 0.01,
+  returnHysteresis: 0.012,
+  standConfirmDeltaFraction: 0.72,
+  minPeakDisplacementFraction: 0.95,
   minStrongBaselineSamples: 12,
+};
+
+/** Patient portal — home-camera tolerant tuning (PR87). */
+export const PATIENT_STS_BIOMECH_CAPTURE_CONFIG: StsBiomechanicalCaptureConfig = {
+  ...DEFAULT_STS_BIOMECH_CAPTURE_CONFIG,
 };
 
 export type StsBiomechanicalCaptureState = {
@@ -231,16 +245,27 @@ export function resolveStsAdaptiveThresholds(
   );
 
   const qualityScale =
-    calibrationQuality === "strong" ? 1 : calibrationQuality === "limited" ? 1.05 : 1.1;
-  const scaledPrimary = primaryDelta * qualityScale;
+    calibrationQuality === "strong" ? 1 : calibrationQuality === "limited" ? 0.97 : 0.94;
+  const scaledPrimary =
+    primaryDelta *
+    qualityScale *
+    captureConfig.standConfirmDeltaFraction;
   const standConfirm = seatedBaseline - scaledPrimary;
   const seatConfirm = seatedBaseline - resetDelta;
+  const standToSeatGap = Math.max(0, seatConfirm - standConfirm);
+  const returnTrigger = round3(
+    standConfirm +
+      Math.max(
+        captureConfig.returnHysteresis * 0.5,
+        standToSeatGap * 0.35,
+      ),
+  );
 
   return {
     seatedBaseline: round3(seatedBaseline),
     riseTrigger: round3(seatConfirm - captureConfig.risingEnterEpsilon),
     standConfirm: round3(standConfirm),
-    returnTrigger: round3(standConfirm + captureConfig.returnHysteresis),
+    returnTrigger,
     seatConfirm: round3(seatConfirm),
     riseDelta: round3(scaledPrimary),
     resetDelta: round3(resetDelta),
@@ -455,6 +480,14 @@ export class StsBiomechanicalCaptureFsm {
     }
   }
 
+  private peakDisplacementMet(
+    attempt: ActiveAttempt,
+    thresholds: StsAdaptiveThresholds,
+  ): boolean {
+    const displacement = attempt.seatedBaselineAtStart - attempt.minHipY;
+    return displacement >= thresholds.riseDelta * this.captureConfig.minPeakDisplacementFraction;
+  }
+
   private tickRising(
     state: StsBiomechanicalCaptureState,
     input: StsBiomechanicalCaptureTickInput,
@@ -484,7 +517,8 @@ export class StsBiomechanicalCaptureFsm {
       smoothed <= thresholds.standConfirm || input.hipY <= thresholds.standConfirm;
     state.standingStreak = nextStreak(state.standingStreak, standCondition);
 
-    if (state.standingStreak >= debounce) {
+    const standingDebounce = this.captureConfig.standingDebounceFrames;
+    if (state.standingStreak >= standingDebounce) {
       this.active.standingReached = true;
       this.active.standingStartMs = input.nowMs;
       state.phase = "standing";
@@ -504,6 +538,20 @@ export class StsBiomechanicalCaptureFsm {
       );
       state.phase = "seated";
       state.seatedStreak = 0;
+      return;
+    }
+
+    const returnFromRise =
+      this.peakDisplacementMet(this.active, thresholds) &&
+      (smoothed > thresholds.returnTrigger || input.hipY > thresholds.returnTrigger);
+    state.returningStreak = nextStreak(state.returningStreak, returnFromRise);
+    if (state.returningStreak >= debounce) {
+      this.active.standingReached = true;
+      this.active.standingStartMs = this.active.standingStartMs ?? input.nowMs;
+      this.active.returningDetected = true;
+      this.active.returningStartMs = input.nowMs;
+      state.phase = "returning";
+      state.returningStreak = 0;
     }
   }
 
@@ -576,12 +624,24 @@ export class StsBiomechanicalCaptureFsm {
     if (state.seatedStreak >= debounce) {
       this.active.seatedReturnReached = true;
       const duration = input.nowMs - this.active.startTimeMs;
-      const attemptType: StsAttemptType =
-        duration >= this.captureConfig.minCompleteCycleMs ? "complete" : "unclear";
-      const reason =
-        attemptType === "complete"
-          ? null
-          : "Cycle duration was too brief for a supported complete attempt.";
+      const peakReached =
+        this.active.standingReached || this.peakDisplacementMet(this.active, thresholds);
+
+      let attemptType: StsAttemptType;
+      let reason: string | null = null;
+
+      if (!this.active.risingDetected || !this.active.returningDetected) {
+        attemptType = "partial";
+        reason = "Return confirmed but phase transition evidence was incomplete.";
+      } else if (!peakReached) {
+        attemptType = "partial";
+        reason = "Return confirmed but standing-like peak was not reached.";
+      } else if (duration < this.captureConfig.minCompleteCycleMs) {
+        attemptType = "unclear";
+        reason = "Cycle duration was too brief for a supported complete attempt.";
+      } else {
+        attemptType = "complete";
+      }
 
       this.finalizeActiveAttempt(state, input.nowMs, attemptType, reason);
       if (attemptType === "complete") {
