@@ -9,6 +9,7 @@ Use this checklist before, during, and after a controlled clinic pilot demo.
 ### Environment
 
 - [ ] Production URL confirmed: https://creative-motion-web.vercel.app
+- [ ] Supabase readiness: `GET /api/health/supabase` returns `status: "ok"` (all pilot tables reachable)
 - [ ] Clinician login tested (provider account active)
 - [ ] Second device/browser ready for patient flows (assessment + portal)
 - [ ] Stable network; backup hotspot if clinic Wi‑Fi is unreliable

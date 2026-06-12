@@ -35,6 +35,8 @@ const PUBLIC_PATHS = new Set([
   "/terms",
   "/intended-use",
   "/clinical-safety",
+  // Ops readiness — env booleans + pilot table reachability only (no secrets).
+  "/api/health/supabase",
 ]);
 
 function isPublic(pathname: string): boolean {
