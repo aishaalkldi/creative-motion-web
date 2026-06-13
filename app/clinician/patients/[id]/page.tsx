@@ -81,6 +81,9 @@ import { buildPatientTimeline } from "../../../lib/clinician/patient-timeline";
 import {
   buildRemoteQuestionnaireSummary,
 } from "../../../lib/remote-questionnaire-summary";
+import { displayPatientFileHeader } from "../../../lib/patient-file-number";
+import { resolveCurrentAndPreviousPlans } from "../../../lib/clinician/resolve-current-plan";
+import { PreviousPlansSummary } from "../../../components/clinician/PreviousPlansSummary";
 
 export default function PatientProfilePage() {
   const params = useParams();
@@ -115,6 +118,7 @@ export default function PatientProfilePage() {
   const [planProgress, setPlanProgress] = useState<PatientProgressSummary | null>(null);
   const [planLoading, setPlanLoading] = useState(false);
   const [patientPlanRows, setPatientPlanRows] = useState<PlanRow[]>([]);
+  const [previousPlanRows, setPreviousPlanRows] = useState<PlanRow[]>([]);
   const [timelineBundle, setTimelineBundle] = useState<PatientTimelineBundle | null>(null);
 
   // Remote assessment state
@@ -206,8 +210,10 @@ export default function PatientProfilePage() {
         if (!res.ok) return;
         const plans = (await res.json()) as PlanRow[];
         setPatientPlanRows(plans);
-        if (plans.length > 0) {
-          const p = plans[0];
+        const { currentPlan, previousPlans } = resolveCurrentAndPreviousPlans(plans);
+        setPreviousPlanRows(previousPlans);
+        if (currentPlan) {
+          const p = currentPlan;
           const sd = p.structured_data;
           const mapped: TreatmentPlan = {
             id:              p.id,
@@ -279,8 +285,9 @@ export default function PatientProfilePage() {
             });
           }
         } else {
+          setTreatmentPlan(null);
           setPlanProgress(null);
-          setPatientPlanRows([]);
+          setPreviousPlanRows([]);
         }
       })
       .catch(() => { /* silent — empty state shown */ })
@@ -734,6 +741,9 @@ export default function PatientProfilePage() {
               Patients
             </Link>
             <h1 className="mt-1.5 text-2xl font-bold text-white">{patient.full_name}</h1>
+            <p className="mt-1 text-xs font-semibold text-white/45">
+              {displayPatientFileHeader(patient.file_number, patient.id)}
+            </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {patient.phone && (
                 <>
@@ -1209,6 +1219,8 @@ export default function PatientProfilePage() {
               plan={treatmentPlan}
               loading={planLoading}
             />
+
+            <PreviousPlansSummary plans={previousPlanRows} />
 
             {/* Progress Snapshot */}
             <ProgressSnapshotSection

@@ -17,6 +17,7 @@ export type PatientRow = {
   diagnosis: string | null;
   sport: string | null;
   status: string;
+  file_number: string | null;
   created_at: string;
   updated_at: string;
 };
