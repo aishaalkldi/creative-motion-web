@@ -1099,6 +1099,40 @@ export function workspaceUi(lang: PatientPortalLanguage): WorkspaceUi {
   return WORKSPACE[lang];
 }
 
+/* ── Lifetime progress summary (PR93) ───────────────────────────────────────── */
+
+export type LifetimeSummaryUi = {
+  title: string;
+  subtitle: string;
+  completedSessions: string;
+  programsAssigned: string;
+  movementCaptures: string;
+  lastActivity: string;
+};
+
+const LIFETIME_SUMMARY: Record<PatientPortalLanguage, LifetimeSummaryUi> = {
+  en: {
+    title: "Your rehab journey",
+    subtitle: "Across all your programs with this clinic",
+    completedSessions: "Completed sessions",
+    programsAssigned: "Programs assigned",
+    movementCaptures: "Movement captures",
+    lastActivity: "Last activity",
+  },
+  ar: {
+    title: "رحلة تأهيلك",
+    subtitle: "عبر كل برامجك مع هذه العيادة",
+    completedSessions: "الجلسات المكتملة",
+    programsAssigned: "البرامج المخصصة",
+    movementCaptures: "تسجيلات الحركة",
+    lastActivity: "آخر نشاط",
+  },
+};
+
+export function lifetimeSummaryUi(lang: PatientPortalLanguage): LifetimeSummaryUi {
+  return LIFETIME_SUMMARY[lang];
+}
+
 /* ── Camera setup & tracking readiness (PR81) ─────────────────────────────── */
 
 export type PatientCvReadinessDisplayState =

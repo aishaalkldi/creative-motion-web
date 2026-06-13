@@ -25,6 +25,13 @@ import {
   extractPlanProgramMetadata,
   resolvePatientRehabFocus,
 } from "../../../lib/plan-program-metadata";
+import {
+  fetchPatientLifetimeSummary,
+  type PatientLifetimeSummary,
+} from "../../../lib/patient-lifetime-summary";
+
+// Re-export for portal consumers
+export type { PatientLifetimeSummary };
 
 // ── Public types (imported by patient portal pages) ────────────────────────────
 
@@ -63,6 +70,8 @@ export type PatientPlanData = {
   assignedBy: string;
   assignedAt: string;
   sessions: PatientSession[];
+  /** Aggregate counts across all plans for this patient (no historical details). */
+  lifetimeSummary: PatientLifetimeSummary;
   // provider_id is intentionally excluded
 };
 
@@ -101,12 +110,13 @@ export async function GET(req: NextRequest) {
     patient_name: string;
     patient_id: string;
     plan_id: string;
+    provider_id: string;
     is_active: boolean;
     expires_at: string | null;
   };
   const { data: tokenRow, error: tokenErr } = await admin
     .from("patient_access_tokens")
-    .select("id, patient_name, patient_id, plan_id, is_active, expires_at")
+    .select("id, patient_name, patient_id, plan_id, provider_id, is_active, expires_at")
     .eq("token", tokenValue)
     .maybeSingle<TokenRow>();
 
@@ -120,6 +130,11 @@ export async function GET(req: NextRequest) {
   if (tokenRow.expires_at && new Date(tokenRow.expires_at) < new Date()) {
     return invalidPatientTokenResponse(req);
   }
+
+  const lifetimeSummaryPromise = fetchPatientLifetimeSummary(admin, {
+    patientId: tokenRow.patient_id,
+    providerId: tokenRow.provider_id,
+  });
 
   // 2 — Fetch treatment plan (exclude provider_id from select)
   type PlanRow = {
@@ -184,6 +199,8 @@ export async function GET(req: NextRequest) {
 
   const patientLanguage = getAssessmentLanguage(latestAssessment?.structured_data) ?? "en";
 
+  const lifetimeSummary = await lifetimeSummaryPromise;
+
   const sd = plan.structured_data;
   const programMeta = extractPlanProgramMetadata(sd);
 
@@ -213,6 +230,7 @@ export async function GET(req: NextRequest) {
       scheduledAt:   s.scheduled_at,
       completedAt:   s.completed_at,
     })),
+    lifetimeSummary,
   };
 
   return NextResponse.json(result);

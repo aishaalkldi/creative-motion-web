@@ -14,6 +14,7 @@ import {
   progressPortalV1Ui,
   type PatientPortalLanguage,
 } from "@/app/lib/patient-portal-ui";
+import { PatientLifetimeSummaryCard } from "@/app/components/patient/PatientLifetimeSummaryCard";
 
 type PatientProgressPortalProps = {
   plan: PatientPlanData;
@@ -90,6 +91,13 @@ export function PatientProgressPortal({
           </p>
         </div>
       </section>
+
+      <PatientLifetimeSummaryCard
+        summary={plan.lifetimeSummary}
+        lang={lang}
+        textDir={textDir}
+        arClass={arClass}
+      />
 
       {/* 2 — Quick Stats */}
       <section className="rounded-[10px] border border-[#E2E8E5] bg-white p-4">
