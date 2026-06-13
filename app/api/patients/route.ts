@@ -3,7 +3,12 @@ import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PatientRow } from "../../lib/validate-patient-ownership";
+import {
+  formatPatientFileNumber,
+  nextPatientFileNumberSequence,
+} from "../../lib/patient-file-number";
 import {
   API_ERRORS,
   genericServerErrorResponse,
@@ -55,6 +60,33 @@ async function buildClients() {
 function migrationPending() {
   console.error("[/api/patients] patients.provider_id column missing — apply migration 003");
   return genericServerErrorResponse();
+}
+
+function fileNumberMigrationPending() {
+  console.error("[/api/patients] patients.file_number column missing — apply migration 010");
+  return genericServerErrorResponse();
+}
+
+async function loadProviderFileNumbers(
+  adminClient: SupabaseClient,
+  providerId: string,
+): Promise<{ ok: true; values: string[] } | { ok: false; migration: true } | { ok: false; error: unknown }> {
+  const { data, error } = await adminClient
+    .from("patients")
+    .select("file_number")
+    .eq("provider_id", providerId)
+    .not("file_number", "is", null);
+
+  if (error) {
+    if (error.code === "42703") return { ok: false, migration: true };
+    return { ok: false, error };
+  }
+
+  const values = (data ?? [])
+    .map((row) => (row as { file_number: string | null }).file_number)
+    .filter((v): v is string => Boolean(v?.trim()));
+
+  return { ok: true, values };
 }
 
 // ── GET /api/patients ──────────────────────────────────────────────────────────
@@ -112,6 +144,7 @@ type CreatePatientBody = {
   diagnosis?: string | null;
   sport?: string | null;
   status?: string | null;
+  file_number?: unknown;
 };
 
 /**
@@ -171,6 +204,12 @@ export async function POST(req: NextRequest) {
   if (!phone) {
     return NextResponse.json({ error: "phone is required." }, { status: 400 });
   }
+  if (body.file_number !== undefined) {
+    return NextResponse.json(
+      { error: "file_number is assigned server-side and cannot be set by the client." },
+      { status: 400 },
+    );
+  }
 
   const age =
     body.age === undefined || body.age === null
@@ -179,29 +218,55 @@ export async function POST(req: NextRequest) {
         ? Math.floor(body.age)
         : null;
 
-  // ── Insert ───────────────────────────────────────────────────────────────────
-  // provider_id is ALWAYS set from the verified session — never from the body.
-  const { data: patient, error: insertError } = await adminClient
-    .from("patients")
-    .insert({
-      provider_id: user.id,
-      full_name: fullName,
-      phone,
-      age,
-      gender: body.gender?.trim() || null,
-      diagnosis: body.diagnosis?.trim() || null,
-      sport: body.sport?.trim() || null,
-      status: body.status?.trim() || "new",
-    })
-    .select()
-    .single();
-
-  if (insertError) {
-    if (insertError.code === "42703") return migrationPending();
-
-    console.error("[POST /api/patients] insert failed:", insertError.message);
+  // ── Insert with server-assigned file_number (never from client body) ─────────
+  const existingNumbers = await loadProviderFileNumbers(adminClient, user.id);
+  if (!existingNumbers.ok) {
+    if ("migration" in existingNumbers && existingNumbers.migration) {
+      return fileNumberMigrationPending();
+    }
+    console.error("[POST /api/patients] file_number lookup failed");
     return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
 
-  return NextResponse.json(patient as PatientRow, { status: 201 });
+  const baseInsert = {
+    provider_id: user.id,
+    full_name: fullName,
+    phone,
+    age,
+    gender: body.gender?.trim() || null,
+    diagnosis: body.diagnosis?.trim() || null,
+    sport: body.sport?.trim() || null,
+    status: body.status?.trim() || "new",
+  };
+
+  let seq = nextPatientFileNumberSequence(existingNumbers.values);
+  let patient: PatientRow | null = null;
+  let lastError: { code?: string; message?: string } | null = null;
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const file_number = formatPatientFileNumber(seq + attempt);
+    const { data, error: insertError } = await adminClient
+      .from("patients")
+      .insert({ ...baseInsert, file_number })
+      .select()
+      .single();
+
+    if (!insertError && data) {
+      patient = data as PatientRow;
+      break;
+    }
+
+    lastError = insertError;
+    if (insertError?.code === "42703") return fileNumberMigrationPending();
+    if (insertError?.code === "23505") continue;
+    break;
+  }
+
+  if (!patient) {
+    if (lastError?.code === "42703") return migrationPending();
+    console.error("[POST /api/patients] insert failed:", lastError?.message);
+    return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
+  }
+
+  return NextResponse.json(patient, { status: 201 });
 }

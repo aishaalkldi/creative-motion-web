@@ -27,7 +27,7 @@ Do not commit real contact values or API keys to the repo.
 
 ## Health / migration readiness
 
-After setting env vars and applying migrations `001`–`009`, verify the pilot schema:
+After setting env vars and applying migrations `001`–`010`, verify the pilot schema:
 
 ```bash
 curl -s https://your-deployment.vercel.app/api/health/supabase | jq
@@ -41,3 +41,5 @@ Response fields:
 - `checkedAt`: ISO timestamp
 
 HTTP `503` when `status` is `error`; `200` for `ok` or `degraded`.
+
+Migration `010_patients_file_number.sql` adds nullable `patients.file_number` — a clinic-visible patient file reference per provider (not a clinical diagnosis identifier). New patients receive a server-assigned value on create; existing rows are not backfilled in this release.

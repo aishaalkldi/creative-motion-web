@@ -80,6 +80,7 @@ type PatchBody = {
   sport?: string | null;
   diagnosis?: string | null;
   status?: string | null;
+  file_number?: unknown;
 };
 
 /**
@@ -111,6 +112,8 @@ export async function PATCH(
   let body: PatchBody;
   try { body = (await req.json()) as PatchBody; }
   catch { return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 }); }
+
+  // file_number is intentionally omitted — assigned server-side on create only.
 
   const patch: Record<string, unknown> = {};
   if (body.full_name !== undefined) {
