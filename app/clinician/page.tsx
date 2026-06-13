@@ -16,6 +16,7 @@ import type { PatientRow } from "@/app/lib/validate-patient-ownership";
 
 const QUICK_ACTIONS = [
   { title: "Add Patient",          description: "Create a new patient file",              href: "/clinician/patients/new" },
+  { title: "Assessment Center",    description: "Plan and review movement assessments.",  href: "/clinician/assessments" },
   { title: "Start Assessment",     description: "In-clinic or remote patient link",       href: "/clinician/assessment/start" },
   { title: "Review Results",       description: "Assessment queue and rehab progress",    href: "/clinician/results" },
   { title: "Build Plan",           description: "Assign a rehabilitation programme",      href: "/clinician/plans/new" },

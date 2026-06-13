@@ -1,0 +1,113 @@
+"use client";
+
+type AssessmentCard = {
+  title: string;
+  status: string;
+  statusTone: "coming" | "foundation";
+  description: string;
+};
+
+const ASSESSMENT_CARDS: AssessmentCard[] = [
+  {
+    title: "Gait Assessment",
+    status: "Coming next",
+    statusTone: "coming",
+    description: "Camera-assisted walking observation for therapist review.",
+  },
+  {
+    title: "Sit-to-Stand Assessment",
+    status: "Available foundation · Existing motion evidence",
+    statusTone: "foundation",
+    description:
+      "Repetition, timing, and movement quality observations for therapist review.",
+  },
+  {
+    title: "Balance Assessment",
+    status: "Coming next",
+    statusTone: "coming",
+    description: "Single-leg stance and balance control observations.",
+  },
+  {
+    title: "Functional Movement",
+    status: "Coming next",
+    statusTone: "coming",
+    description: "Squat, step-down, lunge, and calf raise observations.",
+  },
+  {
+    title: "Patient-Reported Forms",
+    status: "Coming next",
+    statusTone: "coming",
+    description: "Pain, effort, confidence, and symptom tracking.",
+  },
+];
+
+function statusBadgeClass(tone: AssessmentCard["statusTone"]): string {
+  if (tone === "foundation") {
+    return "border-[#1D9E75]/30 bg-[#1D9E75]/10 text-[#5DCAA5]";
+  }
+  return "border-[#1E2D42] bg-[#0B1220] text-white/45";
+}
+
+export default function AssessmentCenterPage() {
+  return (
+    <div className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
+      <div className="mx-auto max-w-5xl">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-[#1D9E75]">
+          RASQ · Movement assessments
+        </p>
+        <h1 className="mt-2 text-2xl font-bold text-white">Assessment Center</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/45">
+          Plan and review structured movement assessments. Each module will provide
+          camera-assisted observations and assistive metrics to support therapist review.
+        </p>
+
+        <div className="mt-5 rounded-[10px] border border-amber-400/20 bg-amber-400/5 px-4 py-3.5">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-200/90">
+            Therapist review required
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-white/55">
+            Camera-assisted assessments provide movement observations to support therapist
+            review. They are not diagnostic and do not replace clinical examination.
+          </p>
+        </div>
+
+        <section className="mt-6">
+          <h2 className="text-sm font-bold text-white">Assessment modules</h2>
+          <p className="mt-1 text-xs text-white/35">
+            Movement evidence modules for pilot rollout. Full workflows arrive in upcoming
+            releases.
+          </p>
+
+          <ul className="mt-4 grid gap-4 sm:grid-cols-2">
+            {ASSESSMENT_CARDS.map((card) => (
+              <li
+                key={card.title}
+                className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <h3 className="text-[15px] font-semibold text-white">{card.title}</h3>
+                  <span
+                    className={`shrink-0 rounded-[5px] border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${statusBadgeClass(card.statusTone)}`}
+                  >
+                    {card.status}
+                  </span>
+                </div>
+                <p className="mt-3 text-sm leading-relaxed text-white/45">{card.description}</p>
+                {card.statusTone === "foundation" ? (
+                  <p className="mt-3 text-[11px] text-white/30">
+                    Existing motion evidence from patient sessions may inform therapist review.
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <p className="mt-8 text-[11px] leading-relaxed text-white/25">
+          Remote questionnaire and in-clinic documentation remain available from the dashboard
+          and patient profile. This center will expand with camera-assisted assessment workflows.
+        </p>
+      </div>
+    </div>
+  );
+}
