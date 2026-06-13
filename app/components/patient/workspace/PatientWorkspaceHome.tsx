@@ -14,6 +14,7 @@ import {
 } from "@/app/lib/patient-portal-ui";
 import type { PatientMovementCheckView } from "@/app/lib/patient-movement-check";
 import { PatientMovementCheckCard } from "@/app/components/patient/workspace/PatientMovementCheckCard";
+import { PatientLifetimeSummaryCard } from "@/app/components/patient/PatientLifetimeSummaryCard";
 
 type Props = {
   plan: PatientPlanData;
@@ -61,6 +62,12 @@ export function PatientWorkspaceHome({
           <p className="text-[17px] font-bold text-[#0A0F1A]">{ui.preparingSchedule}</p>
           <p className="mt-2 text-[14px] leading-relaxed text-[#6B7280]">{ui.noSessionsYet}</p>
         </section>
+        <PatientLifetimeSummaryCard
+          summary={plan.lifetimeSummary}
+          lang={lang}
+          textDir={textDir}
+          arClass={arClass}
+        />
         {plan.assignedBy ? (
           <ProviderCard
             assignedBy={plan.assignedBy}
@@ -84,6 +91,13 @@ export function PatientWorkspaceHome({
         totalCount={preview.totalCount}
         progressLabel={ui.programProgressLabel}
         sessionsLeftLabel={ui.sessionsLeft(sessionsRemaining)}
+      />
+
+      <PatientLifetimeSummaryCard
+        summary={plan.lifetimeSummary}
+        lang={lang}
+        textDir={textDir}
+        arClass={arClass}
       />
 
       {preview.nextSession ? (
