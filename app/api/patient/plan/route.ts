@@ -29,6 +29,7 @@ import {
   fetchPatientLifetimeSummary,
   type PatientLifetimeSummary,
 } from "../../../lib/patient-lifetime-summary";
+import { resolvePatientPortalAccess } from "../../../lib/patient-portal-access";
 
 // Re-export for portal consumers
 export type { PatientLifetimeSummary };
@@ -104,65 +105,26 @@ export async function GET(req: NextRequest) {
     return serviceUnavailableResponse();
   }
 
-  // 1 — Token lookup (service role bypasses RLS on patient_access_tokens)
-  type TokenRow = {
-    id: string;
-    patient_name: string;
-    patient_id: string;
-    plan_id: string;
-    provider_id: string;
-    is_active: boolean;
-    expires_at: string | null;
-  };
-  const { data: tokenRow, error: tokenErr } = await admin
-    .from("patient_access_tokens")
-    .select("id, patient_name, patient_id, plan_id, provider_id, is_active, expires_at")
-    .eq("token", tokenValue)
-    .maybeSingle<TokenRow>();
-
-  if (tokenErr) {
-    console.error("[GET /api/patient/plan] token lookup error");
+  const resolved = await resolvePatientPortalAccess(admin, tokenValue);
+  if (!resolved.ok) {
+    if (resolved.reason === "invalid_token") {
+      return invalidPatientTokenResponse(req);
+    }
+    if (resolved.reason === "plan_not_found") {
+      return unableToCompleteResponse(404);
+    }
     return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
-  if (!tokenRow || !tokenRow.is_active) {
-    return invalidPatientTokenResponse(req);
-  }
-  if (tokenRow.expires_at && new Date(tokenRow.expires_at) < new Date()) {
-    return invalidPatientTokenResponse(req);
-  }
+
+  const { access } = resolved;
+  const plan = access.currentPlan;
 
   const lifetimeSummaryPromise = fetchPatientLifetimeSummary(admin, {
-    patientId: tokenRow.patient_id,
-    providerId: tokenRow.provider_id,
+    patientId: access.patientId,
+    providerId: access.providerId,
   });
 
-  // 2 — Fetch treatment plan (exclude provider_id from select)
-  type PlanRow = {
-    id: string;
-    title: string;
-    structured_data: {
-      programName?: string;
-      phaseName?: string;
-      phaseGoal?: string;
-      sessionsPerWeek?: number;
-      assignedBy?: string;
-    } | null;
-    status: string;
-    total_weeks: number | null;
-    clinician_note: string | null;
-    created_at: string;
-  };
-  const { data: plan, error: planErr } = await admin
-    .from("treatment_plans")
-    .select("id, title, structured_data, status, total_weeks, clinician_note, created_at")
-    .eq("id", tokenRow.plan_id)
-    .single<PlanRow>();
-
-  if (planErr ?? !plan) {
-    return unableToCompleteResponse(404);
-  }
-
-  // 3 — Fetch sessions (exclude provider_id from select)
+  // Fetch sessions for the resolved current plan
   type SessionRow = {
     id: string;
     session_number: number;
@@ -175,7 +137,7 @@ export async function GET(req: NextRequest) {
   const { data: sessions } = await admin
     .from("plan_sessions")
     .select("id, session_number, title, exercises, status, scheduled_at, completed_at")
-    .eq("plan_id", tokenRow.plan_id)
+    .eq("plan_id", access.currentPlanId)
     .order("session_number", { ascending: true })
     .returns<SessionRow[]>();
 
@@ -184,7 +146,7 @@ export async function GET(req: NextRequest) {
   const { data: patientRow } = await admin
     .from("patients")
     .select("diagnosis")
-    .eq("id", tokenRow.patient_id)
+    .eq("id", access.patientId)
     .maybeSingle<PatientRow>();
 
   // 5 — Latest assessment language (no schema change; read existing structured_data)
@@ -192,7 +154,7 @@ export async function GET(req: NextRequest) {
   const { data: latestAssessment } = await admin
     .from("assessments")
     .select("structured_data")
-    .eq("patient_id", tokenRow.patient_id)
+    .eq("patient_id", access.patientId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle<AssessmentLangRow>();
@@ -205,7 +167,7 @@ export async function GET(req: NextRequest) {
   const programMeta = extractPlanProgramMetadata(sd);
 
   const result: PatientPlanData = {
-    patientName:     tokenRow.patient_name,
+    patientName:     access.patientName,
     patientLanguage,
     diagnosis:       patientRow?.diagnosis ?? null,
     planId:          plan.id,

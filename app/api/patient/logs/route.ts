@@ -18,6 +18,7 @@ import {
   invalidPatientTokenResponse,
   serviceUnavailableResponse,
 } from "../../../lib/api/safe-errors";
+import { resolvePatientPortalAccess } from "../../../lib/patient-portal-access";
 
 // ── Public types ───────────────────────────────────────────────────────────────
 
@@ -60,25 +61,18 @@ export async function GET(req: NextRequest) {
     return serviceUnavailableResponse();
   }
 
-  // Validate token first
-  type TokenRow = { is_active: boolean; expires_at: string | null };
-  const { data: tokenRow, error: tokenErr } = await admin
-    .from("patient_access_tokens")
-    .select("is_active, expires_at")
-    .eq("token", tokenValue)
-    .maybeSingle<TokenRow>();
-
-  if (tokenErr) {
+  const resolved = await resolvePatientPortalAccess(admin, tokenValue);
+  if (!resolved.ok) {
+    if (resolved.reason === "invalid_token") {
+      return invalidPatientTokenResponse(req);
+    }
+    if (resolved.reason === "plan_not_found") {
+      return NextResponse.json([], { status: 200 });
+    }
     return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
-  if (!tokenRow || !tokenRow.is_active) {
-    return invalidPatientTokenResponse(req);
-  }
-  if (tokenRow.expires_at && new Date(tokenRow.expires_at) < new Date()) {
-    return invalidPatientTokenResponse(req);
-  }
 
-  // Fetch logs (safe fields only — no provider_id, no patient_id)
+  // Current-plan logs only (resolved plan, not token-bound plan_id)
   type LogRow = {
     id: string;
     plan_session_id: string | null;
@@ -91,7 +85,7 @@ export async function GET(req: NextRequest) {
   const { data: logs, error: logsErr } = await admin
     .from("session_logs")
     .select("id, plan_session_id, effort_score, pain_score, exercises_completed, notes, completed_at")
-    .eq("patient_token", tokenValue)
+    .eq("plan_id", resolved.access.currentPlanId)
     .order("completed_at", { ascending: false })
     .returns<LogRow[]>();
 

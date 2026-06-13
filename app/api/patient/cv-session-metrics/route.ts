@@ -25,6 +25,7 @@ import {
   serviceUnavailableResponse,
   unableToCompleteResponse,
 } from "@/app/lib/api/safe-errors";
+import { resolvePatientPortalAccess } from "@/app/lib/patient-portal-access";
 
 const TRACKING_QUALITIES = new Set<CvTrackingQuality>(["good", "fair", "poor", "unknown"]);
 
@@ -43,14 +44,6 @@ type RequestBody = {
   framesWithPose?: number;
   framesTotal?: number;
   motion_quality?: Record<string, unknown>;
-};
-
-type TokenRow = {
-  patient_id: string;
-  plan_id: string;
-  provider_id: string;
-  is_active: boolean;
-  expires_at: string | null;
 };
 
 type SessionRow = {
@@ -138,28 +131,24 @@ export async function POST(req: NextRequest) {
   const admin = buildAdminClient();
   if (!admin) return serviceUnavailableResponse();
 
-  const { data: tokenRow, error: tokenErr } = await admin
-    .from("patient_access_tokens")
-    .select("patient_id, plan_id, provider_id, is_active, expires_at")
-    .eq("token", tokenValue)
-    .maybeSingle<TokenRow>();
-
-  if (tokenErr) {
-    console.error("[POST /api/patient/cv-session-metrics] token lookup error");
+  const resolved = await resolvePatientPortalAccess(admin, tokenValue);
+  if (!resolved.ok) {
+    if (resolved.reason === "invalid_token") {
+      return invalidPatientTokenResponse(req);
+    }
+    if (resolved.reason === "plan_not_found") {
+      return unableToCompleteResponse(404);
+    }
     return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
-  if (!tokenRow || !tokenRow.is_active) {
-    return invalidPatientTokenResponse(req);
-  }
-  if (tokenRow.expires_at && new Date(tokenRow.expires_at) < new Date()) {
-    return invalidPatientTokenResponse(req);
-  }
+
+  const { access } = resolved;
 
   const { data: sessionRow, error: sessionErr } = await admin
     .from("plan_sessions")
     .select("id, plan_id")
     .eq("id", sessionId)
-    .eq("plan_id", tokenRow.plan_id)
+    .eq("plan_id", access.currentPlanId)
     .maybeSingle<SessionRow>();
 
   if (sessionErr) {
@@ -197,9 +186,9 @@ export async function POST(req: NextRequest) {
   const { data: inserted, error: insertErr } = await admin
     .from("cv_session_metrics")
     .insert({
-      provider_id: tokenRow.provider_id,
-      patient_id: tokenRow.patient_id,
-      plan_id: tokenRow.plan_id,
+      provider_id: access.providerId,
+      patient_id: access.patientId,
+      plan_id: access.currentPlanId,
       plan_session_id: sessionId,
       exercise_id: exerciseId,
       rep_count: body.repCount ?? null,

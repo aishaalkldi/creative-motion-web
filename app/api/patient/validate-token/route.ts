@@ -16,8 +16,8 @@ import {
   API_ERRORS,
   invalidPatientTokenResponse,
   serviceUnavailableResponse,
-  unableToCompleteResponse,
 } from "../../../lib/api/safe-errors";
+import { lookupPatientPortalToken } from "../../../lib/patient-portal-access";
 
 export async function POST(req: NextRequest) {
   const general = checkPatientGeneralLimit(req, "validate-token");
@@ -47,21 +47,12 @@ export async function POST(req: NextRequest) {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  type TokenRow = { is_active: boolean; expires_at: string | null };
-  const { data: tokenRow, error } = await admin
-    .from("patient_access_tokens")
-    .select("is_active, expires_at")
-    .eq("token", token)
-    .maybeSingle<TokenRow>();
-
-  if (error) {
+  const lookup = await lookupPatientPortalToken(admin, token);
+  if (!lookup.ok) {
+    if (lookup.reason === "invalid_token") {
+      return invalidPatientTokenResponse(req);
+    }
     return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
-  }
-  if (!tokenRow || !tokenRow.is_active) {
-    return invalidPatientTokenResponse(req);
-  }
-  if (tokenRow.expires_at && new Date(tokenRow.expires_at) < new Date()) {
-    return invalidPatientTokenResponse(req);
   }
 
   return NextResponse.json({ valid: true });

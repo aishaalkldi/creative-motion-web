@@ -21,6 +21,7 @@ import {
   patientMovementCheckValue,
   type PatientMovementCheckMetricRow,
 } from "../../../lib/patient-movement-check";
+import { resolvePatientPortalAccess } from "../../../lib/patient-portal-access";
 
 export type PatientMovementCheckResponse = {
   metrics: PatientMovementCheckMetricRow[];
@@ -49,28 +50,18 @@ export async function GET(req: NextRequest) {
   const admin = buildAdminClient();
   if (!admin) return serviceUnavailableResponse();
 
-  type TokenRow = {
-    patient_id: string;
-    plan_id: string;
-    is_active: boolean;
-    expires_at: string | null;
-  };
-
-  const { data: tokenRow, error: tokenErr } = await admin
-    .from("patient_access_tokens")
-    .select("patient_id, plan_id, is_active, expires_at")
-    .eq("token", tokenValue)
-    .maybeSingle<TokenRow>();
-
-  if (tokenErr) {
+  const resolved = await resolvePatientPortalAccess(admin, tokenValue);
+  if (!resolved.ok) {
+    if (resolved.reason === "invalid_token") {
+      return invalidPatientTokenResponse(req);
+    }
+    if (resolved.reason === "plan_not_found") {
+      return NextResponse.json({ metrics: [] } satisfies PatientMovementCheckResponse);
+    }
     return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
-  if (!tokenRow || !tokenRow.is_active) {
-    return invalidPatientTokenResponse(req);
-  }
-  if (tokenRow.expires_at && new Date(tokenRow.expires_at) < new Date()) {
-    return invalidPatientTokenResponse(req);
-  }
+
+  const { access } = resolved;
 
   type MetricRow = {
     exercise_id: string;
@@ -82,8 +73,8 @@ export async function GET(req: NextRequest) {
   const { data: rows, error: metricsErr } = await admin
     .from("cv_session_metrics")
     .select("exercise_id, rep_count, session_duration_s, recorded_at")
-    .eq("patient_id", tokenRow.patient_id)
-    .eq("plan_id", tokenRow.plan_id)
+    .eq("patient_id", access.patientId)
+    .eq("plan_id", access.currentPlanId)
     .order("recorded_at", { ascending: true });
 
   if (metricsErr) {
