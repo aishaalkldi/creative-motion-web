@@ -21,6 +21,7 @@ import {
   serviceUnavailableResponse,
   unableToCompleteResponse,
 } from "../../../lib/api/safe-errors";
+import { resolvePatientPortalAccess } from "../../../lib/patient-portal-access";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -183,37 +184,25 @@ export async function POST(req: NextRequest) {
   const admin = buildAdminClient();
   if (!admin) return serviceUnavailableResponse();
 
-  // 1 — Validate token
-  type TokenRow = {
-    patient_id:   string;
-    plan_id:      string;
-    provider_id:  string;
-    is_active:    boolean;
-    expires_at:   string | null;
-  };
-  const { data: tokenRow, error: tokenErr } = await admin
-    .from("patient_access_tokens")
-    .select("patient_id, plan_id, provider_id, is_active, expires_at")
-    .eq("token", tokenValue)
-    .maybeSingle<TokenRow>();
-
-  if (tokenErr) {
-    console.error("[POST /api/patient/session-complete] token lookup error");
+  const resolved = await resolvePatientPortalAccess(admin, tokenValue);
+  if (!resolved.ok) {
+    if (resolved.reason === "invalid_token") {
+      return invalidPatientTokenResponse(req);
+    }
+    if (resolved.reason === "plan_not_found") {
+      return unableToCompleteResponse(404);
+    }
     return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
-  if (!tokenRow || !tokenRow.is_active) {
-    return invalidPatientTokenResponse(req);
-  }
-  if (tokenRow.expires_at && new Date(tokenRow.expires_at) < new Date()) {
-    return invalidPatientTokenResponse(req);
-  }
 
-  // 2 — Validate session belongs to this token's plan
+  const { access } = resolved;
+
+  // Validate session belongs to the resolved current plan
   const { data: sessionRow, error: sessionErr } = await admin
     .from("plan_sessions")
     .select("id, plan_id, status, completed_at")
     .eq("id", sessionId)
-    .eq("plan_id", tokenRow.plan_id)
+    .eq("plan_id", access.currentPlanId)
     .maybeSingle<SessionRow>();
 
   if (sessionErr) {
@@ -226,10 +215,10 @@ export async function POST(req: NextRequest) {
 
   const now = new Date().toISOString();
   const logPayload: InsertPayload = {
-    plan_id:             tokenRow.plan_id,
+    plan_id:             access.currentPlanId,
     plan_session_id:     sessionId,
-    provider_id:         tokenRow.provider_id,
-    patient_id:          tokenRow.patient_id,
+    provider_id:         access.providerId,
+    patient_id:          access.patientId,
     patient_token:       tokenValue,
     effort_score:        effortScore,
     pain_score:          painScore,
