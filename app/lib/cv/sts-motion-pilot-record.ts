@@ -13,6 +13,10 @@ import type { MiniSquatMotionPilotRecord } from "@/app/lib/cv/mini-squat-motion-
 import { findForbiddenKeysInSummaryPayload } from "@/app/lib/cv/motion-summary-types";
 import type { SessionMotionSummary } from "@/app/lib/cv/motion-summary-types";
 import type { StsAttemptSummary } from "@/app/lib/cv/sts-biomechanical-capture-fsm";
+import {
+  assessCaptureQualityFromSession,
+  type CaptureQualityResult,
+} from "@/app/lib/cv/capture-quality";
 
 export const STS_MOTION_PILOT_VERSION = "smt-1" as const;
 
@@ -63,6 +67,8 @@ export type StsMotionPilotRecord = {
   reviewRequired: true;
   reviewReason: string;
   disclaimer: string;
+  /** Technical capture reliability for therapist review — not clinical interpretation. */
+  captureQuality: CaptureQualityResult;
   attemptSummaries?: StsMotionPilotAttemptSummary[];
 };
 
@@ -84,6 +90,7 @@ export const STS_PILOT_RECORD_ALLOWED_TOP_LEVEL_KEYS = [
   "reviewRequired",
   "reviewReason",
   "disclaimer",
+  "captureQuality",
   "attemptSummaries",
 ] as const satisfies readonly (keyof StsMotionPilotRecord)[];
 
@@ -205,6 +212,12 @@ export function buildStsMotionPilotRecord(
 
   const attemptSummaries = input.attemptSummaries ?? [];
   const pilotAttempts = attemptSummaries.map(toPilotAttemptSummary);
+  const trackingSignal = dominantTrackingSignal(summary.trackingQualityDistribution);
+  const visibilityRatios = {
+    hip: clampPct(summary.visibilityAssist.hipVisiblePct),
+    knee: clampPct(summary.visibilityAssist.kneeVisiblePct),
+    ankle: clampPct(summary.visibilityAssist.ankleVisiblePct),
+  };
 
   return {
     pilotVersion: STS_MOTION_PILOT_VERSION,
@@ -215,7 +228,7 @@ export function buildStsMotionPilotRecord(
     repCount: summary.legacyRepCount,
     completeReps: summary.completeRepCount,
     unclearReps: summary.unclearRepCount,
-    trackingSignal: dominantTrackingSignal(summary.trackingQualityDistribution),
+    trackingSignal,
     movementDetected: metrics.movementDetected,
     phaseRatios: { ...summary.phaseRatios },
     repTimings: {
@@ -223,11 +236,7 @@ export function buildStsMotionPilotRecord(
       fastestS: summary.repDurationSummary.fastestDurationS,
       slowestS: summary.repDurationSummary.slowestDurationS,
     },
-    visibilityRatios: {
-      hip: clampPct(summary.visibilityAssist.hipVisiblePct),
-      knee: clampPct(summary.visibilityAssist.kneeVisiblePct),
-      ankle: clampPct(summary.visibilityAssist.ankleVisiblePct),
-    },
+    visibilityRatios,
     clinicianFlags: buildClinicianFlags(summary, [
       ...(input.extraClinicianFlags ?? []),
       ...buildAttemptClinicianFlags(attemptSummaries),
@@ -236,6 +245,12 @@ export function buildStsMotionPilotRecord(
     reviewReason: "derived_motion_timeline_pilot",
     disclaimer:
       "Assistive motion capture for clinician review only. Not a clinical score or diagnosis.",
+    captureQuality: assessCaptureQualityFromSession({
+      visibilityRatios,
+      trackingSignal,
+      poseLossEventCount: summary.interruptions.poseLossEventCount,
+      captureFlags: summary.captureFlags,
+    }),
     attemptSummaries: pilotAttempts.length > 0 ? pilotAttempts : [],
   };
 }
