@@ -338,3 +338,50 @@ export function buildCaptureQualityLandmarkFixture(visibility: number): PoseLand
   }
   return landmarks;
 }
+
+const QUALITY_LEVELS = new Set<CaptureQualityLevel>(["high", "medium", "low"]);
+const BODY_VISIBILITY_LEVELS = new Set<BodyVisibilityLevel>(["good", "fair", "poor"]);
+const TRACKING_CONFIDENCE_LEVELS = new Set<TrackingConfidenceLevel>(["high", "medium", "low"]);
+const CAMERA_POSITION_STATUSES = new Set<CameraPositionStatus>([
+  "acceptable",
+  "needs_adjustment",
+  "unknown",
+]);
+
+/** Parse persisted captureQuality from motion_quality.smtPilot (null when absent/invalid). */
+export function parseCaptureQuality(value: unknown): CaptureQualityResult | null {
+  if (!value || typeof value !== "object") return null;
+  const record = value as Record<string, unknown>;
+
+  const qualityLevel = record.qualityLevel;
+  const bodyVisibility = record.bodyVisibility;
+  const trackingConfidence = record.trackingConfidence;
+  const cameraPosition = record.cameraPosition;
+
+  if (
+    typeof qualityLevel !== "string" ||
+    !QUALITY_LEVELS.has(qualityLevel as CaptureQualityLevel) ||
+    typeof bodyVisibility !== "string" ||
+    !BODY_VISIBILITY_LEVELS.has(bodyVisibility as BodyVisibilityLevel) ||
+    typeof trackingConfidence !== "string" ||
+    !TRACKING_CONFIDENCE_LEVELS.has(trackingConfidence as TrackingConfidenceLevel) ||
+    typeof cameraPosition !== "string" ||
+    !CAMERA_POSITION_STATUSES.has(cameraPosition as CameraPositionStatus) ||
+    typeof record.retestRecommended !== "boolean"
+  ) {
+    return null;
+  }
+
+  const warnings = Array.isArray(record.warnings)
+    ? record.warnings.filter((w): w is string => typeof w === "string")
+    : [];
+
+  return {
+    qualityLevel: qualityLevel as CaptureQualityLevel,
+    bodyVisibility: bodyVisibility as BodyVisibilityLevel,
+    trackingConfidence: trackingConfidence as TrackingConfidenceLevel,
+    cameraPosition: cameraPosition as CameraPositionStatus,
+    retestRecommended: record.retestRecommended,
+    warnings,
+  };
+}
