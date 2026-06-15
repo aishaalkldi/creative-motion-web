@@ -135,6 +135,10 @@ import {
   type PosturalAlignmentProxyResult,
 } from "@/app/lib/cv/postural-alignment-proxy";
 import type { StsMotionPilotAttemptSummary } from "@/app/lib/cv/sts-motion-pilot-record";
+import {
+  parseCaptureQuality,
+  type CaptureQualityResult,
+} from "@/app/lib/cv/capture-quality";
 
 export type { BiomechanicalContributionReview } from "@/app/lib/cv/biomechanical-contribution-review";
 export type { CvEvidenceIntegrityGate } from "@/app/lib/cv/cv-evidence-integrity-gate";
@@ -285,6 +289,8 @@ export type MotionAnalysisReport = {
   stsBiomechanicalFlags: StsBiomechanicalFlagsResult | null;
   posturalAlignmentProxy: PosturalAlignmentProxyResult | null;
   stsAttemptSummaries: StsMotionPilotAttemptSummary[] | null;
+  /** STS smtPilot capture quality metadata when persisted (PR96+). */
+  captureQuality: CaptureQualityResult | null;
 };
 
 export type BuildMotionAnalysisReportInput = {
@@ -738,6 +744,10 @@ export function buildMotionAnalysisReport(
 
   const smtPilot =
     exerciseId === "sit-to-stand" ? parseSmtPilotSummary(input.motionQuality) : null;
+  const captureQuality =
+    exerciseId === "sit-to-stand"
+      ? parseCaptureQuality(input.motionQuality?.smtPilot?.captureQuality)
+      : null;
   const persistedMsPilot =
     exerciseId === "mini-squat" ? parseMsPilotSummary(input.motionQuality) : null;
   const msPilot =
@@ -1132,6 +1142,7 @@ export function buildMotionAnalysisReport(
     stsBiomechanicalFlags,
     posturalAlignmentProxy,
     stsAttemptSummaries,
+    captureQuality,
   };
 
   const executiveSummary = buildMotionAnalysisExecutiveSummary(reportDraft);
@@ -1202,6 +1213,7 @@ export function buildMotionAnalysisReport(
     stsBiomechanicalFlags,
     posturalAlignmentProxy,
     stsAttemptSummaries,
+    captureQuality,
   };
 }
 

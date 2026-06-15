@@ -68,6 +68,7 @@ import {
   resolveCaptureEvidenceCycleMetricLabel,
   resolveCaptureEvidenceTimingLabels,
 } from "@/app/lib/cv/motion-analysis-report-present";
+import { CaptureQualitySection } from "@/app/components/clinician/cv/CaptureQualitySection";
 
 const SUMMARY_BADGE_CLASS: Record<MotionAnalysisSummaryLabel, string> = {
   "Limited visibility": "border-amber-500/35 bg-amber-500/10 text-amber-200",
@@ -952,6 +953,10 @@ function StsPolishedReportBody({ report }: { report: MotionAnalysisReport }) {
     <>
       <ReportHeaderStrip report={report} />
       <EvidenceIntegrityBanner report={report} />
+      <CaptureQualitySection
+        captureQuality={report.captureQuality}
+        showFallback={report.smtPilot != null}
+      />
 
       {report.executiveSummary ? (
         <div className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5">
@@ -1045,6 +1050,10 @@ function LegacyReportBody({ report }: { report: MotionAnalysisReport }) {
     <>
       <ReportHeaderStrip report={report} />
       <EvidenceIntegrityBanner report={report} />
+      <CaptureQualitySection
+        captureQuality={report.captureQuality}
+        showFallback={report.smtPilot != null}
+      />
       <ClinicalSnapshotSection report={report} isLegacy={isLegacy} />
       <MovementTimingPhaseReviewSection report={report} />
       <StsBiomechanicalFlagsSection report={report} />

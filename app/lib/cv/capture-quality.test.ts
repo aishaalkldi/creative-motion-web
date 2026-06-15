@@ -9,6 +9,7 @@ import {
   buildCaptureQualityLandmarkFixture,
   findForbiddenTermsInCaptureWarnings,
   FORBIDDEN_CAPTURE_WARNING_TERMS,
+  parseCaptureQuality,
 } from "./capture-quality";
 import { PATIENT_POSE_ANKLE_INDICES, PATIENT_POSE_KNEE_INDICES } from "./pose-landmark-overlay";
 
@@ -123,5 +124,26 @@ describe("assessCaptureQualityFromSession", () => {
     });
 
     assert.equal(result.qualityLevel, "medium");
+  });
+});
+
+describe("parseCaptureQuality", () => {
+  it("parses valid persisted captureQuality", () => {
+    const parsed = parseCaptureQuality({
+      qualityLevel: "high",
+      bodyVisibility: "good",
+      trackingConfidence: "high",
+      cameraPosition: "acceptable",
+      retestRecommended: false,
+      warnings: [],
+    });
+
+    assert.ok(parsed);
+    assert.equal(parsed?.qualityLevel, "high");
+  });
+
+  it("returns null for invalid or missing payloads", () => {
+    assert.equal(parseCaptureQuality(null), null);
+    assert.equal(parseCaptureQuality({ qualityLevel: "invalid" }), null);
   });
 });
