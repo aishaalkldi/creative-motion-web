@@ -1,0 +1,104 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CvReviewSummary } from "@/app/components/clinician/cv/CvReviewSummary";
+import { getCvReadyExercises } from "@/app/lib/cv/cv-ready-exercises";
+import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
+
+const STS_EXERCISE_ID = "sit-to-stand";
+const FETCH_LIMIT = 50;
+const DISPLAY_MAX = 10;
+
+export default function SitToStandAssessmentReviewPage() {
+  const exerciseNameById = useMemo(
+    () =>
+      Object.fromEntries(
+        getCvReadyExercises().map((exercise) => [exercise.exerciseId, exercise.nameEn]),
+      ),
+    [],
+  );
+
+  const [metrics, setMetrics] = useState<CvSessionMetricPublic[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const fetchMetrics = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const res = await fetch(`/api/cv/session-metrics?limit=${FETCH_LIMIT}`);
+      if (!res.ok) {
+        setError(true);
+        setMetrics([]);
+        return;
+      }
+      const data = (await res.json()) as { metrics?: CvSessionMetricPublic[] };
+      const stsMetrics = (data.metrics ?? []).filter(
+        (row) => row.exerciseId === STS_EXERCISE_ID,
+      );
+      setMetrics(stsMetrics);
+    } catch {
+      setError(true);
+      setMetrics([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchMetrics();
+  }, [fetchMetrics]);
+
+  const hasPatientLinkedSessions = metrics.some((row) => Boolean(row.patientId));
+
+  return (
+    <div className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
+      <div className="mx-auto max-w-3xl">
+        <Link
+          href="/clinician/assessments"
+          className="inline-flex text-xs font-semibold text-[#5DCAA5] transition hover:text-[#1D9E75]"
+        >
+          ← Assessment Center
+        </Link>
+
+        <p className="mt-4 text-[10px] font-bold uppercase tracking-widest text-[#1D9E75]">
+          RASQ · Sit-to-Stand assessment
+        </p>
+        <h1 className="mt-2 text-2xl font-bold text-white">Sit-to-Stand motion evidence</h1>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/45">
+          Review recorded sit-to-stand sessions from patient portal captures and linked plan
+          activity. Observations support therapist review only.
+        </p>
+
+        <div className="mt-5 rounded-[10px] border border-amber-400/20 bg-amber-400/5 px-4 py-3.5">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-200/90">
+            Therapist review required
+          </p>
+          <p className="mt-2 text-sm leading-relaxed text-white/55">
+            Derived movement metrics reflect camera and tracking reliability. They are not
+            diagnostic and do not replace clinical examination.
+          </p>
+        </div>
+
+        <div className="mt-6 flex flex-wrap gap-2">
+          <Link
+            href="/clinician/results"
+            className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/60 transition hover:border-[#1D9E75]/25 hover:text-white"
+          >
+            Open Results queue
+          </Link>
+        </div>
+
+        <CvReviewSummary
+          metrics={metrics}
+          exerciseNameById={exerciseNameById}
+          loading={loading}
+          error={error}
+          showPatientLinks={hasPatientLinkedSessions}
+          maxSessions={DISPLAY_MAX}
+        />
+      </div>
+    </div>
+  );
+}
