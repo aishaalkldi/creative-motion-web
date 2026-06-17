@@ -1,18 +1,27 @@
 "use client";
 
+import Link from "next/link";
+
+const GAIT_ASSESSMENT_HREF = "/clinician/assessments/gait";
+const STS_ASSESSMENT_REVIEW_HREF = "/clinician/assessments/sit-to-stand";
+
 type AssessmentCard = {
   title: string;
   status: string;
   statusTone: "coming" | "foundation";
   description: string;
+  href?: string;
+  cta?: string;
 };
 
 const ASSESSMENT_CARDS: AssessmentCard[] = [
   {
     title: "Gait Assessment",
-    status: "Coming next",
-    statusTone: "coming",
+    status: "Assessment shell · v1",
+    statusTone: "foundation",
     description: "Camera-assisted walking observation for therapist review.",
+    href: GAIT_ASSESSMENT_HREF,
+    cta: "Open gait observation",
   },
   {
     title: "Sit-to-Stand Assessment",
@@ -20,6 +29,8 @@ const ASSESSMENT_CARDS: AssessmentCard[] = [
     statusTone: "foundation",
     description:
       "Repetition, timing, and movement quality observations for therapist review.",
+    href: STS_ASSESSMENT_REVIEW_HREF,
+    cta: "Review Sit-to-Stand results",
   },
   {
     title: "Balance Assessment",
@@ -79,27 +90,56 @@ export default function AssessmentCenterPage() {
           </p>
 
           <ul className="mt-4 grid gap-4 sm:grid-cols-2">
-            {ASSESSMENT_CARDS.map((card) => (
-              <li
-                key={card.title}
-                className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5"
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <h3 className="text-[15px] font-semibold text-white">{card.title}</h3>
-                  <span
-                    className={`shrink-0 rounded-[5px] border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${statusBadgeClass(card.statusTone)}`}
-                  >
-                    {card.status}
-                  </span>
-                </div>
-                <p className="mt-3 text-sm leading-relaxed text-white/45">{card.description}</p>
-                {card.statusTone === "foundation" ? (
-                  <p className="mt-3 text-[11px] text-white/30">
-                    Existing motion evidence from patient sessions may inform therapist review.
-                  </p>
-                ) : null}
-              </li>
-            ))}
+            {ASSESSMENT_CARDS.map((card) => {
+              const cardBody = (
+                <>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <h3 className="text-[15px] font-semibold text-white">{card.title}</h3>
+                    <span
+                      className={`shrink-0 rounded-[5px] border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${statusBadgeClass(card.statusTone)}`}
+                    >
+                      {card.status}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-sm leading-relaxed text-white/45">{card.description}</p>
+                  {card.title === "Sit-to-Stand Assessment" ? (
+                    <p className="mt-3 text-[11px] text-white/30">
+                      Existing motion evidence from patient sessions may inform therapist review.
+                    </p>
+                  ) : null}
+                  {card.cta ? (
+                    <p className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-[#5DCAA5]">
+                      {card.cta}
+                      <span aria-hidden className="transition group-hover:translate-x-0.5">
+                        →
+                      </span>
+                    </p>
+                  ) : null}
+                </>
+              );
+
+              if (card.href) {
+                return (
+                  <li key={card.title}>
+                    <Link
+                      href={card.href}
+                      className="group block rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5 transition hover:border-[#1D9E75]/30 hover:bg-[#0d1f18]"
+                    >
+                      {cardBody}
+                    </Link>
+                  </li>
+                );
+              }
+
+              return (
+                <li
+                  key={card.title}
+                  className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5"
+                >
+                  {cardBody}
+                </li>
+              );
+            })}
           </ul>
         </section>
 
