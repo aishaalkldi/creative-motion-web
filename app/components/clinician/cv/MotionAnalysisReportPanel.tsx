@@ -68,7 +68,7 @@ import {
   resolveCaptureEvidenceCycleMetricLabel,
   resolveCaptureEvidenceTimingLabels,
 } from "@/app/lib/cv/motion-analysis-report-present";
-import { CaptureQualitySection } from "@/app/components/clinician/cv/CaptureQualitySection";
+import { CaptureQualitySection, type CaptureReliabilityContext } from "@/app/components/clinician/cv/CaptureQualitySection";
 
 const SUMMARY_BADGE_CLASS: Record<MotionAnalysisSummaryLabel, string> = {
   "Limited visibility": "border-amber-500/35 bg-amber-500/10 text-amber-200",
@@ -106,6 +106,19 @@ const DEFAULT_TIMING_LABELS: MotionAnalysisTimingMetricLabels = {
 type MotionAnalysisReportPanelProps = {
   report: MotionAnalysisReport;
 };
+
+function stsCaptureReliabilityContext(
+  report: MotionAnalysisReport,
+): CaptureReliabilityContext | null {
+  const pilot = report.smtPilot;
+  if (!pilot) return null;
+  return {
+    visibilityRatios: pilot.visibilityRatios,
+    completeReps: pilot.completeReps,
+    unclearReps: pilot.unclearReps,
+    clinicianFlags: pilot.clinicianFlags,
+  };
+}
 
 function SectionHeading({ children }: { children: ReactNode }) {
   return (
@@ -956,6 +969,7 @@ function StsPolishedReportBody({ report }: { report: MotionAnalysisReport }) {
       <CaptureQualitySection
         captureQuality={report.captureQuality}
         showFallback={report.smtPilot != null}
+        reliability={stsCaptureReliabilityContext(report)}
       />
 
       {report.executiveSummary ? (
@@ -1053,6 +1067,7 @@ function LegacyReportBody({ report }: { report: MotionAnalysisReport }) {
       <CaptureQualitySection
         captureQuality={report.captureQuality}
         showFallback={report.smtPilot != null}
+        reliability={stsCaptureReliabilityContext(report)}
       />
       <ClinicalSnapshotSection report={report} isLegacy={isLegacy} />
       <MovementTimingPhaseReviewSection report={report} />

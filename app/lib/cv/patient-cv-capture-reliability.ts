@@ -91,6 +91,21 @@ export function shouldShowNoSnapshotCaptureWarning(input: {
   return input.nowMs - input.trackingConfirmedAtMs >= CAPTURE_RELIABILITY_WARNING_DELAY_MS;
 }
 
+export type PatientSessionCaptureOutcome = "good" | "limited";
+
+export function resolvePatientSessionCaptureOutcome(input: {
+  captureSetupLimited: boolean;
+  snapshotCount: number;
+  trackingQuality: "good" | "fair" | "poor" | "unknown" | null;
+  trackingStatus: SitToStandTrackingStatus;
+}): PatientSessionCaptureOutcome {
+  if (input.captureSetupLimited) return "limited";
+  if (input.snapshotCount === 0) return "limited";
+  if (input.trackingQuality === "poor") return "limited";
+  if (input.trackingStatus === "pose-lost") return "limited";
+  return "good";
+}
+
 export function appendNoTimelineSnapshotsFlag(
   flags: string[],
   snapshotCount: number,

@@ -125,6 +125,32 @@ describe("assessCaptureQualityFromSession", () => {
 
     assert.equal(result.qualityLevel, "medium");
   });
+
+  it("downgrades high quality when capture_setup_limited is present", () => {
+    const result = assessCaptureQualityFromSession({
+      visibilityRatios: { hip: 85, knee: 82, ankle: 78 },
+      trackingSignal: "good",
+      captureFlags: ["capture_setup_limited"],
+    });
+
+    assert.equal(result.qualityLevel, "medium");
+    assert.equal(result.retestRecommended, true);
+    assert.ok(result.warnings.includes("Capture started before setup checks passed"));
+    assert.ok(result.warnings.includes("Retest recommended before therapist review"));
+  });
+
+  it("adds interruption and no-timeline warnings from reliability flags", () => {
+    const result = assessCaptureQualityFromSession({
+      visibilityRatios: { hip: 70, knee: 68, ankle: 65 },
+      trackingSignal: "fair",
+      poseLossEventCount: 3,
+      captureFlags: ["pose_tracking_interrupted", "no_timeline_snapshots"],
+    });
+
+    assert.ok(result.warnings.includes("Tracking was interrupted during session"));
+    assert.ok(result.warnings.includes("No motion timeline snapshots were recorded"));
+    assert.equal(result.retestRecommended, true);
+  });
 });
 
 describe("parseCaptureQuality", () => {

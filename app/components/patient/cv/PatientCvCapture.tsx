@@ -144,7 +144,10 @@ import {
   appendNoTimelineSnapshotsFlag,
   buildPatientCvCaptureReliabilityState,
   resolveLastMovementEvent,
+  resolvePatientSessionCaptureOutcome,
+  readLiveTimelineSnapshotCount,
   shouldShowNoSnapshotCaptureWarning,
+  type PatientSessionCaptureOutcome,
   type TimelineAccumulatorProbe,
 } from "@/app/lib/cv/patient-cv-capture-reliability";
 import {
@@ -524,6 +527,8 @@ export function PatientCvCapture({
   const [lastMovementEvent, setLastMovementEvent] = useState("—");
   const [detectorPhase, setDetectorPhase] = useState("—");
   const [showNoSnapshotWarning, setShowNoSnapshotWarning] = useState(false);
+  const [sessionCaptureOutcome, setSessionCaptureOutcome] =
+    useState<PatientSessionCaptureOutcome | null>(null);
   const [reliabilityTick, setReliabilityTick] = useState(0);
   const [lastRepAccepted, setLastRepAccepted] = useState(false);
 
@@ -1045,6 +1050,7 @@ export function PatientCvCapture({
 
     stopInProgressRef.current = true;
     reportMetrics();
+    const snapshotCount = readLiveTimelineSnapshotCount(getActiveTimelineAcc());
     const summary = finalizeStsMotionTimelineCapture(
       exerciseId,
       stsTimelineRefs,
@@ -1088,6 +1094,15 @@ export function PatientCvCapture({
       logLateralStepMotionTimelineSummaryDebug(lsSummary, lsTimelineRefs);
     }
     detector.stop();
+    const endSnapshot = detector.getSnapshot() as CvDetectorSnapshot;
+    setSessionCaptureOutcome(
+      resolvePatientSessionCaptureOutcome({
+        captureSetupLimited: captureSetupLimitedRef.current,
+        snapshotCount,
+        trackingQuality: endSnapshot.trackingQuality ?? null,
+        trackingStatus: endSnapshot.trackingStatus,
+      }),
+    );
     setCameraLive(false);
     setTrackingStopped(true);
     flushMetricsForSave();
@@ -1104,6 +1119,7 @@ export function PatientCvCapture({
     frTimelineRefs,
     lsTimelineRefs,
     cvDebugEnabled,
+    getActiveTimelineAcc,
   ]);
 
   const mapStartError =
@@ -1423,6 +1439,7 @@ export function PatientCvCapture({
     setLastMovementEvent("—");
     setDetectorPhase("—");
     setShowNoSnapshotWarning(false);
+    setSessionCaptureOutcome(null);
     setLastRepAccepted(false);
     stableTrackingRef.current = { stableSinceMs: null, stableSeconds: 0 };
     captureSetupLimitedRef.current = false;
@@ -1836,13 +1853,38 @@ export function PatientCvCapture({
 
       {trackingStopped && (
         <div
-          className="mt-3 rounded-[8px] border border-[#D1E7DE] bg-[#F0FAF6] px-3.5 py-3 text-[13px] font-medium leading-relaxed text-[#0A0F1A]"
+          className={`mt-3 rounded-[8px] border px-3.5 py-3 text-[13px] font-medium leading-relaxed ${
+            sessionCaptureOutcome === "limited"
+              ? "border-amber-300 bg-amber-50 text-amber-950"
+              : "border-[#D1E7DE] bg-[#F0FAF6] text-[#0A0F1A]"
+          }`}
           role="status"
           aria-live="polite"
         >
-          {copy.sessionCompleteConfirmation}
+          <p>
+            {sessionCaptureOutcome === "limited"
+              ? copy.sessionCompleteLimitedConfirmation
+              : copy.sessionCompleteConfirmation}
+          </p>
+          {sessionCaptureOutcome === "limited" ? (
+            <p className="mt-2 text-[12px] leading-relaxed text-amber-900/90">
+              {copy.sessionRetestGuidance}
+            </p>
+          ) : null}
         </div>
       )}
+
+      {trackingStopped && sessionCaptureOutcome === "limited" ? (
+        <div className="mt-3 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => handleTryAgain()}
+            className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] bg-[#1D9E75] text-[14px] font-bold text-white transition hover:bg-[#179165]"
+          >
+            {copy.tryAgainLabel}
+          </button>
+        </div>
+      ) : null}
 
       {showReadinessActions && (
         <div className="mt-3 flex flex-col gap-2">

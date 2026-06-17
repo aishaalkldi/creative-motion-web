@@ -219,6 +219,11 @@ export function buildStsMotionPilotRecord(
     ankle: clampPct(summary.visibilityAssist.ankleVisiblePct),
   };
 
+  const clinicianFlags = buildClinicianFlags(summary, [
+    ...(input.extraClinicianFlags ?? []),
+    ...buildAttemptClinicianFlags(attemptSummaries),
+  ]);
+
   return {
     pilotVersion: STS_MOTION_PILOT_VERSION,
     isPilot: true,
@@ -237,10 +242,7 @@ export function buildStsMotionPilotRecord(
       slowestS: summary.repDurationSummary.slowestDurationS,
     },
     visibilityRatios,
-    clinicianFlags: buildClinicianFlags(summary, [
-      ...(input.extraClinicianFlags ?? []),
-      ...buildAttemptClinicianFlags(attemptSummaries),
-    ]),
+    clinicianFlags,
     reviewRequired: true,
     reviewReason: "derived_motion_timeline_pilot",
     disclaimer:
@@ -249,7 +251,7 @@ export function buildStsMotionPilotRecord(
       visibilityRatios,
       trackingSignal,
       poseLossEventCount: summary.interruptions.poseLossEventCount,
-      captureFlags: summary.captureFlags,
+      captureFlags: [...summary.captureFlags, ...clinicianFlags],
     }),
     attemptSummaries: pilotAttempts.length > 0 ? pilotAttempts : [],
   };

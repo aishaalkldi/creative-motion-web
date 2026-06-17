@@ -12,6 +12,7 @@ import {
   NO_TIMELINE_SNAPSHOTS_FLAG,
   readLiveTimelineSnapshotCount,
   resolveLastMovementEvent,
+  resolvePatientSessionCaptureOutcome,
   shouldShowNoSnapshotCaptureWarning,
 } from "./patient-cv-capture-reliability";
 import type { CaptureReadinessCheck } from "./patient-cv-capture-readiness";
@@ -117,6 +118,44 @@ describe("resolveLastMovementEvent", () => {
       exerciseId: "heel-raise",
     });
     assert.equal(event, "Rep counted (2)");
+  });
+});
+
+describe("resolvePatientSessionCaptureOutcome", () => {
+  it("returns limited when setup was limited", () => {
+    assert.equal(
+      resolvePatientSessionCaptureOutcome({
+        captureSetupLimited: true,
+        snapshotCount: 8,
+        trackingQuality: "good",
+        trackingStatus: "pose-found",
+      }),
+      "limited",
+    );
+  });
+
+  it("returns limited when no timeline snapshots were recorded", () => {
+    assert.equal(
+      resolvePatientSessionCaptureOutcome({
+        captureSetupLimited: false,
+        snapshotCount: 0,
+        trackingQuality: "good",
+        trackingStatus: "pose-found",
+      }),
+      "limited",
+    );
+  });
+
+  it("returns good for stable captures", () => {
+    assert.equal(
+      resolvePatientSessionCaptureOutcome({
+        captureSetupLimited: false,
+        snapshotCount: 4,
+        trackingQuality: "good",
+        trackingStatus: "pose-found",
+      }),
+      "good",
+    );
   });
 });
 

@@ -303,6 +303,10 @@ export type PatientCvCopy = {
   setupPrivacyMicroConsent: string;
   /** Shown after the patient stops camera tracking. */
   sessionCompleteConfirmation: string;
+  /** Shown after a limited-quality capture completes. */
+  sessionCompleteLimitedConfirmation: string;
+  /** Guidance encouraging a retest after limited capture. */
+  sessionRetestGuidance: string;
   /** Shown when tracking is active but timeline snapshots stay at zero. */
   captureReliabilityNoDataWarning: string;
 };
@@ -378,6 +382,10 @@ const PATIENT_SETUP_WIZARD_COPY_EN = {
     "Camera is optional. No video or image is stored. Your therapist only sees derived movement numbers.",
   sessionCompleteConfirmation:
     "Well done — your session is complete. Your therapist will review your results soon.",
+  sessionCompleteLimitedConfirmation:
+    "Session saved — camera tracking was limited during this capture.",
+  sessionRetestGuidance:
+    "A clearer capture may help your therapist review movement observations. You can try again when ready.",
   captureReliabilityNoDataWarning:
     "Camera is on, but movement data is not being captured. Please adjust your position.",
 } as const;
@@ -423,6 +431,10 @@ const PATIENT_SETUP_WIZARD_COPY_AR = {
     "الكاميرا اختيارية. لا يتم حفظ أي فيديو أو صورة. يصل للمعالج فقط أرقام الحركة المشتقة.",
   sessionCompleteConfirmation:
     "أحسنت — اكتملت جلستك. سيراجع معالجك نتائجك قريبًا.",
+  sessionCompleteLimitedConfirmation:
+    "تم حفظ الجلسة — كان تتبّع الكاميرا محدوداً أثناء هذا التسجيل.",
+  sessionRetestGuidance:
+    "قد يساعد تسجيل أوضح المعالج في مراجعة ملاحظات الحركة. يمكنك المحاولة مرة أخرى عندما تكون جاهزاً.",
   captureReliabilityNoDataWarning:
     "الكاميرا تعمل، لكن بيانات الحركة لا تُسجَّل. يُرجى تعديل وضعيتك.",
 } as const;
