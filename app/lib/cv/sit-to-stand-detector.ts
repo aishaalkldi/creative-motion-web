@@ -65,6 +65,11 @@ import {
 } from "@/app/lib/cv/body-framing-evaluator";
 import { resolveBodyFramingProfile } from "@/app/lib/cv/body-framing-profiles";
 import { drawPoseLandmarkDots } from "@/app/lib/cv/pose-landmark-overlay";
+import {
+  computeStsLandmarkCoverage,
+  isStsAdvisoryFramingState,
+  isStsCoverageReady,
+} from "@/app/lib/cv/sts-landmark-coverage";
 
 export { computeHipMidY, computeTorsoSpan, hipsMeetMinVisibility };
 export type { PoseLandmark, BodyFramingState };
@@ -87,6 +92,8 @@ export type SitToStandDetectorSnapshot = {
   framesTotal: number;
   initPhase: SitToStandInitPhase;
   previewActive: boolean;
+  /** PR101: STS landmark coverage ready (shoulders/hips/knees); advisory when framing is move_back. */
+  stsLandmarkCoverageReady?: boolean;
   trackingError: string | null;
   /** True while collecting seated hip baseline (patient baseline mode only) */
   isBaselineCalibrating: boolean;
@@ -321,6 +328,7 @@ export class SitToStandDetector {
   private isBaselineCalibrating = false;
   private poseReadiness: PoseReadiness = "ready";
   private bodyFramingState: BodyFramingState = "good_distance";
+  private stsLandmarkCoverageReady = false;
   private readinessCheckEndMs = 0;
   /** MQ-SIGNAL-1B: in-memory session visibility (saved summary only; not persisted). */
   private hipVisSamples: number[] = [];
@@ -354,6 +362,9 @@ export class SitToStandDetector {
       framesTotal: this.framesTotal,
       initPhase: this.initPhase,
       previewActive: this.previewActive,
+      stsLandmarkCoverageReady: this.usesStsAdaptiveFraming()
+        ? this.stsLandmarkCoverageReady
+        : undefined,
       trackingError: this.trackingError,
       isBaselineCalibrating: this.isBaselineCalibrating,
       standPhase: this.standPhase,
@@ -431,6 +442,13 @@ export class SitToStandDetector {
     return resolveBodyFramingProfile(this.config.bodyFramingProfileId);
   }
 
+  private usesStsAdaptiveFraming(): boolean {
+    return (
+      (this.config.metricsExerciseId ?? "sit-to-stand") === "sit-to-stand" &&
+      this.config.bodyFramingProfileId === "seated-rise"
+    );
+  }
+
   private mapFramingToPoseReadiness(
     framingState: BodyFramingState,
     quality: SitToStandTrackingQuality,
@@ -505,6 +523,13 @@ export class SitToStandDetector {
     const quality = this.trackingQuality ?? "poor";
     const framingProfile = this.bodyFramingProfile();
 
+    if (this.usesStsAdaptiveFraming()) {
+      const coverage = computeStsLandmarkCoverage(landmarks);
+      this.stsLandmarkCoverageReady = isStsCoverageReady(coverage, quality);
+    } else {
+      this.stsLandmarkCoverageReady = false;
+    }
+
     if (framingProfile) {
       this.bodyFramingState = evaluateBodyFraming(landmarks, framingProfile, {
         checking: false,
@@ -512,11 +537,20 @@ export class SitToStandDetector {
       });
 
       if (this.bodyFramingState !== "good_distance") {
-        this.poseReadiness = this.mapFramingToPoseReadiness(this.bodyFramingState, quality);
-        return;
+        const stsFramingOverride =
+          this.usesStsAdaptiveFraming() &&
+          this.stsLandmarkCoverageReady &&
+          isStsAdvisoryFramingState(this.bodyFramingState) &&
+          quality !== "poor";
+
+        if (!stsFramingOverride) {
+          this.poseReadiness = this.mapFramingToPoseReadiness(this.bodyFramingState, quality);
+          return;
+        }
       }
     } else {
       this.bodyFramingState = "good_distance";
+      this.stsLandmarkCoverageReady = false;
     }
 
     const wasCountingReady =

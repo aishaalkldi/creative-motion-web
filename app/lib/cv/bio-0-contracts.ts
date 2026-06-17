@@ -444,8 +444,8 @@ const PATIENT_SETUP_EXERCISE_HINTS: Record<
   Record<PatientExerciseLanguage, string>
 > = {
   "sit-to-stand": {
-    en: "Place your phone 1.5 meters in front of you. Make sure your full body is visible from head to feet. Sit on a stable chair.",
-    ar: "ضع الهاتف أمامك على بُعد 1.5 متر. تأكد أن جسمك كاملًا داخل الإطار من الرأس إلى القدم. اجلس على كرسي ثابت.",
+    en: "Place your phone 1.5 meters in front of you. Keep your shoulders, hips, and knees visible. Sit on a stable chair.",
+    ar: "ضع الهاتف أمامك على بُعد 1.5 متر. أبقِ الكتفين والوركين والركبتين ظاهرين. اجلس على كرسي ثابت.",
   },
   "mini-squat": {
     en: "Place your phone in front of you. Make sure your feet and knees are clearly visible.",
@@ -479,14 +479,14 @@ const PATIENT_SETUP_EXERCISE_TIPS: Record<
 > = {
   "sit-to-stand": {
     en: [
+      "Keep shoulders, hips, and knees visible — ankles are helpful but optional.",
+      "If you're tall or in a small room, step back slightly or lower the phone.",
       "Keep the chair visible in frame.",
-      "Use a full body side or front angle.",
-      "Hips and knees must stay visible.",
     ],
     ar: [
+      "أبقِ الكتفين والوركين والركبتين ظاهرين — الكاحلان مفيدان لكنهما اختياريان.",
+      "إذا كنت طويل القامة أو في غرفة صغيرة، ابتعد قليلاً أو أنزل الهاتف.",
       "أبقِ الكرسي ظاهراً في الإطار.",
-      "استخدم زاوية جانبية أو أمامية للجسم بالكامل.",
-      "يجب أن يبقى الوركان والركبتان ظاهرين.",
     ],
   },
   "mini-squat": {
@@ -1431,6 +1431,14 @@ export function patientCvCopy(
     setupPreCaptureBullets: [...setupCopy.setupPreCaptureBullets],
     setupExerciseHint,
     setupExerciseTips,
+    ...(exerciseId === "sit-to-stand"
+      ? {
+          setupCheckHipKneeAnkleVisible:
+            lang === "ar"
+              ? "الكتفان والوركان والركبتان ظاهرون"
+              : "Shoulders, hips, and knees visible",
+        }
+      : {}),
   };
 }
 
