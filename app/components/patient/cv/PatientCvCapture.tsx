@@ -465,6 +465,7 @@ function applySnapshot(
     setTrackingQuality: (v: SitToStandTrackingQuality | null) => void;
     setPoseReadiness: (v: PoseReadiness) => void;
     setBodyFramingState: (v: BodyFramingState) => void;
+    setStsLandmarkCoverageReady?: (v: boolean) => void;
     setSessionSeconds: (v: number) => void;
     setMovementDetected: (v: boolean) => void;
     setBaselineCalibrating: (v: boolean) => void;
@@ -479,6 +480,12 @@ function applySnapshot(
   setters.setTrackingQuality(snapshot.trackingQuality);
   setters.setPoseReadiness(snapshot.poseReadiness);
   setters.setBodyFramingState(snapshot.bodyFramingState);
+  if (
+    setters.setStsLandmarkCoverageReady &&
+    "stsLandmarkCoverageReady" in snapshot
+  ) {
+    setters.setStsLandmarkCoverageReady(Boolean(snapshot.stsLandmarkCoverageReady));
+  }
   setters.setSessionSeconds(snapshot.sessionSeconds);
   setters.setMovementDetected(snapshot.movementDetected);
   setters.setBaselineCalibrating(snapshot.isBaselineCalibrating);
@@ -517,6 +524,7 @@ export function PatientCvCapture({
   const [trackingQuality, setTrackingQuality] = useState<SitToStandTrackingQuality | null>(null);
   const [poseReadiness, setPoseReadiness] = useState<PoseReadiness>("checking");
   const [bodyFramingState, setBodyFramingState] = useState<BodyFramingState>("checking");
+  const [stsLandmarkCoverageReady, setStsLandmarkCoverageReady] = useState(false);
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [movementDetected, setMovementDetected] = useState(false);
   const [baselineCalibrating, setBaselineCalibrating] = useState(false);
@@ -650,6 +658,8 @@ export function PatientCvCapture({
         setTrackingQuality,
         setPoseReadiness,
         setBodyFramingState,
+        setStsLandmarkCoverageReady:
+          exerciseId === "sit-to-stand" ? setStsLandmarkCoverageReady : undefined,
         setSessionSeconds,
         setMovementDetected,
         setBaselineCalibrating,
@@ -1183,6 +1193,8 @@ export function PatientCvCapture({
         poseReadiness,
         bodyFramingState,
         previewActive,
+        stsLandmarkCoverageReady:
+          exerciseId === "sit-to-stand" ? stsLandmarkCoverageReady : undefined,
       },
       stableSeconds,
     );
@@ -1199,6 +1211,7 @@ export function PatientCvCapture({
     trackingQuality,
     poseReadiness,
     bodyFramingState,
+    stsLandmarkCoverageReady,
     stableSeconds,
     confirmStartTracking,
   ]);
@@ -1527,6 +1540,8 @@ export function PatientCvCapture({
       poseReadiness,
       bodyFramingState,
       previewActive,
+      stsLandmarkCoverageReady:
+        exerciseId === "sit-to-stand" ? stsLandmarkCoverageReady : undefined,
     },
     stableSeconds,
   );

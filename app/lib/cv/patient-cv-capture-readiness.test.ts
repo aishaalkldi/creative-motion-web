@@ -72,6 +72,50 @@ describe("evaluateCaptureReadiness", () => {
     assert.ok(feet?.required);
     assert.equal(feet?.met, false);
   });
+
+  it("allows STS start when move_back but landmark coverage is ready", () => {
+    const snapshot: CaptureReadinessSnapshot = {
+      ...READY_SNAPSHOT,
+      bodyFramingState: "move_back",
+      stsLandmarkCoverageReady: true,
+    };
+    const evaluation = evaluateCaptureReadiness(
+      "sit-to-stand",
+      snapshot,
+      CAPTURE_READINESS_STABLE_SECONDS,
+    );
+    const distance = evaluation.checks.find((c) => c.id === "correct_distance");
+    assert.equal(distance?.met, true);
+    assert.equal(evaluation.canStartTracking, true);
+  });
+
+  it("blocks STS when move_back and coverage is not ready", () => {
+    const snapshot: CaptureReadinessSnapshot = {
+      ...READY_SNAPSHOT,
+      bodyFramingState: "move_back",
+      stsLandmarkCoverageReady: false,
+      poseReadiness: "not_ready",
+    };
+    const evaluation = evaluateCaptureReadiness(
+      "sit-to-stand",
+      snapshot,
+      CAPTURE_READINESS_STABLE_SECONDS,
+    );
+    const distance = evaluation.checks.find((c) => c.id === "correct_distance");
+    assert.equal(distance?.met, false);
+    assert.equal(evaluation.canStartTracking, false);
+  });
+
+  it("keeps heel-raise correct_distance strict on move_back", () => {
+    const snapshot: CaptureReadinessSnapshot = {
+      ...READY_SNAPSHOT,
+      bodyFramingState: "move_back",
+      stsLandmarkCoverageReady: true,
+    };
+    const checks = evaluateCaptureReadinessChecks("heel-raise", snapshot, 3);
+    const distance = checks.find((c) => c.id === "correct_distance");
+    assert.equal(distance?.met, false);
+  });
 });
 
 describe("updateStableTrackingState", () => {

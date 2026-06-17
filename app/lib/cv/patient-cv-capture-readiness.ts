@@ -37,6 +37,7 @@ export type CaptureReadinessSnapshot = Pick<
   | "poseReadiness"
   | "bodyFramingState"
   | "previewActive"
+  | "stsLandmarkCoverageReady"
 >;
 
 export type CaptureReadinessEvaluation = {
@@ -89,8 +90,20 @@ function isUpperReachVisible(
   return poseReadiness === "ready" && trackingQuality !== "poor";
 }
 
-function isCorrectDistance(bodyFramingState: BodyFramingState): boolean {
-  return bodyFramingState === "good_distance";
+function isCorrectDistance(
+  exerciseId: PatientCvExerciseId,
+  bodyFramingState: BodyFramingState,
+  stsLandmarkCoverageReady?: boolean,
+): boolean {
+  if (bodyFramingState === "good_distance") return true;
+  if (
+    exerciseId === "sit-to-stand" &&
+    stsLandmarkCoverageReady &&
+    bodyFramingState === "move_back"
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function isLightingAcceptable(
@@ -145,6 +158,7 @@ export function evaluateCaptureReadinessChecks(
     trackingQuality,
     poseReadiness,
     bodyFramingState,
+    stsLandmarkCoverageReady,
   } = snapshot;
 
   const values: Record<CaptureReadinessCheckId, boolean> = {
@@ -156,7 +170,11 @@ export function evaluateCaptureReadinessChecks(
       trackingQuality,
       trackingStatus,
     ),
-    correct_distance: isCorrectDistance(bodyFramingState),
+    correct_distance: isCorrectDistance(
+      exerciseId,
+      bodyFramingState,
+      stsLandmarkCoverageReady,
+    ),
     lighting_acceptable: isLightingAcceptable(trackingQuality, bodyFramingState),
     tracking_stable: stableSeconds >= CAPTURE_READINESS_STABLE_SECONDS,
   };
@@ -182,13 +200,19 @@ export function resolveCaptureSetupGuidance(
   exerciseId: PatientCvExerciseId,
   snapshot: CaptureReadinessSnapshot,
 ): CaptureSetupGuidance {
-  const { trackingStatus, poseReadiness, bodyFramingState, trackingQuality } =
+  const { trackingStatus, poseReadiness, bodyFramingState, trackingQuality, stsLandmarkCoverageReady } =
     snapshot;
 
   if (trackingStatus === "pose-lost" || poseReadiness === "not_ready") {
     return "step_into_frame";
   }
-  if (bodyFramingState === "move_back") return "move_farther";
+  if (bodyFramingState === "move_back") {
+    const stsCoverageOverrides =
+      exerciseId === "sit-to-stand" &&
+      stsLandmarkCoverageReady &&
+      (poseReadiness === "ready" || poseReadiness === "partial");
+    if (!stsCoverageOverrides) return "move_farther";
+  }
   if (bodyFramingState === "move_closer") return "step_into_frame";
   if (
     bodyFramingState === "low_visibility" ||
