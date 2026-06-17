@@ -25,7 +25,8 @@ Use this checklist before, during, and after a controlled clinic pilot demo.
 ### Clinical & legal framing
 
 - [ ] Team aligned: RASQ **does not diagnose** or **prescribe autonomously**
-- [ ] **No patient-facing AI** — clinician-only AI draft summary is for review only; **no voice** in supported workflow; **optional experimental CV** (sit-to-stand only) is **not pilot-critical** — state explicitly
+- [ ] **No patient-facing AI** — clinician-only AI draft summary is for review only; **no voice** in supported workflow; **optional experimental CV** (sit-to-stand primary; other allowlisted exercises may appear) is **not pilot-critical** — state explicitly
+- [ ] **Assessment Center** — confirm `/clinician/assessments` (STS review live, Gait shell only) if demo includes structured movement review
 - [ ] `ai-clinician-summary-smoke-test.md` completed on production (if using AI summary)
 - [ ] `pilot-activation-runbook.md` reviewed for first activation session
 - [ ] Legal pages reviewed at high level; counsel review planned before paid contracts
@@ -74,7 +75,7 @@ Use this checklist before, during, and after a controlled clinic pilot demo.
 ### Known limitations to mention
 
 - [ ] No autonomous diagnosis or prescription
-- [ ] No patient-facing AI — clinician-only AI draft summary is for review only (not clinical decision support); no voice in supported workflow; optional sit-to-stand CV is experimental, therapist-review only, not clinically validated, and not required for session completion; supine/manual exercises are manual-only
+- [ ] No patient-facing AI — clinician-only AI draft summary is for review only (not clinical decision support); no voice in supported workflow; optional camera assist is experimental, therapist-review only, not clinically validated, not required for session completion (sit-to-stand is the most mature CV path); supine/manual exercises are manual-only
 - [ ] Clinician review required for flagged items
 - [ ] Rate limits are in-memory (may reset on deploy)
 - [ ] Legal pages not final counsel-reviewed

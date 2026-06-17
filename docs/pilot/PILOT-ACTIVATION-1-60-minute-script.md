@@ -121,7 +121,7 @@ Use clinic-approved consent first. RASQ is assistive only.
 
 > “Your physiotherapist assigned exercises in this app. It supports your rehab program — it does **not** diagnose you or change your treatment on its own.
 >
-> If you see an **optional camera** for sit-to-stand, it only helps count movement for your therapist to review. You can tap **Continue without camera** and finish manually.
+> If you see an **optional camera** during an exercise, it only helps record movement observations for your therapist to review. You can tap **Continue without camera** and finish manually.
 >
 > Stop if you feel sharp pain or unwell, and contact your therapist as your clinic advises.”
 
@@ -129,7 +129,7 @@ Use clinic-approved consent first. RASQ is assistive only.
 
 > «برنامج التمارين الذي حدده معالجك. لا يشخّصك ولا يغيّر العلاج من تلقاء نفسه.
 >
-> إذا ظهرت **كاميرا اختيارية** لتمرين الجلوس والوقوف، فهي لعدّ الحركة لمراجعة المعالج فقط. يمكنك اختيار **المتابعة دون كاميرا** وإكمال التمرين يدوياً.
+> إذا ظهرت **كاميرا اختيارية** أثناء التمرين، فهي لتسجيل ملاحظات الحركة لمراجعة المعالج فقط. يمكنك اختيار **المتابعة دون كاميرا** وإكمال التمرين يدوياً.
 >
 > توقف إذا شعرت بألم حاد أو عدم راحة غير معتاد، وتواصل مع المعالج حسب تعليمات العيادة.»
 

@@ -1,5 +1,27 @@
 # Project log
 
+## 2026-06-17 — PR102 pilot documentation refresh (docs only)
+
+### Summary
+
+Documentation-only update after PR99–PR101 merges. Adds `docs/RASQ_CURRENT_STATE.md` and refreshes pilot pack language for Assessment Center, STS capture quality/reliability, STS adaptive framing, and multi-exercise CV allowlist (sit-to-stand primary).
+
+### What changed
+
+- `docs/RASQ_CURRENT_STATE.md` — new single-page platform state
+- `docs/pilot/known-limitations.md` — Assessment Center, CV scope, pilot scripts
+- `docs/pilot/pilot-checklist.md`, `clinician-onboarding-guide.md`, `investor-proof-template.md`, `PILOT-ACTIVATION-1-60-minute-script.md`, `sts-motion-timeline-pilot.md`
+
+### Open PR cleanup
+
+PR #97 (PR98) recommended for close — superseded by PR99 on `main`.
+
+### Safety boundaries
+
+No app code, database, AI, or diagnosis wording changes.
+
+---
+
 ## 2026-05-30 — AI Clinician Summary Draft v0 merged to production
 
 ### Summary

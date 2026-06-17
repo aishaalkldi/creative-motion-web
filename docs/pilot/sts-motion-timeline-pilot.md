@@ -1,29 +1,33 @@
-# STS motion timeline — internal pilot (SMT-1)
+# STS motion timeline — patient pilot notes
 
-**Status:** Developer-only. Not shown to patients or clinicians. Not persisted.
+**Status:** Enabled for patient Sit-to-Stand via `PATIENT_STS_CONFIG.motionTimelineEnabled` (production patient config). Derived motion evidence feeds clinician review paths when saves succeed — **therapist review required**, not a clinical assessment.
 
-## Enable (controlled session)
+## Optional developer gate (legacy)
 
-Add both query parameters to a **patient Sit-to-Stand** session URL:
+For controlled internal debugging, query parameters may still be used on a patient Sit-to-Stand session URL:
 
 ```
 ?cvDebug=1&smtTimeline=1
 ```
 
-`PATIENT_STS_CONFIG.motionTimelineEnabled` stays **unset** in production. Timeline collection runs only when the pilot gate above is active (or if config is explicitly set `true` in a future controlled rollout).
+This is **not required** for timeline collection in the current patient STS config.
 
-## Manual verification
+## Manual verification (clinician / QA)
 
-1. Open STS session with `?cvDebug=1&smtTimeline=1`.
+1. Open a patient Sit-to-Stand session (with or without debug query params).
 2. Start camera, complete ≥3 reps, stop session.
-3. DevTools → Console → look for `[smt-1] session motion summary`.
-4. Confirm fields: `snapshotCount` ≥ 1, `legacyRepCount` matches on-screen reps, `forbiddenKeyCount` = 0.
-5. Repeat **without** query params: no `[smt-1]` summary log; save/metrics unchanged.
+3. Confirm session metrics save and clinician review shows motion evidence where wired (Results, Assessment Center STS review, motion report when present).
+4. Confirm capture quality / limited-capture messaging behaves as expected after PR100–PR101.
 
 ## Rollback
 
-Remove query params or revert the pilot-gate PR. No database or API rollback required.
+Revert patient STS config or timeline wiring PRs. No database rollback required for pilot gate changes.
 
 ## Evidence
 
 Record outcome in `pilot-evidence-log.md` (observation only).
+
+## See also
+
+- `docs/RASQ_CURRENT_STATE.md` — platform snapshot
+- `docs/pilot/known-limitations.md` — pilot safety framing

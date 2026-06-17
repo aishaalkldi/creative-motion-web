@@ -10,7 +10,7 @@
 
 - Confirm your **provider account** is active (clinic admin or RASQ team).
 - Use a **demo or consented patient** per clinic policy.
-- Read `known-limitations.md` — **no patient-facing AI**; clinician-only AI draft summary is available for review only (not clinical decision support); no autonomous diagnosis; optional experimental sit-to-stand camera assist only (not pilot-critical, therapist review only, not clinically validated); supine/manual exercises are manual-only.
+- Read `known-limitations.md` and `docs/RASQ_CURRENT_STATE.md` — **no patient-facing AI**; clinician-only AI draft summary is available for review only (not clinical decision support); no autonomous diagnosis; optional experimental camera assist during portal exercises (sit-to-stand most mature; not pilot-critical, therapist review only, not clinically validated); Assessment Center STS review live, Gait shell only; supine/manual exercises are manual-only.
 - Complete `ai-clinician-summary-smoke-test.md` on production before first activation session.
 - Review `pilot-activation-runbook.md` for the 60-minute supervised session (1 clinician, 2–3 test patients).
 - Legal pages (`/privacy`, `/terms`, `/intended-use`, `/clinical-safety`) are pilot-ready; counsel review is required before commercial contracts.
