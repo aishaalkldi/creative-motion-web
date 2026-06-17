@@ -52,6 +52,13 @@ const WARNING_LOW_TRACKING = "Low tracking confidence";
 const WARNING_LOWER_LIMB = "Key lower-limb landmarks are missing";
 const WARNING_CAMERA = "Camera position may affect measurement reliability";
 const WARNING_RETEST = "Retest recommended before therapist review";
+const WARNING_SETUP_LIMITED = "Capture started before setup checks passed";
+const WARNING_TRACKING_INTERRUPTED = "Tracking was interrupted during session";
+const WARNING_NO_TIMELINE = "No motion timeline snapshots were recorded";
+
+export const CAPTURE_SETUP_LIMITED_FLAG = "capture_setup_limited";
+export const CAPTURE_POSE_INTERRUPTED_FLAG = "pose_tracking_interrupted";
+export const CAPTURE_NO_TIMELINE_FLAG = "no_timeline_snapshots";
 
 /** Safe-language guard — warnings must not contain clinical/diagnostic terms. */
 export const FORBIDDEN_CAPTURE_WARNING_TERMS = [
@@ -157,6 +164,10 @@ function qualityLevelFromSignals(input: {
   return "low";
 }
 
+function hasCaptureFlag(flags: readonly string[] | undefined, flag: string): boolean {
+  return (flags ?? []).includes(flag);
+}
+
 function buildWarnings(input: {
   qualityLevel: CaptureQualityLevel;
   bodyVisibility: BodyVisibilityLevel;
@@ -164,6 +175,9 @@ function buildWarnings(input: {
   cameraPosition: CameraPositionStatus;
   lowerLimbMissing: boolean;
   essentialMissing: boolean;
+  setupLimited?: boolean;
+  trackingInterrupted?: boolean;
+  noTimelineSnapshots?: boolean;
 }): string[] {
   const warnings: string[] = [];
   if (input.bodyVisibility === "poor" || input.essentialMissing) {
@@ -178,7 +192,21 @@ function buildWarnings(input: {
   if (input.cameraPosition === "needs_adjustment") {
     warnings.push(WARNING_CAMERA);
   }
-  if (input.qualityLevel === "low" || input.essentialMissing) {
+  if (input.setupLimited) {
+    warnings.push(WARNING_SETUP_LIMITED);
+  }
+  if (input.trackingInterrupted) {
+    warnings.push(WARNING_TRACKING_INTERRUPTED);
+  }
+  if (input.noTimelineSnapshots) {
+    warnings.push(WARNING_NO_TIMELINE);
+  }
+  if (
+    input.qualityLevel === "low" ||
+    input.essentialMissing ||
+    input.setupLimited ||
+    input.noTimelineSnapshots
+  ) {
     warnings.push(WARNING_RETEST);
   }
   return [...new Set(warnings)];
@@ -258,6 +286,13 @@ export function assessCaptureQualityFromLandmarks(
 export function assessCaptureQualityFromSession(
   input: CaptureQualitySessionInput,
 ): CaptureQualityResult {
+  const flags = input.captureFlags ?? [];
+  const setupLimited = hasCaptureFlag(flags, CAPTURE_SETUP_LIMITED_FLAG);
+  const trackingInterrupted =
+    hasCaptureFlag(flags, CAPTURE_POSE_INTERRUPTED_FLAG) ||
+    (input.poseLossEventCount ?? 0) > 0;
+  const noTimelineSnapshots = hasCaptureFlag(flags, CAPTURE_NO_TIMELINE_FLAG);
+
   const hip = pctToUnit(input.visibilityRatios.hip);
   const knee = pctToUnit(input.visibilityRatios.knee);
   const ankle = pctToUnit(input.visibilityRatios.ankle);
@@ -271,18 +306,27 @@ export function assessCaptureQualityFromSession(
   if ((input.poseLossEventCount ?? 0) > 2) {
     trackingConfidence = trackingConfidence === "high" ? "medium" : "low";
   }
+  if (noTimelineSnapshots && trackingConfidence === "high") {
+    trackingConfidence = "medium";
+  }
 
-  const hasFramingFlag = (input.captureFlags ?? []).some((f) =>
-    ["unclear_visibility", "pose_tracking_interrupted", "limited_observed_phases"].includes(f),
+  const hasFramingFlag = flags.some((f) =>
+    [
+      "unclear_visibility",
+      CAPTURE_POSE_INTERRUPTED_FLAG,
+      "limited_observed_phases",
+      CAPTURE_SETUP_LIMITED_FLAG,
+      CAPTURE_NO_TIMELINE_FLAG,
+    ].includes(f),
   );
   const cameraPosition: CameraPositionStatus =
-    input.trackingSignal === "lost" || hasFramingFlag
+    input.trackingSignal === "lost" || hasFramingFlag || setupLimited
       ? "needs_adjustment"
       : avgConfidence >= HIGH_CONFIDENCE
         ? "acceptable"
         : "unknown";
 
-  const qualityLevel = qualityLevelFromSignals({
+  let qualityLevel = qualityLevelFromSignals({
     avgConfidence,
     essentialMissing,
     lowerLimbMissing,
@@ -290,7 +334,18 @@ export function assessCaptureQualityFromSession(
     bodyVisibility,
   });
 
-  const retestRecommended = qualityLevel === "low" || essentialMissing;
+  if (setupLimited && qualityLevel === "high") {
+    qualityLevel = "medium";
+  }
+  if (noTimelineSnapshots && qualityLevel === "high") {
+    qualityLevel = "medium";
+  }
+
+  const retestRecommended =
+    qualityLevel === "low" ||
+    essentialMissing ||
+    setupLimited ||
+    noTimelineSnapshots;
 
   return {
     qualityLevel,
@@ -305,6 +360,9 @@ export function assessCaptureQualityFromSession(
       cameraPosition,
       lowerLimbMissing,
       essentialMissing,
+      setupLimited,
+      trackingInterrupted,
+      noTimelineSnapshots,
     }),
   };
 }

@@ -80,6 +80,30 @@ describe("buildStsMotionPilotRecord", () => {
     assert.deepEqual(findForbiddenKeysInStsPilotRecord(record), []);
   });
 
+  it("feeds capture_setup_limited into capture quality scoring", () => {
+    const record = buildStsMotionPilotRecord({
+      summary: SUMMARY,
+      metrics: {
+        exerciseId: "sit-to-stand",
+        repCount: 3,
+        sessionDurationS: 12,
+        trackingQuality: "good",
+        movementDetected: true,
+        framesWithPose: 100,
+        framesTotal: 120,
+      },
+      snapshotCount: 10,
+      extraClinicianFlags: ["capture_setup_limited"],
+    });
+
+    assert.ok(record.captureQuality);
+    assert.equal(record.captureQuality.qualityLevel, "medium");
+    assert.equal(record.captureQuality.retestRecommended, true);
+    assert.ok(
+      record.captureQuality.warnings.includes("Capture started before setup checks passed"),
+    );
+  });
+
   it("merges smtPilot without removing other motion_quality keys", () => {
     const record = buildStsMotionPilotRecord({
       summary: SUMMARY,

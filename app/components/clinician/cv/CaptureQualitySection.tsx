@@ -1,11 +1,19 @@
 "use client";
 
 import type { CaptureQualityResult, CaptureQualityLevel } from "@/app/lib/cv/capture-quality";
+import { humanizeCaptureReliabilityFlags } from "@/app/lib/cv/capture-reliability-display";
 
 const QUALITY_BADGE_CLASS: Record<CaptureQualityLevel, string> = {
   high: "border-[#1D9E75]/35 bg-[#1D9E75]/12 text-[#5DCAA5]",
   medium: "border-[#EF9F27]/35 bg-[#EF9F27]/10 text-[#EF9F27]",
   low: "border-amber-500/35 bg-amber-500/10 text-amber-200",
+};
+
+export type CaptureReliabilityContext = {
+  visibilityRatios: { hip: number; knee: number; ankle: number } | null;
+  completeReps: number;
+  unclearReps: number;
+  clinicianFlags: string[] | null;
 };
 
 function titleCase(value: string): string {
@@ -31,13 +39,32 @@ function MetricRow({ label, value }: { label: string; value: string }) {
 type CaptureQualitySectionProps = {
   captureQuality: CaptureQualityResult | null;
   showFallback: boolean;
+  reliability?: CaptureReliabilityContext | null;
 };
+
+function shouldShowExpandedReliability(
+  captureQuality: CaptureQualityResult | null,
+  reliability: CaptureReliabilityContext | null | undefined,
+): boolean {
+  if (captureQuality?.qualityLevel === "medium" || captureQuality?.qualityLevel === "low") {
+    return true;
+  }
+  if (!captureQuality && reliability) {
+    const flags = humanizeCaptureReliabilityFlags(reliability.clinicianFlags ?? []);
+    return flags.length > 0;
+  }
+  return false;
+}
 
 export function CaptureQualitySection({
   captureQuality,
   showFallback,
+  reliability,
 }: CaptureQualitySectionProps) {
   if (!showFallback) return null;
+
+  const reliabilityFlags = humanizeCaptureReliabilityFlags(reliability?.clinicianFlags ?? []);
+  const showExpanded = shouldShowExpandedReliability(captureQuality, reliability);
 
   return (
     <div className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5">
@@ -67,6 +94,11 @@ export function CaptureQualitySection({
           {captureQuality.qualityLevel === "low" ? (
             <p className="mt-2 rounded-[5px] border border-amber-500/35 bg-amber-500/10 px-2.5 py-2 text-[10px] font-medium leading-relaxed text-amber-200">
               Use caution when quality is low. Therapist review required.
+            </p>
+          ) : captureQuality.qualityLevel === "medium" ? (
+            <p className="mt-2 rounded-[5px] border border-[#EF9F27]/35 bg-[#EF9F27]/10 px-2.5 py-2 text-[10px] font-medium leading-relaxed text-[#EF9F27]">
+              Limited capture quality may reduce how much movement evidence supports therapist
+              review.
             </p>
           ) : (
             <p className="mt-2 text-[10px] leading-relaxed text-[#9CA3AF]">
@@ -106,6 +138,67 @@ export function CaptureQualitySection({
           ) : null}
         </>
       )}
+
+      {showExpanded && reliability ? (
+        <div className="mt-3 rounded-[5px] border border-[#1E2D42] bg-[#070D16] px-2.5 py-2">
+          <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">
+            Capture limitations
+          </p>
+          <p className="mt-1 text-[10px] leading-relaxed text-[#9CA3AF]">
+            Low or limited capture quality reduces how much movement evidence can support therapist
+            review.
+          </p>
+
+          {reliability.visibilityRatios ? (
+            <dl className="mt-2 space-y-1.5">
+              <MetricRow
+                label="Hip visible"
+                value={`${reliability.visibilityRatios.hip}%`}
+              />
+              <MetricRow
+                label="Knee visible"
+                value={`${reliability.visibilityRatios.knee}%`}
+              />
+              <MetricRow
+                label="Ankle visible"
+                value={`${reliability.visibilityRatios.ankle}%`}
+              />
+            </dl>
+          ) : null}
+
+          <dl className="mt-2 space-y-1.5">
+            <MetricRow
+              label="Complete reps"
+              value={String(reliability.completeReps)}
+            />
+            <MetricRow
+              label="Unclear reps"
+              value={String(reliability.unclearReps)}
+            />
+          </dl>
+
+          {reliabilityFlags.length > 0 ? (
+            <ul className="mt-2 list-inside list-disc space-y-0.5 text-[10px] leading-snug text-[#D1D5DB]">
+              {reliabilityFlags.map((flag) => (
+                <li key={flag}>{flag}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!captureQuality && reliabilityFlags.length > 0 ? (
+        <div className="mt-3 rounded-[5px] border border-[#1E2D42] bg-[#070D16] px-2.5 py-2">
+          <p className="text-[9px] uppercase tracking-[0.06em] text-[#6B7280]">
+            Capture limitations
+          </p>
+          <ul className="mt-1 list-inside list-disc space-y-0.5 text-[10px] leading-snug text-[#D1D5DB]">
+            {reliabilityFlags.map((flag) => (
+              <li key={flag}>{flag}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </div>
   );
 }
