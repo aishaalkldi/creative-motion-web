@@ -2,7 +2,7 @@
 
 This document states platform limitations for **controlled clinic pilots** and **workflow validation**. Share with clinicians before demo and reference in consent / clinic communications as appropriate.
 
-**Production build:** Through Sprint W (clinician operational adherence readiness on patient list and profile) plus **AI Clinician Summary Draft v0** (clinician-only). Patient portal has no AI surface. Assessment, plan, and review flows unchanged in scope for this pilot pack.
+**Production build:** Through **PR101** on `main` — Assessment Center (STS review + Gait shell), STS capture quality/reliability (PR100), STS adaptive framing readiness (PR101), plus prior clinician operational layer and **AI Clinician Summary Draft v0** (clinician-only). Patient portal has no AI surface.
 
 ---
 
@@ -52,14 +52,29 @@ The pilot build includes **AI Clinician Summary Draft v0** on the clinician pati
 
 **Patient portal:** No AI summary surface — patients never see the draft.
 
+### Assessment Center (clinician)
+
+The pilot build includes a clinician **Assessment Center** (`/clinician/assessments`) for structured movement assessment planning and review.
+
+**Live today:**
+
+- **Sit-to-Stand assessment review** (`/clinician/assessments/sit-to-stand`) — lists STS session metrics from patient portal captures for **therapist review only**
+- **Gait Assessment v1 shell** (`/clinician/assessments/gait`) — clinician review surface and planned walking metrics; **no live gait capture yet**
+
+**Coming next:** Balance Assessment, Functional Movement, Patient-Reported Forms (cards shown as coming next in Assessment Center).
+
+Assessment modules provide **movement observations to support therapist review** — not diagnostic labels and not automatic treatment decisions.
+
 ### Optional patient computer vision (CV) — experimental, not pilot-critical
 
-The pilot build includes **optional, experimental** camera assist for **sit-to-stand only** during an active patient portal exercise (`PatientCvCapture`). It is **not clinically validated** and is **for therapist review only**.
+The pilot build includes **optional, experimental** camera assist during active patient portal exercises (`PatientCvCapture`). It is **not clinically validated** and is **for therapist review only**.
+
+**Sit-to-stand** is the **most mature** CV path (capture quality scoring, reliability flags, adaptive framing readiness as of PR100–PR101). Additional Sports Knee Foundation exercises on the patient CV allowlist (e.g. mini squat, single-leg stance, heel raise, step-up, lateral step, functional reach) may also offer optional camera assist when wired in an assigned plan — treat these as **experimental** unless your clinic demo plan specifies otherwise.
 
 - **The pilot workflow does not depend on CV.** Assessment, plan assignment, session completion, pain/effort reporting, and clinician review work without camera use.
 - **Patient choice:** Patients can select **Continue without camera** and complete the session manually.
-- **If camera tracking fails:** Poor signal or a metrics save error does **not** block exercise completion.
-- **CV-derived metrics** (e.g. rep count, duration, tracking signal) are **therapist-review only** — assistive, not a clinical assessment.
+- **If camera tracking fails:** Poor signal, limited setup, or a metrics save error does **not** block exercise completion. Limited captures may be flagged for therapist review and optional retest (PR100).
+- **CV-derived metrics** (e.g. rep count, duration, tracking signal, capture quality level) are **therapist-review only** — assistive, not a clinical assessment.
 - **What CV does not do:** No diagnosis, no clinical score, no automatic treatment recommendation, and no automatic progression decision. It does not judge whether movement is correct or wrong.
 
 **CV Lab** (`/clinician/cv-lab`) is **internal clinician tooling** for experimentation and review — separate from the **required** patient pilot path. Do not position optional home camera assist as proof of form quality or clinical outcome in pilot communications.
@@ -138,13 +153,13 @@ The following are explicitly **out of scope** for this pilot activation:
 - Clinical scoring engines or autonomous progression
 - New product features beyond what is already in production
 
-**In scope for PILOT-ACTIVATION-0:** supervised use of existing production features — clinician-only AI draft summary v0, optional Sit-to-Stand CV, manual supine exercises, therapist review only.
+**In scope for PILOT-ACTIVATION-0:** supervised use of existing production features — clinician-only AI draft summary v0, Assessment Center (STS review + Gait shell), optional patient CV (sit-to-stand primary; other allowlisted exercises experimental), manual supine exercises, therapist review only.
 
 ---
 
 ## What to tell patients (short script)
 
-> “This program supports exercises your physiotherapist assigned. It does not diagnose you or change your treatment on its own. If you see an optional camera for sit-to-stand, it only helps count movement for your therapist to review — you can skip it and continue manually. Stop if you feel sharp pain or unwell, and contact your therapist or emergency services as your clinic advises.”
+> “This program supports exercises your physiotherapist assigned. It does not diagnose you or change your treatment on its own. If you see an optional camera during an exercise, it only helps record movement observations for your therapist to review — you can skip it and continue manually. Stop if you feel sharp pain or unwell, and contact your therapist or emergency services as your clinic advises.”
 
 Arabic safety messaging is also shown in the patient portal (`PatientSafetyNotice`).
 
@@ -152,12 +167,13 @@ Arabic safety messaging is also shown in the patient portal (`PatientSafetyNotic
 
 ## What to tell clinicians (short script)
 
-> “RASQ organizes remote intake, plans, and home sessions under your license. You review all assessments and flags. No patient-facing AI — a clinician-only AI draft summary is available for your review only; it is not clinical decision support and does not replace your judgment. There is no voice in the supported workflow. Optional sit-to-stand camera assist is experimental, therapist-review only, and not clinically validated — the pilot does not depend on it. Legal pages are for pilot use — get counsel sign-off before commercial rollout.”
+> “RASQ organizes remote intake, plans, and home sessions under your license. You review all assessments and flags. The Assessment Center supports structured movement review — Sit-to-Stand session evidence is live; Gait is a planning shell only. No patient-facing AI — a clinician-only AI draft summary is available for your review only; it is not clinical decision support and does not replace your judgment. There is no voice in the supported workflow. Optional camera assist is experimental, therapist-review only, and not clinically validated — sit-to-stand is the most mature path; the pilot does not depend on CV. Legal pages are for pilot use — get counsel sign-off before commercial rollout.”
 
 ---
 
 ## Related documents
 
+- `docs/RASQ_CURRENT_STATE.md` — Single-page platform state (architecture, PR99–101, pilot readiness)
 - `clinician-onboarding-guide.md` — First-time clinician steps  
 - `pilot-workflow.md` — End-to-end flow (Sprint V/W operational layer)  
 - `patient-guide-ar.md` — Arabic patient handout  

@@ -122,5 +122,5 @@ _One measurable goal for the next session._
 | No PHI in quotes or screenshots | ☐ |
 | Clinician approved use of quote | ☐ |
 | Metrics match `pilot-metrics-manual-tracker.md` | ☐ |
-| Claims match actual product (no patient-facing AI; clinician-only AI draft summary for review only — not clinical decision support; no voice in supported workflow; optional experimental sit-to-stand CV only if mentioned; supine exercises manual-only) | ☐ |
+| Claims match actual product (no patient-facing AI; clinician-only AI draft summary for review only — not clinical decision support; no voice in supported workflow; Assessment Center STS review + Gait shell; optional experimental CV if mentioned — sit-to-stand primary; supine exercises manual-only) | ☐ |
 | Intended-use framing: clinician-led, not autonomous diagnosis | ☐ |
