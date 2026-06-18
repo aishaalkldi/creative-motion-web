@@ -1,5 +1,26 @@
 # Project log
 
+## 2026-06-05 — PR104 STS pilot QA validation (docs only)
+
+### Summary
+
+Documentation-only QA record for the full Sit-to-Stand optional camera pilot workflow after PR100–PR103. Code-path review and 69 targeted unit tests; no live camera automation. **Bugs found: none.**
+
+### What changed
+
+- `docs/pilot/sts-pilot-qa-validation.md` — QA checklist, pass/fail table, manual device smoke checklist, pilot readiness statement
+- `docs/RASQ_CURRENT_STATE.md` — PR103/PR104 entries, pilot readiness, related doc link
+
+### Pilot readiness
+
+STS optional camera assist is **ready for controlled clinic pilot** on `main`, provided each clinic completes the manual device smoke checklist in `docs/pilot/sts-pilot-qa-validation.md`.
+
+### Safety boundaries
+
+No app code, database, AI, or diagnosis wording changes.
+
+---
+
 ## 2026-06-17 — PR102 pilot documentation refresh (docs only)
 
 ### Summary
