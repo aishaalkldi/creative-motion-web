@@ -1,7 +1,7 @@
 # RASQ Current State
 
-**Last updated:** 2026-06-17  
-**Baseline:** `main` through **PR101** (merge `0070a7b`)
+**Last updated:** 2026-06-05  
+**Baseline:** `main` through **PR103** (merge `0614ec4`); **PR104** QA validation documented
 
 This document is the single source of truth for RASQ platform state during controlled clinic pilots. It is **not** a clinical or legal document. All movement observations require **therapist review**. RASQ does **not** diagnose, score clinically, or make automatic treatment decisions.
 
@@ -19,6 +19,8 @@ This document is the single source of truth for RASQ platform state during contr
 | Patient CV (optional camera assist) | Live — multi-exercise allowlist; **STS most mature** |
 | STS capture quality & reliability | Live — PR100 |
 | STS adaptive framing readiness | Live — PR101 |
+| Patient camera consent gate | Live — PR103 |
+| STS pilot QA validation (docs) | **PR104** — code-path + unit tests; manual smoke required |
 | Balance / Functional Movement / PR forms (Assessment Center) | Coming next |
 
 **Production URL:** https://creative-motion-web.vercel.app
@@ -48,7 +50,18 @@ Patient profile + AI draft (clinician)         ├─ Setup readiness + framing
 
 ---
 
-## Completed PRs (recent — PR99–PR101)
+## Completed PRs (recent — PR99–PR104)
+
+### PR103 — Patient camera consent foundation
+- Checkbox-required consent gate before camera access in `PatientCvCapture`
+- Privacy and Terms links; unified EN/AR consent copy
+- `captureConsent` persisted in existing `motion_quality` JSONB (`cv-camera-1.0`, timestamp)
+- No database migration; no AI
+
+### PR104 — STS pilot QA validation (docs only)
+- `docs/pilot/sts-pilot-qa-validation.md` — checklist, pass/fail table, manual smoke steps
+- Validates STS workflow after PR100–PR103; **bugs found: none**
+- **STS ready for controlled clinic pilot** with required manual device smoke per clinic
 
 ### PR99 — Gait Assessment v1 shell
 - Assessment Center hub links for **Gait** and **Sit-to-Stand**
@@ -116,12 +129,12 @@ Optional camera assist may appear during active portal sessions for:
 | Dimension | Assessment |
 |-----------|------------|
 | Core RASQ workflow | **Ready** for controlled pilots |
-| STS optional camera assist | **Ready** — PR100/101 hardening complete |
+| STS optional camera assist | **Ready** — PR100/101/103; PR104 QA pass; **manual device smoke required** |
 | Assessment Center | **Partial** — STS review useful; Gait/Balance are shells |
-| Pilot documentation | **Updated** via PR102 — review `docs/pilot/known-limitations.md` before demo |
+| Pilot documentation | **Updated** — PR102 + PR104 STS QA validation |
 | Legal / counsel | Pages pilot-ready; counsel review required before commercial contracts |
 
-**Pre-demo:** Use `docs/pilot/pilot-checklist.md` and `docs/pilot/clinician-onboarding-guide.md`.
+**Pre-demo:** Use `docs/pilot/pilot-checklist.md`, `docs/pilot/clinician-onboarding-guide.md`, and `docs/pilot/sts-pilot-qa-validation.md` (manual smoke).
 
 ---
 
@@ -141,7 +154,7 @@ Optional camera assist may appear during active portal sessions for:
 
 ## Recommended next PR
 
-**PR103 — Balance Assessment v1 shell** (product)
+**PR105 — Balance Assessment v1 shell** (product)
 
 Follow PR99 pattern: clinician shell page, Assessment Center card, planned metrics, therapist-review copy — no capture, no DB, no AI.
 
@@ -163,6 +176,7 @@ Suggested close comment:
 
 ## Related documents
 
+- `docs/pilot/sts-pilot-qa-validation.md` — PR104 STS QA + manual smoke (before STS camera pilot)
 - `docs/pilot/known-limitations.md` — Share with clinicians before pilot
 - `docs/pilot/pilot-checklist.md` — Before / during / after demo
 - `docs/pilot/clinician-onboarding-guide.md` — First-time clinician steps
