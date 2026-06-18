@@ -103,6 +103,7 @@ export default function SessionPlayerPage() {
     registerMetricsFlush,
     registerStsPilotBeforeSave,
     registerStsPilotRecordFlush,
+    registerCaptureConsentGetter,
     saveCvMetrics,
     resetCapture,
   } = useCvSessionCapture({
@@ -554,6 +555,7 @@ export default function SessionPlayerPage() {
         onRegisterCvMetricsFlush={registerMetricsFlush}
         onRegisterStsPilotBeforeSave={registerStsPilotBeforeSave}
         onRegisterStsPilotRecordFlush={registerStsPilotRecordFlush}
+        onRegisterCaptureConsent={registerCaptureConsentGetter}
         showTopProgress={false}
       />
 

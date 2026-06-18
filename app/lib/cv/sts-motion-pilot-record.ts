@@ -10,6 +10,7 @@ import type { FunctionalReachMotionPilotRecord } from "@/app/lib/cv/functional-r
 import type { LateralStepMotionPilotRecord } from "@/app/lib/cv/lateral-step-motion-pilot-record";
 import type { StepUpMotionPilotRecord } from "@/app/lib/cv/step-up-motion-pilot-record";
 import type { MiniSquatMotionPilotRecord } from "@/app/lib/cv/mini-squat-motion-pilot-record";
+import type { PatientCvCameraConsentRecord } from "@/app/lib/cv/patient-cv-consent";
 import { findForbiddenKeysInSummaryPayload } from "@/app/lib/cv/motion-summary-types";
 import type { SessionMotionSummary } from "@/app/lib/cv/motion-summary-types";
 import type { StsAttemptSummary } from "@/app/lib/cv/sts-biomechanical-capture-fsm";
@@ -263,6 +264,7 @@ export function findForbiddenKeysInStsPilotRecord(record: StsMotionPilotRecord):
 
 /** Payload shape stored on cv_session_metrics.motion_quality */
 export type CvMotionQualityPayload = {
+  captureConsent?: PatientCvCameraConsentRecord;
   smtPilot?: StsMotionPilotRecord;
   msPilot?: MiniSquatMotionPilotRecord;
   hrPilot?: HeelRaiseMotionPilotRecord;

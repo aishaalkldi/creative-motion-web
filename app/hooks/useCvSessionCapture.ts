@@ -4,6 +4,10 @@ import { useCallback, useRef, useState } from "react";
 import type { PatientCvDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import { isCvEnabledExercise } from "@/app/lib/cv/cv-patient-config";
 import { isCvMetricsEligibleForSave } from "@/app/lib/cv/cv-session-save-gate";
+import {
+  mergeCaptureConsentIntoMotionQuality,
+  type PatientCvCameraConsentRecord,
+} from "@/app/lib/cv/patient-cv-consent";
 import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
 
 export type CvCaptureStatus =
@@ -43,6 +47,7 @@ export function useCvSessionCapture({
   const flushMetricsRef = useRef<(() => void) | null>(null);
   const stsPilotBeforeSaveRef = useRef<(() => void) | null>(null);
   const flushStsPilotRecordRef = useRef<(() => CvMotionQualityPayload | null) | null>(null);
+  const captureConsentRef = useRef<(() => PatientCvCameraConsentRecord | null) | null>(null);
 
   const isCvEligible = isCvEnabledExercise(exerciseId);
 
@@ -77,6 +82,13 @@ export function useCvSessionCapture({
     [],
   );
 
+  const registerCaptureConsentGetter = useCallback(
+    (getter: () => PatientCvCameraConsentRecord | null) => {
+      captureConsentRef.current = getter;
+    },
+    [],
+  );
+
   const resetCapture = useCallback(() => {
     latestMetricsRef.current = null;
     hasSavedRef.current = false;
@@ -86,6 +98,7 @@ export function useCvSessionCapture({
     flushMetricsRef.current = null;
     stsPilotBeforeSaveRef.current = null;
     flushStsPilotRecordRef.current = null;
+    captureConsentRef.current = null;
     setCvStatus("not_started");
   }, []);
 
@@ -98,7 +111,12 @@ export function useCvSessionCapture({
 
       flushMetricsRef.current?.();
       stsPilotBeforeSaveRef.current?.();
-      const motionQuality = flushStsPilotRecordRef.current?.() ?? undefined;
+      const pilotMotionQuality = flushStsPilotRecordRef.current?.() ?? null;
+      const captureConsent = captureConsentRef.current?.() ?? null;
+      const motionQuality = mergeCaptureConsentIntoMotionQuality(
+        pilotMotionQuality,
+        captureConsent,
+      );
 
       const metrics = latestMetricsRef.current;
       if (!metrics) return "no_metrics";
@@ -166,6 +184,7 @@ export function useCvSessionCapture({
     registerMetricsFlush,
     registerStsPilotBeforeSave,
     registerStsPilotRecordFlush,
+    registerCaptureConsentGetter,
     saveCvMetrics,
     resetCapture,
   };

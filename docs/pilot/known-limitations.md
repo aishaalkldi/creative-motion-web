@@ -73,6 +73,7 @@ The pilot build includes **optional, experimental** camera assist during active 
 
 - **The pilot workflow does not depend on CV.** Assessment, plan assignment, session completion, pain/effort reporting, and clinician review work without camera use.
 - **Patient choice:** Patients can select **Continue without camera** and complete the session manually.
+- **Camera consent (PR103):** Enabling the camera requires an explicit checkbox acknowledgment plus links to Privacy Policy and Terms. Consent version and timestamp are saved in `motion_quality.captureConsent` when metrics are stored (no new database table).
 - **If camera tracking fails:** Poor signal, limited setup, or a metrics save error does **not** block exercise completion. Limited captures may be flagged for therapist review and optional retest (PR100).
 - **CV-derived metrics** (e.g. rep count, duration, tracking signal, capture quality level) are **therapist-review only** — assistive, not a clinical assessment.
 - **What CV does not do:** No diagnosis, no clinical score, no automatic treatment recommendation, and no automatic progression decision. It does not judge whether movement is correct or wrong.

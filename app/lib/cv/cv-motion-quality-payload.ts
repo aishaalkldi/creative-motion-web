@@ -12,6 +12,7 @@ import {
   FUNCTIONAL_REACH_PILOT_RECORD_ALLOWED_TOP_LEVEL_KEYS,
   type FunctionalReachMotionPilotRecord,
 } from "@/app/lib/cv/functional-reach-motion-pilot-record";
+import { isPatientCvCameraConsentRecord } from "@/app/lib/cv/patient-cv-consent";
 import {
   findForbiddenKeysInLateralStepPilotRecord,
   LATERAL_STEP_PILOT_RECORD_ALLOWED_TOP_LEVEL_KEYS,
@@ -394,6 +395,12 @@ export function validateCvMotionQualityPayload(value: unknown): string | null {
   }
   if (payload.frPilot !== undefined && !isFunctionalReachMotionPilotRecord(payload.frPilot)) {
     return "motion_quality.frPilot is invalid.";
+  }
+  if (
+    payload.captureConsent !== undefined &&
+    !isPatientCvCameraConsentRecord(payload.captureConsent)
+  ) {
+    return "motion_quality.captureConsent is invalid.";
   }
   return null;
 }

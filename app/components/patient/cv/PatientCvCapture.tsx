@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   memo,
   useCallback,
@@ -186,6 +187,12 @@ import {
   buildStsMotionPilotRecord,
   type CvMotionQualityPayload,
 } from "@/app/lib/cv/sts-motion-pilot-record";
+import {
+  createPatientCvCameraConsentRecord,
+  readPatientCvCameraConsentFromSession,
+  writePatientCvCameraConsentToSession,
+  type PatientCvCameraConsentRecord,
+} from "@/app/lib/cv/patient-cv-consent";
 
 const METRICS_REPORT_INTERVAL_MS = 3_000;
 
@@ -399,6 +406,7 @@ export type PatientCvCaptureProps = {
   onRegisterMetricsFlush?: (flush: () => void) => void;
   onRegisterStsPilotBeforeSave?: (beforeSave: () => void) => void;
   onRegisterStsPilotRecordFlush?: (flush: () => CvMotionQualityPayload | null) => void;
+  onRegisterCaptureConsent?: (getter: () => PatientCvCameraConsentRecord | null) => void;
   onCaptureReadinessChange?: (payload: {
     primaryGuidance: CaptureSetupGuidance;
     canStartTracking: boolean;
@@ -504,6 +512,7 @@ export function PatientCvCapture({
   onRegisterMetricsFlush,
   onRegisterStsPilotBeforeSave,
   onRegisterStsPilotRecordFlush,
+  onRegisterCaptureConsent,
   onCaptureReadinessChange,
 }: PatientCvCaptureProps) {
   const copy = patientCvCopy(language, exerciseId);
@@ -512,6 +521,8 @@ export function PatientCvCapture({
 
   const [skipped, setSkipped] = useState(false);
   const [consented, setConsented] = useState(false);
+  const [consentCheckboxChecked, setConsentCheckboxChecked] = useState(false);
+  const captureConsentRef = useRef<PatientCvCameraConsentRecord | null>(null);
   const [previewActive, setPreviewActive] = useState(false);
   const [cameraLive, setCameraLive] = useState(false);
   const [trackingStopped, setTrackingStopped] = useState(false);
@@ -1030,6 +1041,28 @@ export function PatientCvCapture({
     onRegisterStsPilotRecordFlush(buildMotionPilotRecordFlush);
     return () => onRegisterStsPilotRecordFlush(() => null);
   }, [onRegisterStsPilotRecordFlush, buildMotionPilotRecordFlush]);
+
+  useEffect(() => {
+    const stored = readPatientCvCameraConsentFromSession();
+    if (!stored) return;
+    captureConsentRef.current = stored;
+    setConsentCheckboxChecked(true);
+    setConsented(true);
+  }, []);
+
+  useEffect(() => {
+    if (!onRegisterCaptureConsent) return;
+    onRegisterCaptureConsent(() => captureConsentRef.current);
+    return () => onRegisterCaptureConsent(() => null);
+  }, [onRegisterCaptureConsent]);
+
+  const acceptCameraConsent = useCallback(() => {
+    if (!consentCheckboxChecked) return;
+    const record = createPatientCvCameraConsentRecord();
+    captureConsentRef.current = record;
+    writePatientCvCameraConsentToSession(record);
+    setConsented(true);
+  }, [consentCheckboxChecked]);
 
   useEffect(() => {
     if (!trackingConfirmed) return;
@@ -1645,16 +1678,43 @@ export function PatientCvCapture({
           </ul>
           <p className="text-[#6B7280]">{copy.consentSecureNote}</p>
           <p className="text-[#6B7280]">{copy.consentDerivedNote}</p>
-          <p className="rounded-[6px] border border-[#D1E7DE] bg-[#F0FAF6] px-3 py-2 text-[12px] font-medium text-[#374151]">
-            {copy.setupPrivacyMicroConsent}
+          <label className="mt-1 flex cursor-pointer items-start gap-2.5 rounded-[6px] border border-[#D1E7DE] bg-[#F9FAFB] px-3 py-2.5">
+            <input
+              type="checkbox"
+              checked={consentCheckboxChecked}
+              onChange={(event) => setConsentCheckboxChecked(event.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 accent-[#1D9E75]"
+            />
+            <span className="text-[12px] leading-relaxed text-[#374151]">{copy.consentCheckboxLabel}</span>
+          </label>
+          <p className="text-[12px] text-[#6B7280]">
+            {copy.consentLegalNote}{" "}
+            <Link
+              href="/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-[#1D9E75] underline underline-offset-2"
+            >
+              {copy.consentPrivacyLinkLabel}
+            </Link>
+            {" · "}
+            <Link
+              href="/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-[#1D9E75] underline underline-offset-2"
+            >
+              {copy.consentTermsLinkLabel}
+            </Link>
           </p>
           <p className="text-[11px] text-[#9CA3AF]">{copy.therapistReviewOnly}</p>
         </div>
         <div className="mt-4 flex flex-col gap-2">
           <button
             type="button"
-            onClick={() => setConsented(true)}
-            className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] bg-[#1D9E75] text-[14px] font-bold text-white transition hover:bg-[#179165]"
+            onClick={acceptCameraConsent}
+            disabled={!consentCheckboxChecked}
+            className="flex min-h-[44px] w-full items-center justify-center rounded-[7px] bg-[#1D9E75] text-[14px] font-bold text-white transition hover:bg-[#179165] disabled:cursor-not-allowed disabled:opacity-45"
           >
             {copy.consentAccept}
           </button>
