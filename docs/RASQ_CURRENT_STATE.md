@@ -93,6 +93,8 @@ Optional camera assist may appear during active portal sessions for:
 
 **Patient choice:** Continue without camera always available. Poor tracking or save errors do not block session completion.
 
+**Consent (PR103):** Before camera access, patients must check an explicit consent box (camera-assisted movement observation; therapist review only; not diagnostic). Acceptance is stored as `motion_quality.captureConsent` (`cv-camera-1.0`, timestamp) on saved CV metrics — no separate consent table.
+
 **CV Lab** (`/clinician/cv-lab`): Internal clinician tooling — not required for patient pilot path.
 
 ---

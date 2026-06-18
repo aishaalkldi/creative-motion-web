@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PatientCvDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
+import type { PatientCvCameraConsentRecord } from "@/app/lib/cv/patient-cv-consent";
 import type { ResolvedExerciseView } from "@/app/lib/exercise-resolve";
 import { getLibraryExerciseById } from "@/app/lib/exercise-library-v1";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
@@ -46,6 +47,7 @@ type PatientExerciseSessionCardProps = {
   onRegisterCvMetricsFlush?: (flush: () => void) => void;
   onRegisterStsPilotBeforeSave?: (beforeSave: () => void) => void;
   onRegisterStsPilotRecordFlush?: (flush: () => CvMotionQualityPayload | null) => void;
+  onRegisterCaptureConsent?: (getter: () => PatientCvCameraConsentRecord | null) => void;
   /** Guided session shell renders its own progress header */
   showTopProgress?: boolean;
 };
@@ -96,6 +98,7 @@ export function PatientExerciseSessionCard({
   onRegisterCvMetricsFlush,
   onRegisterStsPilotBeforeSave,
   onRegisterStsPilotRecordFlush,
+  onRegisterCaptureConsent,
   showTopProgress = true,
 }: PatientExerciseSessionCardProps) {
   const flowUi = sessionExerciseFlowUi(lang);
@@ -214,6 +217,7 @@ export function PatientExerciseSessionCard({
           onRegisterCvMetricsFlush={onRegisterCvMetricsFlush}
           onRegisterStsPilotBeforeSave={onRegisterStsPilotBeforeSave}
           onRegisterStsPilotRecordFlush={onRegisterStsPilotRecordFlush}
+          onRegisterCaptureConsent={onRegisterCaptureConsent}
           onCaptureReadinessChange={handleCaptureReadinessChange}
         />
 

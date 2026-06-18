@@ -7,6 +7,7 @@ import { PatientCvCapture } from "@/app/components/patient/cv/PatientCvCapture";
 import { isPatientCvCaptureWired, type CvY1ExerciseId } from "@/app/lib/cv/cv-patient-config";
 import type { CaptureSetupGuidance } from "@/app/lib/cv/patient-cv-capture-readiness";
 import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
+import type { PatientCvCameraConsentRecord } from "@/app/lib/cv/patient-cv-consent";
 import { patientExerciseGuideImage } from "@/app/lib/exercise-guide-media";
 import { exerciseMediaUi } from "@/app/lib/patient-portal-ui";
 
@@ -26,6 +27,7 @@ export type ExerciseMediaAreaProps = {
   onRegisterCvMetricsFlush?: (flush: () => void) => void;
   onRegisterStsPilotBeforeSave?: (beforeSave: () => void) => void;
   onRegisterStsPilotRecordFlush?: (flush: () => CvMotionQualityPayload | null) => void;
+  onRegisterCaptureConsent?: (getter: () => PatientCvCameraConsentRecord | null) => void;
   onCaptureReadinessChange?: (payload: {
     primaryGuidance: CaptureSetupGuidance;
     canStartTracking: boolean;
@@ -426,6 +428,7 @@ export function ExerciseMediaArea({
   onRegisterCvMetricsFlush,
   onRegisterStsPilotBeforeSave,
   onRegisterStsPilotRecordFlush,
+  onRegisterCaptureConsent,
   onCaptureReadinessChange,
 }: ExerciseMediaAreaProps) {
   const ui = exerciseMediaUi(language);
@@ -451,6 +454,7 @@ export function ExerciseMediaArea({
           onRegisterMetricsFlush={onRegisterCvMetricsFlush}
           onRegisterStsPilotBeforeSave={onRegisterStsPilotBeforeSave}
           onRegisterStsPilotRecordFlush={onRegisterStsPilotRecordFlush}
+          onRegisterCaptureConsent={onRegisterCaptureConsent}
           onCaptureReadinessChange={onCaptureReadinessChange}
         />
       )}

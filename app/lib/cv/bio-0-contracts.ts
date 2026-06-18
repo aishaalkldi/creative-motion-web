@@ -215,6 +215,10 @@ export type PatientCvCopy = {
   consentSecureNote: string;
   consentDerivedNote: string;
   consentAccept: string;
+  consentCheckboxLabel: string;
+  consentPrivacyLinkLabel: string;
+  consentTermsLinkLabel: string;
+  consentLegalNote: string;
   startTracking: string;
   stopTracking: string;
   repsCounted: (n: number) => string;
@@ -328,6 +332,45 @@ const PATIENT_CV_CONSENT_DONT_AR = [
   "لا يقدّم تشخيصاً أو درجة أو توصية علاجية",
   "لا يتخذ قرار تقدّم أو علاج تلقائياً",
 ] as const;
+
+/** PR103 — unified camera consent gate copy (all PatientCvCapture exercises). */
+const PATIENT_CV_CONSENT_GATE_EN = {
+  consentTitle: "Camera-assisted movement observation",
+  consentDoIntro: "What this does:",
+  consentDoBullets: [
+    "Uses your device camera to observe movement during your exercise",
+    "Creates derived movement observations to support therapist review",
+    "Shows whether movement is being detected",
+    "Saves derived counts and duration for your therapist to review",
+  ],
+  consentDontIntro: "What this does not do:",
+  consentDontBullets: [...PATIENT_CV_CONSENT_DONT_EN],
+  consentAccept: "Enable camera",
+  consentCheckboxLabel:
+    "I understand this is camera-assisted movement observation for therapist review. It is not diagnostic and does not make automatic treatment decisions.",
+  consentPrivacyLinkLabel: "Privacy Policy",
+  consentTermsLinkLabel: "Terms of Service",
+  consentLegalNote: "See also:",
+} as const;
+
+const PATIENT_CV_CONSENT_GATE_AR = {
+  consentTitle: "ملاحظة الحركة بمساعدة الكاميرا",
+  consentDoIntro: "ماذا يفعل هذا:",
+  consentDoBullets: [
+    "يستخدم كاميرتك على هذا الجهاز لمراقبة الحركة أثناء التمرين",
+    "يُنشئ ملاحظات حركة مشتقة لدعم مراجعة المعالج",
+    "يُظهر ما إذا كانت الحركة تُكتشف",
+    "يحفظ العدّ والمدة المشتقة لمراجعة معالجك",
+  ],
+  consentDontIntro: "ماذا لا يفعل هذا:",
+  consentDontBullets: [...PATIENT_CV_CONSENT_DONT_AR],
+  consentAccept: "تفعيل الكاميرا",
+  consentCheckboxLabel:
+    "أفهم أن هذه ملاحظة حركة بمساعدة الكاميرا لمراجعة المعالج. ليست تشخيصاً ولا تتخذ قرارات علاج تلقائية.",
+  consentPrivacyLinkLabel: "سياسة الخصوصية",
+  consentTermsLinkLabel: "شروط الخدمة",
+  consentLegalNote: "راجع أيضاً:",
+} as const;
 
 const PATIENT_LIVE_SIGNAL_COPY_EN = {
   liveSignalBodyVisible: "Body visible",
@@ -568,24 +611,25 @@ type PatientCvCopyBase = Omit<
   | keyof typeof PATIENT_SETUP_WIZARD_COPY_EN
   | "setupExerciseHint"
   | "setupExerciseTips"
+  | "consentTitle"
+  | "consentDoIntro"
+  | "consentDoBullets"
+  | "consentDontIntro"
+  | "consentDontBullets"
+  | "consentAccept"
+  | "consentCheckboxLabel"
+  | "consentPrivacyLinkLabel"
+  | "consentTermsLinkLabel"
+  | "consentLegalNote"
 >;
 
 const PATIENT_STS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = {
   en: {
-    consentTitle: "Camera for movement counting",
-    consentDoIntro: "What this does:",
-    consentDoBullets: [
-      "Uses your camera on this device to detect body position",
-      "Counts sit-to-stand movements during your exercise",
-      "Shows whether movement is being detected",
-      "Saves derived counts and duration for your therapist to review",
-    ],
-    consentDontIntro: "What this does not do:",
-    consentDontBullets: [...PATIENT_CV_CONSENT_DONT_EN],
+
     consentSecureNote: "Camera access requires a secure connection (HTTPS).",
     consentDerivedNote:
       "Only derived session metrics are saved. No video or body coordinates are stored.",
-    consentAccept: "I understand — enable camera",
+
     startTracking: "Start movement tracking",
     stopTracking: "Stop tracking",
     repsCounted: (n) => `Reps counted: ${n}`,
@@ -634,25 +678,10 @@ const PATIENT_STS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = 
     ...PATIENT_LIVE_SIGNAL_COPY_EN,
   },
   ar: {
-    consentTitle: "الكاميرا لعدّ الحركة",
-    consentDoIntro: "ماذا يفعل هذا:",
-    consentDoBullets: [
-      "يستخدم كاميرتك على هذا الجهاز لاكتشاف وضع الجسم",
-      "يعدّ حركات الجلوس والوقوف أثناء التمرين",
-      "يُظهر ما إذا كانت الحركة تُكتشف",
-      "يحفظ العدّ والمدة المشتقة لمراجعة معالجك",
-    ],
-    consentDontIntro: "ماذا لا يفعل هذا:",
-    consentDontBullets: [
-      "لا يسجّل أو يرفع فيديو",
-      "لا يخزّن إحداثيات الجسم أو معالم الوضعية",
-      "لا يحكم على صحة أو خطأ حركتك",
-      "لا يقدّم تشخيصاً أو درجة أو توصية علاجية",
-      "لا يتخذ قرار تقدّم أو علاج تلقائياً",
-    ],
+
     consentSecureNote: "يتطلب الوصول للكاميرا اتصالاً آمناً (HTTPS).",
     consentDerivedNote: "تُحفظ مقاييس الجلسة المشتقة فقط. لا يُخزَّن فيديو أو إحداثيات جسم.",
-    consentAccept: "أفهم — تفعيل الكاميرا",
+
     startTracking: "بدء تتبّع الحركة",
     stopTracking: "إيقاف التتبّع",
     repsCounted: (n) => `التكرارات المحسوبة: ${n}`,
@@ -701,20 +730,11 @@ const PATIENT_STS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = 
 
 const PATIENT_MINI_SQUAT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = {
   en: {
-    consentTitle: "Camera for movement counting",
-    consentDoIntro: "What this does:",
-    consentDoBullets: [
-      "Uses your camera on this device to detect body position",
-      "Counts mini squat movements during your exercise",
-      "Shows whether movement is being detected",
-      "Saves derived counts and duration for your therapist to review",
-    ],
-    consentDontIntro: "What this does not do:",
-    consentDontBullets: [...PATIENT_CV_CONSENT_DONT_EN],
+
     consentSecureNote: "Camera access requires a secure connection (HTTPS).",
     consentDerivedNote:
       "Only derived session metrics are saved. No video or body coordinates are stored.",
-    consentAccept: "I understand — enable camera",
+
     startTracking: "Start movement tracking",
     stopTracking: "Stop tracking",
     repsCounted: (n) => `Reps counted: ${n}`,
@@ -760,19 +780,10 @@ const PATIENT_MINI_SQUAT_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyB
     ...PATIENT_LIVE_SIGNAL_COPY_EN,
   },
   ar: {
-    consentTitle: "الكاميرا لعدّ الحركة",
-    consentDoIntro: "ماذا يفعل هذا:",
-    consentDoBullets: [
-      "يستخدم كاميرتك على هذا الجهاز لاكتشاف وضع الجسم",
-      "يعدّ حركات القرفصاء الصغيرة أثناء التمرين",
-      "يُظهر ما إذا كانت الحركة تُكتشف",
-      "يحفظ العدّ والمدة المشتقة لمراجعة معالجك",
-    ],
-    consentDontIntro: "ماذا لا يفعل هذا:",
-    consentDontBullets: [...PATIENT_CV_CONSENT_DONT_AR],
+
     consentSecureNote: "يتطلب الوصول للكاميرا اتصالاً آمناً (HTTPS).",
     consentDerivedNote: "تُحفظ مقاييس الجلسة المشتقة فقط. لا يُخزَّن فيديو أو إحداثيات جسم.",
-    consentAccept: "أفهم — تفعيل الكاميرا",
+
     startTracking: "بدء تتبّع الحركة",
     stopTracking: "إيقاف التتبّع",
     repsCounted: (n) => `العدات المحسوبة: ${n}`,
@@ -860,20 +871,11 @@ const PATIENT_SLS_CONSENT_DONT_AR = [
 
 const PATIENT_SLS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = {
   en: {
-    consentTitle: "Camera for hold tracking",
-    consentDoIntro: "What this does:",
-    consentDoBullets: [
-      "Uses your camera on this device to detect body position",
-      "Tracks assistive hold time during single-leg stance",
-      "Shows whether hold time is being detected",
-      "Saves derived hold duration for your therapist to review",
-    ],
-    consentDontIntro: "What this does not do:",
-    consentDontBullets: [...PATIENT_SLS_CONSENT_DONT_EN],
+
     consentSecureNote: "Camera access requires a secure connection (HTTPS).",
     consentDerivedNote:
       "Only derived session metrics are saved. No video or body coordinates are stored.",
-    consentAccept: "I understand — enable camera",
+
     startTracking: "Start hold tracking",
     stopTracking: "Stop tracking",
     repsCounted: () => "",
@@ -928,19 +930,10 @@ const PATIENT_SLS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = 
     ...PATIENT_LIVE_SIGNAL_COPY_EN,
   },
   ar: {
-    consentTitle: "الكاميرا لتتبّع الثبات",
-    consentDoIntro: "ماذا يفعل هذا:",
-    consentDoBullets: [
-      "يستخدم كاميرتك على هذا الجهاز لاكتشاف وضع الجسم",
-      "يتتبّع وقت الثبات المساعد أثناء الوقوف على رجل واحدة",
-      "يُظهر ما إذا كان وقت الثبات يُكتشف",
-      "يحفظ مدة الثبات المشتقة لمراجعة معالجك",
-    ],
-    consentDontIntro: "ماذا لا يفعل هذا:",
-    consentDontBullets: [...PATIENT_SLS_CONSENT_DONT_AR],
+
     consentSecureNote: "يتطلب الوصول للكاميرا اتصالاً آمناً (HTTPS).",
     consentDerivedNote: "تُحفظ مقاييس الجلسة المشتقة فقط. لا يُخزَّن فيديو أو إحداثيات جسم.",
-    consentAccept: "أفهم — تفعيل الكاميرا",
+
     startTracking: "بدء تتبّع الثبات",
     stopTracking: "إيقاف التتبّع",
     repsCounted: () => "",
@@ -996,20 +989,11 @@ const PATIENT_SLS_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = 
 
 const PATIENT_HEEL_RAISE_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = {
   en: {
-    consentTitle: "Camera for movement counting",
-    consentDoIntro: "What this does:",
-    consentDoBullets: [
-      "Uses your camera on this device to detect body position",
-      "Counts double heel raise reps during your exercise",
-      "Shows whether movement is being detected",
-      "Saves derived counts and duration for your therapist to review",
-    ],
-    consentDontIntro: "What this does not do:",
-    consentDontBullets: [...PATIENT_HEEL_RAISE_CONSENT_DONT_EN],
+
     consentSecureNote: "Camera access requires a secure connection (HTTPS).",
     consentDerivedNote:
       "Only derived session metrics are saved. No video or body coordinates are stored.",
-    consentAccept: "I understand — enable camera",
+
     startTracking: "Start movement tracking",
     stopTracking: "Stop tracking",
     repsCounted: (n) => `Reps counted: ${n}`,
@@ -1060,19 +1044,10 @@ const PATIENT_HEEL_RAISE_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyB
     ...PATIENT_LIVE_SIGNAL_COPY_EN,
   },
   ar: {
-    consentTitle: "الكاميرا لعدّ الحركة",
-    consentDoIntro: "ماذا يفعل هذا:",
-    consentDoBullets: [
-      "يستخدم كاميرتك على هذا الجهاز لاكتشاف وضع الجسم",
-      "يعدّ تكرارات رفع الكعبين معاً أثناء التمرين",
-      "يُظهر ما إذا كانت الحركة تُكتشف",
-      "يحفظ العدّ والمدة المشتقة لمراجعة معالجك",
-    ],
-    consentDontIntro: "ماذا لا يفعل هذا:",
-    consentDontBullets: [...PATIENT_HEEL_RAISE_CONSENT_DONT_AR],
+
     consentSecureNote: "يتطلب الوصول للكاميرا اتصالاً آمناً (HTTPS).",
     consentDerivedNote: "تُحفظ مقاييس الجلسة المشتقة فقط. لا يُخزَّن فيديو أو إحداثيات جسم.",
-    consentAccept: "أفهم — تفعيل الكاميرا",
+
     startTracking: "بدء تتبّع الحركة",
     stopTracking: "إيقاف التتبّع",
     repsCounted: (n) => `التكرارات المحسوبة: ${n}`,
@@ -1137,20 +1112,11 @@ const PATIENT_STEP_UP_CONSENT_DONT_AR = [
 
 const PATIENT_STEP_UP_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = {
   en: {
-    consentTitle: "Camera for movement counting",
-    consentDoIntro: "What this does:",
-    consentDoBullets: [
-      "Uses your camera on this device to detect body position",
-      "Counts step-up reps during your exercise",
-      "Shows whether movement is being detected",
-      "Saves derived counts and duration for your therapist to review",
-    ],
-    consentDontIntro: "What this does not do:",
-    consentDontBullets: [...PATIENT_STEP_UP_CONSENT_DONT_EN],
+
     consentSecureNote: "Camera access requires a secure connection (HTTPS).",
     consentDerivedNote:
       "Only derived session metrics are saved. No video or body coordinates are stored.",
-    consentAccept: "I understand — enable camera",
+
     startTracking: "Start movement tracking",
     stopTracking: "Stop tracking",
     repsCounted: (n) => `Reps counted: ${n}`,
@@ -1201,19 +1167,10 @@ const PATIENT_STEP_UP_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase
     ...PATIENT_LIVE_SIGNAL_COPY_EN,
   },
   ar: {
-    consentTitle: "الكاميرا لعدّ الحركة",
-    consentDoIntro: "ماذا يفعل هذا:",
-    consentDoBullets: [
-      "يستخدم كاميرتك على هذا الجهاز لاكتشاف وضع الجسم",
-      "يعدّ تكرارات صعود الدرجة أثناء التمرين",
-      "يُظهر ما إذا كانت الحركة تُكتشف",
-      "يحفظ العدّ والمدة المشتقة لمراجعة معالجك",
-    ],
-    consentDontIntro: "ماذا لا يفعل هذا:",
-    consentDontBullets: [...PATIENT_STEP_UP_CONSENT_DONT_AR],
+
     consentSecureNote: "يتطلب الوصول للكاميرا اتصالاً آمناً (HTTPS).",
     consentDerivedNote: "تُحفظ مقاييس الجلسة المشتقة فقط. لا يُخزَّن فيديو أو إحداثيات جسم.",
-    consentAccept: "أفهم — تفعيل الكاميرا",
+
     startTracking: "بدء تتبّع الحركة",
     stopTracking: "إيقاف التتبّع",
     repsCounted: (n) => `التكرارات المحسوبة: ${n}`,
@@ -1264,28 +1221,9 @@ const PATIENT_STEP_UP_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase
   },
 };
 
-const PATIENT_LATERAL_STEP_CONSENT_DONT_EN = [
-  ...PATIENT_CV_CONSENT_DONT_EN,
-  "Measure step width or hip strength",
-  "Score movement quality",
-] as const;
-
-const PATIENT_LATERAL_STEP_CONSENT_DONT_AR = [
-  ...PATIENT_CV_CONSENT_DONT_AR,
-  "لا يقيس عرض الخطوة أو قوة الورك",
-  "لا يقيّم جودة الحركة",
-] as const;
-
 const PATIENT_LATERAL_STEP_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = {
   en: {
     ...PATIENT_STEP_UP_CV_COPY.en,
-    consentDoBullets: [
-      "Uses your camera on this device to detect body position",
-      "Counts lateral-step cycles during your exercise",
-      "Shows whether movement is being detected",
-      "Saves derived counts and duration for your therapist to review",
-    ],
-    consentDontBullets: [...PATIENT_LATERAL_STEP_CONSENT_DONT_EN],
     optionalCameraNote:
       "Optional camera assist · therapist review only · not clinically validated. Lateral step (experimental). No width or strength score. The pilot workflow does not depend on camera tracking.",
     startSeatedHint:
@@ -1300,13 +1238,6 @@ const PATIENT_LATERAL_STEP_CV_COPY: Record<PatientExerciseLanguage, PatientCvCop
   },
   ar: {
     ...PATIENT_STEP_UP_CV_COPY.ar,
-    consentDoBullets: [
-      "يستخدم كاميرتك على هذا الجهاز لاكتشاف وضع الجسم",
-      "يعدّ دورات الخطوة الجانبية أثناء التمرين",
-      "يُظهر ما إذا كانت الحركة تُكتشف",
-      "يحفظ العدّ والمدة المشتقة لمراجعة معالجك",
-    ],
-    consentDontBullets: [...PATIENT_LATERAL_STEP_CONSENT_DONT_AR],
     optionalCameraNote:
       "مساعدة كاميرا اختيارية · للمعالج فقط · غير مُتحقّق سريرياً. الخطوة الجانبية (تجريبي). لا درجة عرض أو قوة. مسار التجربة لا يعتمد على تتبّع الكاميرا.",
     startSeatedHint:
@@ -1321,28 +1252,9 @@ const PATIENT_LATERAL_STEP_CV_COPY: Record<PatientExerciseLanguage, PatientCvCop
   },
 };
 
-const PATIENT_FUNCTIONAL_REACH_CONSENT_DONT_EN = [
-  ...PATIENT_CV_CONSENT_DONT_EN,
-  "Measure reach distance or balance score",
-  "Score movement quality",
-] as const;
-
-const PATIENT_FUNCTIONAL_REACH_CONSENT_DONT_AR = [
-  ...PATIENT_CV_CONSENT_DONT_AR,
-  "لا يقيس مسافة الوصول أو درجة التوازن",
-  "لا يقيّم جودة الحركة",
-] as const;
-
 const PATIENT_FUNCTIONAL_REACH_CV_COPY: Record<PatientExerciseLanguage, PatientCvCopyBase> = {
   en: {
     ...PATIENT_LATERAL_STEP_CV_COPY.en,
-    consentDoBullets: [
-      "Uses your camera on this device to detect body position",
-      "Counts functional-reach cycles during your exercise",
-      "Shows whether movement is being detected",
-      "Saves derived counts and duration for your therapist to review",
-    ],
-    consentDontBullets: [...PATIENT_FUNCTIONAL_REACH_CONSENT_DONT_EN],
     optionalCameraNote:
       "Optional camera assist · therapist review only · not clinically validated. Functional reach (experimental). No reach distance or balance score. The pilot workflow does not depend on camera tracking.",
     startSeatedHint:
@@ -1357,13 +1269,6 @@ const PATIENT_FUNCTIONAL_REACH_CV_COPY: Record<PatientExerciseLanguage, PatientC
   },
   ar: {
     ...PATIENT_LATERAL_STEP_CV_COPY.ar,
-    consentDoBullets: [
-      "يستخدم كاميرتك على هذا الجهاز لاكتشاف وضع الجسم",
-      "يعدّ دورات الوصول الوظيفي أثناء التمرين",
-      "يُظهر ما إذا كانت الحركة تُكتشف",
-      "يحفظ العدّ والمدة المشتقة لمراجعة معالجك",
-    ],
-    consentDontBullets: [...PATIENT_FUNCTIONAL_REACH_CONSENT_DONT_AR],
     optionalCameraNote:
       "مساعدة كاميرا اختيارية · للمعالج فقط · غير مُتحقّق سريرياً. الوصول الوظيفي (تجريبي). لا مسافة وصول أو درجة توازن. مسار التجربة لا يعتمد على تتبّع الكاميرا.",
     startSeatedHint:
@@ -1425,8 +1330,14 @@ export function patientCvCopy(
     };
   }
 
+  const consentGate =
+    lang === "ar" ? PATIENT_CV_CONSENT_GATE_AR : PATIENT_CV_CONSENT_GATE_EN;
+
   return {
     ...base,
+    ...consentGate,
+    consentDoBullets: [...consentGate.consentDoBullets],
+    consentDontBullets: [...consentGate.consentDontBullets],
     ...setupCopy,
     setupPreCaptureBullets: [...setupCopy.setupPreCaptureBullets],
     setupExerciseHint,

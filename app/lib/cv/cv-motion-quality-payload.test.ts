@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { validateCvMotionQualityPayload } from "@/app/lib/cv/cv-motion-quality-payload";
+import { createPatientCvCameraConsentRecord } from "@/app/lib/cv/patient-cv-consent";
 import { buildStsMotionPilotRecord } from "@/app/lib/cv/sts-motion-pilot-record";
 import type { SessionMotionSummary } from "@/app/lib/cv/motion-summary-types";
 
@@ -63,5 +64,19 @@ describe("validateCvMotionQualityPayload", () => {
 
   it("rejects invalid smtPilot shape", () => {
     assert.ok(validateCvMotionQualityPayload({ smtPilot: { pilotVersion: "x" } }) !== null);
+  });
+
+  it("accepts motion_quality with captureConsent only", () => {
+    const consent = createPatientCvCameraConsentRecord(1_700_000_000_000);
+    assert.equal(validateCvMotionQualityPayload({ captureConsent: consent }), null);
+  });
+
+  it("rejects invalid captureConsent shape", () => {
+    assert.equal(
+      validateCvMotionQualityPayload({
+        captureConsent: { version: "cv-camera-1.0", acceptedAtMs: 1 },
+      }),
+      "motion_quality.captureConsent is invalid.",
+    );
   });
 });
