@@ -1,5 +1,28 @@
 # Project log
 
+## 2026-06-05 — PR105 PDPL readiness foundation (docs only)
+
+### Summary
+
+Documentation-only privacy-by-design foundation for controlled clinic pilot deployment. Establishes data inventory, data-flow map, and pre-pilot privacy checklist. **Not** legal compliance certification.
+
+### What changed
+
+- `docs/compliance/PDPL_FOUNDATION.md` — data inventory, classification, purpose limitation, minimization, consent, access control, retention considerations
+- `docs/compliance/DATA_FLOW_MAP.md` — patient → camera → CV → metrics → Supabase → clinician review; stored vs not stored
+- `docs/compliance/PILOT_PRIVACY_CHECKLIST.md` — pre-pilot privacy verification checklist
+- `docs/RASQ_CURRENT_STATE.md` — Privacy & Compliance section, PR105 entry
+
+### Pilot readiness
+
+Adds technical and operational PDPL readiness documentation for pilot operators. Counsel review still required before commercial or regulated claims.
+
+### Safety boundaries
+
+No app code, database, API, AI, or diagnosis wording changes. No “PDPL compliant” claims.
+
+---
+
 ## 2026-06-05 — PR104 STS pilot QA validation (docs only)
 
 ### Summary
