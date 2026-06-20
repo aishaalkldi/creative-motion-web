@@ -1,5 +1,26 @@
 # Project log
 
+## 2026-06-05 — PR109 Gait Assessment v1 capture audit (docs only)
+
+### Summary
+
+Documentation-only code review to determine the safest minimal path for actionable Gait Assessment v1 after the current clinician shell. Inventories RASQ vs legacy gait code, assesses MediaPipe and capture-quality reuse, defines minimal v1 metrics, and recommends phased implementation.
+
+### What changed
+
+- `docs/assessments/GAIT_ASSESSMENT_V1_CAPTURE_AUDIT.md` — full capture audit
+- `docs/RASQ_CURRENT_STATE.md` — PR109 entry, gait status, recommended next PRs
+
+### Verdict
+
+Bounded walking observation is feasible with existing RASQ CV architecture. Do not integrate legacy `app/gait/` AI API. Build gait capture **after** internal STS testing; Phase 0 review wiring can precede capture.
+
+### Safety boundaries
+
+No app code, database, API, AI, diagnosis wording, or gait CV implementation.
+
+---
+
 ## 2026-06-05 — PR108 Heel Raise CV hardening plan (docs only)
 
 ### Summary

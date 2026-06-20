@@ -1,7 +1,7 @@
 # RASQ Current State
 
 **Last updated:** 2026-06-05  
-**Baseline:** `main` through PR103; PR104–PR107 documented; **PR108** heel-raise hardening gap analysis documented
+**Baseline:** `main` through PR103; PR104–PR108 documented; **PR109** gait assessment v1 capture audit documented
 
 This document is the single source of truth for RASQ platform state during controlled clinic pilots. It is **not** a clinical or legal document. All movement observations require **therapist review**. RASQ does **not** diagnose, score clinically, or make automatic treatment decisions.
 
@@ -15,7 +15,7 @@ This document is the single source of truth for RASQ platform state during contr
 | Clinician-only AI draft summary v0 | Live — review only, not persisted to patient |
 | Assessment Center | Live — `/clinician/assessments` |
 | Sit-to-Stand assessment review | Live — `/clinician/assessments/sit-to-stand` |
-| Gait Assessment v1 | Shell live — `/clinician/assessments/gait` (no live capture yet) |
+| Gait Assessment v1 | Shell live — `/clinician/assessments/gait` (PR109 audit; capture **after STS testing**) |
 | Patient CV (optional camera assist) | Live — multi-exercise allowlist; **STS most mature** |
 | STS capture quality & reliability | Live — PR100 |
 | STS adaptive framing readiness | Live — PR101 |
@@ -25,6 +25,7 @@ This document is the single source of truth for RASQ platform state during contr
 | Controlled STS pilot plan (docs) | **PR106** — first clinic pilot protocol (3–5 patients) |
 | CV allowlist expansion plan (docs) | **PR107** — post-STS exercise sequencing; heel-raise first |
 | Heel Raise CV hardening plan (docs) | **PR108** — gap analysis; readiness 68/100; PR109 implementation slices |
+| Gait Assessment v1 capture audit (docs) | **PR109** — bounded walking observation path; after STS testing |
 | Balance / Functional Movement / PR forms (Assessment Center) | Coming next |
 
 **Production URL:** https://creative-motion-web.vercel.app
@@ -54,7 +55,12 @@ Patient profile + AI draft (clinician)         ├─ Setup readiness + framing
 
 ---
 
-## Completed PRs (recent — PR99–PR108)
+## Completed PRs (recent — PR99–PR109)
+
+### PR109 — Gait Assessment v1 capture audit (docs only)
+- `docs/assessments/GAIT_ASSESSMENT_V1_CAPTURE_AUDIT.md` — code inventory, minimal v1 scope, phases, STS sequencing gate
+- Verdict: bounded walking observation feasible via existing MediaPipe stack; do not integrate legacy gait AI
+- Recommended: Phase 0 review wiring (PR110), capture after STS internal testing
 
 ### PR108 — Heel Raise CV hardening plan (docs only)
 - `docs/cv/HEEL_RAISE_CV_HARDENING_PLAN.md` — gap analysis, readiness score (68/100), PR109 implementation slices
@@ -156,7 +162,7 @@ Optional camera assist may appear during active portal sessions for:
 | Core RASQ workflow | **Ready** for controlled pilots |
 | STS optional camera assist | **Ready** — PR100/101/103; PR104 QA pass; **manual device smoke required** |
 | Assessment Center | **Partial** — STS review useful; Gait/Balance are shells |
-| Pilot documentation | **Updated** — PR102–PR108 incl. heel-raise hardening plan |
+| Pilot documentation | **Updated** — PR102–PR109 incl. gait capture audit |
 | Privacy & compliance (technical) | **Foundation documented** — PR105; counsel review still required |
 | Legal / counsel | Pages pilot-ready; counsel review required before commercial contracts |
 
@@ -201,11 +207,13 @@ Optional camera assist may appear during active portal sessions for:
 
 ## Recommended next PR
 
-**Operational:** Execute controlled STS pilot per `docs/pilot/CONTROLLED_STS_PILOT_PLAN.md` before CV code expansion.
+**Operational:** Execute controlled STS pilot per `docs/pilot/CONTROLLED_STS_PILOT_PLAN.md` before gait capture or heel-raise promotion.
 
-**Product (after STS pilot go):** **PR109 — Heel Raise CV hardening implementation** — per `docs/cv/HEEL_RAISE_CV_HARDENING_PLAN.md` (PR109a capture quality on `hrPilot`, PR109b ankle coverage readiness, PR109e manual smoke).
+**CV expansion (after STS go):** **PR109 implementation** — Heel Raise hardening per `docs/cv/HEEL_RAISE_CV_HARDENING_PLAN.md` (was labeled PR109a in PR108; rename to avoid clash with this PR109 audit).
 
-**Alternative product:** **Balance Assessment v1 shell** (PR99 pattern) if Assessment Center breadth is priority over CV expansion.
+**Assessment Center:** **PR110 — Gait Assessment review surface wiring** (fetch metrics, empty state; no capture) per `docs/assessments/GAIT_ASSESSMENT_V1_CAPTURE_AUDIT.md`. Gait capture (PR111+) **after** STS internal testing.
+
+**Alternative product:** **Balance Assessment v1 shell** (PR99 pattern).
 
 **Compliance follow-up (optional):** Clinician-visible `captureConsent` read-only field; automated retention policy — only after counsel input.
 
@@ -225,7 +233,8 @@ Suggested close comment:
 
 ## Related documents
 
-- `docs/cv/HEEL_RAISE_CV_HARDENING_PLAN.md` — PR108 heel-raise gap analysis and PR109 slices
+- `docs/assessments/GAIT_ASSESSMENT_V1_CAPTURE_AUDIT.md` — PR109 gait v1 capture audit
+- `docs/cv/HEEL_RAISE_CV_HARDENING_PLAN.md` — PR108 heel-raise gap analysis and implementation slices
 - `docs/cv/CV_EXERCISE_ALLOWLIST_PLAN.md` — PR107 post-STS CV expansion sequence
 - `docs/pilot/CONTROLLED_STS_PILOT_PLAN.md` — PR106 first controlled STS clinic pilot
 - `docs/compliance/PDPL_FOUNDATION.md` — PR105 PDPL readiness foundation
