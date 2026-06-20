@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { getCvReadyExercises } from "@/app/lib/cv/cv-ready-exercises";
 import {
-  CV_CLINICIAN_DISCLAIMER,
   formatCvDuration,
   formatCvRecordedAt,
   formatCvSource,
@@ -12,7 +11,9 @@ import {
 import type { CaptureQualityLevel } from "@/app/lib/cv/capture-quality";
 import type { ProgressOutcomesBundle } from "@/app/lib/progress/progress-outcomes-bundle";
 import {
+  PROGRESS_OUTCOMES_CV_FOOTER,
   PROGRESS_OUTCOMES_SAFETY_BANNER,
+  PROGRESS_OUTCOMES_SECTION_BADGES,
   PROGRESS_OUTCOMES_THERAPIST_REVIEW_LABEL,
   assessmentTypeDisplayLabel,
 } from "@/app/lib/progress/progress-outcomes-bundle";
@@ -23,35 +24,84 @@ const QUALITY_BADGE_CLASS: Record<CaptureQualityLevel, string> = {
   low: "border-amber-500/35 bg-amber-500/10 text-amber-200",
 };
 
+const SECTION_NAV = [
+  { id: "session-activity", label: "Session activity" },
+  { id: "patient-reported-pain", label: "Patient-reported pain" },
+  { id: "assessment-history", label: "Assessments" },
+  { id: "camera-assisted-observation", label: "Camera-assisted observation" },
+  { id: "technical-capture-reliability", label: "Capture reliability" },
+] as const;
+
 type ProgressOutcomesHubProps = {
   bundle: ProgressOutcomesBundle;
 };
 
+function SectionTypeBadge({ label }: { label: string }) {
+  return (
+    <span className="rounded-[4px] border border-[#1E2D42] bg-[#0B1220] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-[#9CA3AF]">
+      {label}
+    </span>
+  );
+}
+
 function SectionShell({
   id,
   title,
+  typeBadge,
   description,
   children,
 }: {
   id: string;
   title: string;
+  typeBadge: string;
   description: string;
   children: React.ReactNode;
 }) {
   return (
     <section
       id={id}
-      className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 scroll-mt-6"
+      className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 scroll-mt-24"
     >
-      <h2 className="text-[12px] font-medium text-[#F9FAFB]">{title}</h2>
+      <div className="mb-1 flex flex-wrap items-center gap-2">
+        <h2 className="text-[12px] font-medium text-[#F9FAFB]">{title}</h2>
+        <SectionTypeBadge label={typeBadge} />
+      </div>
       <p className="mb-4 mt-1 text-[11px] text-white/35">{description}</p>
       {children}
     </section>
   );
 }
 
-function EmptyNote({ children }: { children: React.ReactNode }) {
-  return <p className="text-[12px] italic text-[#6B7280]">{children}</p>;
+function EmptyState({
+  message,
+  children,
+}: {
+  message: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-[7px] border border-dashed border-[#1E2D42] bg-[#0B1220]/60 px-4 py-3">
+      <p className="text-[12px] text-[#6B7280]">{message}</p>
+      {children ? <div className="mt-3 flex flex-wrap gap-2">{children}</div> : null}
+    </div>
+  );
+}
+
+function EmptyLink({
+  href,
+  children,
+}: {
+  href: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      className="inline-flex rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-1.5 text-xs font-semibold text-white/65 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]"
+    >
+      {children}
+    </Link>
+  );
 }
 
 function MetricTile({ label, value }: { label: string; value: string }) {
@@ -68,6 +118,16 @@ function MetricTile({ label, value }: { label: string; value: string }) {
   );
 }
 
+function hubIsFullyEmpty(bundle: ProgressOutcomesBundle): boolean {
+  return (
+    !bundle.adherence &&
+    bundle.painTrend.length === 0 &&
+    bundle.assessments.length === 0 &&
+    bundle.cvEvidence.length === 0 &&
+    bundle.captureQualityHistory.length === 0
+  );
+}
+
 export function ProgressOutcomesHub({ bundle }: ProgressOutcomesHubProps) {
   const exerciseNameById = Object.fromEntries(
     getCvReadyExercises().map((exercise) => [exercise.exerciseId, exercise.nameEn]),
@@ -79,7 +139,13 @@ export function ProgressOutcomesHub({ bundle }: ProgressOutcomesHubProps) {
       : null;
 
   const profileHref = `/clinician/patients/${bundle.patientId}`;
+  const planHref = `${profileHref}#rehabilitation-plan`;
+  const movementHref = `${profileHref}#movement-tracking-sessions`;
+  const newAssessmentHref = `/clinician/assessment/new?patientId=${encodeURIComponent(bundle.patientId)}`;
+  const newPlanHref = `/clinician/plans/new?patientId=${encodeURIComponent(bundle.patientId)}`;
   const reportBase = `/clinician/assessment/report?patientId=${encodeURIComponent(bundle.patientId)}`;
+
+  const fullyEmpty = hubIsFullyEmpty(bundle);
 
   return (
     <div className="space-y-6">
@@ -92,9 +158,34 @@ export function ProgressOutcomesHub({ bundle }: ProgressOutcomesHubProps) {
         </p>
       </div>
 
+      <nav
+        aria-label="Outcomes hub sections"
+        className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1"
+      >
+        {SECTION_NAV.map((item) => (
+          <a
+            key={item.id}
+            href={`#${item.id}`}
+            className="shrink-0 rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 text-[11px] font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]"
+          >
+            {item.label}
+          </a>
+        ))}
+      </nav>
+
+      {fullyEmpty ? (
+        <EmptyState message="No outcomes data recorded yet for this patient. Patient-reported trends and derived observations will appear here as assessments, sessions, and optional camera-assisted exercises are completed. Therapist interpretation required.">
+          <EmptyLink href={profileHref}>Open patient chart</EmptyLink>
+          <EmptyLink href={newAssessmentHref}>Record assessment</EmptyLink>
+          <EmptyLink href="/clinician/results">Results queue</EmptyLink>
+          <EmptyLink href="/clinician/assessments">Assessment Center</EmptyLink>
+        </EmptyState>
+      ) : null}
+
       <SectionShell
         id="session-activity"
         title="Session activity"
+        typeBadge={PROGRESS_OUTCOMES_SECTION_BADGES.sessionActivity}
         description="Plan adherence counts from completed plan sessions. Factual activity only — therapist interpretation required."
       >
         {bundle.adherence ? (
@@ -110,52 +201,47 @@ export function ProgressOutcomesHub({ bundle }: ProgressOutcomesHubProps) {
                 value={`${bundle.adherence.completed} / ${bundle.adherence.total}`}
               />
               <MetricTile label="Adherence" value={`${bundle.adherence.progressPct}%`} />
-              <MetricTile
-                label="Logged sessions"
-                value={String(bundle.painTrend.length)}
-              />
+              <MetricTile label="Logged sessions" value={String(bundle.painTrend.length)} />
               <MetricTile
                 label="Last session logged"
-                value={
-                  lastSessionAt
-                    ? formatCvRecordedAt(lastSessionAt)
-                    : "—"
-                }
+                value={lastSessionAt ? formatCvRecordedAt(lastSessionAt) : "—"}
               />
             </div>
             <Link
-              href={`${profileHref}#rehabilitation-plan`}
+              href={planHref}
               className="inline-flex text-xs font-semibold text-[#5DCAA5] transition hover:text-[#1D9E75]"
             >
               View plan &amp; sessions →
             </Link>
           </div>
         ) : (
-          <EmptyNote>
-            No treatment plan on file. Session activity will appear when a plan is assigned.
-          </EmptyNote>
+          <EmptyState message="No treatment plan on file. Session activity appears when a plan is assigned.">
+            <EmptyLink href={planHref}>Open treatment plan</EmptyLink>
+            <EmptyLink href={newPlanHref}>Create plan</EmptyLink>
+          </EmptyState>
         )}
       </SectionShell>
 
       <SectionShell
         id="patient-reported-pain"
         title="Patient-reported pain"
+        typeBadge={PROGRESS_OUTCOMES_SECTION_BADGES.patientReportedPain}
         description="Patient-reported trends from session check-ins. Not a clinical score — therapist interpretation required."
       >
         {bundle.painTrend.length === 0 ? (
-          <EmptyNote>
-            No patient-reported pain entries yet. Data appears after the patient completes session check-ins.
-          </EmptyNote>
+          <EmptyState message="No patient-reported pain entries yet. This table fills after the patient completes session check-ins.">
+            <EmptyLink href={planHref}>View plan &amp; sessions</EmptyLink>
+          </EmptyState>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-left text-[12px]">
+            <table className="w-full min-w-[560px] text-left text-[12px]">
               <thead>
                 <tr className="border-b border-[#1E2D42] text-[10px] uppercase tracking-[0.06em] text-[#6B7280]">
                   <th className="pb-2 pr-3 font-semibold">Date</th>
                   <th className="pb-2 pr-3 font-semibold">Session</th>
-                  <th className="pb-2 pr-3 font-semibold">Pain before</th>
-                  <th className="pb-2 pr-3 font-semibold">Pain after</th>
-                  <th className="pb-2 font-semibold">Effort</th>
+                  <th className="pb-2 pr-3 font-semibold">Patient-reported pain before</th>
+                  <th className="pb-2 pr-3 font-semibold">Patient-reported pain after</th>
+                  <th className="pb-2 font-semibold">Patient-reported effort</th>
                 </tr>
               </thead>
               <tbody>
@@ -190,16 +276,21 @@ export function ProgressOutcomesHub({ bundle }: ProgressOutcomesHubProps) {
       <SectionShell
         id="assessment-history"
         title="Assessment history"
+        typeBadge={PROGRESS_OUTCOMES_SECTION_BADGES.assessmentHistory}
         description="Submitted assessments for this patient. Derived observations from intake data — therapist interpretation required."
       >
         {bundle.assessments.length === 0 ? (
-          <EmptyNote>
-            No assessments on file. Send or record an assessment to populate this section.
-          </EmptyNote>
+          <EmptyState message="No assessments on file. Derived observations from intake appear here after an assessment is submitted.">
+            <EmptyLink href={newAssessmentHref}>Record assessment</EmptyLink>
+            <EmptyLink href="/clinician/assessments">Assessment Center</EmptyLink>
+          </EmptyState>
         ) : (
           <ul className="divide-y divide-[#1E2D42]">
             {bundle.assessments.map((row) => (
-              <li key={row.assessmentId} className="flex flex-wrap items-start justify-between gap-3 py-3 first:pt-0 last:pb-0">
+              <li
+                key={row.assessmentId}
+                className="flex flex-wrap items-start justify-between gap-3 py-3 first:pt-0 last:pb-0"
+              >
                 <div className="min-w-0">
                   <p className="text-[13px] font-medium text-[#F9FAFB]">
                     {assessmentTypeDisplayLabel(row.assessmentType)}
@@ -208,9 +299,11 @@ export function ProgressOutcomesHub({ bundle }: ProgressOutcomesHubProps) {
                     {formatCvRecordedAt(row.submittedAt)}
                   </p>
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-white/55">
-                    {row.painAtRest && <span>Pain at rest: {row.painAtRest}</span>}
+                    {row.painAtRest && (
+                      <span>Patient-reported pain at rest: {row.painAtRest}</span>
+                    )}
                     {row.painOnMovement && (
-                      <span>Pain on movement: {row.painOnMovement}</span>
+                      <span>Patient-reported pain on movement: {row.painOnMovement}</span>
                     )}
                     {row.bodyRegion && <span>Body region: {row.bodyRegion}</span>}
                   </div>
@@ -228,14 +321,17 @@ export function ProgressOutcomesHub({ bundle }: ProgressOutcomesHubProps) {
       </SectionShell>
 
       <SectionShell
-        id="camera-assisted-evidence"
-        title="Camera-assisted evidence"
-        description="Derived movement observations from optional camera-assisted sessions. Therapist interpretation required."
+        id="camera-assisted-observation"
+        title="Camera-assisted observation"
+        typeBadge={PROGRESS_OUTCOMES_SECTION_BADGES.cameraObservation}
+        description="Derived observations from optional camera-assisted sessions. Camera-assisted observation only — therapist interpretation required."
       >
         {bundle.cvEvidence.length === 0 ? (
-          <EmptyNote>
-            No camera-assisted evidence recorded yet. Sessions appear when CV-enabled exercises are completed.
-          </EmptyNote>
+          <EmptyState message="No camera-assisted observations recorded yet. Sessions appear when CV-enabled exercises are completed or reviewed in Assessment Center.">
+            <EmptyLink href={movementHref}>Movement tracking on chart</EmptyLink>
+            <EmptyLink href="/clinician/assessments/sit-to-stand">STS review</EmptyLink>
+            <EmptyLink href="/clinician/assessments">Assessment Center</EmptyLink>
+          </EmptyState>
         ) : (
           <div className="space-y-3">
             <ul className="divide-y divide-[#1E2D42]">
@@ -253,34 +349,32 @@ export function ProgressOutcomesHub({ bundle }: ProgressOutcomesHubProps) {
                     </p>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-white/55">
                       <span>Duration: {formatCvDuration(row.sessionDurationS)}</span>
-                      <span>
-                        Reps: {row.repCount != null ? String(row.repCount) : "—"}
-                      </span>
-                      <span>
-                        Tracking: {formatCvTrackingSignal(row.trackingQuality)}
-                      </span>
-                      <span>
-                        Movement detected: {row.movementDetected ? "Yes" : "No"}
-                      </span>
+                      <span>Reps: {row.repCount != null ? String(row.repCount) : "—"}</span>
+                      <span>Tracking: {formatCvTrackingSignal(row.trackingQuality)}</span>
+                      <span>Movement detected: {row.movementDetected ? "Yes" : "No"}</span>
                     </div>
                   </div>
                 </li>
               ))}
             </ul>
-            <p className="text-[10px] leading-relaxed text-[#6B7280]">{CV_CLINICIAN_DISCLAIMER}</p>
+            <p className="text-[10px] leading-relaxed text-[#6B7280]">
+              {PROGRESS_OUTCOMES_CV_FOOTER}
+            </p>
           </div>
         )}
       </SectionShell>
 
       <SectionShell
-        id="capture-quality-history"
-        title="Capture quality history"
-        description="Technical capture reliability only. Not movement quality or clinical assessment."
+        id="technical-capture-reliability"
+        title="Technical capture reliability"
+        typeBadge={PROGRESS_OUTCOMES_SECTION_BADGES.captureReliability}
+        description="Technical capture reliability only. Not movement quality or clinical assessment. Therapist interpretation required."
       >
         {bundle.captureQualityHistory.length === 0 ? (
-          <EmptyNote>
-            No capture quality records yet. Available when pilot capture quality is stored with a session.
-          </EmptyNote>
+          <EmptyState message="No technical capture reliability records yet. Available when pilot sessions store capture metadata (STS today).">
+            <EmptyLink href="/clinician/assessments/sit-to-stand">STS review</EmptyLink>
+            <EmptyLink href="/clinician/assessments">Assessment Center</EmptyLink>
+          </EmptyState>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[480px] text-left text-[12px]">
@@ -288,7 +382,7 @@ export function ProgressOutcomesHub({ bundle }: ProgressOutcomesHubProps) {
                 <tr className="border-b border-[#1E2D42] text-[10px] uppercase tracking-[0.06em] text-[#6B7280]">
                   <th className="pb-2 pr-3 font-semibold">Date</th>
                   <th className="pb-2 pr-3 font-semibold">Exercise</th>
-                  <th className="pb-2 pr-3 font-semibold">Reliability</th>
+                  <th className="pb-2 pr-3 font-semibold">Technical reliability</th>
                   <th className="pb-2 font-semibold">Retest</th>
                 </tr>
               </thead>
@@ -321,6 +415,12 @@ export function ProgressOutcomesHub({ bundle }: ProgressOutcomesHubProps) {
           </div>
         )}
       </SectionShell>
+
+      <div className="flex flex-wrap gap-2 border-t border-[#1E2D42] pt-4">
+        <EmptyLink href={profileHref}>Patient chart</EmptyLink>
+        <EmptyLink href="/clinician/results">Results queue</EmptyLink>
+        <EmptyLink href="/clinician/assessments">Assessment Center</EmptyLink>
+      </div>
     </div>
   );
 }
