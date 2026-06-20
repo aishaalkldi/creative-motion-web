@@ -10,6 +10,8 @@
 
 **When to use:** Before demonstrating the outcomes hub to clinicians or including it in a pilot onboarding session.
 
+**Populate real data first:** Run [`docs/pilot/real-data-flow-validation.md`](./real-data-flow-validation.md) when the hub shows zero logged sessions or empty pain/CV sections — empty is **expected** until a full patient journey is completed.
+
 ---
 
 ## Safety framing (read before review)
@@ -124,6 +126,7 @@
 
 ## Related documents
 
+- [`docs/pilot/real-data-flow-validation.md`](./real-data-flow-validation.md) — PR114 one-patient journey to populate hub with real data
 - `docs/progress/PROGRESS_OUTCOMES_HUB_AUDIT.md` — PR111 audit and PR112 plan
 - `docs/pilot/sts-pilot-qa-validation.md` — STS camera pilot QA (upstream of CV rows)
 - `docs/RASQ_CURRENT_STATE.md` — platform state
@@ -134,4 +137,5 @@
 
 | Date | PR | Notes |
 |------|-----|-------|
+| 2026-06-05 | PR114 | Cross-link to real data flow validation doc |
 | 2026-06-05 | PR113 | Initial outcomes hub QA checklist |

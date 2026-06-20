@@ -1,5 +1,29 @@
 # Project log
 
+## 2026-06-05 — PR114 Real data flow validation
+
+### Summary
+
+Aligned Progress Outcomes API plan selection with patient profile (`resolveCurrentAndPreviousPlans`: active plan first, else newest). Added manual QA doc for completing one real patient journey and documenting when an empty Outcomes Hub is expected.
+
+### What changed
+
+- `app/api/clinician/progress-outcomes/route.ts` — current plan resolution fix
+- `docs/pilot/real-data-flow-validation.md` — journey checklist and empty-hub guidance
+- `docs/pilot/progress-outcomes-hub-qa.md` — cross-link to journey doc
+- `docs/RASQ_CURRENT_STATE.md` — PR114 entry
+- `docs/project-log.md` — this entry
+
+### Verdict
+
+Empty hub sections are expected until assessment, plan, and portal session completion. Multi-plan patients now see session logs for the same current plan as the profile.
+
+### Safety boundaries
+
+No pain-before UI, patient portal fields, CV changes, DB migration, AI, or clinical improvement claims.
+
+---
+
 ## 2026-06-05 — PR113 Progress & Outcomes Hub polish & validation
 
 ### Summary

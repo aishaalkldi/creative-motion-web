@@ -14,6 +14,7 @@ import {
   serviceUnavailableResponse,
   unableToCompleteResponse,
 } from "@/app/lib/api/safe-errors";
+import { resolveCurrentAndPreviousPlans } from "@/app/lib/clinician/resolve-current-plan";
 import {
   buildProgressOutcomesBundle,
   type ProgressOutcomesBundle,
@@ -114,22 +115,30 @@ export async function GET(req: NextRequest) {
     planId = plan.id;
     planTitle = plan.title;
   } else {
-    const { data: plan, error: planErr } = await adminClient
+    type PlanPickRow = {
+      id: string;
+      title: string;
+      status: string;
+      created_at: string;
+    };
+
+    const { data: planRows, error: planErr } = await adminClient
       .from("treatment_plans")
-      .select("id, title")
+      .select("id, title, status, created_at")
       .eq("patient_id", patientId)
       .eq("provider_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle<{ id: string; title: string }>();
+      .returns<PlanPickRow[]>();
 
     if (planErr) {
       console.error("[GET /api/clinician/progress-outcomes] plan lookup failed");
       return genericServerErrorResponse();
     }
-    if (plan) {
-      planId = plan.id;
-      planTitle = plan.title;
+
+    const { currentPlan } = resolveCurrentAndPreviousPlans(planRows ?? []);
+    if (currentPlan) {
+      planId = currentPlan.id;
+      planTitle = currentPlan.title;
     }
   }
 
