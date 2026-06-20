@@ -1,7 +1,7 @@
 # RASQ Current State
 
 **Last updated:** 2026-06-05  
-**Baseline:** `main` through **PR103** (merge `0614ec4`); **PR104** QA documented; **PR105** PDPL readiness; **PR106** controlled STS pilot plan documented
+**Baseline:** `main` through PR103; PR104–PR106 documented; **PR107** CV allowlist expansion plan documented
 
 This document is the single source of truth for RASQ platform state during controlled clinic pilots. It is **not** a clinical or legal document. All movement observations require **therapist review**. RASQ does **not** diagnose, score clinically, or make automatic treatment decisions.
 
@@ -23,6 +23,7 @@ This document is the single source of truth for RASQ platform state during contr
 | STS pilot QA validation (docs) | **PR104** — code-path + unit tests; manual smoke required |
 | PDPL readiness foundation (docs) | **PR105** — data inventory, flow map, pilot privacy checklist |
 | Controlled STS pilot plan (docs) | **PR106** — first clinic pilot protocol (3–5 patients) |
+| CV allowlist expansion plan (docs) | **PR107** — post-STS exercise sequencing; heel-raise first |
 | Balance / Functional Movement / PR forms (Assessment Center) | Coming next |
 
 **Production URL:** https://creative-motion-web.vercel.app
@@ -52,7 +53,12 @@ Patient profile + AI draft (clinician)         ├─ Setup readiness + framing
 
 ---
 
-## Completed PRs (recent — PR99–PR106)
+## Completed PRs (recent — PR99–PR107)
+
+### PR107 — CV exercise allowlist expansion plan (docs only)
+- `docs/cv/CV_EXERCISE_ALLOWLIST_PLAN.md` — selection criteria, phased allowlist, defer list, implementation phases
+- Recommended pilot expansion: STS (P0) → heel-raise (P1) → mini-squat → step-up → functional-reach
+- No code or allowlist changes
 
 ### PR106 — Controlled STS pilot plan (docs only)
 - `docs/pilot/CONTROLLED_STS_PILOT_PLAN.md` — first supervised clinic pilot using optional STS camera (3–5 patients)
@@ -115,7 +121,7 @@ Optional camera assist may appear during active portal sessions for:
 | lateral-step | Motion pilot | Feature-flagged copy path |
 | functional-reach | Motion pilot | Feature-flagged copy path |
 
-**Pilot messaging:** Position **sit-to-stand** as the reference CV path for demos. Other exercises may show optional camera assist when present in assigned plans — still **experimental**, **therapist-review only**, and **not pilot-critical**.
+**Pilot messaging:** Position **sit-to-stand** as the reference CV path for demos. Expansion sequence after STS pilot: **heel-raise → mini-squat → step-up → functional-reach** per `docs/cv/CV_EXERCISE_ALLOWLIST_PLAN.md`. `single-leg-stance` and `lateral-step` remain in codebase but deferred for pilot expansion messaging.
 
 **Patient choice:** Continue without camera always available. Poor tracking or save errors do not block session completion.
 
@@ -144,7 +150,7 @@ Optional camera assist may appear during active portal sessions for:
 | Core RASQ workflow | **Ready** for controlled pilots |
 | STS optional camera assist | **Ready** — PR100/101/103; PR104 QA pass; **manual device smoke required** |
 | Assessment Center | **Partial** — STS review useful; Gait/Balance are shells |
-| Pilot documentation | **Updated** — PR102–PR106 incl. controlled STS pilot plan |
+| Pilot documentation | **Updated** — PR102–PR107 incl. CV allowlist expansion plan |
 | Privacy & compliance (technical) | **Foundation documented** — PR105; counsel review still required |
 | Legal / counsel | Pages pilot-ready; counsel review required before commercial contracts |
 
@@ -179,7 +185,7 @@ Optional camera assist may appear during active portal sessions for:
 - Balance Assessment shell (Assessment Center)
 - Functional Movement and Patient-Reported Forms modules
 - Overlay UX polish when STS coverage-ready but framing advisory is amber
-- CV pilot doc alignment for motion-pilot exercises beyond STS
+- CV pilot doc alignment for motion-pilot exercises beyond STS → **PR107 plan** (`docs/cv/CV_EXERCISE_ALLOWLIST_PLAN.md`)
 - Close superseded PR #97 (PR98)
 - Experimental branch PR #1 (`cv-readiness-experimental`) — not pilot scope
 
@@ -189,13 +195,11 @@ Optional camera assist may appear during active portal sessions for:
 
 ## Recommended next PR
 
-**PR107 — Balance Assessment v1 shell** (product)
+**Operational:** Execute controlled STS pilot per `docs/pilot/CONTROLLED_STS_PILOT_PLAN.md` before CV code expansion.
 
-Follow PR99 pattern: clinician shell page, Assessment Center card, planned metrics, therapist-review copy — no capture, no DB, no AI.
+**Product (after STS pilot go):** **PR108 — Heel Raise CV hardening** — promote P1 exercise per `docs/cv/CV_EXERCISE_ALLOWLIST_PLAN.md` (capture quality parity, pilot smoke, copy audit; no new exercise types).
 
-**Alternative:** Gait capture foundation v1 if walking assessment is the next demo priority.
-
-**Pilot execution:** Run first controlled STS pilot per `docs/pilot/CONTROLLED_STS_PILOT_PLAN.md` before expanding scope.
+**Alternative product:** **Balance Assessment v1 shell** (PR99 pattern) if Assessment Center breadth is priority over CV expansion.
 
 **Compliance follow-up (optional):** Clinician-visible `captureConsent` read-only field; automated retention policy — only after counsel input.
 
@@ -215,6 +219,7 @@ Suggested close comment:
 
 ## Related documents
 
+- `docs/cv/CV_EXERCISE_ALLOWLIST_PLAN.md` — PR107 post-STS CV expansion sequence
 - `docs/pilot/CONTROLLED_STS_PILOT_PLAN.md` — PR106 first controlled STS clinic pilot
 - `docs/compliance/PDPL_FOUNDATION.md` — PR105 PDPL readiness foundation
 - `docs/compliance/DATA_FLOW_MAP.md` — CV data flow; stored vs not stored

@@ -1,5 +1,26 @@
 # Project log
 
+## 2026-06-05 — PR107 CV exercise allowlist expansion plan (docs only)
+
+### Summary
+
+Documentation-only plan for which exercises receive camera-assisted CV support after Sit-to-Stand. Defines selection criteria, phased allowlist (STS → heel-raise → mini-squat → step-up → functional-reach), defer list, per-exercise requirements, and implementation phases. No code changes.
+
+### What changed
+
+- `docs/cv/CV_EXERCISE_ALLOWLIST_PLAN.md` — full allowlist expansion plan
+- `docs/RASQ_CURRENT_STATE.md` — PR107 entry, pilot messaging, recommended next PR
+
+### Recommended first exercise after STS
+
+**Heel Raise** (P1) — after controlled STS pilot go decision.
+
+### Safety boundaries
+
+No app code, database, API, AI, diagnosis wording, or allowlist code changes.
+
+---
+
 ## 2026-06-05 — PR106 controlled STS pilot plan (docs only)
 
 ### Summary
