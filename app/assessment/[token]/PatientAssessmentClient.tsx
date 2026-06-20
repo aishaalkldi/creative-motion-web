@@ -16,7 +16,7 @@ import {
 import { LanguageToggle, type PatientLang } from "@/app/components/patient/LanguageToggle";
 import { VoiceConsentBanner } from "@/app/components/patient/VoiceConsentBanner";
 import { VoiceFieldControls } from "@/app/components/patient/VoiceFieldControls";
-import { VOICE_SUBMIT_BLOCK_MESSAGE } from "@/app/components/patient/voice-ui-labels";
+import { voiceLabel, VOICE_SUBMIT_BLOCK_MESSAGE } from "@/app/components/patient/voice-ui-labels";
 import {
   PATIENT_SECTION_QUESTIONS,
   PATIENT_SECTION_TITLES,
@@ -127,6 +127,7 @@ function ConfigSectionForm({
   data,
   onChange,
   lang,
+  assessmentToken,
   voiceConsentGiven,
   onConsentNeeded,
   onVoiceTranscript,
@@ -139,6 +140,7 @@ function ConfigSectionForm({
   data: Record<string, string>;
   onChange: (next: Record<string, string>) => void;
   lang: PatientLang;
+  assessmentToken: string;
   voiceConsentGiven: boolean;
   onConsentNeeded: () => void;
   onVoiceTranscript: (fieldKey: string, text: string) => void;
@@ -166,6 +168,7 @@ function ConfigSectionForm({
               <>
                 <VoiceFieldControls
                   lang={lang}
+                  assessmentToken={assessmentToken}
                   questionText={questionText}
                   consentGiven={voiceConsentGiven}
                   onConsentNeeded={onConsentNeeded}
@@ -179,6 +182,7 @@ function ConfigSectionForm({
               <>
                 <VoiceFieldControls
                   lang={lang}
+                  assessmentToken={assessmentToken}
                   questionText={questionText}
                   fieldValue={value}
                   consentGiven={voiceConsentGiven}
@@ -200,7 +204,7 @@ function ConfigSectionForm({
                 value.trim() &&
                 !voiceReviewDismissed[field.key] ? (
                   <p className="mt-1 text-[11px] italic text-[#9CA3AF]">
-                    Please review your answer above before continuing. Voice transcription may not be perfectly accurate.
+                    {voiceLabel("transcribed", lang)}
                   </p>
                 ) : null}
               </>
@@ -208,6 +212,7 @@ function ConfigSectionForm({
               <>
                 <VoiceFieldControls
                   lang={lang}
+                  assessmentToken={assessmentToken}
                   questionText={questionText}
                   fieldValue={value}
                   consentGiven={voiceConsentGiven}
@@ -228,7 +233,7 @@ function ConfigSectionForm({
                 value.trim() &&
                 !voiceReviewDismissed[field.key] ? (
                   <p className="mt-1 text-[11px] italic text-[#9CA3AF]">
-                    Please review your answer above before continuing. Voice transcription may not be perfectly accurate.
+                    {voiceLabel("transcribed", lang)}
                   </p>
                 ) : null}
               </>
@@ -761,7 +766,7 @@ export function PatientAssessmentClient() {
             >
               {showConsentBanner && (
                 <div className="mb-5">
-                  <VoiceConsentBanner onAccept={handleVoiceConsentAccept} />
+                  <VoiceConsentBanner lang={lang} onAccept={handleVoiceConsentAccept} />
                 </div>
               )}
               <ConfigSectionForm
@@ -769,6 +774,7 @@ export function PatientAssessmentClient() {
                 data={getSectionData(currentSection, draft)}
                 onChange={(d) => updateSection(currentSection, d)}
                 lang={lang}
+                assessmentToken={token}
                 voiceConsentGiven={voiceConsentGiven}
                 onConsentNeeded={() => setShowConsentBanner(true)}
                 onVoiceTranscript={(fieldKey, text) =>
