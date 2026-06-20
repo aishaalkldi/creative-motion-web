@@ -16,6 +16,18 @@ export const PROGRESS_OUTCOMES_SAFETY_BANNER =
 
 export const PROGRESS_OUTCOMES_THERAPIST_REVIEW_LABEL = "Therapist interpretation required";
 
+/** Hub-only CV footer — no prohibited wording; not shared with global CV disclaimer. */
+export const PROGRESS_OUTCOMES_CV_FOOTER =
+  "Optional experimental assist. Camera-assisted observations are derived movement metrics only. Therapist interpretation required. No video or body coordinates stored.";
+
+export const PROGRESS_OUTCOMES_SECTION_BADGES = {
+  sessionActivity: "Activity record",
+  patientReportedPain: "Patient-reported trend",
+  assessmentHistory: "Derived observation",
+  cameraObservation: "Camera-assisted observation",
+  captureReliability: "Technical capture reliability only",
+} as const;
+
 export type ProgressOutcomesAdherence = {
   planId: string;
   completed: number;

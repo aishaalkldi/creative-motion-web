@@ -1,5 +1,26 @@
 # Project log
 
+## 2026-06-05 — PR113 Progress & Outcomes Hub polish & validation
+
+### Summary
+
+UI-only polish on the clinician Progress & Outcomes Hub for demo and pilot review: header navigation, section type badges, tightened safe wording, improved empty states with neutral CTAs, and manual QA checklist. No API, database, AI, or patient-facing changes.
+
+### What changed
+
+- `app/components/clinician/progress/ProgressOutcomesHub.tsx` — section nav, badges, empty states, wording, footer links
+- `app/clinician/patients/[id]/outcomes/page.tsx` — header nav strip, summary counts, loading skeleton
+- `app/lib/progress/progress-outcomes-bundle.ts` — hub display constants (CV footer, section badge labels)
+- `docs/pilot/progress-outcomes-hub-qa.md` — manual QA checklist
+- `docs/RASQ_CURRENT_STATE.md` — PR112/PR113 entries
+- `docs/project-log.md` — this entry
+
+### Safety boundaries
+
+No API logic changes, database migration, AI, clinical action logic, charts, or prohibited wording (improvement, recovery, diagnosis, prediction, treatment recommendation).
+
+---
+
 ## 2026-06-05 — PR111 Progress & Outcomes Hub audit (docs only)
 
 ### Summary

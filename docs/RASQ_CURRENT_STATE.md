@@ -1,7 +1,7 @@
 # RASQ Current State
 
 **Last updated:** 2026-06-05  
-**Baseline:** `main` through PR110; PR111 progress/outcomes hub audit documented
+**Baseline:** `main` through PR112; PR113 outcomes hub polish documented
 
 This document is the single source of truth for RASQ platform state during controlled clinic pilots. It is **not** a clinical or legal document. All movement observations require **therapist review**. RASQ does **not** diagnose, score clinically, or make automatic treatment decisions.
 
@@ -28,6 +28,8 @@ This document is the single source of truth for RASQ platform state during contr
 | Gait Assessment v1 capture audit (docs) | **PR109** — bounded walking observation path; after STS testing |
 | Gait Assessment review wiring | **PR110** — STS-style metrics fetch + empty state; no capture |
 | Progress & Outcomes Hub audit (docs) | **PR111** — fragmented data inventory; PR112 hub plan |
+| Progress & Outcomes Hub v1 | **PR112** — read-only clinician hub at `/clinician/patients/[id]/outcomes` |
+| Progress & Outcomes Hub polish (docs + UI) | **PR113** — section badges, empty states, nav links, QA checklist |
 | Balance / Functional Movement / PR forms (Assessment Center) | Coming next |
 
 **Production URL:** https://creative-motion-web.vercel.app
@@ -57,7 +59,18 @@ Patient profile + AI draft (clinician)         ├─ Setup readiness + framing
 
 ---
 
-## Completed PRs (recent — PR99–PR111)
+## Completed PRs (recent — PR99–PR113)
+
+### PR113 — Progress & Outcomes Hub polish & validation
+- UI polish on `/clinician/patients/[id]/outcomes` — header nav, section chips/badges, tightened safe wording, improved empty states, footer links
+- Hub-specific CV footer without prohibited wording
+- `docs/pilot/progress-outcomes-hub-qa.md` — manual QA checklist for demo/pilot review
+- No API, database, AI, or patient-facing changes
+
+### PR112 — Progress & Outcomes Hub v1
+- `/clinician/patients/[id]/outcomes` — read-only clinician aggregation (session activity, patient-reported pain table, assessments, camera-assisted timeline, capture reliability)
+- `GET /api/clinician/progress-outcomes` — composes existing data only
+- Navigation from patient profile, results queue; legacy progress redirect
 
 ### PR111 — Progress & Outcomes Hub audit (docs only)
 - `docs/progress/PROGRESS_OUTCOMES_HUB_AUDIT.md` — data inventory, care pathway joins, safe outcome views, PR112 plan
@@ -218,9 +231,11 @@ Optional camera assist may appear during active portal sessions for:
 
 ## Recommended next PR
 
+**Product:** **PR114+** — heel raise hardening, gait capture, or Assessment Center forms per existing plans.
+
 **Operational:** Execute controlled STS pilot per `docs/pilot/CONTROLLED_STS_PILOT_PLAN.md` before gait capture or heel-raise promotion.
 
-**Product:** **PR112 — Progress & Outcomes Hub v1** — read-only clinician aggregation per `docs/progress/PROGRESS_OUTCOMES_HUB_AUDIT.md` (pain trend, adherence, CV timeline; no clinical improvement claims).
+**Outcomes hub QA:** Run `docs/pilot/progress-outcomes-hub-qa.md` before clinician demo of `/clinician/patients/[id]/outcomes`.
 
 **CV expansion (after STS go):** Heel Raise hardening per `docs/cv/HEEL_RAISE_CV_HARDENING_PLAN.md`.
 
@@ -246,6 +261,7 @@ Suggested close comment:
 
 ## Related documents
 
+- `docs/pilot/progress-outcomes-hub-qa.md` — PR113 outcomes hub manual QA
 - `docs/progress/PROGRESS_OUTCOMES_HUB_AUDIT.md` — PR111 progress & outcomes hub audit
 - `docs/assessments/GAIT_ASSESSMENT_V1_CAPTURE_AUDIT.md` — PR109 gait v1 capture audit
 - `docs/cv/HEEL_RAISE_CV_HARDENING_PLAN.md` — PR108 heel-raise gap analysis and implementation slices

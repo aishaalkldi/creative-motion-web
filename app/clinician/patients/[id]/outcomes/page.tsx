@@ -2,9 +2,31 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ProgressOutcomesHub } from "@/app/components/clinician/progress/ProgressOutcomesHub";
 import type { ProgressOutcomesBundle } from "@/app/lib/progress/progress-outcomes-bundle";
+
+function OutcomesLoadingSkeleton() {
+  return (
+    <div className="space-y-4" aria-hidden>
+      <div className="h-16 animate-pulse rounded-[8px] border border-[#1E2D42] bg-[#0F1825]" />
+      <div className="h-10 animate-pulse rounded-[8px] border border-[#1E2D42] bg-[#0F1825]" />
+      <div className="h-40 animate-pulse rounded-[10px] border border-[#1E2D42] bg-[#0F1825]" />
+      <div className="h-40 animate-pulse rounded-[10px] border border-[#1E2D42] bg-[#0F1825]" />
+    </div>
+  );
+}
+
+function HeaderNavLink({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <Link
+      href={href}
+      className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 text-xs font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]"
+    >
+      {children}
+    </Link>
+  );
+}
 
 export default function PatientOutcomesPage() {
   const params = useParams();
@@ -48,6 +70,16 @@ export default function PatientOutcomesPage() {
 
   const profileHref = `/clinician/patients/${patientId}`;
 
+  const summaryLine = useMemo(() => {
+    if (!bundle) return null;
+    const parts = [
+      `${bundle.painTrend.length} logged session${bundle.painTrend.length === 1 ? "" : "s"}`,
+      `${bundle.assessments.length} assessment${bundle.assessments.length === 1 ? "" : "s"}`,
+      `${bundle.cvEvidence.length} camera session${bundle.cvEvidence.length === 1 ? "" : "s"}`,
+    ];
+    return parts.join(" · ");
+  }, [bundle]);
+
   return (
     <main className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
       <div className="mx-auto max-w-5xl">
@@ -61,17 +93,30 @@ export default function PatientOutcomesPage() {
           Patient chart
         </Link>
 
+        <div className="mb-4 flex flex-wrap gap-2">
+          <HeaderNavLink href={profileHref}>Patient chart</HeaderNavLink>
+          <HeaderNavLink href="/clinician/results">Results queue</HeaderNavLink>
+          <HeaderNavLink href="/clinician/assessments">Assessment Center</HeaderNavLink>
+        </div>
+
         <div className="mb-7">
-          <h1 className="text-2xl font-bold text-white">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#1D9E75]">
+            RASQ · Progress &amp; outcomes
+          </p>
+          <h1 className="mt-1 text-2xl font-bold text-white">
             {bundle?.patientName ?? "Progress & outcomes"}
           </h1>
           <p className="mt-1 text-xs text-white/45">
-            Read-only clinician hub — patient-reported trends and derived observations.
+            Read-only clinician hub — patient-reported trends and derived observations. Therapist
+            interpretation required.
           </p>
+          {summaryLine && !loading ? (
+            <p className="mt-2 text-[11px] font-medium text-white/35">{summaryLine}</p>
+          ) : null}
         </div>
 
         {loading ? (
-          <p className="text-sm text-white/50">Loading progress and outcomes…</p>
+          <OutcomesLoadingSkeleton />
         ) : error ? (
           <div className="rounded-[8px] border border-rose-400/25 bg-rose-400/8 px-4 py-3">
             <p className="text-sm text-rose-200/90">{error}</p>
