@@ -1,6 +1,16 @@
 "use client";
 
 import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { CvReviewSummary } from "@/app/components/clinician/cv/CvReviewSummary";
+import {
+  GAIT_ASSESSMENT_EXERCISE_DISPLAY_NAMES,
+  isGaitAssessmentExerciseId,
+} from "@/app/lib/cv/gait-assessment-exercise-ids";
+import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
+
+const FETCH_LIMIT = 50;
+const DISPLAY_MAX = 10;
 
 const PLANNED_GAIT_METRICS = [
   {
@@ -38,6 +48,45 @@ const PLANNED_GAIT_METRICS = [
 ] as const;
 
 export default function GaitAssessmentPage() {
+  const exerciseNameById = useMemo(
+    () => ({ ...GAIT_ASSESSMENT_EXERCISE_DISPLAY_NAMES }),
+    [],
+  );
+
+  const [metrics, setMetrics] = useState<CvSessionMetricPublic[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  const fetchMetrics = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const res = await fetch(`/api/cv/session-metrics?limit=${FETCH_LIMIT}`);
+      if (!res.ok) {
+        setError(true);
+        setMetrics([]);
+        return;
+      }
+      const data = (await res.json()) as { metrics?: CvSessionMetricPublic[] };
+      const gaitMetrics = (data.metrics ?? []).filter((row) =>
+        isGaitAssessmentExerciseId(row.exerciseId),
+      );
+      setMetrics(gaitMetrics);
+    } catch {
+      setError(true);
+      setMetrics([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void fetchMetrics();
+  }, [fetchMetrics]);
+
+  const hasPatientLinkedSessions = metrics.some((row) => Boolean(row.patientId));
+  const showGaitEmptyState = !loading && !error && metrics.length === 0;
+
   return (
     <div className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
       <div className="mx-auto max-w-3xl">
@@ -63,25 +112,60 @@ export default function GaitAssessmentPage() {
           </p>
           <p className="mt-2 text-sm leading-relaxed text-white/55">
             This module provides camera-assisted walking observation and movement observations
-            to support therapist review. It is not diagnostic, does not classify gait patterns,
-            and does not replace clinical examination.
+            to support therapist review. It is not diagnostic, does not classify walking
+            patterns, and does not replace clinical examination.
           </p>
         </div>
 
-        <div className="mt-5 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] px-4 py-3.5">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-[#9CA3AF]">
-            Coming next
-          </p>
-          <p className="mt-2 text-sm leading-relaxed text-white/55">
-            Live gait capture and structured walking metrics.
-          </p>
+        <div className="mt-6 flex flex-wrap gap-2">
+          <Link
+            href="/clinician/results"
+            className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/60 transition hover:border-[#1D9E75]/25 hover:text-white"
+          >
+            Open Results queue
+          </Link>
         </div>
 
-        <section className="mt-6 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
-          <h2 className="text-sm font-bold text-white">Review workflow shell</h2>
+        <section className="mt-8">
+          <h2 className="text-sm font-bold text-white">Recorded walking observations</h2>
+          <p className="mt-1 text-xs leading-relaxed text-white/40">
+            Saved assessment movement sessions appear here when gait capture is enabled in a
+            future release.
+          </p>
+
+          {loading ? (
+            <p className="mt-4 text-xs text-[#6B7280]">Loading walking observations…</p>
+          ) : error ? (
+            <p className="mt-4 text-xs text-rose-300">
+              Could not load walking observations. Try again later.
+            </p>
+          ) : showGaitEmptyState ? (
+            <div className="mt-4 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] px-4 py-8 text-center">
+              <p className="text-sm font-medium text-[#9CA3AF]">
+                No gait observations have been captured yet
+              </p>
+              <p className="mt-2 text-xs leading-relaxed text-[#6B7280]">
+                When bounded walking capture is available, saved sessions will appear here for
+                therapist review. Live capture is not enabled in this release.
+              </p>
+            </div>
+          ) : (
+            <CvReviewSummary
+              metrics={metrics}
+              exerciseNameById={exerciseNameById}
+              loading={false}
+              error={false}
+              showPatientLinks={hasPatientLinkedSessions}
+              maxSessions={DISPLAY_MAX}
+            />
+          )}
+        </section>
+
+        <section className="mt-8 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
+          <h2 className="text-sm font-bold text-white">Planned observation metrics</h2>
           <p className="mt-2 text-sm leading-relaxed text-white/45">
-            Gait Assessment v1 establishes the clinician review surface. Structured walking
-            metrics will populate here after live capture is enabled.
+            Structured walking metrics will populate after live capture is enabled. All values
+            will remain assistive observations for therapist review only.
           </p>
 
           <dl className="mt-5 space-y-3">
@@ -114,8 +198,8 @@ export default function GaitAssessmentPage() {
         </section>
 
         <p className="mt-8 text-[11px] leading-relaxed text-white/25">
-          Patient portal and existing CV exercise modules are unchanged in this release. Gait
-          capture will connect to this review surface in a future update.
+          Patient portal exercise modules are unchanged. Gait capture will connect to this review
+          surface in a future update.
         </p>
       </div>
     </div>
