@@ -1,7 +1,7 @@
 # RASQ Current State
 
 **Last updated:** 2026-06-05  
-**Baseline:** `main` through **PR103** (merge `0614ec4`); **PR104** QA documented; **PR105** PDPL readiness foundation documented
+**Baseline:** `main` through **PR103** (merge `0614ec4`); **PR104** QA documented; **PR105** PDPL readiness; **PR106** controlled STS pilot plan documented
 
 This document is the single source of truth for RASQ platform state during controlled clinic pilots. It is **not** a clinical or legal document. All movement observations require **therapist review**. RASQ does **not** diagnose, score clinically, or make automatic treatment decisions.
 
@@ -22,6 +22,7 @@ This document is the single source of truth for RASQ platform state during contr
 | Patient camera consent gate | Live — PR103 |
 | STS pilot QA validation (docs) | **PR104** — code-path + unit tests; manual smoke required |
 | PDPL readiness foundation (docs) | **PR105** — data inventory, flow map, pilot privacy checklist |
+| Controlled STS pilot plan (docs) | **PR106** — first clinic pilot protocol (3–5 patients) |
 | Balance / Functional Movement / PR forms (Assessment Center) | Coming next |
 
 **Production URL:** https://creative-motion-web.vercel.app
@@ -51,7 +52,12 @@ Patient profile + AI draft (clinician)         ├─ Setup readiness + framing
 
 ---
 
-## Completed PRs (recent — PR99–PR105)
+## Completed PRs (recent — PR99–PR106)
+
+### PR106 — Controlled STS pilot plan (docs only)
+- `docs/pilot/CONTROLLED_STS_PILOT_PLAN.md` — first supervised clinic pilot using optional STS camera (3–5 patients)
+- Success/failure criteria, STS testing steps, therapist/patient feedback, go/no-go decision matrix
+- References PR104 manual smoke and PR105 privacy checklist
 
 ### PR105 — PDPL readiness foundation (docs only)
 - `docs/compliance/PDPL_FOUNDATION.md` — data inventory, classification, minimization, consent, access control
@@ -138,11 +144,11 @@ Optional camera assist may appear during active portal sessions for:
 | Core RASQ workflow | **Ready** for controlled pilots |
 | STS optional camera assist | **Ready** — PR100/101/103; PR104 QA pass; **manual device smoke required** |
 | Assessment Center | **Partial** — STS review useful; Gait/Balance are shells |
-| Pilot documentation | **Updated** — PR102 + PR104 STS QA + PR105 PDPL readiness |
+| Pilot documentation | **Updated** — PR102–PR106 incl. controlled STS pilot plan |
 | Privacy & compliance (technical) | **Foundation documented** — PR105; counsel review still required |
 | Legal / counsel | Pages pilot-ready; counsel review required before commercial contracts |
 
-**Pre-demo:** Use `docs/pilot/pilot-checklist.md`, `docs/pilot/clinician-onboarding-guide.md`, `docs/pilot/sts-pilot-qa-validation.md` (manual smoke), and `docs/compliance/PILOT_PRIVACY_CHECKLIST.md` (privacy).
+**Pre-demo / pre-pilot:** Use `docs/pilot/CONTROLLED_STS_PILOT_PLAN.md` (first STS clinic pilot), `docs/pilot/sts-pilot-qa-validation.md` (manual smoke), `docs/compliance/PILOT_PRIVACY_CHECKLIST.md` (privacy), `docs/pilot/pilot-checklist.md`, and `docs/pilot/clinician-onboarding-guide.md`.
 
 ---
 
@@ -183,11 +189,13 @@ Optional camera assist may appear during active portal sessions for:
 
 ## Recommended next PR
 
-**PR106 — Balance Assessment v1 shell** (product)
+**PR107 — Balance Assessment v1 shell** (product)
 
 Follow PR99 pattern: clinician shell page, Assessment Center card, planned metrics, therapist-review copy — no capture, no DB, no AI.
 
 **Alternative:** Gait capture foundation v1 if walking assessment is the next demo priority.
+
+**Pilot execution:** Run first controlled STS pilot per `docs/pilot/CONTROLLED_STS_PILOT_PLAN.md` before expanding scope.
 
 **Compliance follow-up (optional):** Clinician-visible `captureConsent` read-only field; automated retention policy — only after counsel input.
 
@@ -207,6 +215,7 @@ Suggested close comment:
 
 ## Related documents
 
+- `docs/pilot/CONTROLLED_STS_PILOT_PLAN.md` — PR106 first controlled STS clinic pilot
 - `docs/compliance/PDPL_FOUNDATION.md` — PR105 PDPL readiness foundation
 - `docs/compliance/DATA_FLOW_MAP.md` — CV data flow; stored vs not stored
 - `docs/compliance/PILOT_PRIVACY_CHECKLIST.md` — Pre-pilot privacy checks
