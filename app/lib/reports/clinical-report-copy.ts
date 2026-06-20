@@ -30,6 +30,26 @@ export const PATIENT_REPORTED_INTRO =
 
 export const SECTION_PATIENT_REPORTED_SUMMARY = "Patient-Reported Summary";
 
+export const SECTION_ASSESSMENT_INTERPRETATION_DRAFT = "Assessment Interpretation Draft";
+
+export const INTERPRETATION_DRAFT_BADGE = "Draft only — therapist confirmation required";
+
+export const INTERPRETATION_DRAFT_INTRO =
+  "Structured physiotherapy review prompts derived from patient-reported answers. This is not a diagnosis, does not replace clinical examination, and requires therapist confirmation before use.";
+
+export const INTERPRETATION_DRAFT_FUNCTIONAL_HEADING = "Patient-reported functional limitations";
+
+export const INTERPRETATION_DRAFT_MOVEMENT_HEADING =
+  "Movement components that may be relevant to assess";
+
+export const INTERPRETATION_DRAFT_MUSCLE_HEADING =
+  "Possible muscle performance areas for therapist review";
+
+export const INTERPRETATION_DRAFT_OBJECTIVE_HEADING = "Suggested objective therapist assessment items";
+
+export const INTERPRETATION_DRAFT_EMPTY_NOTE =
+  "Insufficient patient-reported detail to generate structured review prompts. Confirm findings during clinical examination.";
+
 export const SECTION_CLINICAL_FINDINGS = "Clinical Findings / Therapist Input";
 
 export const SECTION_SAFETY_INDICATORS = "Safety Indicators";

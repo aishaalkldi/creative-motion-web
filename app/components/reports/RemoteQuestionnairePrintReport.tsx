@@ -1,6 +1,8 @@
 import type { PatientAssessmentDraft, PatientSectionId } from "@/app/lib/api/remote-assessments";
 import { buildFullClinicianReview } from "@/app/lib/patient-assessment-questions";
 import type { RemoteQuestionnaireSummary } from "@/app/lib/remote-questionnaire-summary";
+import type { AssessmentInterpretationDraft } from "@/app/lib/reports/assessment-interpretation-draft";
+import { AssessmentInterpretationDraftSection } from "@/app/components/reports/AssessmentInterpretationDraftSection";
 import {
   CLINICAL_DISCLAIMER_FULL,
   patientReportedLabel,
@@ -103,6 +105,7 @@ function PrintSubmittedAnswers({
 
 type Props = {
   summary: RemoteQuestionnaireSummary;
+  interpretationDraft: AssessmentInterpretationDraft;
   patientName: string;
   patientId: string;
   assessmentId?: string;
@@ -113,6 +116,7 @@ type Props = {
 
 export function RemoteQuestionnairePrintReport({
   summary,
+  interpretationDraft,
   patientName,
   patientId,
   assessmentId,
@@ -162,6 +166,8 @@ export function RemoteQuestionnairePrintReport({
           />
         </ReportPrintSection>
       ) : null}
+
+      <AssessmentInterpretationDraftSection draft={interpretationDraft} variant="print" />
 
       {notes ? (
         <ReportPrintSection title="Therapist-entered clinical note">

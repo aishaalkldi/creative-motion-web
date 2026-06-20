@@ -45,6 +45,7 @@ import {
 } from "@/app/lib/remote-questionnaire-summary";
 import { ReportExportToolbar } from "@/app/components/reports/ReportExportToolbar";
 import { RemoteQuestionnairePrintReport } from "@/app/components/reports/RemoteQuestionnairePrintReport";
+import { AssessmentInterpretationDraftSection } from "@/app/components/reports/AssessmentInterpretationDraftSection";
 import { PdfTranslationWarningModal } from "@/app/components/clinician/PdfTranslationWarningModal";
 import { isAiTranslationEnabled } from "@/app/lib/ai/ai-features";
 import {
@@ -97,6 +98,7 @@ import {
   PROGRAM_DIRECTION_SECTION_TITLE,
 } from "@/app/lib/program-direction-copy";
 import { resolveProgramOptionsForFocus } from "@/app/lib/program-direction-options";
+import { buildAssessmentInterpretationDraft } from "@/app/lib/reports/assessment-interpretation-draft";
 
 // ── Constants & labels ─────────────────────────────────────────────────────────
 
@@ -1350,6 +1352,11 @@ export function AssessmentReportClient() {
       remoteQuestionnaireDraft,
       reportDate || new Date().toISOString(),
     );
+    const interpretationDraft = buildAssessmentInterpretationDraft({
+      draft: remoteQuestionnaireDraft,
+      includedSections: remoteIncludedSections,
+      submissionMeta: remoteSubmissionMeta,
+    });
     const backHref = patientId ? `/clinician/patients/${patientId}` : "/clinician/patients";
 
     return (
@@ -1358,6 +1365,7 @@ export function AssessmentReportClient() {
           <div className="print-only">
             <RemoteQuestionnairePrintReport
               summary={printSummary}
+              interpretationDraft={interpretationDraft}
               patientName={patient?.full_name ?? "Patient"}
               patientId={patientId}
               assessmentId={assessmentId || undefined}
@@ -1425,6 +1433,7 @@ export function AssessmentReportClient() {
               />
             </div>
           </section>
+          <AssessmentInterpretationDraftSection draft={interpretationDraft} />
           {serverNotes?.trim() ? (
             <section className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
               <h2 className="text-base font-bold text-white">Therapist-entered clinical note</h2>
