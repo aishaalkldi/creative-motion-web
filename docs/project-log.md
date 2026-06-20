@@ -1,5 +1,47 @@
 # Project log
 
+## 2026-06-05 — PR108 Heel Raise CV hardening plan (docs only)
+
+### Summary
+
+Documentation-only gap analysis for promoting Heel Raise as the second camera-assisted exercise after Sit-to-Stand. Reviews detector, readiness, capture quality, `hrPilot`, clinician review, patient setup, and framing against the STS reference path.
+
+### What changed
+
+- `docs/cv/HEEL_RAISE_CV_HARDENING_PLAN.md` — readiness score 68/100, gaps, risks, test plan, PR109 slices
+- `docs/RASQ_CURRENT_STATE.md` — PR108 entry, heel-raise row update, recommended next PR → PR109
+
+### Verdict
+
+Heel raise **can** reach STS-level quality using the existing CV architecture. Promotion blockers: `hrPilot.captureQuality`, ankle landmark coverage readiness, landmark-based visibility, manual smoke QA, copy de-experimentalization.
+
+### Safety boundaries
+
+No app code, database, API, AI, diagnosis wording, or treatment recommendations.
+
+---
+
+## 2026-06-05 — PR107 CV exercise allowlist expansion plan (docs only)
+
+### Summary
+
+Documentation-only plan for which exercises receive camera-assisted CV support after Sit-to-Stand. Defines selection criteria, phased allowlist (STS → heel-raise → mini-squat → step-up → functional-reach), defer list, per-exercise requirements, and implementation phases. No code changes.
+
+### What changed
+
+- `docs/cv/CV_EXERCISE_ALLOWLIST_PLAN.md` — full allowlist expansion plan
+- `docs/RASQ_CURRENT_STATE.md` — PR107 entry, pilot messaging, recommended next PR
+
+### Recommended first exercise after STS
+
+**Heel Raise** (P1) — after controlled STS pilot go decision.
+
+### Safety boundaries
+
+No app code, database, API, AI, diagnosis wording, or allowlist code changes.
+
+---
+
 ## 2026-06-05 — PR106 controlled STS pilot plan (docs only)
 
 ### Summary
