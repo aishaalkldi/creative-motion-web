@@ -15,7 +15,7 @@ This document is the single source of truth for RASQ platform state during contr
 | Clinician-only AI draft summary v0 | Live — review only, not persisted to patient |
 | Assessment Center | Live — `/clinician/assessments` |
 | Sit-to-Stand assessment review | Live — `/clinician/assessments/sit-to-stand` |
-| Gait Assessment v1 | Shell live — `/clinician/assessments/gait` (PR109 audit; capture **after STS testing**) |
+| Gait Assessment v1 | Shell live — `/clinician/assessments/gait` (PR110 review wiring; capture later) |
 | Patient CV (optional camera assist) | Live — multi-exercise allowlist; **STS most mature** |
 | STS capture quality & reliability | Live — PR100 |
 | STS adaptive framing readiness | Live — PR101 |
@@ -26,6 +26,7 @@ This document is the single source of truth for RASQ platform state during contr
 | CV allowlist expansion plan (docs) | **PR107** — post-STS exercise sequencing; heel-raise first |
 | Heel Raise CV hardening plan (docs) | **PR108** — gap analysis; readiness 68/100; PR109 implementation slices |
 | Gait Assessment v1 capture audit (docs) | **PR109** — bounded walking observation path; after STS testing |
+| Gait Assessment review wiring | **PR110** — STS-style metrics fetch + empty state; no capture |
 | Balance / Functional Movement / PR forms (Assessment Center) | Coming next |
 
 **Production URL:** https://creative-motion-web.vercel.app
@@ -55,7 +56,12 @@ Patient profile + AI draft (clinician)         ├─ Setup readiness + framing
 
 ---
 
-## Completed PRs (recent — PR99–PR109)
+## Completed PRs (recent — PR99–PR110)
+
+### PR110 — Gait Assessment review surface wiring
+- `/clinician/assessments/gait` — fetches CV session metrics (STS pattern), filters gait exercise IDs, empty state, `CvReviewSummary` when data exists
+- `app/lib/cv/gait-assessment-exercise-ids.ts` — reserved IDs for future capture
+- No gait capture, detector, or legacy gait AI
 
 ### PR109 — Gait Assessment v1 capture audit (docs only)
 - `docs/assessments/GAIT_ASSESSMENT_V1_CAPTURE_AUDIT.md` — code inventory, minimal v1 scope, phases, STS sequencing gate
@@ -211,7 +217,7 @@ Optional camera assist may appear during active portal sessions for:
 
 **CV expansion (after STS go):** **PR109 implementation** — Heel Raise hardening per `docs/cv/HEEL_RAISE_CV_HARDENING_PLAN.md` (was labeled PR109a in PR108; rename to avoid clash with this PR109 audit).
 
-**Assessment Center:** **PR110 — Gait Assessment review surface wiring** (fetch metrics, empty state; no capture) per `docs/assessments/GAIT_ASSESSMENT_V1_CAPTURE_AUDIT.md`. Gait capture (PR111+) **after** STS internal testing.
+**Assessment Center:** Gait capture (PR111+) **after** STS internal testing per `docs/assessments/GAIT_ASSESSMENT_V1_CAPTURE_AUDIT.md`. Review surface wired in **PR110**.
 
 **Alternative product:** **Balance Assessment v1 shell** (PR99 pattern).
 

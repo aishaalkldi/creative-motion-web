@@ -1,5 +1,24 @@
 # Project log
 
+## 2026-06-05 — PR110 Gait Assessment review surface wiring
+
+### Summary
+
+Clinician Gait Assessment page now mirrors STS review: fetches `/api/cv/session-metrics`, filters reserved gait exercise IDs, shows empty state when none exist, and renders `CvReviewSummary` when observations are present. Planned metrics and safety copy retained.
+
+### What changed
+
+- `app/clinician/assessments/gait/page.tsx` — review wiring + empty state + Results queue link
+- `app/lib/cv/gait-assessment-exercise-ids.ts` — gait ID filter for review surface
+- `app/lib/cv/gait-assessment-exercise-ids.test.ts` — filter unit tests
+- `docs/RASQ_CURRENT_STATE.md` — PR110 entry
+
+### Safety boundaries
+
+No gait capture, MediaPipe detector, legacy gait AI, DB migration, patient portal changes, or diagnosis wording.
+
+---
+
 ## 2026-06-05 — PR109 Gait Assessment v1 capture audit (docs only)
 
 ### Summary
