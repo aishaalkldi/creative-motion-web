@@ -1,5 +1,26 @@
 # Project log
 
+## 2026-06-05 — PR106 controlled STS pilot plan (docs only)
+
+### Summary
+
+Documentation-only operational plan for the first controlled clinic pilot using optional Sit-to-Stand camera assist. Defines 3–5 patient cohort, therapist role, testing steps, success/failure criteria, feedback questions, and go/no-go decision matrix.
+
+### What changed
+
+- `docs/pilot/CONTROLLED_STS_PILOT_PLAN.md` — full controlled STS pilot plan
+- `docs/RASQ_CURRENT_STATE.md` — PR106 entry, pre-pilot doc references
+
+### Pilot readiness
+
+Provides executable pilot protocol linking PR104 manual smoke and PR105 privacy checklist. Does not add product features.
+
+### Safety boundaries
+
+No app code, database, API, AI, or diagnosis wording changes.
+
+---
+
 ## 2026-06-05 — PR105 PDPL readiness foundation (docs only)
 
 ### Summary
