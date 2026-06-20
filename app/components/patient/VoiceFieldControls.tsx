@@ -7,6 +7,7 @@ import type { PatientLang } from "@/app/components/patient/LanguageToggle";
 
 type Props = {
   lang: PatientLang;
+  assessmentToken: string;
   questionText: string;
   fieldValue?: string;
   consentGiven: boolean;
@@ -18,6 +19,7 @@ type Props = {
 
 export function VoiceFieldControls({
   lang,
+  assessmentToken,
   questionText,
   fieldValue,
   consentGiven,
@@ -29,28 +31,34 @@ export function VoiceFieldControls({
   const { mounted, isSupported, speak } = useSpeechSynthesis();
 
   return (
-    <div className="mb-2 flex flex-wrap items-center gap-2">
-      {mounted && isSupported ? (
-        <button
-          type="button"
-          onClick={() => speak(questionText, lang)}
-          aria-label="Listen to question"
-          title={voiceLabel("listen", lang)}
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-[7px] border border-white/20 bg-white/[0.04] px-3 py-2 text-xs font-medium text-white/75 transition hover:border-white/35 hover:text-white"
-          style={{ borderWidth: "0.5px" }}
-        >
-          🔊 {voiceLabel("listen", lang)}
-        </button>
-      ) : null}
-      {showRecord ? (
-        <VoiceInputButton
-          lang={lang}
-          fieldValue={fieldValue}
-          consentGiven={consentGiven}
-          onConsentNeeded={onConsentNeeded}
-          onTranscript={onTranscript}
-          onTranscriptionFailed={onTranscriptionFailed}
-        />
+    <div className="mb-2 space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        {mounted && isSupported ? (
+          <button
+            type="button"
+            onClick={() => speak(questionText, lang)}
+            aria-label="Listen to question"
+            title={voiceLabel("listen", lang)}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-[7px] border border-white/20 bg-white/[0.04] px-3 py-2 text-xs font-medium text-white/75 transition hover:border-white/35 hover:text-white"
+            style={{ borderWidth: "0.5px" }}
+          >
+            🔊 {voiceLabel("listen", lang)}
+          </button>
+        ) : null}
+        {showRecord ? (
+          <VoiceInputButton
+            lang={lang}
+            assessmentToken={assessmentToken}
+            fieldValue={fieldValue}
+            consentGiven={consentGiven}
+            onConsentNeeded={onConsentNeeded}
+            onTranscript={onTranscript}
+            onTranscriptionFailed={onTranscriptionFailed}
+          />
+        ) : null}
+      </div>
+      {showRecord && consentGiven ? (
+        <p className="text-[10px] leading-relaxed text-white/40">{voiceLabel("privacyNote", lang)}</p>
       ) : null}
     </div>
   );

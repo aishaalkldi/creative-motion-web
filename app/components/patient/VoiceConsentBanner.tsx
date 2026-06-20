@@ -1,10 +1,14 @@
 "use client";
 
+import { voiceLabel } from "@/app/components/patient/voice-ui-labels";
+import type { PatientLang } from "@/app/components/patient/LanguageToggle";
+
 type Props = {
+  lang: PatientLang;
   onAccept: () => void;
 };
 
-export function VoiceConsentBanner({ onAccept }: Props) {
+export function VoiceConsentBanner({ lang, onAccept }: Props) {
   function handleAccept() {
     sessionStorage.setItem("rasq_voice_consent", "1");
     onAccept();
@@ -17,8 +21,10 @@ export function VoiceConsentBanner({ onAccept }: Props) {
     >
       <h3 className="text-sm font-semibold text-[#0A0F1A]">Voice input</h3>
       <p className="mt-2 text-xs leading-relaxed text-[#0A0F1A]">
-        No audio is stored. Your speech is converted to text in your browser only — nothing is
-        sent to any server. Your answer will appear as text for you to review before submitting.
+        {voiceLabel("privacyNote", lang)}
+      </p>
+      <p className="mt-2 text-xs leading-relaxed text-[#374151]">
+        {voiceLabel("reviewBeforeSubmit", lang)} Clinician review required.
       </p>
       <button
         type="button"
