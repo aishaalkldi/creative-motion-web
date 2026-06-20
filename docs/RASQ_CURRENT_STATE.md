@@ -1,7 +1,7 @@
 # RASQ Current State
 
 **Last updated:** 2026-06-05  
-**Baseline:** `main` through PR103; PR104–PR108 documented; **PR109** gait assessment v1 capture audit documented
+**Baseline:** `main` through PR110; PR111 progress/outcomes hub audit documented
 
 This document is the single source of truth for RASQ platform state during controlled clinic pilots. It is **not** a clinical or legal document. All movement observations require **therapist review**. RASQ does **not** diagnose, score clinically, or make automatic treatment decisions.
 
@@ -27,6 +27,7 @@ This document is the single source of truth for RASQ platform state during contr
 | Heel Raise CV hardening plan (docs) | **PR108** — gap analysis; readiness 68/100; PR109 implementation slices |
 | Gait Assessment v1 capture audit (docs) | **PR109** — bounded walking observation path; after STS testing |
 | Gait Assessment review wiring | **PR110** — STS-style metrics fetch + empty state; no capture |
+| Progress & Outcomes Hub audit (docs) | **PR111** — fragmented data inventory; PR112 hub plan |
 | Balance / Functional Movement / PR forms (Assessment Center) | Coming next |
 
 **Production URL:** https://creative-motion-web.vercel.app
@@ -56,7 +57,11 @@ Patient profile + AI draft (clinician)         ├─ Setup readiness + framing
 
 ---
 
-## Completed PRs (recent — PR99–PR110)
+## Completed PRs (recent — PR99–PR111)
+
+### PR111 — Progress & Outcomes Hub audit (docs only)
+- `docs/progress/PROGRESS_OUTCOMES_HUB_AUDIT.md` — data inventory, care pathway joins, safe outcome views, PR112 plan
+- Verdict: progress data exists but fragmented; unified hub can aggregate existing APIs without migration
 
 ### PR110 — Gait Assessment review surface wiring
 - `/clinician/assessments/gait` — fetches CV session metrics (STS pattern), filters gait exercise IDs, empty state, `CvReviewSummary` when data exists
@@ -215,9 +220,11 @@ Optional camera assist may appear during active portal sessions for:
 
 **Operational:** Execute controlled STS pilot per `docs/pilot/CONTROLLED_STS_PILOT_PLAN.md` before gait capture or heel-raise promotion.
 
-**CV expansion (after STS go):** **PR109 implementation** — Heel Raise hardening per `docs/cv/HEEL_RAISE_CV_HARDENING_PLAN.md` (was labeled PR109a in PR108; rename to avoid clash with this PR109 audit).
+**Product:** **PR112 — Progress & Outcomes Hub v1** — read-only clinician aggregation per `docs/progress/PROGRESS_OUTCOMES_HUB_AUDIT.md` (pain trend, adherence, CV timeline; no clinical improvement claims).
 
-**Assessment Center:** Gait capture (PR111+) **after** STS internal testing per `docs/assessments/GAIT_ASSESSMENT_V1_CAPTURE_AUDIT.md`. Review surface wired in **PR110**.
+**CV expansion (after STS go):** Heel Raise hardening per `docs/cv/HEEL_RAISE_CV_HARDENING_PLAN.md`.
+
+**Assessment Center:** Gait capture after STS internal testing per `docs/assessments/GAIT_ASSESSMENT_V1_CAPTURE_AUDIT.md` (review surface in PR110).
 
 **Alternative product:** **Balance Assessment v1 shell** (PR99 pattern).
 
@@ -239,6 +246,7 @@ Suggested close comment:
 
 ## Related documents
 
+- `docs/progress/PROGRESS_OUTCOMES_HUB_AUDIT.md` — PR111 progress & outcomes hub audit
 - `docs/assessments/GAIT_ASSESSMENT_V1_CAPTURE_AUDIT.md` — PR109 gait v1 capture audit
 - `docs/cv/HEEL_RAISE_CV_HARDENING_PLAN.md` — PR108 heel-raise gap analysis and implementation slices
 - `docs/cv/CV_EXERCISE_ALLOWLIST_PLAN.md` — PR107 post-STS CV expansion sequence

@@ -1,5 +1,26 @@
 # Project log
 
+## 2026-06-05 — PR111 Progress & Outcomes Hub audit (docs only)
+
+### Summary
+
+Documentation-only audit of patient/clinician progress flows, results queue, session completion, assessments, and CV metrics. Defines safe outcome views and PR112 implementation plan for a unified clinician hub without clinical improvement claims.
+
+### What changed
+
+- `docs/progress/PROGRESS_OUTCOMES_HUB_AUDIT.md` — full audit
+- `docs/RASQ_CURRENT_STATE.md` — PR111 entry, recommended next PR → PR112
+
+### Verdict
+
+Progress data exists across `session_logs`, plans, assessments, and `cv_session_metrics` but is fragmented. PR112 can aggregate read-only without DB migration.
+
+### Safety boundaries
+
+No app code, database, API, AI, diagnosis wording, or clinical improvement claims.
+
+---
+
 ## 2026-06-05 — PR110 Gait Assessment review surface wiring
 
 ### Summary
