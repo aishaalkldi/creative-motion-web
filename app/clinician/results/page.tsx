@@ -452,6 +452,7 @@ function ReviewQueueCard({
   onAcknowledged: (reviewedAt: string) => void;
 }) {
   const profileHref = `/clinician/patients/${card.patientId}`;
+  const outcomesHref = `/clinician/patients/${card.patientId}/outcomes`;
   const planHref = `${profileHref}#rehabilitation-plan`;
   const styles =
     card.clinicalAction.severity === "high"
@@ -502,6 +503,12 @@ function ReviewQueueCard({
         >
           View plan &amp; sessions
         </Link>
+        <Link
+          href={outcomesHref}
+          className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
+        >
+          Progress &amp; outcomes
+        </Link>
       </div>
 
       <ClinicalReviewActions
@@ -528,6 +535,7 @@ function PatientPipelineCardView({
   const badge = stateBadge(card.state);
   const showRehabMetrics = card.rehab != null && card.state.kind !== "assessment_submitted";
   const profileHref = `/clinician/patients/${card.patientId}`;
+  const outcomesHref = `/clinician/patients/${card.patientId}/outcomes`;
 
   return (
     <article className="rounded-[10px] border border-[#1E2D42] bg-[#0B1220] p-5">
@@ -626,6 +634,12 @@ function PatientPipelineCardView({
             View plan &amp; sessions
           </Link>
         )}
+        <Link
+          href={outcomesHref}
+          className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
+        >
+          Progress &amp; outcomes
+        </Link>
         <Link
           href={profileHref}
           className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"

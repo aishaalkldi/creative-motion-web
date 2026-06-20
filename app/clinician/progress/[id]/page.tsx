@@ -10,15 +10,17 @@ export default function ClinicianProgressRedirectPage() {
   const patientId = String(params.id || "");
 
   useEffect(() => {
-    router.replace(patientId ? `/clinician/patients/${patientId}` : "/clinician/results");
+    router.replace(
+      patientId ? `/clinician/patients/${patientId}/outcomes` : "/clinician/results",
+    );
   }, [router, patientId]);
 
   return (
     <main className="min-h-screen bg-[#0B1220] px-6 py-16 text-white">
       <div className="mx-auto max-w-lg text-center">
-        <p className="text-sm text-white/50">Opening patient progress…</p>
+        <p className="text-sm text-white/50">Opening progress &amp; outcomes…</p>
         <Link
-          href={patientId ? `/clinician/patients/${patientId}` : "/clinician/results"}
+          href={patientId ? `/clinician/patients/${patientId}/outcomes` : "/clinician/results"}
           className="mt-4 inline-block text-sm font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
         >
           Continue →
