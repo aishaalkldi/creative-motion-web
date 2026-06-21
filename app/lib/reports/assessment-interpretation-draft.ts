@@ -1,5 +1,5 @@
 /**
- * PR117 — Rule-based assessment interpretation draft from patient-reported answers.
+ * PR117 + PR118 — Rule-based assessment interpretation draft from patient-reported answers.
  * Therapist review prompts only. No diagnosis, pathology labels, or treatment advice.
  */
 import type {
@@ -7,26 +7,24 @@ import type {
   PatientSectionId,
 } from "@/app/lib/api/remote-assessments";
 import { inferIncludedSections } from "@/app/lib/remote-questionnaire-summary";
+import {
+  matchBiomechanicalRules,
+  type BiomechanicalRegionTag,
+} from "@/app/lib/reports/biomechanical-review-rules";
 
-export type BodyRegionBucket =
-  | "Knee"
-  | "Shoulder"
-  | "Neck"
-  | "Ankle / foot"
-  | "Hip"
-  | "Balance and gait"
-  | "Upper limb"
-  | "Low back"
-  | "General MSK";
+export type BodyRegionBucket = BiomechanicalRegionTag;
 
 export type AssessmentInterpretationDraft = {
   bodyRegionBucket: BodyRegionBucket | null;
+  bodyRegionBuckets: BodyRegionBucket[];
   sufficientDetail: boolean;
+  hasBiomechanicalPrompts: boolean;
   functionalLimitations: string[];
   movementComponents: string[];
   musclePerformanceAreas: string[];
   suggestedObjectiveAssessments: string[];
   confirmationNote: string;
+  matchedRuleIds: string[];
 };
 
 export type BuildAssessmentInterpretationDraftInput = {
@@ -46,103 +44,40 @@ export const FORBIDDEN_INTERPRETATION_TERMS = [
   "will improve",
   "clinical improvement",
   "fall risk",
+  "fall risk prediction",
   "pathology",
+  "osteoarthritis",
+  "meniscus",
+  "meniscus injury",
+  "impingement",
+  "radiculopathy",
+  "grade 3 weakness",
+  "mmt +3",
+  "mmt grade",
+  "limited rom",
+  "rom loss",
+  "weakness confirmed",
+  "weakness grade",
 ] as const;
 
 const FUNCTIONAL_LIMITATION_PREFIX = "Patient-reported limitation:";
-const MOVEMENT_PREFIX = "Movement component that may be relevant to assess:";
+const MOVEMENT_PREFIX = "Movement component for review:";
 const MUSCLE_PREFIX = "Possible muscle performance area for therapist review:";
-const OBJECTIVE_PREFIX = "Suggested therapist assessment:";
+const OBJECTIVE_PREFIX = "Suggested objective PT assessment item:";
 
-const REGION_MOVEMENT: Record<BodyRegionBucket, string[]> = {
-  Shoulder: [
-    "shoulder flexion",
-    "shoulder abduction",
-    "shoulder external rotation",
-    "shoulder internal rotation",
-  ],
-  Knee: ["knee flexion", "knee extension", "squatting", "stair negotiation"],
-  "Low back": ["lumbar flexion", "lumbar extension", "trunk rotation", "sit-to-stand transition"],
-  Neck: ["cervical rotation", "cervical flexion", "cervical extension"],
-  Hip: ["hip flexion", "hip extension", "hip abduction", "single-leg loading"],
-  "Ankle / foot": ["ankle dorsiflexion", "ankle plantarflexion", "foot clearance during gait"],
-  "Upper limb": ["elbow flexion", "wrist movement", "grip-related functional tasks"],
-  "Balance and gait": ["walking tolerance", "turning", "single-leg stance", "step length symmetry"],
-  "General MSK": ["functional reaching", "transfers", "weight-bearing tolerance"],
-};
-
-const REGION_MUSCLE: Record<BodyRegionBucket, string[]> = {
-  Shoulder: ["deltoid", "rotator cuff", "scapular stabilizers"],
-  Knee: ["quadriceps", "hamstrings", "hip abductors"],
-  "Low back": ["lumbar extensors", "core stabilizers", "hip extensors"],
-  Neck: ["deep neck flexors", "scapular stabilizers", "upper trapezius context"],
-  Hip: ["gluteus medius", "gluteus maximus", "hip flexors"],
-  "Ankle / foot": ["calf complex", "ankle invertors and evertors", "intrinsic foot muscles"],
-  "Upper limb": ["forearm flexors and extensors", "grip-related muscle groups", "shoulder girdle stabilizers"],
-  "Balance and gait": ["quadriceps", "gluteus medius", "calf complex"],
-  "General MSK": ["regional stabilizers relevant to reported tasks"],
-};
-
-const REGION_OBJECTIVE: Record<BodyRegionBucket, string[]> = {
-  Shoulder: [
-    "active range of motion (AROM)",
-    "passive range of motion (PROM)",
-    "manual muscle testing (MMT) — therapist observation only",
-    "painful arc observation",
-  ],
-  Knee: [
-    "active range of motion (AROM)",
-    "passive range of motion (PROM)",
-    "manual muscle testing (MMT) — therapist observation only",
-    "step-up or stair negotiation observation",
-  ],
-  "Low back": [
-    "active range of motion (AROM)",
-    "repeated flexion or extension observation",
-    "sit-to-stand observation",
-    "functional task tolerance observation",
-  ],
-  Neck: [
-    "active range of motion (AROM)",
-    "passive range of motion (PROM)",
-    "cervical movement observation during functional tasks",
-  ],
-  Hip: [
-    "active range of motion (AROM)",
-    "passive range of motion (PROM)",
-    "manual muscle testing (MMT) — therapist observation only",
-    "single-leg stance observation",
-  ],
-  "Ankle / foot": [
-    "active range of motion (AROM)",
-    "weight-bearing tolerance observation",
-    "gait observation",
-  ],
-  "Upper limb": [
-    "active range of motion (AROM)",
-    "passive range of motion (PROM)",
-    "functional grip or reach observation",
-  ],
-  "Balance and gait": [
-    "timed walking observation",
-    "turning observation",
-    "single-leg stance observation",
-    "assistive device use observation",
-  ],
-  "General MSK": [
-    "active range of motion (AROM)",
-    "passive range of motion (PROM)",
-    "functional task observation",
-  ],
-};
+const MAX_MOVEMENT_ITEMS = 6;
+const MAX_MUSCLE_ITEMS = 4;
+const MAX_OBJECTIVE_ITEMS = 4;
 
 const ACTIVITY_LIMITATION_RULES: { pattern: RegExp; phrase: string }[] = [
   { pattern: /\b(overhead|above\s*head|reach(?:ing)?\s*(?:up|over))\b/i, phrase: "difficulty with overhead reaching" },
-  { pattern: /\b(groom|dress|shirt|hair|comb)\b/i, phrase: "difficulty with grooming or dressing tasks" },
-  { pattern: /\b(stair|step(?:s)?\s*up|climb)\b/i, phrase: "difficulty with stair climbing" },
+  { pattern: /\b(comb\s*(?:my\s*)?hair|wash\s*(?:my\s*)?hair|groom)\b/i, phrase: "difficulty with grooming or hair care tasks" },
+  { pattern: /\b(behind\s*(?:the\s*)?back|bra\s*clasp|do\s*(?:my\s*)?bra)\b/i, phrase: "difficulty with hand-behind-back or dressing tasks" },
+  { pattern: /\b(stairs?|step(?:s)?\s*up|climb)\b/i, phrase: "difficulty with stair climbing" },
   { pattern: /\b(walk|walking|gait|march)\b/i, phrase: "difficulty with walking tolerance" },
-  { pattern: /\b(squat|sit\s*to\s*stand|stand\s*from\s*chair)\b/i, phrase: "difficulty with sit-to-stand or squatting tasks" },
-  { pattern: /\b(balance|unsteady|steady)\b/i, phrase: "difficulty with balance during daily tasks" },
+  { pattern: /\b(squat|sit\s*to\s*stand|stand\s*from\s*chair|getting\s*up)\b/i, phrase: "difficulty with sit-to-stand or rising tasks" },
+  { pattern: /\b(sitting|prolonged\s*sit)\b/i, phrase: "difficulty with prolonged sitting or rising from seated" },
+  { pattern: /\b(balance|unsteady)\b/i, phrase: "difficulty with balance during daily tasks" },
   { pattern: /\b(lift|carry|grocer|object)\b/i, phrase: "difficulty lifting or carrying objects" },
   { pattern: /\b(sleep|night|rest)\b/i, phrase: "sleep or rest disruption related to reported symptoms" },
   { pattern: /\b(work|job|desk|office)\b/i, phrase: "difficulty with work-related tasks" },
@@ -168,6 +103,22 @@ function bucketPainLocation(text: string): BodyRegionBucket | null {
   if (/\b(full\s*body|general|multiple|عام)\b/.test(t)) return "General MSK";
 
   return null;
+}
+
+function inferRegionBucketsFromCorpus(corpus: string): BodyRegionBucket[] {
+  const buckets: BodyRegionBucket[] = [];
+  const add = (bucket: BodyRegionBucket | null) => {
+    if (!bucket || buckets.includes(bucket)) return;
+    buckets.push(bucket);
+  };
+
+  const segments = corpus.split(/\n+/);
+  for (const segment of segments) {
+    add(bucketPainLocation(segment));
+  }
+  add(bucketPainLocation(corpus));
+
+  return buckets;
 }
 
 function readMetaTranslation(
@@ -256,10 +207,10 @@ function collectTextCorpus(
 
 function containsForbiddenTerm(text: string): boolean {
   const normalized = normalizeText(text);
-  return FORBIDDEN_INTERPRETATION_TERMS.some((term) => normalized.includes(term));
+  return FORBIDDEN_INTERPRETATION_TERMS.some((term) => normalized.includes(term.trim()));
 }
 
-function sanitizeLine(text: string): string | null {
+function sanitizeItem(text: string): string | null {
   const trimmed = text.trim();
   if (!trimmed || containsForbiddenTerm(trimmed)) return null;
   return trimmed;
@@ -280,7 +231,7 @@ function dedupe(items: string[]): string[] {
 function prefixLines(prefix: string, items: string[]): string[] {
   return dedupe(
     items
-      .map((item) => sanitizeLine(item))
+      .map((item) => sanitizeItem(item))
       .filter((item): item is string => Boolean(item))
       .map((item) => `${prefix} ${item}`),
   );
@@ -330,27 +281,43 @@ function buildFunctionalLimitations(
 ): string[] {
   const activityLines = inferActivityLimitations(corpus);
   const directLines = inferDirectLimitationSnippets(draft, submissionMeta);
-
   const combined = dedupe([...activityLines, ...directLines]);
   if (combined.length === 0) return [];
-
   return prefixLines(FUNCTIONAL_LIMITATION_PREFIX, combined);
 }
 
-function inferRegionBucket(
-  draft: PatientAssessmentDraft,
-  submissionMeta: Record<string, unknown> | null | undefined,
-  corpus: string,
-): BodyRegionBucket | null {
-  const painLocation = readField(draft, submissionMeta, "painLocation", draft.pain?.painLocation);
-  const fromLocation = bucketPainLocation(painLocation);
-  if (fromLocation) return fromLocation;
+function collectBiomechanicalItems(
+  matchedRules: ReturnType<typeof matchBiomechanicalRules>,
+): {
+  movement: string[];
+  muscle: string[];
+  objective: string[];
+  regionTags: BodyRegionBucket[];
+  matchedRuleIds: string[];
+} {
+  const movement: string[] = [];
+  const muscle: string[] = [];
+  const objective: string[] = [];
+  const regionTags: BodyRegionBucket[] = [];
+  const matchedRuleIds: string[] = [];
 
-  return bucketPainLocation(corpus);
-}
+  for (const rule of matchedRules) {
+    matchedRuleIds.push(rule.id);
+    movement.push(...rule.movementForReview);
+    muscle.push(...rule.muscleForReview);
+    objective.push(...rule.objectiveForReview);
+    for (const tag of rule.regionTags ?? []) {
+      if (!regionTags.includes(tag)) regionTags.push(tag);
+    }
+  }
 
-function regionOrGeneral(region: BodyRegionBucket | null): BodyRegionBucket {
-  return region ?? "General MSK";
+  return {
+    movement: dedupe(movement),
+    muscle: dedupe(muscle),
+    objective: dedupe(objective),
+    regionTags,
+    matchedRuleIds,
+  };
 }
 
 export function buildAssessmentInterpretationDraft(
@@ -359,43 +326,65 @@ export function buildAssessmentInterpretationDraft(
   const { draft, submissionMeta = null } = input;
   const includedSections = input.includedSections ?? inferIncludedSections(draft);
   const corpus = collectTextCorpus(draft, submissionMeta);
-  const bodyRegionBucket = inferRegionBucket(draft, submissionMeta, corpus);
-  const region = regionOrGeneral(bodyRegionBucket);
+
+  const painLocation = readField(draft, submissionMeta, "painLocation", draft.pain?.painLocation);
+  const locationBucket = bucketPainLocation(painLocation);
+  const corpusBuckets = inferRegionBucketsFromCorpus(corpus);
+
+  const matchedRules = matchBiomechanicalRules(corpus);
+  const biomechanical = collectBiomechanicalItems(matchedRules);
+
+  const bodyRegionBuckets = dedupe([
+    ...biomechanical.regionTags,
+    ...(locationBucket ? [locationBucket] : []),
+    ...corpusBuckets,
+  ]) as BodyRegionBucket[];
 
   const functionalLimitations = buildFunctionalLimitations(draft, submissionMeta, corpus);
 
   const movementComponents = prefixLines(
     MOVEMENT_PREFIX,
-    REGION_MOVEMENT[region].slice(0, 4),
+    biomechanical.movement.slice(0, MAX_MOVEMENT_ITEMS),
   );
-
   const musclePerformanceAreas = prefixLines(
     MUSCLE_PREFIX,
-    REGION_MUSCLE[region].slice(0, 3),
+    biomechanical.muscle.slice(0, MAX_MUSCLE_ITEMS),
   );
-
   const suggestedObjectiveAssessments = prefixLines(
     OBJECTIVE_PREFIX,
-    REGION_OBJECTIVE[region].slice(0, 4),
+    biomechanical.objective.slice(0, MAX_OBJECTIVE_ITEMS),
   );
+
+  const hasBiomechanicalPrompts =
+    movementComponents.length > 0 ||
+    musclePerformanceAreas.length > 0 ||
+    suggestedObjectiveAssessments.length > 0;
 
   const hasPatientText = corpus.trim().length >= 12;
   const sufficientDetail =
     includedSections.length > 0 &&
-    (functionalLimitations.length > 0 || hasPatientText);
+    (functionalLimitations.length > 0 || hasBiomechanicalPrompts || hasPatientText);
 
-  const confirmationNote = sufficientDetail
-    ? "Draft only — therapist confirmation required."
-    : "Insufficient patient-reported detail for structured prompts. Draft only — therapist confirmation required.";
+  let confirmationNote = "Draft only — therapist confirmation required.";
+  if (!sufficientDetail) {
+    confirmationNote =
+      "Insufficient patient-reported detail for structured prompts. Draft only — therapist confirmation required.";
+  } else if (!hasBiomechanicalPrompts && functionalLimitations.length > 0) {
+    confirmationNote =
+      "No biomechanical review prompts matched patient-reported tasks. Draft only — therapist confirmation required.";
+  }
 
   return {
-    bodyRegionBucket,
+    bodyRegionBucket: bodyRegionBuckets[0] ?? locationBucket,
+    bodyRegionBuckets,
     sufficientDetail,
+    hasBiomechanicalPrompts,
     functionalLimitations,
     movementComponents,
     musclePerformanceAreas,
     suggestedObjectiveAssessments,
     confirmationNote,
+    matchedRuleIds: biomechanical.matchedRuleIds,
   };
 }
 
@@ -411,10 +400,21 @@ export function draftOutputContainsForbiddenTerms(draft: AssessmentInterpretatio
   const hits: string[] = [];
   for (const line of lines) {
     for (const term of FORBIDDEN_INTERPRETATION_TERMS) {
-      if (normalizeText(line).includes(term)) {
+      if (normalizeText(line).includes(term.trim())) {
         hits.push(term);
       }
     }
   }
   return dedupe(hits);
+}
+
+/** Whether the interpretation section should render at all. */
+export function shouldShowAssessmentInterpretationDraft(
+  draft: AssessmentInterpretationDraft,
+): boolean {
+  if (!draft.sufficientDetail) return false;
+  return (
+    draft.functionalLimitations.length > 0 ||
+    draft.hasBiomechanicalPrompts
+  );
 }

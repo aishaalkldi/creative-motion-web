@@ -39,13 +39,14 @@ export const INTERPRETATION_DRAFT_INTRO =
 
 export const INTERPRETATION_DRAFT_FUNCTIONAL_HEADING = "Patient-reported functional limitations";
 
-export const INTERPRETATION_DRAFT_MOVEMENT_HEADING =
-  "Movement components that may be relevant to assess";
+export const INTERPRETATION_DRAFT_MOVEMENT_HEADING = "Movement Components For Review";
 
-export const INTERPRETATION_DRAFT_MUSCLE_HEADING =
-  "Possible muscle performance areas for therapist review";
+export const INTERPRETATION_DRAFT_MUSCLE_HEADING = "Muscle Performance Areas For Review";
 
-export const INTERPRETATION_DRAFT_OBJECTIVE_HEADING = "Suggested objective therapist assessment items";
+export const INTERPRETATION_DRAFT_OBJECTIVE_HEADING = "Suggested Objective PT Assessment Items";
+
+export const INTERPRETATION_DRAFT_NO_BIOMECHANICAL_NOTE =
+  "No biomechanical review prompts matched patient-reported tasks. Therapist confirmation required.";
 
 export const INTERPRETATION_DRAFT_EMPTY_NOTE =
   "Insufficient patient-reported detail to generate structured review prompts. Confirm findings during clinical examination.";
