@@ -1,6 +1,9 @@
 "use client";
 
-import type { AssessmentInterpretationDraft } from "@/app/lib/reports/assessment-interpretation-draft";
+import {
+  shouldShowAssessmentInterpretationDraft,
+  type AssessmentInterpretationDraft,
+} from "@/app/lib/reports/assessment-interpretation-draft";
 import {
   INTERPRETATION_DRAFT_BADGE,
   INTERPRETATION_DRAFT_EMPTY_NOTE,
@@ -8,6 +11,7 @@ import {
   INTERPRETATION_DRAFT_INTRO,
   INTERPRETATION_DRAFT_MOVEMENT_HEADING,
   INTERPRETATION_DRAFT_MUSCLE_HEADING,
+  INTERPRETATION_DRAFT_NO_BIOMECHANICAL_NOTE,
   INTERPRETATION_DRAFT_OBJECTIVE_HEADING,
   SECTION_ASSESSMENT_INTERPRETATION_DRAFT,
 } from "@/app/lib/reports/clinical-report-copy";
@@ -57,12 +61,55 @@ function DraftSubsection({
   );
 }
 
+function DraftBody({ draft, variant }: { draft: AssessmentInterpretationDraft; variant: "screen" | "print" }) {
+  const hasFunctional = draft.functionalLimitations.length > 0;
+  const hasBiomechanical = draft.hasBiomechanicalPrompts;
+
+  if (!hasFunctional && !hasBiomechanical) {
+    const emptyClass =
+      variant === "print" ? "mt-4 text-sm text-gray-700" : "text-sm italic text-white/45";
+    return <p className={emptyClass}>{INTERPRETATION_DRAFT_EMPTY_NOTE}</p>;
+  }
+
+  const noteClass =
+    variant === "print" ? "mt-4 text-sm text-gray-700" : "mt-4 text-sm italic text-white/45";
+
+  return (
+    <>
+      <DraftSubsection
+        title={INTERPRETATION_DRAFT_FUNCTIONAL_HEADING}
+        items={draft.functionalLimitations}
+        variant={variant}
+      />
+      {hasBiomechanical ? (
+        <>
+          <DraftSubsection
+            title={INTERPRETATION_DRAFT_MOVEMENT_HEADING}
+            items={draft.movementComponents}
+            variant={variant}
+          />
+          <DraftSubsection
+            title={INTERPRETATION_DRAFT_MUSCLE_HEADING}
+            items={draft.musclePerformanceAreas}
+            variant={variant}
+          />
+          <DraftSubsection
+            title={INTERPRETATION_DRAFT_OBJECTIVE_HEADING}
+            items={draft.suggestedObjectiveAssessments}
+            variant={variant}
+          />
+        </>
+      ) : hasFunctional ? (
+        <p className={noteClass}>{INTERPRETATION_DRAFT_NO_BIOMECHANICAL_NOTE}</p>
+      ) : null}
+    </>
+  );
+}
+
 export function AssessmentInterpretationDraftSection({ draft, variant = "screen" }: Props) {
-  const hasLists =
-    draft.functionalLimitations.length > 0 ||
-    draft.movementComponents.length > 0 ||
-    draft.musclePerformanceAreas.length > 0 ||
-    draft.suggestedObjectiveAssessments.length > 0;
+  if (!shouldShowAssessmentInterpretationDraft(draft)) {
+    return null;
+  }
 
   if (variant === "print") {
     return (
@@ -75,32 +122,7 @@ export function AssessmentInterpretationDraftSection({ draft, variant = "screen"
             </p>
             <p className="mt-2 text-sm leading-relaxed text-amber-950">{INTERPRETATION_DRAFT_INTRO}</p>
           </div>
-          {!hasLists ? (
-            <p className="mt-4 text-sm text-gray-700">{INTERPRETATION_DRAFT_EMPTY_NOTE}</p>
-          ) : (
-            <>
-              <DraftSubsection
-                title={INTERPRETATION_DRAFT_FUNCTIONAL_HEADING}
-                items={draft.functionalLimitations}
-                variant="print"
-              />
-              <DraftSubsection
-                title={INTERPRETATION_DRAFT_MOVEMENT_HEADING}
-                items={draft.movementComponents}
-                variant="print"
-              />
-              <DraftSubsection
-                title={INTERPRETATION_DRAFT_MUSCLE_HEADING}
-                items={draft.musclePerformanceAreas}
-                variant="print"
-              />
-              <DraftSubsection
-                title={INTERPRETATION_DRAFT_OBJECTIVE_HEADING}
-                items={draft.suggestedObjectiveAssessments}
-                variant="print"
-              />
-            </>
-          )}
+          <DraftBody draft={draft} variant="print" />
           <p className="mt-4 text-[11px] leading-relaxed text-gray-600">{draft.confirmationNote}</p>
         </div>
       </section>
@@ -123,32 +145,7 @@ export function AssessmentInterpretationDraftSection({ draft, variant = "screen"
       </div>
 
       <div className="px-6 py-5">
-        {!hasLists ? (
-          <p className="text-sm italic text-white/45">{INTERPRETATION_DRAFT_EMPTY_NOTE}</p>
-        ) : (
-          <>
-            <DraftSubsection
-              title={INTERPRETATION_DRAFT_FUNCTIONAL_HEADING}
-              items={draft.functionalLimitations}
-              variant="screen"
-            />
-            <DraftSubsection
-              title={INTERPRETATION_DRAFT_MOVEMENT_HEADING}
-              items={draft.movementComponents}
-              variant="screen"
-            />
-            <DraftSubsection
-              title={INTERPRETATION_DRAFT_MUSCLE_HEADING}
-              items={draft.musclePerformanceAreas}
-              variant="screen"
-            />
-            <DraftSubsection
-              title={INTERPRETATION_DRAFT_OBJECTIVE_HEADING}
-              items={draft.suggestedObjectiveAssessments}
-              variant="screen"
-            />
-          </>
-        )}
+        <DraftBody draft={draft} variant="screen" />
         <p className="mt-5 text-xs leading-relaxed text-white/40">{draft.confirmationNote}</p>
       </div>
     </section>
