@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export type FieldTranslationState =
   | 'idle'
@@ -14,6 +14,7 @@ export function useTranslationProgress(
   arabicFields: { fieldKey: string; text: string }[],
   existingTranslations: Record<string, string>,
   existingGeneratedAt: Record<string, string> = {},
+  options?: { autoTranslate?: boolean },
 ) {
   const initialStates: Record<string, FieldTranslationState> = Object.fromEntries(
     arabicFields.map((f) => [
@@ -78,6 +79,17 @@ export function useTranslationProgress(
       toTranslate.map((f) => translateField(f.fieldKey, f.text)),
     )
   }, [arabicFields, states, translateField])
+
+  const autoTranslateStarted = useRef(false)
+  useEffect(() => {
+    if (!options?.autoTranslate || !assessmentId || autoTranslateStarted.current) return
+    const pending = arabicFields.filter((f) => !existingTranslations[`${f.fieldKey}_en`])
+    if (pending.length === 0) return
+    autoTranslateStarted.current = true
+    void Promise.allSettled(
+      pending.map((f) => translateField(f.fieldKey, f.text)),
+    )
+  }, [options?.autoTranslate, assessmentId, arabicFields, existingTranslations, translateField])
 
   const doneCount = Object.values(states).filter(
     (s) => s === 'done' || s === 'cached',

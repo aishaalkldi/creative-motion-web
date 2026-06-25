@@ -20,6 +20,10 @@ import {
 } from "@/app/lib/ai/ai-features";
 import { patientReportedLabel } from "@/app/lib/reports/clinical-report-copy";
 import {
+  extractTranslationMeta,
+  isTranslatablePatientFieldKey,
+} from "@/app/lib/reports/patient-clinical-translation";
+import {
   useTranslationProgress,
   type FieldTranslationState,
 } from "@/hooks/useTranslationProgress";
@@ -40,12 +44,6 @@ type Props = {
   }) => void;
 };
 
-const NON_TRANSLATABLE_FIELD_KEYS = new Set(["painScore"]);
-
-function readMetaBoolean(meta: Record<string, unknown> | null | undefined, key: string): boolean {
-  return meta?.[key] === true;
-}
-
 function isVoiceAnswered(
   submissionMeta: Record<string, unknown> | null | undefined,
   fieldKey: string | undefined,
@@ -61,38 +59,19 @@ function collectArabicFields(
     .flatMap((block) => block.entries)
     .filter(
       (entry) =>
-        entry.fieldKey &&
-        !NON_TRANSLATABLE_FIELD_KEYS.has(entry.fieldKey) &&
+        isTranslatablePatientFieldKey(entry.fieldKey) &&
         entry.value.trim(),
     )
     .map((entry) => ({ fieldKey: entry.fieldKey!, text: entry.value }));
 }
 
-function extractTranslationMeta(meta: Record<string, unknown> | null | undefined): {
-  translations: Record<string, string>;
-  generatedAt: Record<string, string>;
-} {
-  const translations: Record<string, string> = {};
-  const generatedAt: Record<string, string> = {};
-  if (!meta) return { translations, generatedAt };
-
-  for (const [key, value] of Object.entries(meta)) {
-    if (!key.endsWith("_en") || key.endsWith("_en_generated_at") || key.endsWith("_en_reviewed")) {
-      continue;
-    }
-    if (typeof value !== "string" || !value.trim()) continue;
-    translations[key] = value.trim();
-    const baseKey = key.replace(/_en$/, "");
-    const atValue = meta[`${baseKey}_en_generated_at`];
-    if (typeof atValue === "string" && atValue.trim()) {
-      generatedAt[baseKey] = atValue.trim();
-    }
-  }
-  return { translations, generatedAt };
+function readMetaBoolean(meta: Record<string, unknown> | null | undefined, key: string): boolean {
+  return meta?.[key] === true;
 }
 
 /**
- * English-only clinician view of patient-submitted assessment answers.
+ * Clinician review of patient-submitted assessment answers.
+ * Arabic submissions preserve the original answer with clinical English underneath when available.
  */
 export function PatientSubmittedAnswersReview({
   patientDraft,
@@ -121,6 +100,7 @@ export function PatientSubmittedAnswersReview({
     arabicFields,
     existingTranslations,
     existingGeneratedAt,
+    { autoTranslate: aiTranslationEnabled && assessmentLanguage === "ar" && !!assessmentId },
   );
 
   const {
@@ -199,7 +179,7 @@ export function PatientSubmittedAnswersReview({
               >
                 {anyLoading
                   ? `Translating ${doneCount} of ${totalCount} fields...`
-                  : "Translate all answers to English"}
+                  : "Regenerate all clinical English translations"}
               </button>
             )}
           </div>
@@ -238,8 +218,7 @@ export function PatientSubmittedAnswersReview({
                 aiTranslationEnabled &&
                 assessmentLanguage === "ar" &&
                 !!assessmentId &&
-                !!fieldKey &&
-                !NON_TRANSLATABLE_FIELD_KEYS.has(fieldKey) &&
+                isTranslatablePatientFieldKey(fieldKey) &&
                 !!entry.value.trim();
 
               return (
@@ -259,6 +238,7 @@ export function PatientSubmittedAnswersReview({
                         existingReviewed={readMetaBoolean(submissionMeta, `${fieldKey}_en_reviewed`)}
                         isVoiceAnswer={voiceAnswered}
                         onTranslate={() => void translateField(fieldKey, entry.value)}
+                        preferAutoTranslate
                       />
                     ) : (
                       <>

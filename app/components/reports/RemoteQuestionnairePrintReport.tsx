@@ -3,6 +3,7 @@ import { buildFullClinicianReview } from "@/app/lib/patient-assessment-questions
 import type { RemoteQuestionnaireSummary } from "@/app/lib/remote-questionnaire-summary";
 import type { AssessmentInterpretationDraft } from "@/app/lib/reports/assessment-interpretation-draft";
 import { AssessmentInterpretationDraftSection } from "@/app/components/reports/AssessmentInterpretationDraftSection";
+import { PatientClinicalTranslationDisplay } from "@/app/components/reports/PatientClinicalTranslationDisplay";
 import {
   CLINICAL_DISCLAIMER_FULL,
   patientReportedLabel,
@@ -13,6 +14,10 @@ import {
   SECTION_PATIENT_REPORTED_SUMMARY,
   SECTION_SAFETY_INDICATORS,
 } from "@/app/lib/reports/clinical-report-copy";
+import {
+  isTranslatablePatientFieldKey,
+  readStoredClinicalTranslation,
+} from "@/app/lib/reports/patient-clinical-translation";
 import { ReportPrintLayout, ReportPrintSection } from "./ReportPrintLayout";
 
 function PrintFieldRows({ rows }: { rows: { label: string; value: string }[] }) {
@@ -67,32 +72,30 @@ function PrintSubmittedAnswers({
           <dl className="divide-y divide-gray-200">
             {block.entries.map((entry) => {
               const fieldKey = entry.fieldKey;
-              const translation =
-                assessmentLanguage === "ar" &&
-                fieldKey &&
-                fieldKey !== "painScore" &&
-                typeof submissionMeta?.[`${fieldKey}_en`] === "string"
-                  ? (submissionMeta[`${fieldKey}_en`] as string).trim()
-                  : "";
+              const showBilingual =
+                assessmentLanguage === "ar" && isTranslatablePatientFieldKey(fieldKey);
+              const clinicalEnglish = showBilingual && fieldKey
+                ? readStoredClinicalTranslation(submissionMeta, fieldKey)
+                : "";
 
               return (
                 <div key={`${block.section}-${entry.label}`} className="px-3 py-2.5">
                   <dt className="text-[10px] font-semibold uppercase tracking-wider text-gray-500">
                     {patientReportedLabel(entry.label)}
                   </dt>
-                  <dd className="mt-0.5 text-sm leading-relaxed text-gray-900 whitespace-pre-wrap" dir="rtl">
-                    {entry.value}
+                  <dd className="mt-0.5">
+                    {showBilingual ? (
+                      <PatientClinicalTranslationDisplay
+                        originalText={entry.value}
+                        clinicalEnglish={clinicalEnglish}
+                        variant="print"
+                      />
+                    ) : (
+                      <p className="text-sm leading-relaxed text-gray-900 whitespace-pre-wrap">
+                        {entry.value}
+                      </p>
+                    )}
                   </dd>
-                  {translation ? (
-                    <div className="mt-2 rounded border-l-2 border-[#1D9E75] bg-[#F0FAF6] px-3 py-2">
-                      <p className="text-[10px] italic text-gray-500">
-                        Translation for clinician review — verify before clinical use
-                      </p>
-                      <p className="mt-1 text-sm leading-relaxed text-[#0D6B4F] whitespace-pre-wrap">
-                        {translation}
-                      </p>
-                    </div>
-                  ) : null}
                 </div>
               );
             })}

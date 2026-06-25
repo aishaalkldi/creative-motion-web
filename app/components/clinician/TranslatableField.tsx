@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AILabel } from "@/app/components/clinician/AILabel";
+import { PatientClinicalTranslationDisplay } from "@/app/components/reports/PatientClinicalTranslationDisplay";
 
 type Props = {
   assessmentId: string;
@@ -13,6 +14,7 @@ type Props = {
   existingReviewed?: boolean;
   isVoiceAnswer?: boolean;
   onTranslate: () => void;
+  preferAutoTranslate?: boolean;
 };
 
 export function TranslatableField({
@@ -25,6 +27,7 @@ export function TranslatableField({
   existingReviewed = false,
   isVoiceAnswer = false,
   onTranslate,
+  preferAutoTranslate = false,
 }: Props) {
   const [reviewed, setReviewed] = useState(existingReviewed);
   const [reviewSaving, setReviewSaving] = useState(false);
@@ -51,59 +54,27 @@ export function TranslatableField({
 
   return (
     <div className="space-y-2">
-      <p dir="rtl" className="text-sm leading-relaxed text-white/80 whitespace-pre-wrap">
-        {isVoiceAnswer ? (
-          <span className="mr-1 inline-block text-[10px] text-[#9CA3AF]" aria-hidden>
-            🎤
-          </span>
-        ) : null}
-        {arabicText}
-      </p>
-      {isVoiceAnswer ? (
-        <p className="text-[10px] italic text-[#6B7280] print:hidden">
-          Patient answered by voice — text as transcribed. Review before clinical use.
-        </p>
-      ) : null}
+      <PatientClinicalTranslationDisplay
+        originalText={arabicText}
+        clinicalEnglish={showTranslation ? translation : ""}
+        isVoiceAnswer={isVoiceAnswer}
+        isLoading={fieldState === "loading"}
+        variant="screen"
+      />
 
-      {fieldState === "idle" && (
+      {fieldState === "idle" && !preferAutoTranslate && (
         <button
           type="button"
           onClick={onTranslate}
           className="print:hidden rounded-[6px] border border-[#1E2D42] bg-transparent px-2.5 py-[3px] text-[10px] text-[#6B7280] transition hover:border-[#1D9E75]/40 hover:text-[#9CA3AF]"
           style={{ borderWidth: "0.5px" }}
         >
-          Translate to English
+          Generate clinical English translation
         </button>
-      )}
-
-      {fieldState === "loading" && (
-        <p className="text-[10px] italic text-[#9CA3AF] print:hidden">Translating...</p>
-      )}
-
-      {fieldState === "failed" && (
-        <div className="space-y-1.5 print:hidden">
-          <p className="text-[10px] italic text-[#9CA3AF]">Translation unavailable. Try again.</p>
-          <button
-            type="button"
-            onClick={onTranslate}
-            className="rounded-[6px] border border-[#1E2D42] bg-transparent px-2.5 py-[3px] text-[10px] text-[#6B7280] transition hover:border-[#1D9E75]/40 hover:text-[#9CA3AF]"
-            style={{ borderWidth: "0.5px" }}
-          >
-            Retry
-          </button>
-        </div>
       )}
 
       {showTranslation && (
         <div className="translation-print-block space-y-1.5">
-          <div
-            className="rounded-[6px] border-l-2 border-[#1D9E75] bg-[#F0FAF6] px-3 py-2"
-            style={{ borderLeftWidth: "2px" }}
-          >
-            <p className="text-[13px] leading-relaxed text-[#0D6B4F] whitespace-pre-wrap">
-              {translation}
-            </p>
-          </div>
           <AILabel generatedAt={generatedAt || undefined} />
           <span
             role="button"
