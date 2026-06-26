@@ -28,6 +28,13 @@ export const SECTION_OVERVIEW = "Patient & Assessment Overview";
 export const PATIENT_REPORTED_INTRO =
   "Information below was submitted by the patient. It is not objective examination findings unless confirmed by the treating physiotherapist.";
 
+export const PATIENT_ANSWER_ORIGINAL_LABEL = "Original:";
+
+export const PATIENT_ANSWER_CLINICAL_ENGLISH_LABEL = "Clinical English:";
+
+export const PATIENT_ANSWER_TRANSLATION_DISCLAIMER =
+  "AI-assisted clinical English translation for clinician convenience only — verify meaning with the patient before clinical use. Not a diagnosis.";
+
 export const SECTION_PATIENT_REPORTED_SUMMARY = "Patient-Reported Summary";
 
 export const SECTION_ASSESSMENT_INTERPRETATION_DRAFT = "Assessment Interpretation Draft";

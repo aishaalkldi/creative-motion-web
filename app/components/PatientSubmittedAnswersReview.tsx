@@ -227,7 +227,7 @@ export function PatientSubmittedAnswersReview({
                     {patientReportedLabel(entry.label)}
                   </dt>
                   <dd className="mt-0.5">
-                    {useTranslation ? (
+                    {useTranslation && fieldKey ? (
                       <TranslatableField
                         assessmentId={assessmentId}
                         fieldKey={fieldKey}
