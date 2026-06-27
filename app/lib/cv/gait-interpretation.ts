@@ -1,24 +1,14 @@
 /**
  * PR120 — Assistive gait interpretation for clinician review.
  * Rule-based only. No diagnosis, pathology labels, or treatment advice.
+ *
+ * Measured values are shown by CvReviewSummary; this module adds assistive interpretation only.
  */
 
 import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
-import {
-  formatCvDuration,
-  formatCvMovementDetected,
-  formatCvRecordedAt,
-  formatCvTrackingSignal,
-} from "@/app/lib/cv/cv-metrics-display";
 import { isGaitAssessmentExerciseId } from "@/app/lib/cv/gait-assessment-exercise-ids";
 
-export type GaitMeasuredFinding = {
-  label: string;
-  value: string;
-};
-
 export type GaitAssistiveInterpretation = {
-  measuredFindings: GaitMeasuredFinding[];
   interpretationLines: string[];
   reviewPrompts: string[];
   disclaimer: string;
@@ -40,38 +30,6 @@ export const GAIT_INTERPRETATION_FORBIDDEN_TERMS = [
 
 function normalizeTracking(quality: string | null | undefined): string {
   return quality?.trim().toLowerCase() ?? "";
-}
-
-function buildMeasuredFindings(
-  metric: Pick<
-    CvSessionMetricPublic,
-    "sessionDurationS" | "repCount" | "trackingQuality" | "movementDetected" | "recordedAt"
-  >,
-): GaitMeasuredFinding[] {
-  const findings: GaitMeasuredFinding[] = [
-    {
-      label: "Walking duration",
-      value: formatCvDuration(metric.sessionDurationS),
-    },
-    {
-      label: "Movement detected",
-      value: formatCvMovementDetected(metric.movementDetected),
-    },
-    {
-      label: "Tracking signal",
-      value: formatCvTrackingSignal(metric.trackingQuality),
-    },
-    {
-      label: "Step/cycle estimate",
-      value: metric.repCount != null ? String(metric.repCount) : "Not recorded",
-    },
-    {
-      label: "Recorded",
-      value: formatCvRecordedAt(metric.recordedAt),
-    },
-  ];
-
-  return findings;
 }
 
 function buildInterpretationLines(
@@ -163,21 +121,8 @@ export function buildGaitAssistiveInterpretation(
 ): GaitAssistiveInterpretation | null {
   if (!shouldShowGaitInterpretation(metric)) return null;
 
-  const measuredFindings = buildMeasuredFindings(metric);
-  const interpretationLines = buildInterpretationLines(metric);
-
-  if (interpretationLines.length === 0) {
-    return {
-      measuredFindings,
-      interpretationLines: [],
-      reviewPrompts: [],
-      disclaimer: GAIT_INTERPRETATION_DISCLAIMER,
-    };
-  }
-
   return {
-    measuredFindings,
-    interpretationLines,
+    interpretationLines: buildInterpretationLines(metric),
     reviewPrompts: buildReviewPrompts(metric),
     disclaimer: GAIT_INTERPRETATION_DISCLAIMER,
   };
@@ -188,7 +133,6 @@ export function gaitInterpretationContainsForbiddenTerms(
   interpretation: GaitAssistiveInterpretation,
 ): string[] {
   const corpus = [
-    ...interpretation.measuredFindings.map((item) => `${item.label} ${item.value}`),
     ...interpretation.interpretationLines,
     ...interpretation.reviewPrompts,
     interpretation.disclaimer,

@@ -1,37 +1,10 @@
-"use client";
-
-import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
-import {
-  buildGaitAssistiveInterpretation,
-  type GaitAssistiveInterpretation,
-} from "@/app/lib/cv/gait-interpretation";
+import type { GaitAssistiveInterpretation } from "@/app/lib/cv/gait-interpretation";
 
 type Props = {
-  metric: CvSessionMetricPublic;
+  interpretation: GaitAssistiveInterpretation;
 };
 
-function FindingList({ findings }: { findings: GaitAssistiveInterpretation["measuredFindings"] }) {
-  return (
-    <dl className="mt-2 space-y-2">
-      {findings.map((finding) => (
-        <div
-          key={finding.label}
-          className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4"
-        >
-          <dt className="text-[10px] uppercase tracking-[0.06em] text-[#6B7280]">{finding.label}</dt>
-          <dd className="text-xs text-[#F9FAFB] sm:text-right">{finding.value}</dd>
-        </div>
-      ))}
-    </dl>
-  );
-}
-
-export function GaitInterpretationSection({ metric }: Props) {
-  const interpretation = buildGaitAssistiveInterpretation(metric);
-  if (!interpretation) return null;
-
-  const hasAssistiveLines = interpretation.interpretationLines.length > 0;
-
+export function GaitInterpretationSection({ interpretation }: Props) {
   return (
     <section className="mt-4 rounded-[8px] border border-[#1E2D42] bg-[#0F1825] p-4">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -43,39 +16,35 @@ export function GaitInterpretationSection({ metric }: Props) {
         </span>
       </div>
 
-      <div className="mt-3">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
-          Measured findings
-        </p>
-        <FindingList findings={interpretation.measuredFindings} />
-      </div>
+      <p className="mt-3 text-[10px] leading-relaxed text-white/40">
+        Based on the measured values above — assistive interpretation only, not objective examination
+        findings.
+      </p>
 
-      {hasAssistiveLines ? (
-        <>
-          <div className="mt-4 border-t border-[#1E2D42] pt-4">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-[#EF9F27]">
-              Assistive interpretation
-            </p>
-            <ul className="mt-2 list-inside list-disc space-y-1.5 text-[11px] leading-relaxed text-white/75">
-              {interpretation.interpretationLines.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-          </div>
+      {interpretation.interpretationLines.length > 0 ? (
+        <div className="mt-4 border-t border-[#1E2D42] pt-4">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-[#EF9F27]">
+            Assistive interpretation
+          </p>
+          <ul className="mt-2 list-inside list-disc space-y-1.5 text-[11px] leading-relaxed text-white/75">
+            {interpretation.interpretationLines.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
-          {interpretation.reviewPrompts.length > 0 ? (
-            <div className="mt-4 border-t border-[#1E2D42] pt-4">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
-                Suggested review focus
-              </p>
-              <ul className="mt-2 list-inside list-disc space-y-1.5 text-[11px] leading-relaxed text-white/65">
-                {interpretation.reviewPrompts.map((line) => (
-                  <li key={line}>{line}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </>
+      {interpretation.reviewPrompts.length > 0 ? (
+        <div className="mt-4 border-t border-[#1E2D42] pt-4">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
+            Suggested review focus
+          </p>
+          <ul className="mt-2 list-inside list-disc space-y-1.5 text-[11px] leading-relaxed text-white/65">
+            {interpretation.reviewPrompts.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
       ) : null}
 
       <p className="mt-4 text-[10px] leading-relaxed text-white/35">{interpretation.disclaimer}</p>

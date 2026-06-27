@@ -36,11 +36,9 @@ describe("shouldShowGaitInterpretation", () => {
 });
 
 describe("buildGaitAssistiveInterpretation", () => {
-  it("separates measured findings from assistive interpretation lines", () => {
+  it("returns assistive interpretation lines and review prompts only", () => {
     const result = buildGaitAssistiveInterpretation(BASE_METRIC);
     assert.ok(result);
-    assert.ok(result.measuredFindings.some((item) => item.label === "Walking duration"));
-    assert.ok(result.measuredFindings.some((item) => item.label === "Step/cycle estimate"));
     assert.ok(result.interpretationLines.length > 0);
     assert.ok(result.reviewPrompts.length > 0);
     assert.match(result.disclaimer, /Therapist confirmation required/);

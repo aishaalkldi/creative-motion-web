@@ -25,6 +25,7 @@ import {
   hasDisplayableMotionAnalysisReport,
   motionAnalysisInputFromCvMetric,
 } from "@/app/lib/cv/motion-analysis-report";
+import { buildGaitAssistiveInterpretation } from "@/app/lib/cv/gait-interpretation";
 import { isGaitAssessmentExerciseId } from "@/app/lib/cv/gait-assessment-exercise-ids";
 
 type CvReviewVariant = "lab" | "patient-profile";
@@ -85,6 +86,7 @@ function SessionReviewCard({
 }) {
   const highlightPatient = profileMode && row.source === "patient_session";
   const isGaitSession = isGaitAssessmentExerciseId(row.exerciseId);
+  const gaitInterpretation = isGaitSession ? buildGaitAssistiveInterpretation(row) : null;
   const motionReport = buildMotionAnalysisReport(motionAnalysisInputFromCvMetric(row));
   const showMotionReport = !isGaitSession && hasDisplayableMotionAnalysisReport(motionReport);
 
@@ -119,7 +121,7 @@ function SessionReviewCard({
           />
         ) : null}
         <MetricRow
-          label={profileMode ? cvDurationMetricLabel(row.exerciseId) : "Duration"}
+          label={cvDurationMetricLabel(row.exerciseId)}
           value={formatCvDuration(row.sessionDurationS)}
         />
         <MetricRow
@@ -141,7 +143,9 @@ function SessionReviewCard({
           </>
         ) : null}
       </dl>
-      {isGaitSession ? <GaitInterpretationSection metric={row} /> : null}
+      {gaitInterpretation ? (
+        <GaitInterpretationSection interpretation={gaitInterpretation} />
+      ) : null}
       {showMotionReport ? <MotionAnalysisReportPanel report={motionReport} /> : null}
       {showPatientLink && row.patientId ? (
         <Link
