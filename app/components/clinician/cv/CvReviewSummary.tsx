@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { GaitInterpretationSection } from "@/app/components/clinician/cv/GaitInterpretationSection";
 import { MotionAnalysisReportPanel } from "@/app/components/clinician/cv/MotionAnalysisReportPanel";
 import { dedupeCvMetricsByPlanSessionExercise } from "@/app/lib/cv/cv-metrics-dedupe";
 import {
@@ -24,6 +25,7 @@ import {
   hasDisplayableMotionAnalysisReport,
   motionAnalysisInputFromCvMetric,
 } from "@/app/lib/cv/motion-analysis-report";
+import { isGaitAssessmentExerciseId } from "@/app/lib/cv/gait-assessment-exercise-ids";
 
 type CvReviewVariant = "lab" | "patient-profile";
 
@@ -82,8 +84,9 @@ function SessionReviewCard({
   profileMode: boolean;
 }) {
   const highlightPatient = profileMode && row.source === "patient_session";
+  const isGaitSession = isGaitAssessmentExerciseId(row.exerciseId);
   const motionReport = buildMotionAnalysisReport(motionAnalysisInputFromCvMetric(row));
-  const showMotionReport = hasDisplayableMotionAnalysisReport(motionReport);
+  const showMotionReport = !isGaitSession && hasDisplayableMotionAnalysisReport(motionReport);
 
   return (
     <article
@@ -138,6 +141,7 @@ function SessionReviewCard({
           </>
         ) : null}
       </dl>
+      {isGaitSession ? <GaitInterpretationSection metric={row} /> : null}
       {showMotionReport ? <MotionAnalysisReportPanel report={motionReport} /> : null}
       {showPatientLink && row.patientId ? (
         <Link
