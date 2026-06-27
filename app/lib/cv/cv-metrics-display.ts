@@ -1,4 +1,5 @@
 import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
+import { isGaitAssessmentExerciseId } from "@/app/lib/cv/gait-assessment-exercise-ids";
 
 /** Public derived CV metrics shape from GET /api/cv/session-metrics */
 
@@ -86,11 +87,15 @@ export function isHoldClassCvExercise(exerciseId: string | null | undefined): bo
 }
 
 export function cvDurationMetricLabel(exerciseId: string | null | undefined): string {
-  return isHoldClassCvExercise(exerciseId) ? "Assistive hold tracked" : "Duration";
+  if (isHoldClassCvExercise(exerciseId)) return "Assistive hold tracked";
+  if (isGaitAssessmentExerciseId(exerciseId)) return "Walking duration";
+  return "Duration";
 }
 
 export function cvRepMetricLabel(exerciseId: string | null | undefined): string | null {
-  return isHoldClassCvExercise(exerciseId) ? null : "Reps";
+  if (isHoldClassCvExercise(exerciseId)) return null;
+  if (isGaitAssessmentExerciseId(exerciseId)) return "Step/cycle estimate";
+  return "Reps";
 }
 
 export function formatCvPrototypeLabel(version: string | null | undefined): string {
