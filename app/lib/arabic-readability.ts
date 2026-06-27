@@ -1,7 +1,7 @@
 import type { AssessmentLanguage } from "./assessment-payload";
 
 export const ARABIC_READABILITY_NOTICE =
-  "Arabic patient answers are shown as originally submitted. Use 'Generate English Translation' to create an AI-assisted English translation for clinician review. AI-assisted translation — clinician review required.";
+  "Arabic patient answers are shown as originally submitted. Clinical English translations are generated automatically for clinician review when available. AI-assisted translation — verify meaning with the patient before clinical use.";
 
 export function containsArabic(text: string): boolean {
   return /[\u0600-\u06FF\u0750-\u077F]/.test(text);
