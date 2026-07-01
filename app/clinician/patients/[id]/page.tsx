@@ -68,7 +68,8 @@ import { ClinicalActionCard } from "../../../components/clinician/ClinicalAction
 import { PatientJourneyTimeline } from "../../../components/clinician/PatientJourneyTimeline";
 import { CvPatientCvMetricsSection } from "../../../components/clinician/cv/CvPatientCvMetricsSection";
 import { AiClinicianSummaryCard } from "../../../components/clinician/AiClinicianSummaryCard";
-import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
+import { getCvReadyExercises } from "@/app/lib/cv/cv-ready-exercises";
+import { GAIT_ASSESSMENT_EXERCISE_DISPLAY_NAMES } from "@/app/lib/cv/gait-assessment-exercise-ids";
 import { indexCvMetricsByPlanSessionId } from "@/app/lib/cv/clinician-session-camera-status";
 import { useCvSessionMetrics } from "@/app/hooks/useCvSessionMetrics";
 import { PatientAdherenceSummary } from "../../../components/clinician/PatientAdherenceSummary";
@@ -121,6 +122,11 @@ export default function PatientProfilePage() {
   const [patientPlanRows, setPatientPlanRows] = useState<PlanRow[]>([]);
   const [previousPlanRows, setPreviousPlanRows] = useState<PlanRow[]>([]);
   const [timelineBundle, setTimelineBundle] = useState<PatientTimelineBundle | null>(null);
+  const { metrics: patientCvMetrics } = useCvSessionMetrics({
+    patientId: patient?.id,
+    limit: 30,
+    dedupePatientSessions: false,
+  });
 
   // Remote assessment state
   const [sendModalOpen, setSendModalOpen] = useState(false);
@@ -516,6 +522,17 @@ export default function PatientProfilePage() {
     });
   }, [clinicalFocusLabels, clinicalSummary?.hasRedFlag]);
 
+  const cvExerciseNameById = useMemo<Record<string, string>>(
+    () => ({
+      ...Object.fromEntries(
+        getCvReadyExercises().map((exercise) => [exercise.exerciseId, exercise.nameEn]),
+      ),
+      ...GAIT_ASSESSMENT_EXERCISE_DISPLAY_NAMES,
+      "timed-up-and-go": "Timed Up and Go",
+    }),
+    [],
+  );
+
   const rehabilitationTimelineEvents = useMemo(() => {
     return buildPatientTimeline({
       assessments: supabaseAssessmentRows.map((row) => ({
@@ -551,8 +568,18 @@ export default function PatientProfilePage() {
         status: req.status,
         submittedAt: req.submittedAt,
       })),
+      cvCaptures: patientCvMetrics
+        .filter((row) => row.source === "assessment_movement" || row.source === "patient_session")
+        .map((row) => ({
+          id: row.id,
+          recordedAt: row.recordedAt,
+          exerciseId: row.exerciseId,
+          exerciseLabel: cvExerciseNameById[row.exerciseId] ?? row.exerciseId,
+          sessionDurationS: row.sessionDurationS,
+          source: row.source,
+        })),
     });
-  }, [supabaseAssessmentRows, patientPlanRows, timelineBundle, remoteAssessments]);
+  }, [supabaseAssessmentRows, patientPlanRows, timelineBundle, remoteAssessments, patientCvMetrics, cvExerciseNameById]);
 
   const clinicalSummaryArabicNotice = useMemo(() => {
     if (!clinicalSummary || !clinicalSummaryRow) return false;
