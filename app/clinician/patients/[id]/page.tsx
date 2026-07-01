@@ -70,6 +70,7 @@ import { CvPatientCvMetricsSection } from "../../../components/clinician/cv/CvPa
 import { AiClinicianSummaryCard } from "../../../components/clinician/AiClinicianSummaryCard";
 import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
 import { indexCvMetricsByPlanSessionId } from "@/app/lib/cv/clinician-session-camera-status";
+import { useCvSessionMetrics } from "@/app/hooks/useCvSessionMetrics";
 import { PatientAdherenceSummary } from "../../../components/clinician/PatientAdherenceSummary";
 import {
   formatLastSessionCompletedLine,
@@ -1946,26 +1947,7 @@ function TreatmentPlanSection({
   loading,
 }: TreatmentPlanSectionProps) {
   const structuredPlanHref = `/clinician/plans/new?patientId=${encodeURIComponent(patientId)}`;
-  const [cvMetrics, setCvMetrics] = useState<CvSessionMetricPublic[]>([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const res = await fetch(
-          `/api/cv/session-metrics?patientId=${encodeURIComponent(patientId)}&limit=50`,
-        );
-        if (!res.ok || cancelled) return;
-        const data = (await res.json()) as { metrics?: CvSessionMetricPublic[] };
-        if (!cancelled) setCvMetrics(data.metrics ?? []);
-      } catch {
-        if (!cancelled) setCvMetrics([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [patientId]);
+  const { metrics: cvMetrics } = useCvSessionMetrics({ patientId, limit: 50 });
 
   const cvMetricsByPlanSessionId = useMemo(
     () => indexCvMetricsByPlanSessionId(cvMetrics),

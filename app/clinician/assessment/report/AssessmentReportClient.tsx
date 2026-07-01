@@ -8,8 +8,6 @@ import type { AssessmentData } from "@/app/lib/assessment-types";
 import type { AssessmentDetailResponse } from "@/app/api/assessments/[id]/route";
 import {
   extractGeneralDraft,
-  extractStructuredData,
-  getAssessmentLanguage,
 } from "@/app/lib/assessment-payload";
 import { loadGeneralAssessmentDraft, saveGeneralAssessmentDraft } from "@/app/lib/general-assessment/storage";
 import type {
@@ -39,8 +37,6 @@ import { PatientSubmittedAnswersReview } from "@/app/components/PatientSubmitted
 import type { PatientAssessmentDraft, PatientSectionId } from "@/app/lib/api/remote-assessments";
 import {
   detectRedFlag,
-  extractRemoteQuestionnaireDraft,
-  inferIncludedSections,
   buildRemoteQuestionnaireSummary,
 } from "@/app/lib/remote-questionnaire-summary";
 import { ReportExportToolbar } from "@/app/components/reports/ReportExportToolbar";
@@ -99,6 +95,7 @@ import {
 } from "@/app/lib/program-direction-copy";
 import { resolveProgramOptionsForFocus } from "@/app/lib/program-direction-options";
 import { buildAssessmentInterpretationDraft } from "@/app/lib/reports/assessment-interpretation-draft";
+import { resolveAssessmentReportFromDetail } from "@/app/lib/reports/assessment-report-resolver";
 
 // ── Constants & labels ─────────────────────────────────────────────────────────
 
@@ -1126,40 +1123,21 @@ export function AssessmentReportClient() {
           const detail = (await res.json()) as AssessmentDetailResponse;
           if (cancelled) return;
 
-          setResolvedPatientId(detail.patient_id);
-          setServerNotes(detail.notes);
-          setReportDate(detail.created_at);
-          setPatient({
-            full_name: detail.patient.full_name,
-            diagnosis: detail.patient.diagnosis,
-          } as BackendPatient);
-          setServerBacked(true);
-          setPatientAnsweredInArabic(getAssessmentLanguage(detail.structured_data) === "ar");
-
-          const general = extractGeneralDraft(detail.structured_data, detail.type);
-          if (general) {
-            setDraft(general);
-            setReportKind("general_msk");
-          } else {
-            const remoteDraft = extractRemoteQuestionnaireDraft(detail.structured_data, detail.type);
-            if (remoteDraft) {
-              setRemoteQuestionnaireDraft(remoteDraft);
-              setRemoteSubmissionMeta(
-                typeof detail.structured_data === "object" && detail.structured_data !== null
-                  ? (detail.structured_data as Record<string, unknown>)
-                  : null,
-              );
-              setRemoteIncludedSections(inferIncludedSections(remoteDraft));
-              setReportKind("remote_questionnaire");
-            } else {
-              const structured = extractStructuredData(detail.structured_data);
-              if (structured) {
-                setStructuredData(structured);
-                setReportKind("structured");
-              } else {
-                setLoadError("Assessment data format is not supported for this report.");
-              }
-            }
+          const resolved = resolveAssessmentReportFromDetail(detail);
+          setResolvedPatientId(resolved.resolvedPatientId);
+          setServerNotes(resolved.serverNotes);
+          setReportDate(resolved.reportDate);
+          setPatient(resolved.patient);
+          setServerBacked(resolved.serverBacked);
+          setPatientAnsweredInArabic(resolved.patientAnsweredInArabic);
+          setDraft(resolved.draft);
+          setRemoteQuestionnaireDraft(resolved.remoteQuestionnaireDraft);
+          setRemoteSubmissionMeta(resolved.remoteSubmissionMeta);
+          setRemoteIncludedSections(resolved.remoteIncludedSections);
+          setStructuredData(resolved.structuredData);
+          setReportKind(resolved.kind);
+          if (resolved.loadError) {
+            setLoadError(resolved.loadError);
           }
         } catch (err) {
           if (!cancelled) {

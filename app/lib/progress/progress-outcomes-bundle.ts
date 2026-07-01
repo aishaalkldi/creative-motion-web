@@ -10,6 +10,7 @@ import {
   type CaptureQualityHistoryEntry,
 } from "@/app/lib/progress/extract-capture-quality-history";
 import { parseSessionCoachNotes } from "@/app/lib/session-coach-metadata";
+import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
 
 export const PROGRESS_OUTCOMES_SAFETY_BANNER =
   "Trends are patient-reported or derived observations and require therapist interpretation.";
@@ -64,6 +65,25 @@ export type ProgressOutcomesCvEvidenceEntry = {
   source: string;
   planSessionId: string | null;
 };
+
+/** Map hub CV rows to the shared clinician motion review model. */
+export function mapProgressCvEvidenceToMetrics(
+  rows: readonly ProgressOutcomesCvEvidenceEntry[],
+  patientId: string,
+): CvSessionMetricPublic[] {
+  return rows.map((row) => ({
+    id: row.id,
+    exerciseId: row.exerciseId,
+    repCount: row.repCount,
+    sessionDurationS: row.sessionDurationS,
+    trackingQuality: row.trackingQuality,
+    movementDetected: row.movementDetected,
+    source: row.source,
+    recordedAt: row.recordedAt,
+    patientId,
+    planSessionId: row.planSessionId,
+  }));
+}
 
 export type ProgressOutcomesBundle = {
   patientId: string;

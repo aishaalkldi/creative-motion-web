@@ -9,6 +9,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { LegacyDemoGate } from "@/app/components/legacy/LegacyDemoGate";
 import {
   getTreatmentPlan,
   updateSessionStatus,
@@ -179,6 +180,14 @@ function SessionCard({
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 export default function PatientSessionsPage() {
+  return (
+    <LegacyDemoGate>
+      <PatientSessionsPageContent />
+    </LegacyDemoGate>
+  );
+}
+
+function PatientSessionsPageContent() {
   const router = useRouter();
   const [patientId] = useState<number>(() => getDemoPatientId());
   const [plan, setPlan] = useState<TreatmentPlan | null>(null);

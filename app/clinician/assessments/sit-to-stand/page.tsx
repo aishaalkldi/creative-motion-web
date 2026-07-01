@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { CvReviewSummary } from "@/app/components/clinician/cv/CvReviewSummary";
 import { getCvReadyExercises } from "@/app/lib/cv/cv-ready-exercises";
-import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
+import { useCvSessionMetrics } from "@/app/hooks/useCvSessionMetrics";
 
 const STS_EXERCISE_ID = "sit-to-stand";
 const FETCH_LIMIT = 50;
@@ -19,36 +19,11 @@ export default function SitToStandAssessmentReviewPage() {
     [],
   );
 
-  const [metrics, setMetrics] = useState<CvSessionMetricPublic[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  const fetchMetrics = useCallback(async () => {
-    setLoading(true);
-    setError(false);
-    try {
-      const res = await fetch(`/api/cv/session-metrics?limit=${FETCH_LIMIT}`);
-      if (!res.ok) {
-        setError(true);
-        setMetrics([]);
-        return;
-      }
-      const data = (await res.json()) as { metrics?: CvSessionMetricPublic[] };
-      const stsMetrics = (data.metrics ?? []).filter(
-        (row) => row.exerciseId === STS_EXERCISE_ID,
-      );
-      setMetrics(stsMetrics);
-    } catch {
-      setError(true);
-      setMetrics([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void fetchMetrics();
-  }, [fetchMetrics]);
+  const { metrics, loading, error } = useCvSessionMetrics({
+    limit: FETCH_LIMIT,
+    exerciseIds: [STS_EXERCISE_ID],
+    dedupePatientSessions: false,
+  });
 
   const hasPatientLinkedSessions = metrics.some((row) => Boolean(row.patientId));
 

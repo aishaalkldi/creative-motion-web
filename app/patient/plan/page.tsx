@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { LegacyDemoGate } from "@/app/components/legacy/LegacyDemoGate";
 import {
   getTreatmentPlan,
   getDemoPatientId,
@@ -121,6 +122,14 @@ function ExerciseCard({ ex, index }: { ex: Exercise; index: number }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function PatientPlanPage() {
+  return (
+    <LegacyDemoGate>
+      <PatientPlanPageContent />
+    </LegacyDemoGate>
+  );
+}
+
+function PatientPlanPageContent() {
   const [patientId] = useState<number>(() => getDemoPatientId());
   const [plan, setPlan] = useState<TreatmentPlan | null>(null);
   const [loading, setLoading] = useState(true);

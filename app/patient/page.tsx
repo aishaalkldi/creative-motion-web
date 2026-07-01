@@ -8,6 +8,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { LegacyDemoGate } from "@/app/components/legacy/LegacyDemoGate";
 import {
   getTreatmentPlan,
   getAdherence,
@@ -113,6 +114,14 @@ function TodaySessionCard({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function PatientDashboard() {
+  return (
+    <LegacyDemoGate>
+      <PatientDashboardContent />
+    </LegacyDemoGate>
+  );
+}
+
+function PatientDashboardContent() {
   const [patientId] = useState<number>(() => getDemoPatientId());
   const [plan, setPlan]           = useState<TreatmentPlan | null>(null);
   const [adherence, setAdherence] = useState<Adherence | null>(null);
