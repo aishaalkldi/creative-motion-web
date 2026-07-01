@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { AssessmentMovementSummaryPanel } from "@/app/components/clinician/cv/AssessmentMovementSummaryPanel";
 import { GaitInterpretationSection } from "@/app/components/clinician/cv/GaitInterpretationSection";
 import { MotionAnalysisReportPanel } from "@/app/components/clinician/cv/MotionAnalysisReportPanel";
 import { dedupeCvMetricsByPlanSessionExercise } from "@/app/lib/cv/cv-metrics-dedupe";
@@ -25,6 +26,7 @@ import {
   hasDisplayableMotionAnalysisReport,
   motionAnalysisInputFromCvMetric,
 } from "@/app/lib/cv/motion-analysis-report";
+import { buildAssessmentMovementSummary } from "@/app/lib/cv/assessment-movement-summary";
 import { buildGaitAssistiveInterpretation } from "@/app/lib/cv/gait-interpretation";
 import { isGaitAssessmentExerciseId } from "@/app/lib/cv/gait-assessment-exercise-ids";
 
@@ -86,9 +88,14 @@ function SessionReviewCard({
 }) {
   const highlightPatient = profileMode && row.source === "patient_session";
   const isGaitSession = isGaitAssessmentExerciseId(row.exerciseId);
-  const gaitInterpretation = isGaitSession ? buildGaitAssistiveInterpretation(row) : null;
+  const isAssessmentCapture = row.source === "assessment_movement";
+  const gaitInterpretation =
+    isGaitSession && !isAssessmentCapture ? buildGaitAssistiveInterpretation(row) : null;
+  const assessmentSummary = buildAssessmentMovementSummary(row);
   const motionReport = buildMotionAnalysisReport(motionAnalysisInputFromCvMetric(row));
-  const showMotionReport = !isGaitSession && hasDisplayableMotionAnalysisReport(motionReport);
+  const showMotionReport =
+    !isGaitSession && !isAssessmentCapture && hasDisplayableMotionAnalysisReport(motionReport);
+  const showAssessmentSummary = isAssessmentCapture && assessmentSummary != null;
 
   return (
     <article
@@ -145,6 +152,9 @@ function SessionReviewCard({
       </dl>
       {gaitInterpretation ? (
         <GaitInterpretationSection interpretation={gaitInterpretation} />
+      ) : null}
+      {showAssessmentSummary && assessmentSummary ? (
+        <AssessmentMovementSummaryPanel summary={assessmentSummary} />
       ) : null}
       {showMotionReport ? <MotionAnalysisReportPanel report={motionReport} /> : null}
       {showPatientLink && row.patientId ? (

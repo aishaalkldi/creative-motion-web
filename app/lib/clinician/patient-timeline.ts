@@ -3,11 +3,14 @@ import {
   deriveClinicalAction,
   type ClinicalActionStatus,
 } from "@/app/lib/clinical-action-engine";
+import { formatCvDuration } from "@/app/lib/cv/cv-metrics-display";
+import { isGaitAssessmentExerciseId } from "@/app/lib/cv/gait-assessment-exercise-ids";
 import { parseSessionCoachNotes } from "@/app/lib/session-coach-metadata";
 
 export type TimelineEventType =
   | "assessment_submitted"
   | "assessment_report_available"
+  | "assessment_movement_captured"
   | "plan_assigned"
   | "session_completed"
   | "review_flag_raised"
@@ -22,6 +25,16 @@ export type TimelineEvent = {
   label: string;
   detail?: string;
   severity?: TimelineEventSeverity;
+  href?: string;
+};
+
+export type TimelineCvCapture = {
+  id: string;
+  recordedAt: string;
+  exerciseId: string;
+  exerciseLabel: string;
+  sessionDurationS: number | null;
+  source: string;
 };
 
 export type TimelineAssessment = {
@@ -113,12 +126,22 @@ function flagLabelForSession(
   return FLAG_LABELS[status] ?? null;
 }
 
+function assessmentModuleHref(exerciseId: string): string | undefined {
+  const id = exerciseId.trim().toLowerCase();
+  if (isGaitAssessmentExerciseId(id)) return "/clinician/assessments/gait";
+  if (id === "single-leg-stance") return "/clinician/assessments/single-leg-stance";
+  if (id === "functional-reach") return "/clinician/assessments/functional-reach";
+  if (id === "timed-up-and-go") return "/clinician/assessments/timed-up-and-go";
+  return undefined;
+}
+
 export function buildPatientTimeline(data: {
   assessments: TimelineAssessment[];
   plans: TimelinePlan[];
   sessionLogs: TimelineSessionLog[];
   reviewAcknowledgments: TimelineReviewAck[];
   remoteAssessmentRequests?: TimelineRemoteRequest[];
+  cvCaptures?: TimelineCvCapture[];
 }): TimelineEvent[] {
   const events: TimelineEvent[] = [];
 
@@ -170,6 +193,21 @@ export function buildPatientTimeline(data: {
       label: "Rehabilitation plan assigned",
       detail: planDetail(plan),
       severity: "info",
+    });
+  }
+
+  for (const capture of data.cvCaptures ?? []) {
+    if (!capture.recordedAt) continue;
+    const duration = formatCvDuration(capture.sessionDurationS);
+    const sourceLabel = capture.source === "patient_session" ? "Patient portal" : "Assessment";
+    events.push({
+      id: `cv-${capture.id}`,
+      type: "assessment_movement_captured",
+      timestamp: capture.recordedAt,
+      label: `${sourceLabel} movement captured`,
+      detail: `${capture.exerciseLabel} · ${duration}`,
+      severity: "action",
+      href: assessmentModuleHref(capture.exerciseId),
     });
   }
 
@@ -261,5 +299,21 @@ export function formatTimelineTimestamp(iso: string): string {
     return `${datePart} · ${timePart}`;
   } catch {
     return iso;
+  }
+}
+
+export function formatRelativeTimelineTime(iso: string): string {
+  try {
+    const deltaMs = Date.now() - new Date(iso).getTime();
+    const minutes = Math.floor(deltaMs / 60_000);
+    if (minutes < 1) return "Just now";
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 48) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 14) return `${days}d ago`;
+    return formatTimelineTimestamp(iso);
+  } catch {
+    return formatTimelineTimestamp(iso);
   }
 }

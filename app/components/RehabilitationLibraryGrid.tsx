@@ -38,6 +38,8 @@ const LIBRARY_FIELDS: LibraryField[] = [
     status: "active",
     primaryHref: "/therapy",
     primaryLabel: "Start therapy session",
+    secondaryHref: "/clinician/assessments/gait",
+    secondaryLabel: "Gait assessment capture",
   },
   {
     key: "neurological",

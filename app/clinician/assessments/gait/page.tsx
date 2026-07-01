@@ -1,7 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+import {
+  AssessmentCvCaptureSession,
+  createGaitWalkingCaptureDetector,
+} from "@/app/components/clinician/assessments/AssessmentCvCaptureSession";
 import { CvReviewSummary } from "@/app/components/clinician/cv/CvReviewSummary";
 import {
   GAIT_ASSESSMENT_EXERCISE_DISPLAY_NAMES,
@@ -12,39 +16,10 @@ import { useCvSessionMetrics } from "@/app/hooks/useCvSessionMetrics";
 const FETCH_LIMIT = 50;
 const DISPLAY_MAX = 10;
 
-const PLANNED_GAIT_METRICS = [
-  {
-    label: "Walking duration",
-    note: "Total observed walking time during capture.",
-  },
-  {
-    label: "Movement detected",
-    note: "Whether walking movement was observed during the session.",
-  },
-  {
-    label: "Tracking quality",
-    note: "Camera and pose tracking reliability for the walking pass.",
-  },
-  {
-    label: "Left/right body visibility",
-    note: "Whether both sides remained visible during walking.",
-  },
-  {
-    label: "Pace consistency",
-    note: "How steady walking pace appeared across the observed pass.",
-  },
-  {
-    label: "Step/cycle estimate",
-    note: "Estimated step or gait-cycle count when tracking confidence is sufficient.",
-  },
-  {
-    label: "Retest recommendation",
-    note: "Whether a repeat capture may help therapist review.",
-  },
-  {
-    label: "Therapist review required",
-    note: "All gait observations require clinician review before use in care planning.",
-  },
+const GAIT_CAPTURE_INSTRUCTIONS = [
+  "Frame the patient from the side or front with hips and legs visible.",
+  "Ask the patient to walk in place or take a short bounded pass toward the camera.",
+  "Stop after about 15–30 seconds — movement and duration are saved for review.",
 ] as const;
 
 export default function GaitAssessmentPage() {
@@ -53,11 +28,17 @@ export default function GaitAssessmentPage() {
     [],
   );
 
-  const { metrics, loading, error } = useCvSessionMetrics({
+  const { metrics, loading, error, refresh } = useCvSessionMetrics({
     limit: FETCH_LIMIT,
     exerciseFilter: isGaitAssessmentExerciseId,
     dedupePatientSessions: false,
   });
+
+  const createDetector = useCallback(
+    (onSnapshot: Parameters<typeof createGaitWalkingCaptureDetector>[0]) =>
+      createGaitWalkingCaptureDetector(onSnapshot),
+    [],
+  );
 
   const hasPatientLinkedSessions = metrics.some((row) => Boolean(row.patientId));
   const showGaitEmptyState = !loading && !error && metrics.length === 0;
@@ -92,6 +73,25 @@ export default function GaitAssessmentPage() {
           </p>
         </div>
 
+        <section className="mt-8">
+          <h2 className="text-sm font-bold text-white">Capture walking observation</h2>
+          <p className="mt-1 text-xs leading-relaxed text-white/40">
+            Run a bounded walking pass. Duration, movement, and optional step estimate are saved
+            for therapist review below.
+          </p>
+          <div className="mt-4">
+            <AssessmentCvCaptureSession
+              title="Walking observation capture"
+              instructions={[...GAIT_CAPTURE_INSTRUCTIONS]}
+              primaryMetricLabel="Step estimate"
+              consentIntro="Camera access is used for a short walking observation pass. No diagnostic gait classification is performed."
+              createDetector={createDetector}
+              onSessionSaved={() => void refresh()}
+              startButtonLabel="Start walking observation"
+            />
+          </div>
+        </section>
+
         <div className="mt-6 flex flex-wrap gap-2">
           <Link
             href="/clinician/results"
@@ -104,8 +104,7 @@ export default function GaitAssessmentPage() {
         <section className="mt-8">
           <h2 className="text-sm font-bold text-white">Recorded walking observations</h2>
           <p className="mt-1 text-xs leading-relaxed text-white/40">
-            Saved assessment movement sessions appear here when gait capture is enabled in a
-            future release.
+            Saved assessment movement sessions appear here after capture.
           </p>
 
           {loading ? (
@@ -120,8 +119,8 @@ export default function GaitAssessmentPage() {
                 No gait observations have been captured yet
               </p>
               <p className="mt-2 text-xs leading-relaxed text-[#6B7280]">
-                When bounded walking capture is available, saved sessions will appear here for
-                therapist review. Live capture is not enabled in this release.
+                Use the capture section above to record a bounded walking pass for therapist
+                review.
               </p>
             </div>
           ) : (
@@ -136,31 +135,6 @@ export default function GaitAssessmentPage() {
           )}
         </section>
 
-        <section className="mt-8 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
-          <h2 className="text-sm font-bold text-white">Planned observation metrics</h2>
-          <p className="mt-2 text-sm leading-relaxed text-white/45">
-            Structured walking metrics will populate after live capture is enabled. All values
-            will remain assistive observations for therapist review only.
-          </p>
-
-          <dl className="mt-5 space-y-3">
-            {PLANNED_GAIT_METRICS.map((metric) => (
-              <div
-                key={metric.label}
-                className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-3"
-              >
-                <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
-                  <dt className="text-[11px] font-semibold text-[#F9FAFB]">{metric.label}</dt>
-                  <dd className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-white/30">
-                    Planned
-                  </dd>
-                </div>
-                <p className="mt-1.5 text-[11px] leading-relaxed text-[#6B7280]">{metric.note}</p>
-              </div>
-            ))}
-          </dl>
-        </section>
-
         <section className="mt-6 rounded-[10px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3.5">
           <h2 className="text-[11px] font-bold uppercase tracking-wider text-white/35">
             Review guidance
@@ -171,11 +145,6 @@ export default function GaitAssessmentPage() {
             <li>Do not use this module alone for treatment or progression decisions.</li>
           </ul>
         </section>
-
-        <p className="mt-8 text-[11px] leading-relaxed text-white/25">
-          Patient portal exercise modules are unchanged. Gait capture will connect to this review
-          surface in a future update.
-        </p>
       </div>
     </div>
   );
