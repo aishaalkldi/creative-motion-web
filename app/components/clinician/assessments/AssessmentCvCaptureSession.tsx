@@ -1,12 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { DEFAULT_STS_CONFIG } from "@/app/lib/cv/bio-0-contracts";
 import {
+  FunctionalReachPoseDetector,
+  mapFunctionalReachStartError,
+} from "@/app/lib/cv/functional-reach-pose-detector";
+import {
   GaitWalkingObservationPoseDetector,
-  formatGaitWalkingDuration,
   mapGaitWalkingStartError,
 } from "@/app/lib/cv/gait-walking-observation-pose-detector";
+import {
+  SingleLegStancePoseDetector,
+  mapSingleLegStanceStartError,
+} from "@/app/lib/cv/single-leg-stance-pose-detector";
+import type { StanceLeg } from "@/app/lib/cv/single-leg-stance-detector";
 import {
   formatSitToStandDuration,
   type SitToStandDetectorSnapshot,
@@ -39,9 +47,16 @@ export type AssessmentCvCaptureSessionProps = {
   title: string;
   instructions: string[];
   primaryMetricLabel: string;
+  /** Which live value to show as the primary metric. */
+  primaryMetricSource?: "repCount" | "sessionSeconds";
   consentIntro: string;
   createDetector: (onSnapshot: (snapshot: SitToStandDetectorSnapshot) => void) => AssessmentCaptureDetector;
   onSessionSaved?: () => void;
+  startButtonLabel?: string;
+  stopButtonLabel?: string;
+  durationLabel?: string;
+  mapStartError?: (err: unknown) => string;
+  preCapture?: ReactNode;
 };
 
 function applySnapshot(
@@ -77,9 +92,15 @@ export function AssessmentCvCaptureSession({
   title,
   instructions,
   primaryMetricLabel,
+  primaryMetricSource = "repCount",
   consentIntro,
   createDetector,
   onSessionSaved,
+  startButtonLabel = "Start capture",
+  stopButtonLabel = "Stop and save observation",
+  durationLabel = "Session duration",
+  mapStartError = mapGaitWalkingStartError,
+  preCapture,
 }: AssessmentCvCaptureSessionProps) {
   const [consented, setConsented] = useState(false);
   const [previewActive, setPreviewActive] = useState(false);
@@ -215,11 +236,11 @@ export function AssessmentCvCaptureSession({
       await detector.start(video, canvas);
     } catch (err) {
       detector.stop();
-      setError(mapGaitWalkingStartError(err));
+      setError(mapStartError(err));
     } finally {
       startInProgressRef.current = false;
     }
-  }, [consented, loading]);
+  }, [consented, loading, mapStartError]);
 
   useEffect(() => {
     return () => detectorRef.current?.stop();
@@ -235,7 +256,13 @@ export function AssessmentCvCaptureSession({
           : "Starting capture…";
 
   const showPreview = previewActive || (loading && initPhase === "camera");
-  const formatDuration = primaryMetricLabel.includes("Step") ? formatGaitWalkingDuration : formatSitToStandDuration;
+  const primaryValue =
+    primaryMetricSource === "sessionSeconds" ? sessionSeconds : repCount;
+  const formatDuration = formatSitToStandDuration;
+  const primaryDisplay =
+    primaryMetricSource === "sessionSeconds"
+      ? formatDuration(primaryValue)
+      : String(primaryValue);
 
   if (!consented) {
     return (
@@ -273,6 +300,7 @@ export function AssessmentCvCaptureSession({
           {trackingError}
         </div>
       )}
+      {!previewActive && preCapture}
       {!previewActive && (
         <button
           type="button"
@@ -280,7 +308,7 @@ export function AssessmentCvCaptureSession({
           onClick={() => void startSession()}
           className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#179165] disabled:opacity-50"
         >
-          {loading ? loadingLabel : "Start walking observation"}
+          {loading ? loadingLabel : startButtonLabel}
         </button>
       )}
       <video ref={videoRef} autoPlay muted playsInline className="pointer-events-none fixed left-0 top-0 h-px w-px opacity-0" aria-hidden />
@@ -298,21 +326,21 @@ export function AssessmentCvCaptureSession({
           onClick={handleStopSession}
           className="rounded-[7px] border border-[#1E2D42] bg-transparent px-4 py-2 text-sm font-semibold text-[#9CA3AF] transition hover:text-white disabled:opacity-50"
         >
-          Stop and save observation
+          {stopButtonLabel}
         </button>
       )}
       {sessionStarted && (
         <div className="space-y-2 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-4">
           <p className="text-xs text-[#F9FAFB]">
-            {!loading && trackingStatus === "pose-found" && "Pose detected — walk in place or toward camera"}
+            {!loading && trackingStatus === "pose-found" && "Pose detected — perform the assessment task"}
             {!loading && trackingStatus === "pose-lost" && "Pose not detected — adjust camera framing"}
             {loading && initPhase && `⏳ ${loadingLabel}`}
           </p>
           <p className="font-mono text-[28px] font-bold text-[#1D9E75]">
-            {primaryMetricLabel}: {repCount}
+            {primaryMetricLabel}: {primaryDisplay}
           </p>
           <p className="text-sm text-[#9CA3AF]">
-            Walking duration: {formatDuration(sessionSeconds)}
+            {durationLabel}: {formatDuration(sessionSeconds)}
           </p>
           {movementDetected && (
             <p className="text-[11px] text-[#6B7280]">Movement observed during this pass.</p>
@@ -340,3 +368,32 @@ export function createGaitWalkingCaptureDetector(
     getDerivedMetrics: () => detector.getDerivedMetrics(),
   };
 }
+
+export function createSingleLegStanceCaptureDetector(
+  stanceLeg: StanceLeg,
+  onSnapshot: (snapshot: SitToStandDetectorSnapshot) => void,
+): AssessmentCaptureDetector {
+  const detector = new SingleLegStancePoseDetector({ onSnapshot }, stanceLeg);
+  return {
+    start: (video, canvas) => detector.start(video, canvas),
+    stop: () => detector.stop(),
+    isPreviewActive: () => detector.isPreviewActive(),
+    canSaveMetrics: () => detector.canSaveMetrics(),
+    getDerivedMetrics: () => detector.getDerivedMetrics(),
+  };
+}
+
+export function createFunctionalReachCaptureDetector(
+  onSnapshot: (snapshot: SitToStandDetectorSnapshot) => void,
+): AssessmentCaptureDetector {
+  const detector = new FunctionalReachPoseDetector({ onSnapshot });
+  return {
+    start: (video, canvas) => detector.start(video, canvas),
+    stop: () => detector.stop(),
+    isPreviewActive: () => detector.isPreviewActive(),
+    canSaveMetrics: () => detector.canSaveMetrics(),
+    getDerivedMetrics: () => detector.getDerivedMetrics(),
+  };
+}
+
+export { mapFunctionalReachStartError, mapSingleLegStanceStartError };
