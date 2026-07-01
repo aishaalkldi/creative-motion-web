@@ -9,6 +9,8 @@ import {
   ownershipErrorResponse,
   serviceUnavailableResponse,
 } from "../../../lib/api/safe-errors";
+import { demoFallbackIfUnavailable } from "../../../lib/api/demo-fallback-server";
+import { getDemoPatientById } from "../../../lib/demo/local-demo-fallback";
 import {
   checkClinicianWriteLimit,
   rateLimitExceededResponse,
@@ -39,10 +41,12 @@ async function buildClients() {
 // ── Auth helper ───────────────────────────────────────────────────────────────
 async function getAuthAndClients() {
   const clients = await buildClients();
-  if (!clients) return { error: API_ERRORS.SERVICE_UNAVAILABLE, status: 503 as const };
+  if (!clients) return { mode: "offline" as const };
   const { data: { user }, error: authError } = await clients.sessionClient.auth.getUser();
-  if (authError ?? !user) return { error: "Unauthorized.", status: 401 as const };
-  return { ...clients, user };
+  if (authError ?? !user) {
+    return { mode: "unauthorized" as const, error: "Unauthorized.", status: 401 as const };
+  }
+  return { mode: "live" as const, sessionClient: clients.sessionClient, adminClient: clients.adminClient, user };
 }
 
 // ── GET /api/patients/[id] ─────────────────────────────────────────────────────
@@ -62,7 +66,19 @@ export async function GET(
   if (!patientId?.trim()) return NextResponse.json({ error: "Patient ID is required." }, { status: 400 });
 
   const auth = await getAuthAndClients();
-  if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  if (auth.mode === "unauthorized") {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+  if (auth.mode === "offline") {
+    const demoPatient = getDemoPatientById(patientId);
+    if (!demoPatient) {
+      return NextResponse.json({ error: API_ERRORS.PATIENT_NOT_FOUND }, { status: 404 });
+    }
+    const demo = demoFallbackIfUnavailable(null, demoPatient);
+    if (demo) return demo;
+    return serviceUnavailableResponse();
+  }
+
   const { adminClient, user } = auth;
 
   const result = await validatePatientOwnership(adminClient, patientId, user.id);
@@ -98,7 +114,10 @@ export async function PATCH(
   if (!patientId?.trim()) return NextResponse.json({ error: "Patient ID is required." }, { status: 400 });
 
   const auth = await getAuthAndClients();
-  if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  if (auth.mode === "unauthorized") {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+  if (auth.mode !== "live") return serviceUnavailableResponse();
   const { adminClient, user } = auth;
 
   const limited = checkClinicianWriteLimit(user.id, "patients:update");
@@ -158,7 +177,10 @@ export async function DELETE(
   if (!patientId?.trim()) return NextResponse.json({ error: "Patient ID is required." }, { status: 400 });
 
   const auth = await getAuthAndClients();
-  if ("error" in auth) return NextResponse.json({ error: auth.error }, { status: auth.status });
+  if (auth.mode === "unauthorized") {
+    return NextResponse.json({ error: auth.error }, { status: auth.status });
+  }
+  if (auth.mode !== "live") return serviceUnavailableResponse();
   const { adminClient, user } = auth;
 
   const limited = checkClinicianWriteLimit(user.id, "patients:delete");

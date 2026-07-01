@@ -14,6 +14,8 @@ import {
   genericServerErrorResponse,
   serviceUnavailableResponse,
 } from "../../lib/api/safe-errors";
+import { demoFallbackIfUnavailable } from "../../lib/api/demo-fallback-server";
+import { getDemoPatients } from "../../lib/demo/local-demo-fallback";
 import {
   checkClinicianWriteLimit,
   rateLimitExceededResponse,
@@ -101,10 +103,9 @@ async function loadProviderFileNumbers(
  */
 export async function GET(_req: NextRequest) {
   const clients = await buildClients();
-  if (!clients) {
-    return serviceUnavailableResponse();
-  }
-  const { sessionClient, adminClient } = clients;
+  const demo = demoFallbackIfUnavailable(clients, { patients: getDemoPatients() });
+  if (demo) return demo;
+  const { sessionClient, adminClient } = clients!;
 
   // ── Auth ────────────────────────────────────────────────────────────────────
   const {

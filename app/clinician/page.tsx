@@ -4,7 +4,13 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ClinicianResultsResponse } from "@/app/api/clinician/results/route";
 import { PilotChecklistCard } from "@/app/components/clinician/PilotChecklistCard";
+import { DemoOfflineBanner } from "@/app/components/clinician/DemoOfflineBanner";
 import { getDashboardStats, type DashboardStats } from "@/app/lib/api";
+import {
+  mergeDemoMeta,
+  parsePatientsList,
+  type PatientsListPayload,
+} from "@/app/lib/api/demo-fallback-client";
 import {
   buildPilotAttentionQueue,
   type PilotAttentionItem,
@@ -147,6 +153,8 @@ export default function ClinicianDashboardPage() {
   const [results, setResults] = useState<ClinicianResultsResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [copyFeedback, setCopyFeedback] = useState<"idle" | "copied" | "unavailable">("idle");
+  const [demoMode, setDemoMode] = useState(false);
+  const [demoNotice, setDemoNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -154,19 +162,43 @@ export default function ClinicianDashboardPage() {
     Promise.all([
       getDashboardStats().catch(() => null),
       fetch("/api/patients")
-        .then(async (res) => (res.ok ? (res.json() as Promise<PatientRow[]>) : []))
-        .catch(() => [] as PatientRow[]),
+        .then(async (res) => {
+          const json = (await res.json()) as PatientsListPayload;
+          if (!res.ok && !Array.isArray(json) && !("patients" in json)) {
+            return { patients: [] as PatientRow[], demoMode: false, demoNotice: null };
+          }
+          return parsePatientsList(json);
+        })
+        .catch(() => ({ patients: [] as PatientRow[], demoMode: false, demoNotice: null })),
       fetch("/api/clinician/results")
         .then(async (res) =>
           res.ok ? (res.json() as Promise<ClinicianResultsResponse>) : null,
         )
         .catch(() => null),
     ])
-      .then(([statsData, patientsData, resultsData]) => {
+      .then(([statsData, patientsPayload, resultsData]) => {
         if (!isMounted) return;
         setStats(statsData);
-        setPatients(patientsData);
+        setPatients(patientsPayload.patients);
         setResults(resultsData);
+        let meta = mergeDemoMeta(
+          { demoMode: false, demoNotice: null },
+          patientsPayload,
+        );
+        if (statsData?.demoMode) {
+          meta = mergeDemoMeta(meta, {
+            demoMode: true,
+            demoNotice: statsData.demoNotice ?? null,
+          });
+        }
+        if (resultsData?.demoMode) {
+          meta = mergeDemoMeta(meta, {
+            demoMode: true,
+            demoNotice: resultsData.demoNotice ?? null,
+          });
+        }
+        setDemoMode(meta.demoMode);
+        setDemoNotice(meta.demoNotice);
       })
       .finally(() => {
         if (isMounted) setLoading(false);
@@ -256,6 +288,8 @@ export default function ClinicianDashboardPage() {
         </div>
 
         <PilotChecklistCard />
+
+        <DemoOfflineBanner visible={demoMode} notice={demoNotice} />
 
         {/* ── Clinical pathway hint ── */}
         <div className="mb-6 rounded-[8px] border border-[#1E2D42] bg-[#0F1825] px-5 py-3.5 text-sm text-white/40">

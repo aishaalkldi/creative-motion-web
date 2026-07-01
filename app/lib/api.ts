@@ -414,6 +414,8 @@ export type DashboardStats = {
   pendingReviews: number | null;
   remoteAssessmentsPending: number | null;
   generatedAt: string;
+  demoMode?: boolean;
+  demoNotice?: string;
 };
 
 export async function getDashboardStats(): Promise<DashboardStats> {
