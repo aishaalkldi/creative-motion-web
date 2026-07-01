@@ -421,6 +421,7 @@ export function PatientAssessmentClient() {
   const [draft, setDraft] = useState<PatientAssessmentDraft>(emptyDraft());
   const [lang, setLang] = useState<PatientLang>("en");
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [voiceConsentGiven, setVoiceConsentGiven] = useState(false);
   const [showConsentBanner, setShowConsentBanner] = useState(false);
   const [voiceMethods, setVoiceMethods] = useState<Record<string, "voice">>({});
@@ -653,6 +654,7 @@ export function PatientAssessmentClient() {
     if (blockIfCorruptedVoiceFields()) return;
 
     setSubmitVoiceError(null);
+    setSubmitError(null);
     setSubmitting(true);
     setStage("submitting");
     try {
@@ -661,6 +663,11 @@ export function PatientAssessmentClient() {
     } catch {
       setSubmitting(false);
       setStage("review");
+      setSubmitError(
+        lang === "ar"
+          ? "تعذر إرسال التقييم الآن. تم حفظ إجاباتك محليًا — حاول الإرسال مرة أخرى أو تواصل مع العيادة."
+          : "Could not submit right now. Your answers are still saved on this device — try again or contact your clinic.",
+      );
     }
   }
 
@@ -856,7 +863,14 @@ export function PatientAssessmentClient() {
 
             <div className="pt-2">
               {submitVoiceError ? (
-                <p className="mb-3 text-[11px] italic text-[#D97706]">{submitVoiceError}</p>
+                <p className="mb-3 rounded-[10px] border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-[11px] italic text-amber-100">
+                  {submitVoiceError}
+                </p>
+              ) : null}
+              {submitError ? (
+                <p className="mb-3 rounded-[10px] border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100">
+                  {submitError}
+                </p>
               ) : null}
               <button
                 type="button"
@@ -872,9 +886,16 @@ export function PatientAssessmentClient() {
         )}
 
         {stage === "submitting" && (
-          <div className="flex flex-col items-center gap-5 py-20 text-center">
+          <div className="flex flex-col items-center gap-5 px-2 py-16 text-center sm:py-20">
             <div className="h-12 w-12 animate-spin rounded-full border-4 border-white/10 border-t-cyan-400" />
-            <p className="text-sm text-white/60">{patientText(PATIENT_UI.sending, lang)}</p>
+            <div>
+              <p className="text-sm font-semibold text-white/75">{patientText(PATIENT_UI.sending, lang)}</p>
+              <p className="mt-2 text-xs text-white/40">
+                {lang === "ar"
+                  ? "يرجى عدم إغلاق هذه الصفحة حتى يكتمل الإرسال."
+                  : "Please keep this page open until submission completes."}
+              </p>
+            </div>
           </div>
         )}
       </main>
