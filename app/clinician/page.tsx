@@ -5,12 +5,20 @@ import { useEffect, useMemo, useState } from "react";
 import type { ClinicianResultsResponse } from "@/app/api/clinician/results/route";
 import { PilotChecklistCard } from "@/app/components/clinician/PilotChecklistCard";
 import { DemoOfflineBanner } from "@/app/components/clinician/DemoOfflineBanner";
+import { ClinicianMetricCard } from "@/app/components/clinician/ClinicianMetricCard";
 import { getDashboardStats, type DashboardStats } from "@/app/lib/api";
 import {
-  mergeDemoMeta,
-  parsePatientsList,
-  type PatientsListPayload,
+  collectDemoMeta,
+  fetchClinicianResults,
+  fetchPatientsList,
 } from "@/app/lib/api/demo-fallback-client";
+import {
+  formatDashboardAdherencePct,
+  formatDashboardGeneratedAt,
+  formatDashboardMetric,
+  formatDashboardSnapshotMetric,
+  formatDashboardStatsTime,
+} from "@/app/lib/clinician/dashboard-format";
 import {
   buildPilotAttentionQueue,
   type PilotAttentionItem,
@@ -76,81 +84,18 @@ function PilotAttentionQueueRow({ item }: { item: PilotAttentionItem }) {
   );
 }
 
-function MetricCard({ title, value, subtitle, attention = false }: {
-  title: string; value: string; subtitle: string; attention?: boolean;
-}) {
-  return (
-    <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
-      <p className="text-xs font-semibold uppercase tracking-wider text-white/35">{title}</p>
-      <p className={`mt-3 font-mono text-3xl font-bold ${attention ? "text-amber-300" : "text-[#5DCAA5]"}`}
-         style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}>
-        {value}
-      </p>
-      <p className="mt-1.5 text-xs text-white/35">{subtitle}</p>
-    </div>
-  );
-}
-
-// ── Page ───────────────────────────────────────────────────────────────────────
-
-function formatMetric(value: number | null | undefined, loading: boolean): string {
-  if (loading) return "…";
-  if (value === null || value === undefined) return "–";
-  return String(value);
-}
-
-function formatStatsTime(iso: string | undefined): string | null {
-  if (!iso) return null;
-  try {
-    return new Date(iso).toLocaleTimeString("en-GB", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-  } catch {
-    return null;
-  }
-}
-
-function formatSnapshotMetric(value: number | null | undefined, loading: boolean): string {
-  if (loading) return "…";
-  if (value === null || value === undefined) return "Not available";
-  return String(value);
-}
-
-function formatGeneratedAt(iso: string | undefined, loading: boolean): string {
-  if (loading) return "…";
-  if (!iso) return "Not available";
-  try {
-    return new Date(iso).toLocaleString("en-GB", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-  } catch {
-    return "Not available";
-  }
-}
-
 function buildPilotSummaryText(stats: DashboardStats | null, loading: boolean): string | null {
   if (loading || !stats) return null;
   return [
     "RASQ Pilot Snapshot",
-    `Patients created: ${formatSnapshotMetric(stats.totalPatients, false)}`,
-    `Active rehabilitation plans: ${formatSnapshotMetric(stats.activeCases, false)}`,
-    `Unreviewed review flags: ${formatSnapshotMetric(stats.pendingReviews, false)}`,
-    `Pending assessment links: ${formatSnapshotMetric(stats.remoteAssessmentsPending, false)}`,
-    `Generated: ${formatGeneratedAt(stats.generatedAt, false)}`,
+    `Patients created: ${formatDashboardSnapshotMetric(stats.totalPatients, false)}`,
+    `Active rehabilitation plans: ${formatDashboardSnapshotMetric(stats.activeCases, false)}`,
+    `Unreviewed review flags: ${formatDashboardSnapshotMetric(stats.pendingReviews, false)}`,
+    `Pending assessment links: ${formatDashboardSnapshotMetric(stats.remoteAssessmentsPending, false)}`,
+    `Sessions this week: ${formatDashboardSnapshotMetric(stats.sessionsCompletedThisWeek, false)}`,
+    `Avg plan adherence: ${formatDashboardAdherencePct(stats.averagePlanAdherencePct, false)}`,
+    `Generated: ${formatDashboardGeneratedAt(stats.generatedAt, false)}`,
   ].join("\n");
-}
-
-function formatAdherencePct(value: number | null | undefined, loading: boolean): string {
-  if (loading) return "…";
-  if (value === null || value === undefined) return "–";
-  return `${value}%`;
 }
 
 export default function ClinicianDashboardPage() {
@@ -167,42 +112,19 @@ export default function ClinicianDashboardPage() {
     setLoading(true);
     Promise.all([
       getDashboardStats().catch(() => null),
-      fetch("/api/patients")
-        .then(async (res) => {
-          const json = (await res.json()) as PatientsListPayload;
-          if (!res.ok && !Array.isArray(json) && !("patients" in json)) {
-            return { patients: [] as PatientRow[], demoMode: false, demoNotice: null };
-          }
-          return parsePatientsList(json);
-        })
-        .catch(() => ({ patients: [] as PatientRow[], demoMode: false, demoNotice: null })),
-      fetch("/api/clinician/results")
-        .then(async (res) =>
-          res.ok ? (res.json() as Promise<ClinicianResultsResponse>) : null,
-        )
-        .catch(() => null),
+      fetchPatientsList().catch(() => ({
+        patients: [] as PatientRow[],
+        demoMode: false,
+        demoNotice: null,
+      })),
+      fetchClinicianResults().catch(() => null),
     ])
       .then(([statsData, patientsPayload, resultsData]) => {
         if (!isMounted) return;
         setStats(statsData);
         setPatients(patientsPayload.patients);
         setResults(resultsData);
-        let meta = mergeDemoMeta(
-          { demoMode: false, demoNotice: null },
-          patientsPayload,
-        );
-        if (statsData?.demoMode) {
-          meta = mergeDemoMeta(meta, {
-            demoMode: true,
-            demoNotice: statsData.demoNotice ?? null,
-          });
-        }
-        if (resultsData?.demoMode) {
-          meta = mergeDemoMeta(meta, {
-            demoMode: true,
-            demoNotice: resultsData.demoNotice ?? null,
-          });
-        }
+        const meta = collectDemoMeta(patientsPayload, statsData, resultsData);
         setDemoMode(meta.demoMode);
         setDemoNotice(meta.demoNotice);
       })
@@ -235,28 +157,28 @@ export default function ClinicianDashboardPage() {
   }
 
   const metricCards = [
-    { title: "Total Patients",              value: formatMetric(stats?.totalPatients, loading),              subtitle: "Connected patient records",              attention: false },
-    { title: "Active Cases",                value: formatMetric(stats?.activeCases, loading),                subtitle: "Patients with active rehabilitation plans", attention: false },
-    { title: "Pending Reviews",             value: formatMetric(stats?.pendingReviews, loading),             subtitle: "Unreviewed clinical review flags",        attention: true  },
-    { title: "Remote Assessments Pending",  value: formatMetric(stats?.remoteAssessmentsPending, loading), subtitle: "Assessment links awaiting response",      attention: false },
+    { title: "Total Patients", value: formatDashboardMetric(stats?.totalPatients, loading), subtitle: "Connected patient records", attention: false },
+    { title: "Active Cases", value: formatDashboardMetric(stats?.activeCases, loading), subtitle: "Patients with active rehabilitation plans", attention: false },
+    { title: "Pending Reviews", value: formatDashboardMetric(stats?.pendingReviews, loading), subtitle: "Unreviewed clinical review flags", attention: true },
+    { title: "Remote Assessments Pending", value: formatDashboardMetric(stats?.remoteAssessmentsPending, loading), subtitle: "Assessment links awaiting response", attention: false },
   ];
 
   const operationalKpiCards = [
-    { title: "Sessions This Week", value: formatMetric(stats?.sessionsCompletedThisWeek, loading), subtitle: "Completed home/clinic sessions logged", attention: false },
-    { title: "Avg Plan Adherence", value: formatAdherencePct(stats?.averagePlanAdherencePct, loading), subtitle: "Mean completion across active plans", attention: false },
-    { title: "Assessments This Month", value: formatMetric(stats?.assessmentsSubmittedThisMonth, loading), subtitle: "Submitted assessment records", attention: false },
-    { title: "CV Captures This Month", value: formatMetric(stats?.cvCapturesThisMonth, loading), subtitle: "Camera-assisted session metrics saved", attention: false },
+    { title: "Sessions This Week", value: formatDashboardMetric(stats?.sessionsCompletedThisWeek, loading), subtitle: "Completed home/clinic sessions logged", attention: false },
+    { title: "Avg Plan Adherence", value: formatDashboardAdherencePct(stats?.averagePlanAdherencePct, loading), subtitle: "Mean completion across active plans", attention: false },
+    { title: "Assessments This Month", value: formatDashboardMetric(stats?.assessmentsSubmittedThisMonth, loading), subtitle: "Submitted assessment records", attention: false },
+    { title: "CV Captures This Month", value: formatDashboardMetric(stats?.cvCapturesThisMonth, loading), subtitle: "Camera-assisted session metrics saved", attention: false },
   ];
 
   const snapshotRows = [
-    { label: "Patients created", value: formatSnapshotMetric(stats?.totalPatients, loading) },
-    { label: "Active rehabilitation plans", value: formatSnapshotMetric(stats?.activeCases, loading) },
-    { label: "Unreviewed review flags", value: formatSnapshotMetric(stats?.pendingReviews, loading) },
-    { label: "Pending assessment links", value: formatSnapshotMetric(stats?.remoteAssessmentsPending, loading) },
-    { label: "Generated", value: formatGeneratedAt(stats?.generatedAt, loading) },
+    { label: "Patients created", value: formatDashboardSnapshotMetric(stats?.totalPatients, loading) },
+    { label: "Active rehabilitation plans", value: formatDashboardSnapshotMetric(stats?.activeCases, loading) },
+    { label: "Unreviewed review flags", value: formatDashboardSnapshotMetric(stats?.pendingReviews, loading) },
+    { label: "Pending assessment links", value: formatDashboardSnapshotMetric(stats?.remoteAssessmentsPending, loading) },
+    { label: "Generated", value: formatDashboardGeneratedAt(stats?.generatedAt, loading) },
   ];
 
-  const statsUpdatedAt = formatStatsTime(stats?.generatedAt);
+  const statsUpdatedAt = formatDashboardStatsTime(stats?.generatedAt);
 
   const attentionQueue = useMemo(
     () =>
@@ -323,7 +245,7 @@ export default function ClinicianDashboardPage() {
         <section className="mb-3">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {metricCards.map((c) => (
-              <MetricCard key={c.title} title={c.title} value={c.value} subtitle={c.subtitle} attention={c.attention} />
+              <ClinicianMetricCard key={c.title} title={c.title} value={c.value} subtitle={c.subtitle} attention={c.attention} />
             ))}
           </div>
           <p className="mt-3 text-[11px] leading-relaxed text-white/25">
@@ -337,7 +259,7 @@ export default function ClinicianDashboardPage() {
           </h2>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {operationalKpiCards.map((c) => (
-              <MetricCard key={c.title} title={c.title} value={c.value} subtitle={c.subtitle} attention={c.attention} />
+              <ClinicianMetricCard key={c.title} title={c.title} value={c.value} subtitle={c.subtitle} attention={c.attention} />
             ))}
           </div>
         </section>

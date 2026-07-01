@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import type { ClinicianResultsResponse } from "@/app/api/clinician/results/route";
+import { useMemo, useState } from "react";
 import {
   formatLastSessionLine,
   formatSessionsLine,
@@ -16,11 +15,8 @@ import {
 import type { PatientRow } from "../../lib/validate-patient-ownership";
 import ConfirmModal from "../../components/ConfirmModal";
 import { DemoOfflineBanner } from "@/app/components/clinician/DemoOfflineBanner";
-import {
-  mergeDemoMeta,
-  parsePatientsList,
-  type PatientsListPayload,
-} from "@/app/lib/api/demo-fallback-client";
+import { ClinicianInlineError } from "@/app/components/clinician/ClinicianInlineError";
+import { useClinicianPatientsAndResults } from "@/app/hooks/useClinicianPatientsAndResults";
 
 /* ─── Badge helpers ──────────────────────────────────────────────────────── */
 
@@ -68,58 +64,18 @@ function StatusBadge({ status }: { status: string | null }) {
 /* ─── Page ───────────────────────────────────────────────────────────────── */
 
 export default function PatientsPage() {
-  const [patients, setPatients]     = useState<PatientRow[]>([]);
-  const [results, setResults]       = useState<ClinicianResultsResponse | null>(null);
+  const {
+    patients,
+    setPatients,
+    results,
+    loading: isLoading,
+    error,
+    demoMode,
+    demoNotice,
+  } = useClinicianPatientsAndResults({ strictPatients: true });
   const [search, setSearch]         = useState("");
-  const [isLoading, setIsLoading]   = useState(true);
-  const [error, setError]           = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<PatientRow | null>(null);
-  const [demoMode, setDemoMode] = useState(false);
-  const [demoNotice, setDemoNotice] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    setIsLoading(true);
-    Promise.all([
-      fetch("/api/patients").then(async (res) => {
-        const json = (await res.json()) as PatientsListPayload;
-        if (!res.ok && !Array.isArray(json) && !("patients" in json)) {
-          const body = json as { error?: string };
-          throw new Error(body.error ?? `Request failed (${res.status})`);
-        }
-        return parsePatientsList(json);
-      }),
-      fetch("/api/clinician/results")
-        .then(async (res) =>
-          res.ok ? (res.json() as Promise<ClinicianResultsResponse>) : null,
-        )
-        .catch(() => null),
-    ])
-      .then(([patientsPayload, resultsData]) => {
-        if (!isMounted) return;
-        setPatients(patientsPayload.patients);
-        setResults(resultsData);
-        let meta = mergeDemoMeta(
-          { demoMode: false, demoNotice: null },
-          patientsPayload,
-        );
-        if (resultsData?.demoMode) {
-          meta = mergeDemoMeta(meta, {
-            demoMode: true,
-            demoNotice: resultsData.demoNotice ?? null,
-          });
-        }
-        setDemoMode(meta.demoMode);
-        setDemoNotice(meta.demoNotice);
-      })
-      .catch((err: unknown) => {
-        if (!isMounted) return;
-        setError(err instanceof Error ? err.message : "Could not load patients.");
-      })
-      .finally(() => { if (isMounted) setIsLoading(false); });
-    return () => { isMounted = false; };
-  }, []);
 
   const operationalByPatient = useMemo(
     () => buildPatientOperationalSummaries(patients, results),
@@ -144,11 +100,20 @@ export default function PatientsPage() {
     }
   }
 
-  const filtered = patients.filter((p) =>
-    `${p.full_name} ${p.id} ${p.phone ?? ""} ${p.diagnosis ?? ""}`.toLowerCase().includes(search.toLowerCase())
+  const filtered = useMemo(
+    () =>
+      patients.filter((p) =>
+        `${p.full_name} ${p.id} ${p.phone ?? ""} ${p.diagnosis ?? ""}`
+          .toLowerCase()
+          .includes(search.toLowerCase()),
+      ),
+    [patients, search],
   );
 
-  const activeCount = patients.filter((p) => (p.status ?? "").toLowerCase() === "active").length;
+  const activeCount = useMemo(
+    () => patients.filter((p) => (p.status ?? "").toLowerCase() === "active").length,
+    [patients],
+  );
 
   return (
     <>
@@ -196,9 +161,7 @@ export default function PatientsPage() {
 
           {/* ── Error banner ── */}
           {error && (
-            <div className="rounded-[7px] border border-rose-400/20 bg-rose-400/6 px-4 py-3 text-xs text-rose-300">
-              Could not load patients. {error}
-            </div>
+            <ClinicianInlineError message={`Could not load patients. ${error}`} />
           )}
 
           {/* ── Search ── */}
@@ -208,7 +171,8 @@ export default function PatientsPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
               </svg>
               <input
-                type="text"
+                type="search"
+                aria-label="Search patients by name, diagnosis, or phone"
                 placeholder="Search by name, diagnosis, or phone…"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
@@ -245,7 +209,7 @@ export default function PatientsPage() {
               <tbody className="divide-y divide-[#1E2D42] bg-[#0F1825]">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={6} className="px-5 py-10 text-sm text-white/30">
+                    <td colSpan={6} className="px-5 py-10 text-sm text-white/30" aria-busy="true">
                       Loading patients…
                     </td>
                   </tr>

@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   AI_CLINICIAN_SUMMARY_DISCLAIMER,
+  AI_CLINICIAN_SUMMARY_V2_SECTION_KEYS,
   AI_CLINICIAN_SUMMARY_V2_SECTION_LABELS,
   type AiClinicianSummaryV2Sections,
 } from "@/app/lib/ai/clinician-summary-constants";
+import { ClinicianInlineError } from "@/app/components/clinician/ClinicianInlineError";
 import {
   clearApprovedAiSummary,
   loadApprovedAiSummary,
@@ -183,11 +185,7 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
         )}
       </div>
 
-      {error && (
-        <p className="mt-3 rounded-[6px] border border-rose-400/25 bg-rose-400/5 px-3 py-2 text-xs text-rose-300">
-          {error}
-        </p>
-      )}
+      {error && <ClinicianInlineError message={error} className="mt-3" />}
 
       {fallbackNotice && (
         <div className="mt-3 rounded-[6px] border border-amber-400/25 bg-amber-400/5 px-3 py-2">
@@ -209,8 +207,7 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
         />
       ) : sections && !isEditing ? (
         <div className="mt-4 space-y-3">
-          {(Object.keys(AI_CLINICIAN_SUMMARY_V2_SECTION_LABELS) as (keyof AiClinicianSummaryV2Sections)[]).map(
-            (key) => (
+          {AI_CLINICIAN_SUMMARY_V2_SECTION_KEYS.map((key) => (
               <div key={key} className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
                   {AI_CLINICIAN_SUMMARY_V2_SECTION_LABELS[key]}
@@ -219,8 +216,7 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
                   {sections[key]}
                 </p>
               </div>
-            ),
-          )}
+          ))}
         </div>
       ) : displayText ? (
         <p className="mt-4 text-sm leading-relaxed text-white/75 whitespace-pre-wrap">
