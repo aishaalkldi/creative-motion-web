@@ -25,6 +25,18 @@ export const VOICE_UI_LABELS = {
     en: "Speech transcription is unavailable. Please type your answer manually.",
     ar: "النسخ الصوتي غير متاح. يرجى كتابة إجابتك يدويًا.",
   },
+  browserFallbackListening: {
+    en: "Server unavailable — speak your answer now (browser recognition)",
+    ar: "الخادم غير متاح — تحدّث بإجابتك الآن (التعرّف عبر المتصفح)",
+  },
+  browserFallbackHint: {
+    en: "Listening with your browser. Tap stop when finished, or type manually below.",
+    ar: "الاستماع عبر المتصفح. اضغط إيقاف عند الانتهاء، أو اكتب يدويًا أدناه.",
+  },
+  transcribedSuccess: {
+    en: "Voice answer added — please review and edit before submitting.",
+    ar: "تمت إضافة الإجابة الصوتية — يرجى المراجعة والتعديل قبل الإرسال.",
+  },
   transcribed: {
     en: "Voice answer transcribed. Please review before submitting.",
     ar: "تم تحويل الإجابة الصوتية إلى نص. يرجى المراجعة قبل الإرسال.",

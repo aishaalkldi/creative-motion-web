@@ -1150,6 +1150,27 @@ export function MotionAnalysisReportPanel({ report }: MotionAnalysisReportPanelP
       </summary>
 
       <div className="space-y-2 px-3 py-2.5">
+        <div className="rounded-[6px] border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[10px] leading-relaxed text-amber-100/95 sm:text-[11px]">
+          {MOTION_ANALYSIS_REVIEW_BANNER}
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          <div className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-2">
+            <p className="text-[9px] uppercase tracking-wider text-[#6B7280]">Duration</p>
+            <p className="mt-0.5 text-xs font-semibold text-[#F9FAFB]">
+              {report.sessionDurationSeconds > 0 ? `${report.sessionDurationSeconds}s` : "—"}
+            </p>
+          </div>
+          <div className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-2">
+            <p className="text-[9px] uppercase tracking-wider text-[#6B7280]">Reps / cycles</p>
+            <p className="mt-0.5 text-xs font-semibold text-[#F9FAFB]">{report.completedReps}</p>
+          </div>
+          <div className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-2">
+            <p className="text-[9px] uppercase tracking-wider text-[#6B7280]">Signal</p>
+            <p className="mt-0.5 text-xs font-semibold text-[#F9FAFB]">
+              {report.captureQuality?.qualityLevel ?? report.summaryLabel}
+            </p>
+          </div>
+        </div>
         {polishedSts ? <StsPolishedReportBody report={report} /> : <LegacyReportBody report={report} />}
       </div>
     </details>

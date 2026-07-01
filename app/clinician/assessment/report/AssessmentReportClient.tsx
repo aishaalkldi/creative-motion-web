@@ -41,8 +41,12 @@ import {
 } from "@/app/lib/remote-questionnaire-summary";
 import { ReportExportToolbar } from "@/app/components/reports/ReportExportToolbar";
 import { RemoteQuestionnairePrintReport } from "@/app/components/reports/RemoteQuestionnairePrintReport";
+import { CvCapturesClinicalSection } from "@/app/components/reports/CvCapturesClinicalSection";
 import { AssessmentInterpretationDraftSection } from "@/app/components/reports/AssessmentInterpretationDraftSection";
 import { PdfTranslationWarningModal } from "@/app/components/clinician/PdfTranslationWarningModal";
+import { useCvSessionMetrics } from "@/app/hooks/useCvSessionMetrics";
+import { getCvReadyExercises } from "@/app/lib/cv/cv-ready-exercises";
+import { GAIT_ASSESSMENT_EXERCISE_DISPLAY_NAMES } from "@/app/lib/cv/gait-assessment-exercise-ids";
 import { isAiTranslationEnabled } from "@/app/lib/ai/ai-features";
 import {
   BADGE_FOR_THERAPIST_REVIEW,
@@ -1099,6 +1103,31 @@ export function AssessmentReportClient() {
 
   const patientId = resolvedPatientId || patientIdParam;
 
+  const { metrics: patientCvMetrics, loading: cvMetricsLoading } = useCvSessionMetrics({
+    patientId: patientId || undefined,
+    limit: 12,
+    dedupePatientSessions: false,
+  });
+
+  const cvExerciseNameById = useMemo<Record<string, string>>(
+    () => ({
+      ...Object.fromEntries(
+        getCvReadyExercises().map((exercise) => [exercise.exerciseId, exercise.nameEn]),
+      ),
+      ...GAIT_ASSESSMENT_EXERCISE_DISPLAY_NAMES,
+      "timed-up-and-go": "Timed Up and Go",
+    }),
+    [],
+  );
+
+  const cvMetricsForReport = useMemo(
+    () =>
+      patientCvMetrics.filter(
+        (row) => row.source === "assessment_movement" || row.source === "patient_session",
+      ),
+    [patientCvMetrics],
+  );
+
   useEffect(() => {
     let cancelled = false;
 
@@ -1319,6 +1348,13 @@ export function AssessmentReportClient() {
               submissionMeta={remoteSubmissionMeta}
               assessmentLanguage={patientAnsweredInArabic ? "ar" : "en"}
             />
+            <div className="mt-4">
+              <CvCapturesClinicalSection
+                metrics={cvMetricsForReport}
+                exerciseNameById={cvExerciseNameById}
+                variant="print"
+              />
+            </div>
           </div>
         ) : null}
 
@@ -1397,6 +1433,12 @@ export function AssessmentReportClient() {
             structuredData={remoteSubmissionMeta}
             patientId={patientId}
           />
+          {!cvMetricsLoading ? (
+            <CvCapturesClinicalSection
+              metrics={cvMetricsForReport}
+              exerciseNameById={cvExerciseNameById}
+            />
+          ) : null}
           <ReportNextStepsFooter patientId={patientId} existingPlan={existingPlan} />
           <ClinicalDisclaimerBlock />
         </div>
@@ -2011,9 +2053,23 @@ export function AssessmentReportClient() {
         {/* ── Section 8: Assign Treatment Plan ── */}
         <AssignPlanSection patientId={patientId} existingPlan={existingPlan} />
 
+        {!cvMetricsLoading ? (
+          <CvCapturesClinicalSection
+            metrics={cvMetricsForReport}
+            exerciseNameById={cvExerciseNameById}
+          />
+        ) : null}
+
         <ReportNextStepsFooter patientId={patientId} existingPlan={existingPlan} />
 
         <div className="pb-8 print:block">
+          <div className="print-only mb-4">
+            <CvCapturesClinicalSection
+              metrics={cvMetricsForReport}
+              exerciseNameById={cvExerciseNameById}
+              variant="print"
+            />
+          </div>
           <ClinicalDisclaimerBlock className="print:border-gray-300 print:bg-gray-50" />
           <p className="mt-3 text-center text-[10px] text-white/25 print:text-gray-500">
             {serverBacked ? "Server-backed assessment" : "Local draft (not yet finalized)"} · {formatDate(displayDate)} · Patient #{patientId}

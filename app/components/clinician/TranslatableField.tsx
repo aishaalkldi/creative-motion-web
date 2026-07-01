@@ -62,6 +62,22 @@ export function TranslatableField({
         variant="screen"
       />
 
+      {fieldState === "failed" && (
+        <div className="print:hidden space-y-1.5">
+          <p className="text-[10px] italic text-rose-300/90">
+            Translation service unavailable. Try offline translation or enter English manually.
+          </p>
+          <button
+            type="button"
+            onClick={onTranslate}
+            className="rounded-[6px] border border-[#1E2D42] bg-transparent px-2.5 py-[3px] text-[10px] text-[#9CA3AF] transition hover:border-[#1D9E75]/40 hover:text-[#5DCAA5]"
+            style={{ borderWidth: "0.5px" }}
+          >
+            Retry translation (offline fallback)
+          </button>
+        </div>
+      )}
+
       {fieldState === "idle" && !preferAutoTranslate && (
         <button
           type="button"

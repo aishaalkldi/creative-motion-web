@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { translateArabicToEnglishClinical } from '@/app/lib/clinical/arabic-clinical-translate-fallback'
 
 export type FieldTranslationState =
   | 'idle'
@@ -65,7 +66,17 @@ export function useTranslationProgress(
         }
         setStates((prev) => ({ ...prev, [fieldKey]: 'done' }))
       } catch {
-        setStates((prev) => ({ ...prev, [fieldKey]: 'failed' }))
+        const fallback = await translateArabicToEnglishClinical(text)
+        if (fallback?.trim()) {
+          setTranslations((prev) => ({
+            ...prev,
+            [fieldKey]: fallback.trim(),
+          }))
+          setGeneratedAtMap((prev) => ({ ...prev, [fieldKey]: new Date().toISOString() }))
+          setStates((prev) => ({ ...prev, [fieldKey]: 'done' }))
+        } else {
+          setStates((prev) => ({ ...prev, [fieldKey]: 'failed' }))
+        }
       }
     },
     [assessmentId],

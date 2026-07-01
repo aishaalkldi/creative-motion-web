@@ -62,6 +62,11 @@ export const SECTION_CLINICAL_FINDINGS = "Clinical Findings / Therapist Input";
 
 export const SECTION_SAFETY_INDICATORS = "Safety Indicators";
 
+export const SECTION_CV_MOVEMENT_OBSERVATIONS = "Camera-Assisted Movement Observations";
+
+export const THERAPIST_REVIEW_BANNER =
+  "Therapist review required. Observations are assistive only — not diagnostic and not validated clinical test scores.";
+
 export const SECTION_SUGGESTED_DIRECTION = "Suggested Rehabilitation Direction";
 
 export const SAFETY_REVIEW_REQUIRED =

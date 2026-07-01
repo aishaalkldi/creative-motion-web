@@ -1,4 +1,5 @@
 import type { AssessmentMovementSummary } from "@/app/lib/cv/assessment-movement-summary";
+import { THERAPIST_REVIEW_BANNER } from "@/app/lib/reports/clinical-report-copy";
 
 type Props = {
   summary: AssessmentMovementSummary;
@@ -21,14 +22,18 @@ export function AssessmentMovementSummaryPanel({ summary }: Props) {
       </summary>
 
       <div className="space-y-2.5 px-3 py-2.5">
-        <dl className="grid gap-2 sm:grid-cols-2">
+        <p className="rounded-[6px] border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-[10px] leading-relaxed text-amber-100/95">
+          {THERAPIST_REVIEW_BANNER}
+        </p>
+
+        <dl className="grid gap-2 grid-cols-1 sm:grid-cols-2">
           {summary.measuredRows.map((row) => (
             <div
               key={row.label}
               className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-2"
             >
               <dt className="text-[10px] uppercase tracking-[0.06em] text-[#6B7280]">{row.label}</dt>
-              <dd className="mt-0.5 text-xs font-semibold text-[#F9FAFB]">{row.value}</dd>
+              <dd className="mt-0.5 text-sm font-semibold text-[#F9FAFB]">{row.value}</dd>
             </div>
           ))}
         </dl>
@@ -37,7 +42,7 @@ export function AssessmentMovementSummaryPanel({ summary }: Props) {
           <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#9CA3AF]">
             Assistive interpretation
           </p>
-          <ul className="mt-1.5 list-inside list-disc space-y-1 text-[11px] leading-relaxed text-[#D1D5DB]">
+          <ul className="mt-1.5 list-inside list-disc space-y-1.5 text-[11px] leading-relaxed text-[#D1D5DB]">
             {summary.interpretationLines.map((line) => (
               <li key={line}>{line}</li>
             ))}
@@ -48,7 +53,7 @@ export function AssessmentMovementSummaryPanel({ summary }: Props) {
           <p className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#EF9F27]">
             Review prompts
           </p>
-          <ul className="mt-1.5 list-inside list-disc space-y-1 text-[11px] leading-relaxed text-[#D1D5DB]">
+          <ul className="mt-1.5 list-inside list-disc space-y-1.5 text-[11px] leading-relaxed text-[#D1D5DB]">
             {summary.reviewPrompts.map((line) => (
               <li key={line}>{line}</li>
             ))}
