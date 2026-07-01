@@ -87,6 +87,7 @@ export default function GaitAssessmentPage() {
               consentIntro="Camera access is used for a short walking observation pass. No diagnostic gait classification is performed."
               createDetector={createDetector}
               onSessionSaved={() => void refresh()}
+              startButtonLabel="Start walking observation"
             />
           </div>
         </section>
