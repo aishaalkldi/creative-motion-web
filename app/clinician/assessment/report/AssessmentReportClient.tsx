@@ -30,7 +30,7 @@ import {
   type SpecialTestRegion,
 } from "@/app/lib/general-assessment/special-tests-catalog";
 import {
-  getTreatmentPlan,
+  getTreatmentPlanForPatient,
   REHAB_PROGRAMS,
   type TreatmentPlan,
   type RehabProgram,
@@ -1213,44 +1213,12 @@ export function AssessmentReportClient() {
   useEffect(() => {
     if (!patientId) return;
     let cancelled = false;
-    void fetch(`/api/plans?patientId=${encodeURIComponent(patientId)}`)
-      .then(async (res) => (res.ok ? res.json() : []))
-      .then((plans: unknown) => {
-        if (cancelled || !Array.isArray(plans) || plans.length === 0) {
-          setExistingPlan(null);
-          return;
-        }
-        const p = plans[0] as {
-          id: string;
-          title: string;
-          created_at: string;
-          clinician_note?: string | null;
-          structured_data?: { programName?: string; phaseName?: string; sessionsPerWeek?: number };
-          sessions?: unknown[];
-        };
-        const sd = p.structured_data;
-        setExistingPlan({
-          id: p.id,
-          patientId: 0,
-          programId: "custom",
-          programName: sd?.programName ?? p.title,
-          phase: "phase-1",
-          phaseName: sd?.phaseName ?? "Phase 1",
-          phaseGoal: "",
-          sessionsPerWeek: sd?.sessionsPerWeek ?? 3,
-          totalSessions: p.sessions?.length ?? 0,
-          clinicianNotes: p.clinician_note ?? "",
-          assignedAt: p.created_at,
-          assignedBy: "Clinician",
-          status: "active",
-          sessions: [],
-        });
+    void getTreatmentPlanForPatient(patientId)
+      .then((plan) => {
+        if (!cancelled) setExistingPlan(plan);
       })
       .catch(() => {
-        const n = parseInt(patientId, 10);
-        if (!isNaN(n) && n > 0) {
-          getTreatmentPlan(n).then((plan) => { if (!cancelled) setExistingPlan(plan); });
-        }
+        if (!cancelled) setExistingPlan(null);
       });
     return () => { cancelled = true; };
   }, [patientId]);

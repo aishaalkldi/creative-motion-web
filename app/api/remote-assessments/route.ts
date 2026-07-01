@@ -122,3 +122,75 @@ export async function POST(req: NextRequest) {
     expiresAt: row.expires_at,
   });
 }
+
+type RemoteAssessmentListRow = {
+  token: string;
+  patient_id: string;
+  assessment_type: string;
+  included_sections: unknown;
+  status: string;
+  expires_at: string;
+  created_at: string;
+  submitted_at: string | null;
+};
+
+/**
+ * GET /api/remote-assessments?patientId=UUID
+ * Clinician lists remote assessment links for a patient (newest first).
+ */
+export async function GET(req: NextRequest) {
+  const clients = await buildClients();
+  if (!clients) {
+    return serviceUnavailableResponse();
+  }
+  const { sessionClient, adminClient } = clients;
+
+  const {
+    data: { user },
+    error: authError,
+  } = await sessionClient.auth.getUser();
+  if (authError ?? !user) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const patientId = new URL(req.url).searchParams.get("patientId")?.trim();
+  if (!patientId) {
+    return NextResponse.json({ error: "patientId is required." }, { status: 400 });
+  }
+
+  const ownership = await validatePatientOwnership(adminClient, patientId, user.id);
+  if (!ownership.ok) {
+    return ownershipErrorResponse(ownership);
+  }
+
+  const { data: rows, error: queryError } = await adminClient
+    .from("remote_assessment_requests")
+    .select(
+      "token, patient_id, assessment_type, included_sections, status, expires_at, created_at, submitted_at",
+    )
+    .eq("patient_id", patientId)
+    .eq("provider_id", user.id)
+    .order("created_at", { ascending: false });
+
+  if (queryError) {
+    if (queryError.code === "42P01") {
+      console.error("[GET /api/remote-assessments] remote_assessment_requests table missing");
+      return genericServerErrorResponse();
+    }
+    console.error("[GET /api/remote-assessments] query failed:", queryError.message);
+    return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
+  }
+
+  const result = (rows ?? []).map((row: RemoteAssessmentListRow) => ({
+    token: row.token,
+    patientId: row.patient_id,
+    assessmentType: row.assessment_type,
+    includedSections: Array.isArray(row.included_sections) ? row.included_sections : [],
+    status: row.status,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+    submittedAt: row.submitted_at,
+  }));
+
+  return NextResponse.json(result);
+}

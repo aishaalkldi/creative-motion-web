@@ -6,8 +6,10 @@
  * GeneralAssessmentDraft when submitted from the same browser.
  */
 
+import { getAuthHeaders } from "../auth";
 import { loadGeneralAssessmentDraft, saveGeneralAssessmentDraft } from "../general-assessment/storage";
 import { PATIENT_SECTION_LABELS_EN } from "../patient-assessment-questions";
+import { isUuidPatientId } from "./patient-id-utils";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -356,7 +358,45 @@ export async function getRemoteAssessment(id: string): Promise<RemoteAssessmentR
   return getRemoteAssessmentLocal(id);
 }
 
-export function listPatientAssessments(patientId: string): RemoteAssessmentRequest[] {
+function parseRemoteStatus(value: string): RemoteAssessmentRequest["status"] {
+  if (value === "submitted") return "submitted";
+  if (value === "in_progress") return "in_progress";
+  return "pending";
+}
+
+type RemoteAssessmentListApiItem = {
+  token: string;
+  patientId: string;
+  assessmentType: string;
+  includedSections: unknown;
+  status: string;
+  expiresAt: string;
+  createdAt: string;
+  submittedAt: string | null;
+};
+
+function mapApiListItemToRequest(
+  item: RemoteAssessmentListApiItem,
+  local: RemoteAssessmentRequest | null,
+): RemoteAssessmentRequest {
+  const req: RemoteAssessmentRequest = {
+    id: item.token,
+    patientId: item.patientId,
+    patientName: local?.patientName ?? "",
+    assessmentType: parseAssessmentType(item.assessmentType),
+    includedSections: parseIncludedSections(item.includedSections),
+    status: parseRemoteStatus(item.status),
+    createdAt: item.createdAt,
+    expiresAt: item.expiresAt,
+    submittedAt: item.submittedAt ?? local?.submittedAt,
+    patientDraft: local?.patientDraft,
+    assessmentLanguage: local?.assessmentLanguage,
+  };
+  persist(req);
+  return req;
+}
+
+function listPatientAssessmentsLocal(patientId: string): RemoteAssessmentRequest[] {
   const ids = collectIndexIds(patientId);
   return ids
     .map((id) => getRemoteAssessmentLocal(id))
@@ -367,6 +407,45 @@ export function listPatientAssessments(patientId: string): RemoteAssessmentReque
       return rid === pid || (legacyNumericIndexKey(pid) !== null && rid === legacyNumericIndexKey(pid));
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+async function fetchPatientAssessmentsFromApi(patientId: string): Promise<RemoteAssessmentRequest[] | null> {
+  if (typeof window === "undefined" || !isUuidPatientId(patientId)) return null;
+
+  try {
+    const res = await fetch(
+      `/api/remote-assessments?patientId=${encodeURIComponent(patientId.trim())}`,
+      { headers: getAuthHeaders() },
+    );
+    if (!res.ok) return null;
+
+    const rows = (await res.json()) as unknown;
+    if (!Array.isArray(rows)) return null;
+
+    const apiIds = new Set<string>();
+    const merged = (rows as RemoteAssessmentListApiItem[]).map((item) => {
+      apiIds.add(item.token);
+      return mapApiListItemToRequest(item, getRemoteAssessmentLocal(item.token));
+    });
+
+    for (const local of listPatientAssessmentsLocal(patientId)) {
+      if (!apiIds.has(local.id)) {
+        merged.push(local);
+      }
+    }
+
+    merged.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return merged;
+  } catch {
+    return null;
+  }
+}
+
+/** List remote assessment links for a patient. Supabase API for UUID patients; localStorage for legacy demo. */
+export async function listPatientAssessments(patientId: string): Promise<RemoteAssessmentRequest[]> {
+  const fromApi = await fetchPatientAssessmentsFromApi(patientId);
+  if (fromApi) return fromApi;
+  return listPatientAssessmentsLocal(patientId);
 }
 
 export function updateRemoteAssessmentDraft(

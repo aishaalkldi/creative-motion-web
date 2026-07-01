@@ -323,7 +323,9 @@ export default function PatientProfilePage() {
 
   useEffect(() => {
     if (!patient) return;
-    const refreshRemote = () => setRemoteAssessments(listPatientAssessments(patient.id));
+    const refreshRemote = () => {
+      void listPatientAssessments(patient.id).then(setRemoteAssessments);
+    };
     refreshRemote();
     window.addEventListener("focus", refreshRemote);
     document.addEventListener("visibilitychange", refreshRemote);
@@ -723,7 +725,7 @@ export default function PatientProfilePage() {
         patientName={patient.full_name}
         onClose={() => setSendModalOpen(false)}
         onCreated={() => {
-          setRemoteAssessments(listPatientAssessments(patient.id));
+          void listPatientAssessments(patient.id).then(setRemoteAssessments);
           void refreshClinicalAssessments();
         }}
       />
