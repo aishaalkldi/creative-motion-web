@@ -1,12 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { AssessmentListRow } from "@/app/api/assessments/route";
-import type { AssessmentRow } from "@/app/api/assessments/route";
-import {
-  generateIntelligentPlanSuggestion,
-  type IntelligentPlanSuggestion,
-} from "@/app/lib/clinician/intelligent-plan-generator";
+import type { AssessmentListRow, AssessmentRow } from "@/app/api/assessments/route";
+import { generateIntelligentPlanSuggestion } from "@/app/lib/clinician/intelligent-plan-generator";
 import {
   PILOT_PROGRAM_TEMPLATES,
   type PilotProgramTemplate,
@@ -30,6 +26,7 @@ export function IntelligentPlanSuggestionPanel({
 }: IntelligentPlanSuggestionPanelProps) {
   const [structuredData, setStructuredData] = useState<unknown>(null);
   const [assessmentType, setAssessmentType] = useState<string | undefined>();
+  const [assessmentLoading, setAssessmentLoading] = useState(false);
 
   const preferredAssessmentId = baselineId || assessments[0]?.id || null;
 
@@ -37,9 +34,11 @@ export function IntelligentPlanSuggestionPanel({
     if (!preferredAssessmentId) {
       setStructuredData(null);
       setAssessmentType(undefined);
+      setAssessmentLoading(false);
       return;
     }
     let cancelled = false;
+    setAssessmentLoading(true);
     void fetch(`/api/assessments/${encodeURIComponent(preferredAssessmentId)}`)
       .then(async (res) => {
         if (!res.ok) return null;
@@ -55,13 +54,16 @@ export function IntelligentPlanSuggestionPanel({
           setStructuredData(null);
           setAssessmentType(undefined);
         }
+      })
+      .finally(() => {
+        if (!cancelled) setAssessmentLoading(false);
       });
     return () => {
       cancelled = true;
     };
   }, [preferredAssessmentId]);
 
-  const suggestion = useMemo<IntelligentPlanSuggestion | null>(() => {
+  const suggestion = useMemo(() => {
     if (!patient) return null;
     return generateIntelligentPlanSuggestion({
       patient,
@@ -71,17 +73,34 @@ export function IntelligentPlanSuggestionPanel({
     });
   }, [patient, assessments, structuredData, assessmentType]);
 
-  if (!patient || !suggestion) return null;
+  if (!patient) return null;
+  if (assessmentLoading) {
+    return (
+      <section
+        aria-busy="true"
+        aria-label="Loading plan suggestion"
+        className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] px-5 py-4 text-sm text-white/40"
+      >
+        Preparing intelligent plan suggestion…
+      </section>
+    );
+  }
+  if (!suggestion) return null;
 
   const template = PILOT_PROGRAM_TEMPLATES.find((row) => row.id === suggestion.templateId);
   if (!template) return null;
 
   return (
-    <section className="rounded-[10px] border border-cyan-400/20 bg-cyan-400/5 p-5">
+    <section
+      aria-labelledby="intelligent-plan-suggestion-title"
+      className="rounded-[10px] border border-cyan-400/20 bg-cyan-400/5 p-5"
+    >
       <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-200/80">
         Intelligent plan suggestion — therapist review required
       </p>
-      <h2 className="mt-1 text-sm font-bold text-white">{suggestion.templateTitle}</h2>
+      <h2 id="intelligent-plan-suggestion-title" className="mt-1 text-sm font-bold text-white">
+        {suggestion.templateTitle}
+      </h2>
       <p className="mt-2 text-xs leading-relaxed text-white/45">
         Suggested from assessment focus and patient record. Not a diagnosis or automatic prescription.
       </p>

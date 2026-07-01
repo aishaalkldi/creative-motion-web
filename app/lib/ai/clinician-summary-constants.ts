@@ -8,6 +8,14 @@ export type AiClinicianSummaryV2Sections = {
   therapistReviewNote: string;
 };
 
+export const AI_CLINICIAN_SUMMARY_V2_SECTION_KEYS = [
+  "overview",
+  "sessionActivity",
+  "patientReportedResponse",
+  "cvObservations",
+  "therapistReviewNote",
+] as const satisfies readonly (keyof AiClinicianSummaryV2Sections)[];
+
 export const AI_CLINICIAN_SUMMARY_V2_SECTION_LABELS: Record<
   keyof AiClinicianSummaryV2Sections,
   string

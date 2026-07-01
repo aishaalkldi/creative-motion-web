@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   buildLongitudinalComparison,
   formatComparisonDirection,
@@ -28,13 +29,18 @@ function DirectionBadge({ comparison }: { comparison: LongitudinalComparison }) 
 }
 
 export function LongitudinalComparisonPanel({ bundle }: LongitudinalComparisonPanelProps) {
-  const comparison = buildLongitudinalComparison(bundle);
+  const comparison = useMemo(() => buildLongitudinalComparison(bundle), [bundle]);
   if (!comparison.hasComparison) return null;
 
   return (
-    <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+    <section
+      aria-labelledby="longitudinal-comparison-title"
+      className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6"
+    >
       <div className="mb-1 flex flex-wrap items-center gap-2">
-        <h2 className="text-[12px] font-medium text-[#F9FAFB]">Longitudinal comparison</h2>
+        <h2 id="longitudinal-comparison-title" className="text-[12px] font-medium text-[#F9FAFB]">
+          Longitudinal comparison
+        </h2>
         <span className="rounded-[4px] border border-[#1E2D42] bg-[#0B1220] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-[#9CA3AF]">
           Baseline vs latest
         </span>

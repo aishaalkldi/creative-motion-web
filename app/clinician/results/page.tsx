@@ -8,10 +8,11 @@ import type { PatientRow } from "@/app/lib/validate-patient-ownership";
 import { ClinicalActionCard } from "@/app/components/clinician/ClinicalActionCard";
 import { ClinicalReviewActions } from "@/app/components/clinician/ClinicalReviewActions";
 import { DemoOfflineBanner } from "@/app/components/clinician/DemoOfflineBanner";
+import { ClinicianInlineError } from "@/app/components/clinician/ClinicianInlineError";
 import {
-  mergeDemoMeta,
-  parsePatientsList,
-  type PatientsListPayload,
+  collectDemoMeta,
+  fetchClinicianResults,
+  fetchPatientsList,
 } from "@/app/lib/api/demo-fallback-client";
 import {
   clinicalActionNeedsTherapistReview,
@@ -214,35 +215,18 @@ export default function UnifiedResultsPage() {
         setLoading(true);
         setError("");
 
-        const [patientsRes, rehabRes] = await Promise.all([
-          fetch("/api/patients"),
-          fetch("/api/clinician/results"),
+        const [patientsPayload, resultsPayload] = await Promise.all([
+          fetchPatientsList({ strict: true }),
+          fetchClinicianResults({ strict: true }),
         ]);
 
-        const patientsJson = (await patientsRes.json()) as PatientsListPayload;
-        if (!patientsRes.ok && !Array.isArray(patientsJson) && !("patients" in patientsJson)) {
-          const body = patientsJson as { error?: string };
-          throw new Error(body.error ?? `Failed to load patients (${patientsRes.status})`);
-        }
-        if (!rehabRes.ok) {
-          const body = (await rehabRes.json().catch(() => ({}))) as { error?: string };
-          throw new Error(body.error ?? `Failed to load results (${rehabRes.status})`);
+        if (!resultsPayload) {
+          throw new Error("Failed to load results.");
         }
 
-        const patientsPayload = parsePatientsList(patientsJson);
-        const resultsPayload = (await rehabRes.json()) as ClinicianResultsResponse;
         const patients = patientsPayload.patients;
         const rehabResults = resultsPayload.cards;
-        let meta = mergeDemoMeta(
-          { demoMode: false, demoNotice: null },
-          patientsPayload,
-        );
-        if (resultsPayload.demoMode) {
-          meta = mergeDemoMeta(meta, {
-            demoMode: true,
-            demoNotice: resultsPayload.demoNotice ?? null,
-          });
-        }
+        const meta = collectDemoMeta(patientsPayload, resultsPayload);
         setDemoMode(meta.demoMode);
         setDemoNotice(meta.demoNotice);
 
@@ -423,14 +407,12 @@ export default function UnifiedResultsPage() {
           </div>
 
           {loading ? (
-            <div className="flex flex-col items-center gap-3 py-12">
+            <div className="flex flex-col items-center gap-3 py-12" aria-busy="true" aria-label="Loading patient pipeline">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1E2D42] border-t-[#1D9E75]" />
               <p className="text-sm text-white/40">Loading patient pipeline…</p>
             </div>
           ) : error ? (
-            <div className="rounded-[7px] border border-rose-400/20 bg-rose-400/8 px-4 py-3 text-sm text-rose-300">
-              {error}
-            </div>
+            <ClinicianInlineError message={error} />
           ) : filtered.length === 0 ? (
             <div className="py-12 text-center">
               <p className="text-sm text-white/40">
