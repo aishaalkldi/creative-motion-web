@@ -147,6 +147,12 @@ function buildPilotSummaryText(stats: DashboardStats | null, loading: boolean): 
   ].join("\n");
 }
 
+function formatAdherencePct(value: number | null | undefined, loading: boolean): string {
+  if (loading) return "…";
+  if (value === null || value === undefined) return "–";
+  return `${value}%`;
+}
+
 export default function ClinicianDashboardPage() {
   const [stats, setStats]   = useState<DashboardStats | null>(null);
   const [patients, setPatients] = useState<PatientRow[]>([]);
@@ -235,6 +241,13 @@ export default function ClinicianDashboardPage() {
     { title: "Remote Assessments Pending",  value: formatMetric(stats?.remoteAssessmentsPending, loading), subtitle: "Assessment links awaiting response",      attention: false },
   ];
 
+  const operationalKpiCards = [
+    { title: "Sessions This Week", value: formatMetric(stats?.sessionsCompletedThisWeek, loading), subtitle: "Completed home/clinic sessions logged", attention: false },
+    { title: "Avg Plan Adherence", value: formatAdherencePct(stats?.averagePlanAdherencePct, loading), subtitle: "Mean completion across active plans", attention: false },
+    { title: "Assessments This Month", value: formatMetric(stats?.assessmentsSubmittedThisMonth, loading), subtitle: "Submitted assessment records", attention: false },
+    { title: "CV Captures This Month", value: formatMetric(stats?.cvCapturesThisMonth, loading), subtitle: "Camera-assisted session metrics saved", attention: false },
+  ];
+
   const snapshotRows = [
     { label: "Patients created", value: formatSnapshotMetric(stats?.totalPatients, loading) },
     { label: "Active rehabilitation plans", value: formatSnapshotMetric(stats?.activeCases, loading) },
@@ -316,6 +329,17 @@ export default function ClinicianDashboardPage() {
           <p className="mt-3 text-[11px] leading-relaxed text-white/25">
             These metrics reflect the current clinician account and are intended for pilot monitoring.
           </p>
+        </section>
+
+        <section className="mb-6">
+          <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-white/35">
+            Operational KPIs
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {operationalKpiCards.map((c) => (
+              <MetricCard key={c.title} title={c.title} value={c.value} subtitle={c.subtitle} attention={c.attention} />
+            ))}
+          </div>
         </section>
 
         <section className="mb-6 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">

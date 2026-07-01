@@ -36,7 +36,11 @@ import {
 } from "@/app/lib/ai/clinician-summary-prompt";
 import {
   buildSafeFallbackSummary,
+  buildSafeFallbackSummaryV2,
+  parseAiV2SectionsFromJson,
+  sectionsToDraftSummary,
   validateAndNormalizeAiSummary,
+  validateV2Sections,
 } from "@/app/lib/ai/clinician-summary-validate";
 import {
   genericServerErrorResponse,
@@ -172,16 +176,18 @@ export async function POST(req: NextRequest) {
   }
 
   const generatedAt = new Date().toISOString();
-  const fallbackSummary = buildSafeFallbackSummary(payload);
+  const fallbackSections = buildSafeFallbackSummaryV2(payload);
+  const fallbackSummary = sectionsToDraftSummary(fallbackSections);
 
   const openai = new OpenAI({ apiKey: keyConfig.apiKey });
   let draftSummary = fallbackSummary;
+  let sections = fallbackSections;
   let usedFallback = true;
 
   try {
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      max_tokens: 220,
+      max_tokens: 420,
       temperature: 0.2,
       messages: [
         { role: "system", content: AI_CLINICIAN_SUMMARY_SYSTEM_PROMPT },
@@ -191,15 +197,34 @@ export async function POST(req: NextRequest) {
 
     const raw = response.choices[0]?.message?.content?.trim() ?? "";
     if (raw) {
-      const validated = validateAndNormalizeAiSummary(raw);
-      if (validated.ok) {
-        draftSummary = validated.summary;
-        usedFallback = false;
+      const parsedSections = parseAiV2SectionsFromJson(raw);
+      if (parsedSections) {
+        const validatedV2 = validateV2Sections(parsedSections);
+        if (validatedV2.ok) {
+          sections = validatedV2.sections;
+          draftSummary = sectionsToDraftSummary(validatedV2.sections);
+          usedFallback = false;
+        } else {
+          console.warn(
+            "[POST /api/clinician/ai-session-summary] unsafe v2 JSON; using fallback:",
+            validatedV2.forbiddenPhrases.join(", "),
+          );
+        }
       } else {
-        console.warn(
-          "[POST /api/clinician/ai-session-summary] unsafe AI output; using fallback:",
-          validated.forbiddenPhrases.join(", "),
-        );
+        const validated = validateAndNormalizeAiSummary(raw);
+        if (validated.ok) {
+          draftSummary = validated.summary;
+          sections = {
+            ...fallbackSections,
+            overview: validated.summary,
+          };
+          usedFallback = false;
+        } else {
+          console.warn(
+            "[POST /api/clinician/ai-session-summary] unsafe AI output; using fallback:",
+            validated.forbiddenPhrases.join(", "),
+          );
+        }
       }
     }
   } catch (error) {
@@ -209,6 +234,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         draftSummary: fallbackSummary,
+        sections: fallbackSections,
         disclaimer: AI_CLINICIAN_SUMMARY_DISCLAIMER,
         generatedAt,
         schemaVersion: AI_CLINICIAN_SUMMARY_SCHEMA_VERSION,
@@ -222,6 +248,7 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     draftSummary,
+    sections,
     disclaimer: AI_CLINICIAN_SUMMARY_DISCLAIMER,
     generatedAt,
     schemaVersion: AI_CLINICIAN_SUMMARY_SCHEMA_VERSION,

@@ -68,6 +68,7 @@ import { ClinicalActionCard } from "../../../components/clinician/ClinicalAction
 import { PatientJourneyTimeline } from "../../../components/clinician/PatientJourneyTimeline";
 import { CvPatientCvMetricsSection } from "../../../components/clinician/cv/CvPatientCvMetricsSection";
 import { AiClinicianSummaryCard } from "../../../components/clinician/AiClinicianSummaryCard";
+import { XrSessionRecommendationsCard } from "@/app/components/clinician/XrSessionRecommendationsCard";
 import { getCvReadyExercises } from "@/app/lib/cv/cv-ready-exercises";
 import { GAIT_ASSESSMENT_EXERCISE_DISPLAY_NAMES } from "@/app/lib/cv/gait-assessment-exercise-ids";
 import { indexCvMetricsByPlanSessionId } from "@/app/lib/cv/clinician-session-camera-status";
@@ -1284,6 +1285,11 @@ export default function PatientProfilePage() {
             <AiClinicianSummaryCard
               patientId={patient.id}
               planId={planProgress?.planId ?? treatmentPlan?.id ?? null}
+            />
+
+            <XrSessionRecommendationsCard
+              patientId={patient.id}
+              diagnosis={patient.diagnosis}
             />
 
             <CvPatientCvMetricsSection patientId={patient.id} />

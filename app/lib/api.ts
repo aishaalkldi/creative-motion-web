@@ -413,6 +413,10 @@ export type DashboardStats = {
   activeCases: number | null;
   pendingReviews: number | null;
   remoteAssessmentsPending: number | null;
+  sessionsCompletedThisWeek: number | null;
+  averagePlanAdherencePct: number | null;
+  assessmentsSubmittedThisMonth: number | null;
+  cvCapturesThisMonth: number | null;
   generatedAt: string;
   demoMode?: boolean;
   demoNotice?: string;
