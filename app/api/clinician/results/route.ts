@@ -28,7 +28,8 @@ import {
   pickPreferredAssessment,
   type AssessmentSnapshot,
 } from "../../../lib/assessment-snapshot";
-import { serviceUnavailableResponse } from "../../../lib/api/safe-errors";
+import { demoFallbackIfUnavailable } from "../../../lib/api/demo-fallback-server";
+import { getDemoClinicianResults } from "@/app/lib/demo/local-demo-fallback";
 
 export type ClinicianResultStatus = "pending_review" | "active" | "completed";
 
@@ -64,6 +65,8 @@ export type ClinicianResultCard = {
 export type ClinicianResultsResponse = {
   cards: ClinicianResultCard[];
   patientAssessments: AssessmentSnapshot[];
+  demoMode?: boolean;
+  demoNotice?: string;
 };
 
 type AssessmentPickRow = {
@@ -107,10 +110,9 @@ function deriveStatus(completed: number, total: number): ClinicianResultStatus {
 
 export async function GET(_req: NextRequest) {
   const clients = await buildClients();
-  if (!clients) {
-    return serviceUnavailableResponse();
-  }
-  const { sessionClient, adminClient } = clients;
+  const demo = demoFallbackIfUnavailable(clients, getDemoClinicianResults());
+  if (demo) return demo;
+  const { sessionClient, adminClient } = clients!;
 
   const {
     data: { user },

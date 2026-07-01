@@ -15,6 +15,12 @@ import {
 } from "@/app/lib/clinician/pilot-attention-queue";
 import type { PatientRow } from "../../lib/validate-patient-ownership";
 import ConfirmModal from "../../components/ConfirmModal";
+import { DemoOfflineBanner } from "@/app/components/clinician/DemoOfflineBanner";
+import {
+  mergeDemoMeta,
+  parsePatientsList,
+  type PatientsListPayload,
+} from "@/app/lib/api/demo-fallback-client";
 
 /* ─── Badge helpers ──────────────────────────────────────────────────────── */
 
@@ -69,17 +75,20 @@ export default function PatientsPage() {
   const [error, setError]           = useState("");
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<PatientRow | null>(null);
+  const [demoMode, setDemoMode] = useState(false);
+  const [demoNotice, setDemoNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
     Promise.all([
       fetch("/api/patients").then(async (res) => {
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({})) as { error?: string };
+        const json = (await res.json()) as PatientsListPayload;
+        if (!res.ok && !Array.isArray(json) && !("patients" in json)) {
+          const body = json as { error?: string };
           throw new Error(body.error ?? `Request failed (${res.status})`);
         }
-        return res.json() as Promise<PatientRow[]>;
+        return parsePatientsList(json);
       }),
       fetch("/api/clinician/results")
         .then(async (res) =>
@@ -87,10 +96,22 @@ export default function PatientsPage() {
         )
         .catch(() => null),
     ])
-      .then(([patientsData, resultsData]) => {
+      .then(([patientsPayload, resultsData]) => {
         if (!isMounted) return;
-        setPatients(patientsData);
+        setPatients(patientsPayload.patients);
         setResults(resultsData);
+        let meta = mergeDemoMeta(
+          { demoMode: false, demoNotice: null },
+          patientsPayload,
+        );
+        if (resultsData?.demoMode) {
+          meta = mergeDemoMeta(meta, {
+            demoMode: true,
+            demoNotice: resultsData.demoNotice ?? null,
+          });
+        }
+        setDemoMode(meta.demoMode);
+        setDemoNotice(meta.demoNotice);
       })
       .catch((err: unknown) => {
         if (!isMounted) return;
@@ -143,6 +164,8 @@ export default function PatientsPage() {
 
       <div className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
         <div className="mx-auto max-w-6xl space-y-5">
+
+          <DemoOfflineBanner visible={demoMode} notice={demoNotice} />
 
           {/* ── Header ── */}
           <div className="flex flex-wrap items-start justify-between gap-4">

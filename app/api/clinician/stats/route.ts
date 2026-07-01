@@ -10,7 +10,8 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { fetchClinicianStats } from "@/app/lib/clinician/clinician-stats";
-import { serviceUnavailableResponse } from "../../../lib/api/safe-errors";
+import { demoFallbackIfUnavailable } from "../../../lib/api/demo-fallback-server";
+import { getDemoDashboardStats } from "@/app/lib/demo/local-demo-fallback";
 
 async function buildClients() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -39,10 +40,9 @@ async function buildClients() {
 
 export async function GET(_req: NextRequest) {
   const clients = await buildClients();
-  if (!clients) {
-    return serviceUnavailableResponse();
-  }
-  const { sessionClient, adminClient } = clients;
+  const demo = demoFallbackIfUnavailable(clients, getDemoDashboardStats());
+  if (demo) return demo;
+  const { sessionClient, adminClient } = clients!;
 
   const {
     data: { user },

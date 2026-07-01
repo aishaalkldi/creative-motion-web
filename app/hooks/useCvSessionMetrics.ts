@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
 import { dedupeCvMetricsByPlanSessionExercise } from "@/app/lib/cv/cv-metrics-dedupe";
+import { extractDemoMeta } from "@/app/lib/api/demo-fallback-client";
 
 export type UseCvSessionMetricsOptions = {
   patientId?: string;
@@ -21,6 +22,8 @@ export type UseCvSessionMetricsResult = {
   metrics: CvSessionMetricPublic[];
   loading: boolean;
   error: boolean;
+  demoMode: boolean;
+  demoNotice: string | null;
   refresh: () => Promise<void>;
 };
 
@@ -61,22 +64,33 @@ export function useCvSessionMetrics(
   const [rawMetrics, setRawMetrics] = useState<CvSessionMetricPublic[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [demoMode, setDemoMode] = useState(false);
+  const [demoNotice, setDemoNotice] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(false);
     try {
       const res = await fetch(buildMetricsUrl(patientId, limit));
-      if (!res.ok) {
+      const data = (await res.json()) as {
+        metrics?: CvSessionMetricPublic[];
+        demoMode?: boolean;
+        demoNotice?: string;
+      };
+      const meta = extractDemoMeta(data);
+      setDemoMode(meta.demoMode);
+      setDemoNotice(meta.demoNotice);
+      if (!res.ok && !meta.demoMode) {
         setError(true);
         setRawMetrics([]);
         return;
       }
-      const data = (await res.json()) as { metrics?: CvSessionMetricPublic[] };
       setRawMetrics(data.metrics ?? []);
     } catch {
       setError(true);
       setRawMetrics([]);
+      setDemoMode(false);
+      setDemoNotice(null);
     } finally {
       setLoading(false);
     }
@@ -105,5 +119,5 @@ export function useCvSessionMetrics(
     return applyExerciseFilter(rows, exerciseIds, exerciseFilter);
   }, [rawMetrics, dedupePatientSessions, exerciseIds, exerciseFilter]);
 
-  return { metrics, loading, error, refresh };
+  return { metrics, loading, error, demoMode, demoNotice, refresh };
 }

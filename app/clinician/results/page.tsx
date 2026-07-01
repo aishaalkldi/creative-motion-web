@@ -7,6 +7,12 @@ import type { AssessmentSnapshot } from "@/app/lib/assessment-snapshot";
 import type { PatientRow } from "@/app/lib/validate-patient-ownership";
 import { ClinicalActionCard } from "@/app/components/clinician/ClinicalActionCard";
 import { ClinicalReviewActions } from "@/app/components/clinician/ClinicalReviewActions";
+import { DemoOfflineBanner } from "@/app/components/clinician/DemoOfflineBanner";
+import {
+  mergeDemoMeta,
+  parsePatientsList,
+  type PatientsListPayload,
+} from "@/app/lib/api/demo-fallback-client";
 import {
   clinicalActionNeedsTherapistReview,
   type ClinicalActionResult,
@@ -199,6 +205,8 @@ export default function UnifiedResultsPage() {
   const [rehabResults, setRehabResults] = useState<ClinicianResultCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [demoMode, setDemoMode] = useState(false);
+  const [demoNotice, setDemoNotice] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -211,8 +219,9 @@ export default function UnifiedResultsPage() {
           fetch("/api/clinician/results"),
         ]);
 
-        if (!patientsRes.ok) {
-          const body = (await patientsRes.json().catch(() => ({}))) as { error?: string };
+        const patientsJson = (await patientsRes.json()) as PatientsListPayload;
+        if (!patientsRes.ok && !Array.isArray(patientsJson) && !("patients" in patientsJson)) {
+          const body = patientsJson as { error?: string };
           throw new Error(body.error ?? `Failed to load patients (${patientsRes.status})`);
         }
         if (!rehabRes.ok) {
@@ -220,9 +229,22 @@ export default function UnifiedResultsPage() {
           throw new Error(body.error ?? `Failed to load results (${rehabRes.status})`);
         }
 
-        const patients = (await patientsRes.json()) as PatientRow[];
+        const patientsPayload = parsePatientsList(patientsJson);
         const resultsPayload = (await rehabRes.json()) as ClinicianResultsResponse;
+        const patients = patientsPayload.patients;
         const rehabResults = resultsPayload.cards;
+        let meta = mergeDemoMeta(
+          { demoMode: false, demoNotice: null },
+          patientsPayload,
+        );
+        if (resultsPayload.demoMode) {
+          meta = mergeDemoMeta(meta, {
+            demoMode: true,
+            demoNotice: resultsPayload.demoNotice ?? null,
+          });
+        }
+        setDemoMode(meta.demoMode);
+        setDemoNotice(meta.demoNotice);
 
         const assessmentsByPatient = new Map<string, AssessmentSnapshotView>();
         for (const snapshot of resultsPayload.patientAssessments) {
@@ -350,6 +372,8 @@ export default function UnifiedResultsPage() {
             ← Dashboard
           </Link>
         </div>
+
+        <DemoOfflineBanner visible={demoMode} notice={demoNotice} />
 
         {!loading && !error && reviewQueue.length > 0 && (
           <section className="mb-6 rounded-[10px] border border-amber-400/20 bg-[#0F1825] p-6">

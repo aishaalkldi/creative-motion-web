@@ -86,6 +86,8 @@ import {
 import { displayPatientFileHeader } from "../../../lib/patient-file-number";
 import { resolveCurrentAndPreviousPlans } from "../../../lib/clinician/resolve-current-plan";
 import { PreviousPlansSummary } from "../../../components/clinician/PreviousPlansSummary";
+import { DemoOfflineBanner } from "@/app/components/clinician/DemoOfflineBanner";
+import { extractDemoMeta } from "@/app/lib/api/demo-fallback-client";
 
 export default function PatientProfilePage() {
   const params = useParams();
@@ -122,7 +124,7 @@ export default function PatientProfilePage() {
   const [patientPlanRows, setPatientPlanRows] = useState<PlanRow[]>([]);
   const [previousPlanRows, setPreviousPlanRows] = useState<PlanRow[]>([]);
   const [timelineBundle, setTimelineBundle] = useState<PatientTimelineBundle | null>(null);
-  const { metrics: patientCvMetrics } = useCvSessionMetrics({
+  const { metrics: patientCvMetrics, demoMode: cvDemoMode, demoNotice: cvDemoNotice } = useCvSessionMetrics({
     patientId: patient?.id,
     limit: 30,
     dedupePatientSessions: false,
@@ -146,6 +148,8 @@ export default function PatientProfilePage() {
   const [showPlanAssignedBanner, setShowPlanAssignedBanner] = useState(
     searchParams.get("planAssigned") === "1"
   );
+  const [demoMode, setDemoMode] = useState(false);
+  const [demoNotice, setDemoNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) { setIsLoading(false); return; }
@@ -160,8 +164,11 @@ export default function PatientProfilePage() {
           const body = await res.json().catch(() => ({})) as { error?: string };
           throw new Error(body.error ?? `Failed to load patient (${res.status})`);
         }
-        const p = (await res.json()) as PatientRow;
+        const p = (await res.json()) as PatientRow & { demoMode?: boolean; demoNotice?: string };
         if (!isMounted) return;
+        const meta = extractDemoMeta(p);
+        setDemoMode(meta.demoMode);
+        setDemoNotice(meta.demoNotice);
         setPatient(p);
         setEditForm(p);
       } catch (err) {
@@ -761,6 +768,10 @@ export default function PatientProfilePage() {
 
     <main className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
       <div className="mx-auto max-w-7xl">
+        <DemoOfflineBanner
+          visible={demoMode || cvDemoMode}
+          notice={demoNotice ?? cvDemoNotice}
+        />
         {/* Header */}
         <div className="mb-7 flex flex-wrap items-start justify-between gap-4">
           <div>

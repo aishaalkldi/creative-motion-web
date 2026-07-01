@@ -15,6 +15,11 @@ import {
   serviceUnavailableResponse,
   unableToCompleteResponse,
 } from "@/app/lib/api/safe-errors";
+import { demoFallbackIfUnavailable } from "@/app/lib/api/demo-fallback-server";
+import {
+  getDemoCvSaveResponse,
+  getDemoCvSessionMetrics,
+} from "@/app/lib/demo/local-demo-fallback";
 
 const FORBIDDEN_BODY_KEYS = new Set([
   "video",
@@ -132,6 +137,8 @@ function toPublicMetric(row: CvMetricRow) {
 export async function POST(req: NextRequest) {
   const clients = await buildClients();
   if (!clients) {
+    const demo = demoFallbackIfUnavailable(null, getDemoCvSaveResponse());
+    if (demo) return demo;
     return serviceUnavailableResponse();
   }
   const { sessionClient, adminClient } = clients;
@@ -264,7 +271,14 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   const clients = await buildClients();
+  const { searchParams } = req.nextUrl;
+  const patientId = searchParams.get("patientId")?.trim() || null;
+
   if (!clients) {
+    const demo = demoFallbackIfUnavailable(null, {
+      metrics: getDemoCvSessionMetrics(patientId),
+    });
+    if (demo) return demo;
     return serviceUnavailableResponse();
   }
   const { sessionClient, adminClient } = clients;
@@ -277,8 +291,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: API_ERRORS.UNAUTHORIZED }, { status: 401 });
   }
 
-  const { searchParams } = req.nextUrl;
-  const patientId = searchParams.get("patientId")?.trim() || null;
   const planId = searchParams.get("planId")?.trim() || null;
   const planSessionId = searchParams.get("planSessionId")?.trim() || null;
 
