@@ -75,6 +75,10 @@ export function getDemoDashboardStats(): DashboardStats {
     activeCases: 1,
     pendingReviews: 1,
     remoteAssessmentsPending: 1,
+    sessionsCompletedThisWeek: 3,
+    averagePlanAdherencePct: 67,
+    assessmentsSubmittedThisMonth: 2,
+    cvCapturesThisMonth: 4,
     generatedAt: now(),
   };
 }

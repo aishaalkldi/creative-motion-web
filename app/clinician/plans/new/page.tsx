@@ -17,6 +17,7 @@ import {
   ExerciseLibraryPicker,
   PrescribedExerciseEditor,
 } from "@/app/components/clinician/ExerciseLibraryPicker";
+import { IntelligentPlanSuggestionPanel } from "@/app/components/clinician/IntelligentPlanSuggestionPanel";
 import type { PrescribedExerciseV1 } from "@/app/lib/exercise-resolve";
 import { isPrescribedExerciseV1, getExerciseDisplayName } from "@/app/lib/exercise-prescription";
 
@@ -696,6 +697,14 @@ function NewPlanInner() {
             Select exercises from the library, set dose, and assign structured sessions.
           </p>
         </div>
+
+        <IntelligentPlanSuggestionPanel
+          patient={selectedPatient}
+          assessments={assessments}
+          baselineId={baselineId}
+          onApplyTemplate={applyPilotTemplate}
+          onSetBaselineId={setBaselineId}
+        />
 
         {/* Patient select */}
         <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 space-y-4">

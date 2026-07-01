@@ -1,7 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AI_CLINICIAN_SUMMARY_DISCLAIMER } from "@/app/lib/ai/clinician-summary-constants";
+import {
+  AI_CLINICIAN_SUMMARY_DISCLAIMER,
+  AI_CLINICIAN_SUMMARY_V2_SECTION_LABELS,
+  type AiClinicianSummaryV2Sections,
+} from "@/app/lib/ai/clinician-summary-constants";
 import {
   clearApprovedAiSummary,
   loadApprovedAiSummary,
@@ -10,6 +14,7 @@ import {
 
 type AiSessionSummaryResponse = {
   draftSummary: string;
+  sections?: AiClinicianSummaryV2Sections;
   disclaimer: string;
   generatedAt: string;
   schemaVersion: string;
@@ -40,6 +45,7 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
   const [editedSummary, setEditedSummary] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [sections, setSections] = useState<AiClinicianSummaryV2Sections | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
 
@@ -99,6 +105,7 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
       }
 
       setDraftSummary(data.draftSummary);
+      setSections(data.sections ?? null);
       setEditedSummary(null);
       setGeneratedAt(data.generatedAt);
       if (data.fallback) {
@@ -163,7 +170,7 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">
-            AI draft summary — clinician review required
+            AI clinical summary v2 — clinician review required
           </p>
           <p className="mt-1 text-xs leading-relaxed text-white/45">
             {AI_CLINICIAN_SUMMARY_DISCLAIMER}
@@ -200,6 +207,21 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
           rows={5}
           className="mt-4 w-full rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5 text-sm leading-relaxed text-white/80 outline-none focus:border-[#1D9E75]/40"
         />
+      ) : sections && !isEditing ? (
+        <div className="mt-4 space-y-3">
+          {(Object.keys(AI_CLINICIAN_SUMMARY_V2_SECTION_LABELS) as (keyof AiClinicianSummaryV2Sections)[]).map(
+            (key) => (
+              <div key={key} className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+                  {AI_CLINICIAN_SUMMARY_V2_SECTION_LABELS[key]}
+                </p>
+                <p className="mt-1 text-sm leading-relaxed text-white/75 whitespace-pre-wrap">
+                  {sections[key]}
+                </p>
+              </div>
+            ),
+          )}
+        </div>
       ) : displayText ? (
         <p className="mt-4 text-sm leading-relaxed text-white/75 whitespace-pre-wrap">
           {displayText}

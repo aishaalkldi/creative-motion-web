@@ -20,6 +20,7 @@ import {
   assessmentTypeDisplayLabel,
   mapProgressCvEvidenceToMetrics,
 } from "@/app/lib/progress/progress-outcomes-bundle";
+import { LongitudinalComparisonPanel } from "@/app/components/clinician/progress/LongitudinalComparisonPanel";
 
 const QUALITY_BADGE_CLASS: Record<CaptureQualityLevel, string> = {
   high: "border-[#1D9E75]/35 bg-[#1D9E75]/12 text-[#5DCAA5]",
@@ -165,6 +166,8 @@ export function ProgressOutcomesHub({ bundle }: ProgressOutcomesHubProps) {
           {PROGRESS_OUTCOMES_SAFETY_BANNER}
         </p>
       </div>
+
+      <LongitudinalComparisonPanel bundle={bundle} />
 
       <nav
         aria-label="Outcomes hub sections"

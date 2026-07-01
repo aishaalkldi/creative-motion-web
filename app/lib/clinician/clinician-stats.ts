@@ -15,6 +15,10 @@ export type ClinicianStatsResponse = {
   activeCases: number | null;
   pendingReviews: number | null;
   remoteAssessmentsPending: number | null;
+  sessionsCompletedThisWeek: number | null;
+  averagePlanAdherencePct: number | null;
+  assessmentsSubmittedThisMonth: number | null;
+  cvCapturesThisMonth: number | null;
   generatedAt: string;
 };
 
@@ -76,6 +80,10 @@ export async function fetchClinicianStats(
     activeCases: null,
     pendingReviews: null,
     remoteAssessmentsPending: null,
+    sessionsCompletedThisWeek: null,
+    averagePlanAdherencePct: null,
+    assessmentsSubmittedThisMonth: null,
+    cvCapturesThisMonth: null,
     generatedAt,
   };
 
@@ -128,107 +136,153 @@ export async function fetchClinicianStats(
 
   if (plansErr) {
     console.error("[clinician-stats] pendingReviews plans query failed:", plansErr.message);
-    return stats;
-  }
-
-  if (!plans?.length) {
+  } else if (!plans?.length) {
     stats.pendingReviews = 0;
-    return stats;
-  }
+    stats.sessionsCompletedThisWeek = 0;
+    stats.averagePlanAdherencePct = 0;
+  } else {
+    const planIds = plans.map((plan) => plan.id);
 
-  const planIds = plans.map((plan) => plan.id);
+    const [{ data: sessions, error: sessionsErr }, { data: logs, error: logsErr }, { data: ackRows, error: ackErr }] =
+      await Promise.all([
+        adminClient
+          .from("plan_sessions")
+          .select("plan_id, status, session_number")
+          .in("plan_id", planIds)
+          .returns<SessionRow[]>(),
+        adminClient
+          .from("session_logs")
+          .select("id, plan_id, plan_session_id, effort_score, pain_score, notes, completed_at")
+          .in("plan_id", planIds)
+          .order("completed_at", { ascending: false })
+          .returns<LogRow[]>(),
+        adminClient
+          .from("clinical_review_acknowledgments")
+          .select("trigger_key, reviewed_at")
+          .eq("provider_id", providerId)
+          .in("plan_id", planIds)
+          .returns<ClinicalReviewAckRow[]>(),
+      ]);
 
-  const [{ data: sessions, error: sessionsErr }, { data: logs, error: logsErr }, { data: ackRows, error: ackErr }] =
-    await Promise.all([
-      adminClient
-        .from("plan_sessions")
-        .select("plan_id, status, session_number")
-        .in("plan_id", planIds)
-        .returns<SessionRow[]>(),
-      adminClient
-        .from("session_logs")
-        .select("id, plan_id, plan_session_id, effort_score, pain_score, notes, completed_at")
-        .in("plan_id", planIds)
-        .order("completed_at", { ascending: false })
-        .returns<LogRow[]>(),
-      adminClient
-        .from("clinical_review_acknowledgments")
-        .select("trigger_key, reviewed_at")
-        .eq("provider_id", providerId)
-        .in("plan_id", planIds)
-        .returns<ClinicalReviewAckRow[]>(),
-    ]);
+    if (sessionsErr || logsErr) {
+      console.error("[clinician-stats] pendingReviews session/log query failed");
+    } else {
+      const sessionsByPlan = new Map<string, SessionRow[]>();
+      (sessions ?? []).forEach((session) => {
+        const arr = sessionsByPlan.get(session.plan_id) ?? [];
+        arr.push(session);
+        sessionsByPlan.set(session.plan_id, arr);
+      });
 
-  if (sessionsErr || logsErr) {
-    console.error("[clinician-stats] pendingReviews session/log query failed");
-    return stats;
-  }
+      const latestLogByPlan = new Map<string, LogRow>();
+      const logsByPlan = new Map<string, LogRow[]>();
+      (logs ?? []).forEach((log) => {
+        if (!latestLogByPlan.has(log.plan_id)) {
+          latestLogByPlan.set(log.plan_id, log);
+        }
+        const arr = logsByPlan.get(log.plan_id) ?? [];
+        arr.push(log);
+        logsByPlan.set(log.plan_id, arr);
+      });
 
-  if (ackErr && ackErr.code !== "42P01") {
-    console.error("[clinician-stats] pendingReviews acknowledgments query failed:", ackErr.message);
-    return stats;
-  }
+      const acknowledgmentsByTriggerKey = new Map<string, ClinicalReviewAckRow>();
+      if (ackErr && ackErr.code !== "42P01") {
+        console.error("[clinician-stats] pendingReviews acknowledgments query failed:", ackErr.message);
+      } else {
+        (ackRows ?? []).forEach((row) => {
+          acknowledgmentsByTriggerKey.set(row.trigger_key, row);
+        });
+      }
 
-  const sessionsByPlan = new Map<string, SessionRow[]>();
-  (sessions ?? []).forEach((session) => {
-    const arr = sessionsByPlan.get(session.plan_id) ?? [];
-    arr.push(session);
-    sessionsByPlan.set(session.plan_id, arr);
-  });
+      const reviewCards: ReviewCard[] = plans.map((plan) => {
+        const planSessions = sessionsByPlan.get(plan.id) ?? [];
+        const latest = latestLogByPlan.get(plan.id);
+        const planLogs = logsByPlan.get(plan.id) ?? [];
+        const clinicalAction = buildClinicalActionFromPlanData({
+          latestLog: latest,
+          sessions: planSessions.map((session) => ({
+            status: session.status,
+            session_number: session.session_number,
+          })),
+          parseNotes: parseSessionCoachNotes,
+          allLogs: [...planLogs].reverse(),
+        });
 
-  const latestLogByPlan = new Map<string, LogRow>();
-  const logsByPlan = new Map<string, LogRow[]>();
-  (logs ?? []).forEach((log) => {
-    if (!latestLogByPlan.has(log.plan_id)) {
-      latestLogByPlan.set(log.plan_id, log);
+        const missedSessionsCount = deriveMissedSessionsForReview(
+          planSessions.map((session) => ({
+            status: session.status,
+            session_number: session.session_number,
+          })),
+        );
+
+        const reviewState = resolveClinicalReviewState({
+          planId: plan.id,
+          actionStatus: clinicalAction.status,
+          latestSessionLogId: latest?.id ?? null,
+          missedSessionsCount,
+          acknowledgmentsByTriggerKey,
+        });
+
+        return {
+          patientId: plan.patient_id,
+          lastCompletedAt: latest?.completed_at ?? null,
+          needsReview: clinicalActionNeedsTherapistReview(clinicalAction.status),
+          reviewAcknowledged: reviewState.reviewAcknowledged,
+        };
+      });
+
+      stats.pendingReviews = countPendingReviews(reviewCards);
+
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      stats.sessionsCompletedThisWeek = (logs ?? []).filter(
+        (log) => new Date(log.completed_at).getTime() >= weekAgo.getTime(),
+      ).length;
+
+      const adherenceSamples: number[] = [];
+      for (const plan of plans) {
+        const planSessions = sessionsByPlan.get(plan.id) ?? [];
+        const total = planSessions.length;
+        if (total === 0) continue;
+        const completed = planSessions.filter((session) => session.status === "completed").length;
+        adherenceSamples.push(Math.round((completed / total) * 100));
+      }
+      stats.averagePlanAdherencePct =
+        adherenceSamples.length > 0
+          ? Math.round(
+              adherenceSamples.reduce((sum, value) => sum + value, 0) / adherenceSamples.length,
+            )
+          : 0;
     }
-    const arr = logsByPlan.get(log.plan_id) ?? [];
-    arr.push(log);
-    logsByPlan.set(log.plan_id, arr);
-  });
+  }
 
-  const acknowledgmentsByTriggerKey = new Map<string, ClinicalReviewAckRow>();
-  (ackRows ?? []).forEach((row) => {
-    acknowledgmentsByTriggerKey.set(row.trigger_key, row);
-  });
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
 
-  const reviewCards: ReviewCard[] = plans.map((plan) => {
-    const planSessions = sessionsByPlan.get(plan.id) ?? [];
-    const latest = latestLogByPlan.get(plan.id);
-    const planLogs = logsByPlan.get(plan.id) ?? [];
-    const clinicalAction = buildClinicalActionFromPlanData({
-      latestLog: latest,
-      sessions: planSessions.map((session) => ({
-        status: session.status,
-        session_number: session.session_number,
-      })),
-      parseNotes: parseSessionCoachNotes,
-      allLogs: [...planLogs].reverse(),
-    });
+  const { count: assessmentsMonth, error: assessmentsMonthErr } = await adminClient
+    .from("assessments")
+    .select("id", { count: "exact", head: true })
+    .eq("provider_id", providerId)
+    .gte("created_at", monthStart.toISOString());
 
-    const missedSessionsCount = deriveMissedSessionsForReview(
-      planSessions.map((session) => ({
-        status: session.status,
-        session_number: session.session_number,
-      })),
-    );
+  if (assessmentsMonthErr) {
+    console.error("[clinician-stats] assessmentsSubmittedThisMonth query failed:", assessmentsMonthErr.message);
+  } else {
+    stats.assessmentsSubmittedThisMonth = assessmentsMonth ?? 0;
+  }
 
-    const reviewState = resolveClinicalReviewState({
-      planId: plan.id,
-      actionStatus: clinicalAction.status,
-      latestSessionLogId: latest?.id ?? null,
-      missedSessionsCount,
-      acknowledgmentsByTriggerKey,
-    });
+  const { count: cvMonth, error: cvMonthErr } = await adminClient
+    .from("cv_session_metrics")
+    .select("id", { count: "exact", head: true })
+    .eq("provider_id", providerId)
+    .gte("recorded_at", monthStart.toISOString());
 
-    return {
-      patientId: plan.patient_id,
-      lastCompletedAt: latest?.completed_at ?? null,
-      needsReview: clinicalActionNeedsTherapistReview(clinicalAction.status),
-      reviewAcknowledged: reviewState.reviewAcknowledged,
-    };
-  });
+  if (cvMonthErr) {
+    console.error("[clinician-stats] cvCapturesThisMonth query failed:", cvMonthErr.message);
+  } else {
+    stats.cvCapturesThisMonth = cvMonth ?? 0;
+  }
 
-  stats.pendingReviews = countPendingReviews(reviewCards);
   return stats;
 }

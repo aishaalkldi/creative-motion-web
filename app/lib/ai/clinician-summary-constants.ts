@@ -1,4 +1,23 @@
-export const AI_CLINICIAN_SUMMARY_SCHEMA_VERSION = "ai-clinician-summary-v0" as const;
+export const AI_CLINICIAN_SUMMARY_SCHEMA_VERSION = "ai-clinician-summary-v2" as const;
+
+export type AiClinicianSummaryV2Sections = {
+  overview: string;
+  sessionActivity: string;
+  patientReportedResponse: string;
+  cvObservations: string;
+  therapistReviewNote: string;
+};
+
+export const AI_CLINICIAN_SUMMARY_V2_SECTION_LABELS: Record<
+  keyof AiClinicianSummaryV2Sections,
+  string
+> = {
+  overview: "Overview",
+  sessionActivity: "Session activity",
+  patientReportedResponse: "Patient-reported response",
+  cvObservations: "Camera-assisted observations",
+  therapistReviewNote: "Therapist review note",
+};
 
 export const AI_CLINICIAN_SUMMARY_DISCLAIMER =
   "AI draft — clinician review required. This summary is generated from structured session data and does not replace clinical judgment. No diagnosis, scoring, or treatment recommendation is generated.";
