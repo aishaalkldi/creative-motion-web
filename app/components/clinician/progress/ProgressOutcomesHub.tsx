@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo } from "react";
+import { CvReviewSummary } from "@/app/components/clinician/cv/CvReviewSummary";
 import { getCvReadyExercises } from "@/app/lib/cv/cv-ready-exercises";
 import {
   formatCvDuration,
@@ -16,6 +18,7 @@ import {
   PROGRESS_OUTCOMES_SECTION_BADGES,
   PROGRESS_OUTCOMES_THERAPIST_REVIEW_LABEL,
   assessmentTypeDisplayLabel,
+  mapProgressCvEvidenceToMetrics,
 } from "@/app/lib/progress/progress-outcomes-bundle";
 
 const QUALITY_BADGE_CLASS: Record<CaptureQualityLevel, string> = {
@@ -144,6 +147,11 @@ export function ProgressOutcomesHub({ bundle }: ProgressOutcomesHubProps) {
   const newAssessmentHref = `/clinician/assessment/new?patientId=${encodeURIComponent(bundle.patientId)}`;
   const newPlanHref = `/clinician/plans/new?patientId=${encodeURIComponent(bundle.patientId)}`;
   const reportBase = `/clinician/assessment/report?patientId=${encodeURIComponent(bundle.patientId)}`;
+
+  const cvReviewMetrics = useMemo(
+    () => mapProgressCvEvidenceToMetrics(bundle.cvEvidence, bundle.patientId),
+    [bundle.cvEvidence, bundle.patientId],
+  );
 
   const fullyEmpty = hubIsFullyEmpty(bundle);
 
@@ -360,6 +368,17 @@ export function ProgressOutcomesHub({ bundle }: ProgressOutcomesHubProps) {
             <p className="text-[10px] leading-relaxed text-[#6B7280]">
               {PROGRESS_OUTCOMES_CV_FOOTER}
             </p>
+            <div className="mt-5 border-t border-[#1E2D42] pt-5">
+              <p className="mb-3 text-[11px] font-semibold text-white/50">
+                Motion review summary — therapist interpretation required
+              </p>
+              <CvReviewSummary
+                metrics={cvReviewMetrics}
+                exerciseNameById={exerciseNameById}
+                variant="patient-profile"
+                maxSessions={5}
+              />
+            </div>
           </div>
         )}
       </SectionShell>

@@ -4,6 +4,12 @@ import {
   resolveTherapyProgramContext,
   type TherapyLibraryQueryContext,
 } from "@/app/lib/therapy-sessions-store";
+import { redirect } from "next/navigation";
+import {
+  isLegacyRouteParam,
+  LEGACY_ROUTE_PARAM,
+  LEGACY_ROUTE_TARGETS,
+} from "@/app/lib/legacy-routes";
 import GaitTherapySession from "./components/GaitTherapySession";
 
 function pickQueryParam(
@@ -101,6 +107,9 @@ export default async function TherapyPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
+  if (!isLegacyRouteParam(pickQueryParam(sp, LEGACY_ROUTE_PARAM))) {
+    redirect(LEGACY_ROUTE_TARGETS.therapy);
+  }
   const libraryQueryContext = parseLibraryQueryContext(sp);
 
   return (

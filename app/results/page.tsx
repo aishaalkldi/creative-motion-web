@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useLegacyResultsRedirect } from "@/app/hooks/useLegacyResultsRedirect";
 import { getResultsByPatient, type ResultOut } from "../lib/api";
 import { patientsRepository } from "../lib/repositories";
 import {
@@ -32,6 +33,7 @@ function asClinicalSeverity(
 }
 
 function ResultsPageContent() {
+  const legacyAllowed = useLegacyResultsRedirect();
   const searchParams = useSearchParams();
 
   const patientId = searchParams.get("patientId") || "—";
@@ -58,6 +60,7 @@ function ResultsPageContent() {
     let isMounted = true;
 
     async function load() {
+      if (!legacyAllowed) return;
       const numericPatientId = parseInt(patientId, 10);
       if (isNaN(numericPatientId)) {
         setIsLoading(false);
@@ -83,10 +86,10 @@ function ResultsPageContent() {
     return () => {
       isMounted = false;
     };
-  }, [patientId]);
+  }, [patientId, legacyAllowed]);
 
   useEffect(() => {
-    if (patientId === "—") {
+    if (!legacyAllowed || patientId === "—") {
       setTherapyLogs([]);
       setTherapyLoading(false);
       return;
@@ -110,7 +113,7 @@ function ResultsPageContent() {
     refresh();
     window.addEventListener("cm-therapy-saved", refresh);
     return () => window.removeEventListener("cm-therapy-saved", refresh);
-  }, [patientId, assessmentId]);
+  }, [patientId, assessmentId, legacyAllowed]);
 
   async function handleGaitUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -509,6 +512,14 @@ function ResultsPageContent() {
       ) ?? null
     );
   }, [patientId, assessmentId, therapyLogs]);
+
+  if (!legacyAllowed) {
+    return (
+      <main className="min-h-screen bg-[#071a2f] px-6 py-20 text-center text-white">
+        <p className="text-sm text-white/60">Redirecting…</p>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#071a2f] px-6 py-10 text-white">

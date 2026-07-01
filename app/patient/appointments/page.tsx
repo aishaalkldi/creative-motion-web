@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { LegacyDemoGate } from "@/app/components/legacy/LegacyDemoGate";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type ApptKind   = "video" | "in-clinic" | "assessment-visit";
@@ -310,6 +311,14 @@ function PastAppointments({ appts }: { appts: Appointment[] }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function PatientAppointmentsPage() {
+  return (
+    <LegacyDemoGate>
+      <PatientAppointmentsPageContent />
+    </LegacyDemoGate>
+  );
+}
+
+function PatientAppointmentsPageContent() {
   const upcoming = APPOINTMENTS
     .filter((a) => a.status === "upcoming" || a.status === "live")
     .sort((a, b) => a.isoDate.localeCompare(b.isoDate));

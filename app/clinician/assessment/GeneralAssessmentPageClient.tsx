@@ -1730,7 +1730,7 @@ export function GeneralAssessmentPageClient() {
             onEdit={(id) => setView(id)}
             onSubmit={async () => {
               const { listPatientAssessments } = await import("@/app/lib/api/remote-assessments");
-              const remoteLang = listPatientAssessments(patientId).find(
+              const remoteLang = (await listPatientAssessments(patientId)).find(
                 (r) => r.status === "submitted" && r.assessmentLanguage,
               )?.assessmentLanguage;
               const res = await fetch("/api/assessments", {

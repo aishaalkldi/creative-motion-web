@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { LegacyDemoGate } from "@/app/components/legacy/LegacyDemoGate";
 import {
   getTreatmentPlan,
   getAdherence,
@@ -37,6 +38,14 @@ function WeekBar({ completed, target, label }: { completed: number; target: numb
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 export default function PatientProgressPage() {
+  return (
+    <LegacyDemoGate>
+      <PatientProgressPageContent />
+    </LegacyDemoGate>
+  );
+}
+
+function PatientProgressPageContent() {
   const [patientId] = useState<number>(() => getDemoPatientId());
   const [plan, setPlan] = useState<TreatmentPlan | null>(null);
   const [adherence, setAdherence] = useState<Adherence | null>(null);

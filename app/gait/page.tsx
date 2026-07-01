@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { LegacyRouteGate } from "@/app/components/legacy/LegacyRouteGate";
+import { LEGACY_ROUTE_TARGETS } from "@/app/lib/legacy-routes";
 import {
   analyzeGaitVideo,
   type GaitAnalysisResponse,
@@ -12,6 +14,14 @@ import { clinicalFlowQuery, getMockClinicalDecision } from "../lib/clinical-deci
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function GaitPage() {
+  return (
+    <LegacyRouteGate targetHref={LEGACY_ROUTE_TARGETS.gaitVideoUpload}>
+      <GaitPageContent />
+    </LegacyRouteGate>
+  );
+}
+
+function GaitPageContent() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);

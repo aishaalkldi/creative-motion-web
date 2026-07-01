@@ -2,6 +2,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { AI_CLINICIAN_SUMMARY_DISCLAIMER } from "@/app/lib/ai/clinician-summary-constants";
+import {
+  clearApprovedAiSummary,
+  loadApprovedAiSummary,
+  saveApprovedAiSummary,
+} from "@/app/lib/ai/clinician-summary-storage";
 
 type AiSessionSummaryResponse = {
   draftSummary: string;
@@ -43,6 +48,13 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
       const dismissed = sessionStorage.getItem(dismissStorageKey(patientId, planId));
       if (dismissed === "1") {
         setCardState("dismissed");
+        return;
+      }
+      const approved = loadApprovedAiSummary(patientId, planId);
+      if (approved) {
+        setDraftSummary(approved.summary);
+        setGeneratedAt(approved.generatedAt);
+        setCardState("approved");
       }
     } catch {
       /* sessionStorage unavailable */
@@ -114,6 +126,7 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
     setIsEditing(false);
     setGeneratedAt(null);
     setFallbackNotice(null);
+    clearApprovedAiSummary(patientId, planId);
     try {
       sessionStorage.setItem(dismissStorageKey(patientId, planId), "1");
     } catch {
@@ -122,8 +135,21 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
   };
 
   const handleApprove = () => {
+    const text = (editedSummary ?? draftSummary)?.trim();
+    if (text && generatedAt) {
+      saveApprovedAiSummary(patientId, planId, {
+        summary: text,
+        generatedAt,
+        approvedAt: new Date().toISOString(),
+      });
+    }
     setCardState("approved");
     setIsEditing(false);
+    try {
+      sessionStorage.removeItem(dismissStorageKey(patientId, planId));
+    } catch {
+      /* ignore */
+    }
   };
 
   const displayText = editedSummary ?? draftSummary;
@@ -144,7 +170,7 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
           </p>
         </div>
         {cardState === "approved" && (
-          <span className="rounded-[5px] border border-[#1D9E75]/30 bg-[#1D9E75]/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#5DCAA5]">
+          <span className="rounded-[5px] border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-cyan-300">
             Approved locally
           </span>
         )}

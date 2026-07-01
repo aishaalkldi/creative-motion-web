@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { CvReviewSummary } from "@/app/components/clinician/cv/CvReviewSummary";
 import {
   GAIT_ASSESSMENT_EXERCISE_DISPLAY_NAMES,
   isGaitAssessmentExerciseId,
 } from "@/app/lib/cv/gait-assessment-exercise-ids";
-import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
+import { useCvSessionMetrics } from "@/app/hooks/useCvSessionMetrics";
 
 const FETCH_LIMIT = 50;
 const DISPLAY_MAX = 10;
@@ -53,36 +53,11 @@ export default function GaitAssessmentPage() {
     [],
   );
 
-  const [metrics, setMetrics] = useState<CvSessionMetricPublic[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
-
-  const fetchMetrics = useCallback(async () => {
-    setLoading(true);
-    setError(false);
-    try {
-      const res = await fetch(`/api/cv/session-metrics?limit=${FETCH_LIMIT}`);
-      if (!res.ok) {
-        setError(true);
-        setMetrics([]);
-        return;
-      }
-      const data = (await res.json()) as { metrics?: CvSessionMetricPublic[] };
-      const gaitMetrics = (data.metrics ?? []).filter((row) =>
-        isGaitAssessmentExerciseId(row.exerciseId),
-      );
-      setMetrics(gaitMetrics);
-    } catch {
-      setError(true);
-      setMetrics([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void fetchMetrics();
-  }, [fetchMetrics]);
+  const { metrics, loading, error } = useCvSessionMetrics({
+    limit: FETCH_LIMIT,
+    exerciseFilter: isGaitAssessmentExerciseId,
+    dedupePatientSessions: false,
+  });
 
   const hasPatientLinkedSessions = metrics.some((row) => Boolean(row.patientId));
   const showGaitEmptyState = !loading && !error && metrics.length === 0;

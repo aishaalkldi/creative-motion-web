@@ -1,15 +1,13 @@
 /**
  * Treatment Plan Service
  *
- * Public contract matches the intended real API:
- *   GET    /api/v1/patients/:id/treatment-plan
- *   POST   /api/v1/patients/:id/treatment-plan
- *   PATCH  /api/v1/patients/:id/treatment-plan
- *   GET    /api/v1/patients/:id/adherence
+ * Two data paths (C2 unification):
+ *   • UUID patients (Supabase) — use `getTreatmentPlanForPatient` or `plans-client.ts`
+ *     (`GET /api/plans?patientId=`).
+ *   • Legacy numeric demo patients — localStorage mock below (`rasq_plans`).
  *
- * Current implementation: in-memory mock store.
- * To connect the real backend, replace only the four service functions below.
- * No UI code needs to change.
+ * Real clinician MVP assigns plans via POST /api/plans; patient portal reads via token API.
+ * Legacy `/patient/*` demo pages still use the numeric mock until C4 redirects.
  */
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -152,9 +150,8 @@ export const REHAB_PROGRAMS: RehabProgram[] = [
   },
 ];
 
-// ── Mock store with localStorage persistence ──────────────────────────────────
-// Survives page refresh. Clinician writes, patient reads — same browser.
-// Replace with real API fetch() calls when the backend is ready.
+// ── Legacy demo mock store (localStorage) ─────────────────────────────────────
+// Numeric patient ids only. UUID patients must use plans-client.ts / /api/plans.
 
 const STORAGE_KEY = "rasq_plans";
 const DEMO_PID_KEY = "rasq_demo_patient_id";
@@ -243,18 +240,34 @@ function _computeAdherence(plan: TreatmentPlan): Adherence {
 // The mock implementation is an internal detail — swap it for fetch() calls below.
 
 /**
- * Retrieve the active treatment plan for a patient.
- * Returns null if no plan has been assigned.
- *
- * Real API: GET /api/v1/patients/:id/treatment-plan
+ * Unified entry point: UUID → Supabase API, numeric → legacy localStorage mock.
+ */
+export async function getTreatmentPlanForPatient(
+  patientId: string | number,
+): Promise<TreatmentPlan | null> {
+  if (typeof patientId === "string") {
+    const trimmed = patientId.trim();
+    if (!trimmed) return null;
+    const { isUuidPatientId } = await import("./patient-id-utils");
+    if (isUuidPatientId(trimmed)) {
+      const { fetchActiveTreatmentPlan } = await import("./plans-client");
+      return fetchActiveTreatmentPlan(trimmed);
+    }
+    const { parseNumericDemoPatientId } = await import("./patient-id-utils");
+    const numeric = parseNumericDemoPatientId(trimmed);
+    if (numeric !== null) return getTreatmentPlan(numeric);
+    return null;
+  }
+  return getTreatmentPlan(patientId);
+}
+
+/**
+ * Legacy demo: retrieve plan from localStorage for a numeric patient id.
+ * UUID patients should use getTreatmentPlanForPatient or plans-client.ts instead.
  */
 export async function getTreatmentPlan(
   patientId: number,
 ): Promise<TreatmentPlan | null> {
-  // TODO: replace with:
-  // const res = await fetch(`/api/v1/patients/${patientId}/treatment-plan`, { headers: getAuthHeaders() });
-  // if (res.status === 404) return null;
-  // return res.json();
   await _delay(80);
   return _getPlans().get(patientId) ?? null;
 }

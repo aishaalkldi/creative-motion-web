@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { LegacyDemoGate } from "@/app/components/legacy/LegacyDemoGate";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 interface AssessmentResult {
@@ -148,6 +149,14 @@ function ResultCard({ result }: { result: AssessmentResult }) {
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function PatientResultsPage() {
+  return (
+    <LegacyDemoGate>
+      <PatientResultsPageContent />
+    </LegacyDemoGate>
+  );
+}
+
+function PatientResultsPageContent() {
   return (
     <main className="min-h-screen bg-[#F4F6F5]" style={{ fontFamily: "var(--font-inter, ui-sans-serif, sans-serif)" }}>
 

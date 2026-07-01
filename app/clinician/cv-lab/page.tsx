@@ -1,14 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import { getCvReadyExercises } from "@/app/lib/cv/cv-ready-exercises";
 import {
   formatCvDuration,
   formatCvRecordedAt,
   formatCvSource,
   formatCvTrackingQuality,
-  type CvSessionMetricPublic,
 } from "@/app/lib/cv/cv-metrics-display";
+import { useCvSessionMetrics } from "@/app/hooks/useCvSessionMetrics";
 import { CvLabSession } from "@/app/components/clinician/cv/CvLabSession";
 import { CvReviewSummary } from "@/app/components/clinician/cv/CvReviewSummary";
 
@@ -18,33 +17,12 @@ export default function CvLabPage() {
     cvReadyExercises.map((exercise) => [exercise.exerciseId, exercise.nameEn]),
   );
 
-  const [history, setHistory] = useState<CvSessionMetricPublic[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(true);
-  const [historyError, setHistoryError] = useState(false);
-
-  const fetchHistory = useCallback(async () => {
-    setHistoryLoading(true);
-    setHistoryError(false);
-    try {
-      const res = await fetch("/api/cv/session-metrics?limit=10");
-      if (!res.ok) {
-        setHistoryError(true);
-        setHistory([]);
-        return;
-      }
-      const data = (await res.json()) as { metrics?: CvSessionMetricPublic[] };
-      setHistory(data.metrics ?? []);
-    } catch {
-      setHistoryError(true);
-      setHistory([]);
-    } finally {
-      setHistoryLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void fetchHistory();
-  }, [fetchHistory]);
+  const {
+    metrics: history,
+    loading: historyLoading,
+    error: historyError,
+    refresh: fetchHistory,
+  } = useCvSessionMetrics({ limit: 10, dedupePatientSessions: false });
 
   const hasPatientLinkedSessions = history.some((row) => Boolean(row.patientId));
 
