@@ -50,6 +50,41 @@ export default function LibraryPage() {
         </div>
       </section>
 
+      <section className="mx-auto max-w-7xl px-6 pb-6">
+        <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[#1D9E75]">
+            Movement assessments
+          </p>
+          <h2 className="mt-2 text-lg font-bold text-white">Camera-assisted assessment modules</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/45">
+            Capture bounded movement observations for therapist review. These modules complement program
+            assignment — they do not replace clinical examination.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              { href: "/clinician/assessments/gait", label: "Gait Assessment v1" },
+              { href: "/clinician/assessments/single-leg-stance", label: "Single Leg Stance" },
+              { href: "/clinician/assessments/functional-reach", label: "Functional Reach" },
+              { href: "/clinician/assessments/timed-up-and-go", label: "Timed Up and Go" },
+            ].map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3 text-sm font-semibold text-[#5DCAA5] transition hover:border-[#1D9E75]/25 hover:text-[#1D9E75]"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+          <Link
+            href="/clinician/assessments"
+            className="mt-4 inline-flex text-xs font-semibold text-white/45 transition hover:text-white"
+          >
+            Open Assessment Center →
+          </Link>
+        </div>
+      </section>
+
       <Suspense
         fallback={
           <div className="mx-auto max-w-7xl px-6 pb-16 text-sm text-white/30">Loading library…</div>

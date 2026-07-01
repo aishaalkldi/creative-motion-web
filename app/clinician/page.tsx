@@ -284,6 +284,40 @@ export default function ClinicianDashboardPage() {
           </p>
         </section>
 
+        <section className="mb-6 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-bold text-white">Movement assessments</h2>
+              <p className="mt-1 text-xs text-white/35">
+                Launch camera-assisted capture modules for demo-ready therapist review.
+              </p>
+            </div>
+            <Link
+              href="/clinician/assessments"
+              className="shrink-0 rounded-[6px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3 py-1.5 text-[11px] font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
+            >
+              Assessment Center
+            </Link>
+          </div>
+          <div className="mt-4 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              { href: "/clinician/assessments/gait", title: "Gait v1", detail: "Walking observation capture" },
+              { href: "/clinician/assessments/single-leg-stance", title: "Single Leg Stance", detail: "Hold-time capture" },
+              { href: "/clinician/assessments/functional-reach", title: "Functional Reach", detail: "Reach cycle capture" },
+              { href: "/clinician/assessments/timed-up-and-go", title: "Timed Up and Go", detail: "Manual task timer" },
+            ].map((module) => (
+              <Link
+                key={module.href}
+                href={module.href}
+                className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4 transition hover:border-[#1D9E75]/25"
+              >
+                <p className="text-sm font-semibold text-white">{module.title}</p>
+                <p className="mt-1 text-xs text-white/35">{module.detail}</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+
         {/* ── Pilot evidence snapshot ── */}
         <section className="mb-6 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
