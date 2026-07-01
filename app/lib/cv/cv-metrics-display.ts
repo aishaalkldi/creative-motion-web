@@ -89,12 +89,14 @@ export function isHoldClassCvExercise(exerciseId: string | null | undefined): bo
 export function cvDurationMetricLabel(exerciseId: string | null | undefined): string {
   if (isHoldClassCvExercise(exerciseId)) return "Assistive hold tracked";
   if (isGaitAssessmentExerciseId(exerciseId)) return "Walking duration";
+  if (exerciseId?.trim().toLowerCase() === "timed-up-and-go") return "Task duration";
   return "Duration";
 }
 
 export function cvRepMetricLabel(exerciseId: string | null | undefined): string | null {
   if (isHoldClassCvExercise(exerciseId)) return null;
   if (isGaitAssessmentExerciseId(exerciseId)) return "Step/cycle estimate";
+  if (exerciseId?.trim().toLowerCase() === "timed-up-and-go") return null;
   return "Reps";
 }
 
