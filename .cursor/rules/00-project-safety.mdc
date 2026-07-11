@@ -1,0 +1,21 @@
+---
+description: Permanent repository safety rules for RASQ
+alwaysApply: true
+---
+
+# Repository Safety
+
+- Never work directly on main.
+- Never push directly to main.
+- Never edit, expose, print, or commit environment files or secrets.
+- Never delete or rewrite working features without explicit approval.
+- Never modify files unrelated to the approved task.
+- Never perform a broad refactor unless explicitly approved.
+- Preserve existing routes and working user flows.
+- Preserve Supabase UUID patients and numeric demo patients.
+- Keep measured clinical values separate from AI interpretation.
+- Do not add dependencies without explaining the need first.
+- Before editing, list the expected files and the smallest safe plan.
+- After editing, run relevant tests and the production build.
+- Report changed files, test results, and remaining risks.
+- Never commit, push, or merge unless explicitly instructed.
