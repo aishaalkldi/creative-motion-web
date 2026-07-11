@@ -33,3 +33,7 @@ creative-motion-backend:
 - Supabase UUID and numeric demo patient paths both remain supported.
 - Arabic and English behavior remains consistent.
 - Cross-repository changes must document contract impact.
+
+## Assessment Delivery
+
+Clinic Mode and Remote Mode share one delivery contract. See [assessment-delivery-architecture.md](./assessment-delivery-architecture.md) for `AssessmentDeliveryContext`, motion-input adapter IDs, and mode compatibility rules.
