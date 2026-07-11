@@ -12,6 +12,10 @@ import {
   extractRemoteQuestionnaireDraft,
   inferIncludedSections,
 } from "@/app/lib/remote-questionnaire-summary";
+import {
+  extractMotionInputSourceFromStructuredData,
+  type MotionInputAdapterId,
+} from "@/app/lib/assessment-delivery/motion-input-registry";
 
 export type AssessmentReportKind = "general_msk" | "remote_questionnaire" | "structured";
 
@@ -28,6 +32,7 @@ export type ResolvedAssessmentReport = {
   reportDate: string;
   serverBacked: boolean;
   patientAnsweredInArabic: boolean;
+  motionInputSource: MotionInputAdapterId | null;
   loadError: string;
 };
 
@@ -50,6 +55,7 @@ export function resolveAssessmentReportFromDetail(
     reportDate: detail.created_at,
     serverBacked: true,
     patientAnsweredInArabic: getAssessmentLanguage(detail.structured_data) === "ar",
+    motionInputSource: extractMotionInputSourceFromStructuredData(detail.structured_data),
     loadError: "",
   };
 
