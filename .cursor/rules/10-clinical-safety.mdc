@@ -1,0 +1,16 @@
+---
+description: Clinical safety rules for RASQ
+alwaysApply: true
+---
+
+# Clinical Safety
+
+- RASQ supports therapist review and does not provide diagnosis.
+- Never invent clinical findings.
+- Avoid definitive wording such as "the patient has".
+- Prefer cautious wording such as "may indicate" and "for therapist review".
+- AI-generated clinical content must remain editable and reviewable.
+- Measured values must remain separate from AI interpretation.
+- Clinical Safety applies across all product domains.
+- Preserve Arabic and English behavior.
+- Patient safety and accessibility take priority over visual effects.
