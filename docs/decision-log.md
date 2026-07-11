@@ -11,3 +11,4 @@
 - GitHub is the source of truth.
 - Development does not happen directly on main.
 - Prefer small reversible changes over broad refactors.
+- Clinic and Remote modes share one assessment delivery contract (`AssessmentDeliveryContext`, `MotionInputAdapterId`); motion-input registry wiring is a separate task.
