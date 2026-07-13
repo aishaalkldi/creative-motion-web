@@ -32,15 +32,24 @@ function clampVisibility(value: number | undefined): number {
   return Math.max(0, Math.min(1, value));
 }
 
-function isFiniteCoord(value: number | undefined): value is number {
-  return typeof value === "number" && Number.isFinite(value);
+/**
+ * Mirrors Motion Intelligence Core's own `isNormalizedCoord` (frame-validation.ts):
+ * finite AND within [0, 1]. BlazePose commonly reports x/y slightly outside
+ * [0, 1] for landmarks near or beyond the frame edge (partially off-screen
+ * limbs) — that is real, expected MediaPipe output, not corrupted data, so it
+ * must be screened out here rather than passed through, or the resulting frame
+ * would fail the core's own `validateNormalizedMotionFrame()`.
+ */
+function isNormalizedCoord(value: number | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 1;
 }
 
 /**
  * Normalize a BlazePose landmark array into a `NormalizedMotionFrame`. Landmarks
- * with non-finite x/y are omitted from the frame rather than included with
- * invalid coordinates; missing/omitted joints are simply absent from the map,
- * consistent with `NormalizedMotionFrame.joints` being a `Partial` record.
+ * with non-finite or out-of-[0,1]-range x/y are omitted from the frame rather
+ * than included with invalid coordinates; missing/omitted joints are simply
+ * absent from the map, consistent with `NormalizedMotionFrame.joints` being a
+ * `Partial` record.
  */
 export function normalizeBlazePoseLandmarks(
   landmarks: readonly PoseLandmark[],
@@ -50,7 +59,7 @@ export function normalizeBlazePoseLandmarks(
 
   JOINT_IDS.forEach((jointId, index) => {
     const landmark = landmarks[index];
-    if (!landmark || !isFiniteCoord(landmark.x) || !isFiniteCoord(landmark.y)) {
+    if (!landmark || !isNormalizedCoord(landmark.x) || !isNormalizedCoord(landmark.y)) {
       return;
     }
 

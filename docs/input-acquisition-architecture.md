@@ -104,9 +104,14 @@ Design notes:
   (group-based: shoulder/hip/knee/ankle) and `frame-validation.ts`'s
   `isJointConfident` (per-joint) — and picking a winner was out of scope for this
   sprint. This remains an open decision.
-- Landmarks with non-finite `x`/`y` are omitted from the frame rather than included
-  with invalid coordinates. If no landmark survives normalization, the adapter
-  returns `null` rather than an empty-but-technically-shaped frame.
+- Landmarks with non-finite `x`/`y`, or `x`/`y` outside `[0, 1]`, are omitted from
+  the frame rather than included with invalid coordinates. BlazePose commonly
+  reports coordinates slightly outside `[0, 1]` for landmarks near or beyond the
+  frame edge (partially off-screen limbs) — real, expected output, not corrupted
+  data — so the adapter screens for the same bound Motion Intelligence Core's own
+  `isNormalizedCoord` enforces, not just finiteness. If no landmark survives
+  normalization, the adapter returns `null` rather than an empty-but-technically-shaped
+  frame.
 
 This sprint does not wire the adapter into any detector, component, API route, or
 database write. It is purely additive — no existing capture flow changes behavior.

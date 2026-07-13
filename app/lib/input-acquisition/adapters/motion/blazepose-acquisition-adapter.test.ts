@@ -67,6 +67,23 @@ describe("normalizeBlazePoseLandmarks", () => {
     assert.equal(frame.joints.nose, undefined);
   });
 
+  it("omits a landmark with finite but out-of-[0,1]-range coordinates (partially off-screen limb)", () => {
+    const landmarks = fullSyntheticLandmarks();
+    const leftWristIndex = JOINT_IDS.indexOf("left_wrist");
+    landmarks[leftWristIndex] = { x: -0.03, y: 0.5, visibility: 0.9 };
+    const rightWristIndex = JOINT_IDS.indexOf("right_wrist");
+    landmarks[rightWristIndex] = { x: 0.5, y: 1.08, visibility: 0.9 };
+
+    const frame = normalizeBlazePoseLandmarks(landmarks, context);
+    assert.equal(frame.joints.left_wrist, undefined);
+    assert.equal(frame.joints.right_wrist, undefined);
+    assert.equal(
+      validateNormalizedMotionFrame(frame).valid,
+      true,
+      "a frame with off-screen landmarks omitted must still pass core frame validation",
+    );
+  });
+
   it("omits a missing (undefined) landmark slot entirely", () => {
     const landmarks = fullSyntheticLandmarks().slice(0, 20);
     const frame = normalizeBlazePoseLandmarks(landmarks, context);
