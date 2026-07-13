@@ -34,3 +34,26 @@ export {
   type ShoulderAbductionReachFrameResult,
   type ShoulderAbductionReachSideResult,
 } from "./shoulder-abduction-reach-detector";
+
+export {
+  isShoulderAbductionReachShadowEnabled,
+  isShoulderAbductionReachShadowPilotEnabledFromSearch,
+} from "./shoulder-abduction-reach-shadow-gate";
+
+export {
+  createShoulderAbductionReachShadowSessionLog,
+  recordShoulderAbductionReachShadowFrame,
+  summarizeShoulderAbductionReachShadowSessionLog,
+  type ShoulderAbductionReachShadowPhaseChangeEvent,
+  type ShoulderAbductionReachShadowPreviousSnapshot,
+  type ShoulderAbductionReachShadowRepEvent,
+  type ShoulderAbductionReachShadowSessionLog,
+  type ShoulderAbductionReachShadowSessionSummary,
+  type ShoulderAbductionReachShadowSideSnapshot,
+} from "./shoulder-abduction-reach-shadow-log";
+
+export {
+  createShoulderAbductionReachShadowState,
+  runShoulderAbductionReachShadowFrame,
+  type ShoulderAbductionReachShadowState,
+} from "./shoulder-abduction-reach-shadow-hook";
