@@ -143,6 +143,49 @@ If rate limit appears, wait briefly and retry later.
 
 ---
 
+## 2026-07-13 — STS Shadow Pilot Validation (Input Acquisition Layer)
+
+Environment:
+Local development — branch `task/sts-shadow-pilot-validation` @ `8e00c85`
+
+Harness:
+`runStsShadowSessionComparison()` via `app/lib/cv/sts-shadow-pilot-validation.test.ts` (development-only; not wired to live capture)
+
+Result:
+**PASS** — pilot-representative synthetic scenarios agreed; expected divergences only in deliberate edge cases.
+
+Scenarios (165 frames total):
+
+| Scenario | Frames | Divergent | Rate | Notes |
+|----------|--------|-----------|------|-------|
+| Nominal pilot STS (seated→stand→seated) | 60 | 0 | 0% | Good/fair/poor tiers matched legacy path throughout motion cycle |
+| Poor hip visibility session | 30 | 0 | 0% | Both paths agreed `poor` |
+| Fair-tier visibility hold | 20 | 0 | 0% | Both paths agreed `fair` |
+| Intermittent off-screen left hip | 40 | 10 | 25% | Expected: `new_frame_missing_hip_joint`, `tracking_quality_mismatch` (frames 25–34) |
+| Raw visibility > 1.0 (clamp delta) | 15 | 15 | 100% | Expected: `hip_visibility_sum_delta_exceeds_tolerance` only; tiers still matched (`good`) |
+
+Confirmed:
+- Legacy and Input Acquisition Layer paths agree on hip tracking quality for nominal pilot framing (in-frame hips, visibility 0.82).
+- Legacy and new paths agree on `poor` and `fair` tiers for low-visibility synthetic sessions.
+- Deliberate off-screen hip framing surfaces the documented acquisition-layer behavior (hip omitted when coordinates outside `[0,1]`).
+- Visibility clamping divergence is isolated to sum-delta reporting; tracking tier remains aligned when both hips in frame.
+- No live capture components, `sit-to-stand-detector.ts`, APIs, database code, or patient identity logic were modified.
+- Unit tests: 25/25 pass (`sts-shadow-comparison.test.ts`, `sts-shadow-log.test.ts`, `sts-shadow-pilot-validation.test.ts`).
+- `npm run build` completed successfully.
+
+Not validated (deferred):
+- Real recorded clinic landmark sequences (camera + patient variability).
+- Live per-frame shadow hook inside `SitToStandDetector` capture loop.
+- Rep-count or session-metrics impact (harness compares tracking quality only).
+
+Pilot recommendation:
+Proceed with pilot STS using the existing live detector. Keep shadow harness offline until a recorded clinic session can be replayed through `runStsShadowSessionComparison()` and reviewed before any live wiring PR.
+
+Re-run command:
+`npx tsx --test app/lib/cv/sts-shadow-pilot-validation.test.ts`
+
+---
+
 <!--
 
 Duplicate the section below for each pilot session.
