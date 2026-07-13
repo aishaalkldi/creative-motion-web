@@ -11,6 +11,7 @@ import {
   type SitToStandTrackingQuality,
   type SitToStandTrackingStatus,
 } from "@/app/lib/cv/sit-to-stand-detector";
+import { useShoulderAbductionReachCvLabShadow } from "./useShoulderAbductionReachCvLabShadow";
 
 const { canvasWidth: CANVAS_WIDTH, canvasHeight: CANVAS_HEIGHT } = DEFAULT_STS_CONFIG;
 
@@ -84,6 +85,12 @@ export function CvLabSession({
   const onSessionSavedRef = useRef(onSessionSaved);
 
   onSessionSavedRef.current = onSessionSaved;
+
+  // Off by default; opt in with ?cvDebug=1&shoulderShadow=1. Console-only,
+  // independent of SitToStandDetector — see
+  // shoulder-abduction-reach-cv-lab-shadow-runner.ts and
+  // docs/shoulder-abduction-reach-shadow-mode.md.
+  useShoulderAbductionReachCvLabShadow({ videoRef, active: previewActive });
 
   const syncFromDetector = useCallback((snapshot: SitToStandDetectorSnapshot) => {
     applySnapshot(snapshot, {
