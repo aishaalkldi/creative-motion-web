@@ -89,14 +89,21 @@ runShoulderAbductionReachShadowFrame(shadowState, landmarks, { frameIndex, captu
 console.log(summarizeShoulderAbductionReachShadowSessionLog(shadowState.log));
 ```
 
-## Future work (explicitly deferred, not this sprint)
+## CV Lab wiring (landed in a follow-up sprint)
 
-1. **Actually call the hook from a live component.** CV Lab
-   (`/clinician/cv-lab`) is the lowest-risk candidate — internal clinician
-   tooling, not part of the patient pilot path per
-   `docs/RASQ_CURRENT_STATE.md`. This is its own future PR, reviewed on its
-   own given it would be the first sprint in this arc to touch live
-   component code.
+Item 1 below is now done. `CvLabSession.tsx` calls
+`useShoulderAbductionReachCvLabShadow({ videoRef, active: previewActive })`
+— an 8-line diff to that file, nothing else. See
+`docs/shoulder-abduction-reach-cv-lab-wiring.md` for the full design: why
+`sit-to-stand-detector.ts` could not be touched (it's shared with
+`PatientCvCapture.tsx` and both assessment-capture components, so editing it
+would not actually be "CV Lab only"), the independent-second-PoseLandmarker
+approach that was used instead, and the accepted two-model-running-at-once
+tradeoff.
+
+## Future work (still deferred)
+
+1. ~~Actually call the hook from a live component.~~ Done — see above.
 2. Exercise-allowlist registration — still not done, still a product/UI
    decision, not a code change to make unilaterally.
 3. A UI surface for shadow-log output (currently console-only by design).
