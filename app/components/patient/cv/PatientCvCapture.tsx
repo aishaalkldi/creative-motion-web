@@ -252,6 +252,16 @@ type PatientCameraPreviewStackProps = {
   ariaLabel: string;
   loadingHint?: string | null;
   overlay?: ReactNode;
+  /**
+   * Layout: real camera aspect ratio (video.videoWidth/videoHeight), once known,
+   * so object-contain letterboxes to zero and the canvas overlay (stretched to
+   * fill the same box) stays pixel-aligned with the video. Falls back to the
+   * exercise's configured canvasWidth/canvasHeight ratio before metadata loads.
+   */
+  aspectRatioOverride?: number | null;
+  onVideoLoadedMetadata?: () => void;
+  /** Layout: renders the preview at a larger, fixed-position size. Visual only. */
+  expanded?: boolean;
 };
 
 type PatientCameraVideoLayerProps = {
@@ -259,6 +269,7 @@ type PatientCameraVideoLayerProps = {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   canvasWidth: number;
   canvasHeight: number;
+  onLoadedMetadata?: () => void;
 };
 
 const PatientCameraVideoLayer = memo(function PatientCameraVideoLayer({
@@ -266,6 +277,7 @@ const PatientCameraVideoLayer = memo(function PatientCameraVideoLayer({
   canvasRef,
   canvasWidth,
   canvasHeight,
+  onLoadedMetadata,
 }: PatientCameraVideoLayerProps) {
   return (
     <>
@@ -274,7 +286,8 @@ const PatientCameraVideoLayer = memo(function PatientCameraVideoLayer({
         autoPlay
         muted
         playsInline
-        className="block h-full w-full object-cover"
+        onLoadedMetadata={onLoadedMetadata}
+        className="block h-full w-full object-contain"
       />
       <canvas
         ref={canvasRef}
@@ -365,26 +378,47 @@ function PatientCameraPreviewStack({
   ariaLabel,
   loadingHint,
   overlay,
+  aspectRatioOverride,
+  onVideoLoadedMetadata,
+  expanded,
 }: PatientCameraPreviewStackProps) {
+  const aspectRatio = aspectRatioOverride ?? canvasWidth / canvasHeight;
+  // Both wrapper divs are always mounted — only classNames/styles toggle with
+  // `expanded`. This keeps the video/canvas DOM nodes stable across the toggle
+  // (never unmounted), so the already-assigned camera srcObject is preserved
+  // instead of being lost to a remount.
   return (
     <div
-      ref={containerRef}
-      className="relative mt-3 w-full overflow-hidden rounded-[8px] border border-[#D1E7DE] bg-black"
-      style={{ aspectRatio: `${canvasWidth} / ${canvasHeight}` }}
-      aria-label={ariaLabel}
+      className={
+        expanded
+          ? "fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4"
+          : "contents"
+      }
     >
-      <PatientCameraVideoLayer
-        videoRef={videoRef}
-        canvasRef={canvasRef}
-        canvasWidth={canvasWidth}
-        canvasHeight={canvasHeight}
-      />
-      {overlay}
-      {loadingHint ? (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60 px-4 text-center text-[12px] font-medium text-white">
-          {loadingHint}
-        </div>
-      ) : null}
+      <div
+        ref={containerRef}
+        className={
+          expanded
+            ? "relative w-full max-w-5xl overflow-hidden rounded-[8px] border border-[#D1E7DE] bg-black"
+            : "relative mt-3 w-full overflow-hidden rounded-[8px] border border-[#D1E7DE] bg-black"
+        }
+        style={{ aspectRatio, maxHeight: expanded ? "calc(100vh - 2rem)" : undefined }}
+        aria-label={ariaLabel}
+      >
+        <PatientCameraVideoLayer
+          videoRef={videoRef}
+          canvasRef={canvasRef}
+          canvasWidth={canvasWidth}
+          canvasHeight={canvasHeight}
+          onLoadedMetadata={onVideoLoadedMetadata}
+        />
+        {overlay}
+        {loadingHint ? (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/60 px-4 text-center text-[12px] font-medium text-white">
+            {loadingHint}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -593,6 +627,15 @@ export function PatientCvCapture({
   const [framesTotal, setFramesTotal] = useState(0);
   const [cvDebugEnabled, setCvDebugEnabled] = useState(false);
   const [debugSnapshot, setDebugSnapshot] = useState<PatientCvDebugSnapshot | null>(null);
+  // Layout: real camera aspect ratio (once known) and the optional expanded-view toggle.
+  // Visual only — does not affect the detector, camera resolution, or MediaPipe input.
+  const [videoAspectRatio, setVideoAspectRatio] = useState<number | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const handleVideoLoadedMetadata = useCallback(() => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth || !video.videoHeight) return;
+    setVideoAspectRatio(video.videoWidth / video.videoHeight);
+  }, []);
   const detectorRef = useRef<PatientCvDetector | null>(null);
   const startInProgressRef = useRef(false);
   const stopInProgressRef = useRef(false);
@@ -1712,7 +1755,7 @@ export function PatientCvCapture({
   if (!consented) {
     return (
       <div
-        className={`border-b border-[#D1E7DE] bg-white px-4 py-4 ${arClass}`}
+        className={`border-b border-[#D1E7DE] bg-white px-4 py-4 lg:relative lg:left-1/2 lg:w-screen lg:max-w-[960px] lg:-translate-x-1/2 lg:px-8 ${arClass}`}
         dir={textDir}
         lang={language}
       >
@@ -1793,7 +1836,7 @@ export function PatientCvCapture({
   if (stanceLegRequired) {
     return (
       <div
-        className={`border-b border-[#D1E7DE] bg-white px-4 py-4 ${arClass}`}
+        className={`border-b border-[#D1E7DE] bg-white px-4 py-4 lg:relative lg:left-1/2 lg:w-screen lg:max-w-[960px] lg:-translate-x-1/2 lg:px-8 ${arClass}`}
         dir={textDir}
         lang={language}
       >
@@ -1833,7 +1876,7 @@ export function PatientCvCapture({
 
   return (
     <div
-      className={`border-b border-[#D1E7DE] bg-white px-4 py-4 ${arClass}`}
+      className={`border-b border-[#D1E7DE] bg-white px-4 py-4 lg:relative lg:left-1/2 lg:w-screen lg:max-w-[960px] lg:-translate-x-1/2 lg:px-8 ${arClass}`}
       dir={textDir}
       lang={language}
     >
@@ -1884,19 +1927,39 @@ export function PatientCvCapture({
         canvasHeight={CANVAS_HEIGHT}
         ariaLabel={copy.consentTitle}
         loadingHint={previewLoadingHint}
+        aspectRatioOverride={videoAspectRatio}
+        onVideoLoadedMetadata={handleVideoLoadedMetadata}
+        expanded={expanded}
         overlay={
-          showCameraHud ? (
-            <CameraHUD
-              mode={cameraHudMode}
-              count={repCount}
-              target={target}
-              trackingSignal={mapTrackingSignal(trackingQuality)}
-              sessionSeconds={sessionSeconds}
-              holdSeconds={holdExercise ? sessionSeconds : undefined}
-              lastRepAccepted={lastRepAccepted}
-              isRtl={textDir === "rtl"}
-            />
-          ) : null
+          <>
+            {showCameraHud ? (
+              <CameraHUD
+                mode={cameraHudMode}
+                count={repCount}
+                target={target}
+                trackingSignal={mapTrackingSignal(trackingQuality)}
+                sessionSeconds={sessionSeconds}
+                holdSeconds={holdExercise ? sessionSeconds : undefined}
+                lastRepAccepted={lastRepAccepted}
+                isRtl={textDir === "rtl"}
+              />
+            ) : null}
+            {showPreviewUi ? (
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                className={`absolute top-2 ${textDir === "rtl" ? "left-2" : "right-2"} z-10 rounded-[6px] border border-white/25 bg-black/55 px-2.5 py-1.5 text-[11px] font-semibold text-white transition hover:bg-black/70`}
+              >
+                {expanded
+                  ? textDir === "rtl"
+                    ? "الخروج من العرض الموسّع"
+                    : "Exit expanded view"
+                  : textDir === "rtl"
+                    ? "توسيع الكاميرا"
+                    : "Expand camera"}
+              </button>
+            ) : null}
+          </>
         }
       />
 
