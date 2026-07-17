@@ -15,19 +15,14 @@ import {
   buildGeneralMskPayload,
   type StoredAssessmentPayload,
 } from "../../lib/assessment-payload";
+import type { AssessmentsRow } from "../../lib/supabase/database.types";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-export type AssessmentListRow = {
-  id: string;
-  patient_id: string;
-  provider_id: string;
-  type: string;
-  notes: string | null;
-  status: string;
-  created_at: string;
-  updated_at: string;
-};
+export type AssessmentListRow = Pick<
+  AssessmentsRow,
+  "id" | "patient_id" | "provider_id" | "type" | "notes" | "status" | "created_at" | "updated_at"
+>;
 
 export type AssessmentRow = AssessmentListRow & {
   structured_data: StoredAssessmentPayload | null;
