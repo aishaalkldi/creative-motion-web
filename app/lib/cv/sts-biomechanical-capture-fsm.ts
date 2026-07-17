@@ -93,6 +93,14 @@ export type StsBiomechanicalCaptureConfig = {
   minPeakDisplacementFraction: number;
   /** Minimum baseline samples for strong calibration. */
   minStrongBaselineSamples: number;
+  /**
+   * Consecutive frames a readiness/calibration-gate drop (canCount=false) is
+   * tolerated during an active attempt before the attempt is finalized as
+   * unclear. Does not apply to actual pose loss (posePresent=false), which
+   * still aborts immediately. Conservative engineering default pending live
+   * device validation — not a clinically validated constant.
+   */
+  readinessDropToleranceFrames: number;
 };
 
 export const DEFAULT_STS_BIOMECH_CAPTURE_CONFIG: StsBiomechanicalCaptureConfig = {
@@ -112,6 +120,7 @@ export const DEFAULT_STS_BIOMECH_CAPTURE_CONFIG: StsBiomechanicalCaptureConfig =
   standConfirmDeltaFraction: 0.72,
   minPeakDisplacementFraction: 0.98,
   minStrongBaselineSamples: 12,
+  readinessDropToleranceFrames: 3,
 };
 
 /** Patient portal — home-camera tolerant tuning (PR87). */
@@ -133,6 +142,8 @@ export type StsBiomechanicalCaptureState = {
   standingStreak: number;
   returningStreak: number;
   seatedStreak: number;
+  /** Consecutive canCount=false frames during an active attempt; resets to 0 the instant canCount is true. */
+  readinessDropStreak: number;
   isBaselineCalibrating: boolean;
   attempts: StsAttemptSummary[];
 };
@@ -180,6 +191,7 @@ export function createStsBiomechanicalCaptureState(): StsBiomechanicalCaptureSta
     standingStreak: 0,
     returningStreak: 0,
     seatedStreak: 0,
+    readinessDropStreak: 0,
     isBaselineCalibrating: false,
     attempts: [],
   };
@@ -199,6 +211,7 @@ export function resetStsBiomechanicalCaptureState(state: StsBiomechanicalCapture
   state.standingStreak = 0;
   state.returningStreak = 0;
   state.seatedStreak = 0;
+  state.readinessDropStreak = 0;
   state.isBaselineCalibrating = false;
   state.attempts = [];
 }
@@ -378,11 +391,24 @@ export class StsBiomechanicalCaptureFsm {
     }
 
     if (!input.canCount) {
+      // Brief readiness/calibration-gate drops are tolerated for a small number of
+      // consecutive frames before an active attempt is discarded — avoids throwing
+      // away real in-progress motion evidence on a one-frame flicker. Actual pose
+      // loss (posePresent=false) is handled separately above and is never tolerated.
       if (this.active) {
-        this.finalizeActiveAttempt(state, input.nowMs, "unclear", "Readiness or calibration gate interrupted attempt evidence.");
+        state.readinessDropStreak += 1;
+        if (state.readinessDropStreak >= this.captureConfig.readinessDropToleranceFrames) {
+          this.finalizeActiveAttempt(
+            state,
+            input.nowMs,
+            "unclear",
+            "Readiness or calibration gate interrupted attempt evidence.",
+          );
+        }
       }
       return;
     }
+    state.readinessDropStreak = 0;
 
     const smoothed = pushSmoothedSignal(state.temporal, input.hipY, 5);
     const thresholds = state.thresholds;
@@ -796,6 +822,7 @@ export class StsBiomechanicalCaptureFsm {
     state.standingStreak = 0;
     state.returningStreak = 0;
     state.seatedStreak = 0;
+    state.readinessDropStreak = 0;
     resetRepTemporalSmoothingState(state.temporal);
   }
 
@@ -812,6 +839,7 @@ export class StsBiomechanicalCaptureFsm {
     state.standingStreak = 0;
     state.returningStreak = 0;
     state.seatedStreak = 0;
+    state.readinessDropStreak = 0;
   }
 }
 
