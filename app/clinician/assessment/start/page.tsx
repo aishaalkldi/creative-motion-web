@@ -39,19 +39,7 @@ function StartAssessmentPageContent() {
       setFeedback({ type: "error", message: "No patient context found. Open this flow from a patient profile." });
       return;
     }
-    const assessmentId = assessmentsRepository.newAssessmentId();
-    assessmentsRepository.create({
-      id: assessmentId,
-      patientId,
-      mode: "remote",
-      selectedTests: [],
-      bodyRegion: "Full Body",
-      side: "Not Applicable",
-      visitType: "Follow-Up",
-      sessionLabel: "Remote Assessment Request",
-      createdAt: new Date().toISOString(),
-    });
-    router.push(`/clinician/request?patientId=${patientId}&assessmentId=${assessmentId}`);
+    router.push(`/clinician/patients/${patientId}?openRemoteAssessment=1`);
   }
 
   return (
