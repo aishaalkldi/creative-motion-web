@@ -134,6 +134,17 @@ import {
   resolveLiveBodySignal,
   type LiveBodySignal,
 } from "@/app/lib/cv/pose-landmark-overlay";
+import type {
+  StsAttemptType,
+  StsCapturePhase,
+} from "@/app/lib/cv/sts-biomechanical-capture-fsm";
+import { stsAttemptOutcomeCopy } from "@/app/lib/cv/sts-attempt-reason-copy";
+import {
+  stsCalibratingCopy,
+  stsCapturePhaseCopy,
+  stsPoseDetectedCopy,
+  stsReadinessCopy,
+} from "@/app/lib/cv/sts-tracking-status-copy";
 import {
   CameraHUD,
   type CameraHudMode,
@@ -141,6 +152,7 @@ import {
 } from "@/app/components/patient/cv/CameraHUD";
 import { PatientCvCaptureReliabilityPanel } from "@/app/components/patient/cv/PatientCvCaptureReliabilityPanel";
 import { PatientCvSetupPanel } from "@/app/components/patient/cv/PatientCvSetupPanel";
+import { PatientTrackingStatusPanel } from "@/app/components/patient/cv/PatientTrackingStatusPanel";
 import {
   appendNoTimelineSnapshotsFlag,
   buildPatientCvCaptureReliabilityState,
@@ -478,6 +490,11 @@ function applySnapshot(
     setMovementDetected: (v: boolean) => void;
     setBaselineCalibrating: (v: boolean) => void;
     setFramesTotal: (v: number) => void;
+    /** Tracking observability foundation: STS-only, undefined for other exercises. */
+    setStsCapturePhase?: (v: StsCapturePhase | undefined) => void;
+    setCalibrationProgressPct?: (v: number | null) => void;
+    setLastAttemptType?: (v: StsAttemptType | null) => void;
+    setLastAttemptReason?: (v: string | null) => void;
   },
 ): void {
   setters.setPreviewActive(snapshot.previewActive);
@@ -493,6 +510,18 @@ function applySnapshot(
     "stsLandmarkCoverageReady" in snapshot
   ) {
     setters.setStsLandmarkCoverageReady(Boolean(snapshot.stsLandmarkCoverageReady));
+  }
+  if (setters.setStsCapturePhase && "capturePhase" in snapshot) {
+    setters.setStsCapturePhase(snapshot.capturePhase);
+  }
+  if (setters.setCalibrationProgressPct && "calibrationProgressPct" in snapshot) {
+    setters.setCalibrationProgressPct(snapshot.calibrationProgressPct ?? null);
+  }
+  if (setters.setLastAttemptType && "lastAttemptType" in snapshot) {
+    setters.setLastAttemptType(snapshot.lastAttemptType ?? null);
+  }
+  if (setters.setLastAttemptReason && "lastAttemptReason" in snapshot) {
+    setters.setLastAttemptReason(snapshot.lastAttemptReason ?? null);
   }
   setters.setSessionSeconds(snapshot.sessionSeconds);
   setters.setMovementDetected(snapshot.movementDetected);
@@ -536,6 +565,11 @@ export function PatientCvCapture({
   const [poseReadiness, setPoseReadiness] = useState<PoseReadiness>("checking");
   const [bodyFramingState, setBodyFramingState] = useState<BodyFramingState>("checking");
   const [stsLandmarkCoverageReady, setStsLandmarkCoverageReady] = useState(false);
+  // Tracking observability foundation (STS only) — see PatientTrackingStatusPanel.
+  const [stsCapturePhase, setStsCapturePhase] = useState<StsCapturePhase | undefined>(undefined);
+  const [calibrationProgressPct, setCalibrationProgressPct] = useState<number | null>(null);
+  const [lastAttemptType, setLastAttemptType] = useState<StsAttemptType | null>(null);
+  const [lastAttemptReason, setLastAttemptReason] = useState<string | null>(null);
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [movementDetected, setMovementDetected] = useState(false);
   const [baselineCalibrating, setBaselineCalibrating] = useState(false);
@@ -671,6 +705,11 @@ export function PatientCvCapture({
         setBodyFramingState,
         setStsLandmarkCoverageReady:
           exerciseId === "sit-to-stand" ? setStsLandmarkCoverageReady : undefined,
+        setStsCapturePhase: exerciseId === "sit-to-stand" ? setStsCapturePhase : undefined,
+        setCalibrationProgressPct:
+          exerciseId === "sit-to-stand" ? setCalibrationProgressPct : undefined,
+        setLastAttemptType: exerciseId === "sit-to-stand" ? setLastAttemptType : undefined,
+        setLastAttemptReason: exerciseId === "sit-to-stand" ? setLastAttemptReason : undefined,
         setSessionSeconds,
         setMovementDetected,
         setBaselineCalibrating,
@@ -1364,6 +1403,27 @@ export function PatientCvCapture({
           : copy.startTracking;
 
   const showPreviewUi = cameraLive || previewActive || loading;
+
+  // Tracking observability foundation (STS only) — always-visible, not debug-gated.
+  const stsTrackingStatusPanelProps =
+    exerciseId === "sit-to-stand"
+      ? {
+          poseDetectedLabel: stsPoseDetectedCopy(trackingStatus, textDir === "rtl"),
+          readinessLabel: stsReadinessCopy(poseReadiness, bodyFramingState, textDir === "rtl"),
+          isReady: poseReadiness === "ready" || poseReadiness === "partial",
+          calibrationProgressPct,
+          calibratingLabel: stsCalibratingCopy(textDir === "rtl"),
+          movementStateLabel: stsCapturePhaseCopy(stsCapturePhase, textDir === "rtl"),
+          lastOutcomeLabel: stsAttemptOutcomeCopy(
+            lastAttemptType,
+            lastAttemptReason,
+            textDir === "rtl",
+          ),
+          lastOutcomeWasSuccess: lastAttemptType === "complete",
+          isRtl: textDir === "rtl",
+        }
+      : null;
+
   const previewLoadingHint =
     loading && initPhase === "import"
       ? copy.loadingPoseLibrary
@@ -1871,7 +1931,19 @@ export function PatientCvCapture({
       ) : null}
 
       {cvDebugEnabled && captureReliabilityState ? (
-        <PatientCvCaptureReliabilityPanel state={captureReliabilityState} />
+        <PatientCvCaptureReliabilityPanel
+          state={captureReliabilityState}
+          stsAttemptDebug={
+            exerciseId === "sit-to-stand"
+              ? {
+                  capturePhase: stsCapturePhase,
+                  calibrationProgressPct,
+                  lastAttemptType,
+                  lastAttemptReason,
+                }
+              : undefined
+          }
+        />
       ) : null}
 
       {showPreviewUi && (
@@ -1887,6 +1959,12 @@ export function PatientCvCapture({
           <span>{liveSignalLabel}</span>
         </div>
       )}
+
+      {showPreviewUi && stsTrackingStatusPanelProps ? (
+        <div className="mt-2">
+          <PatientTrackingStatusPanel {...stsTrackingStatusPanelProps} />
+        </div>
+      ) : null}
 
       {!trackingConfirmed ? (
         <PatientCvSetupPanel

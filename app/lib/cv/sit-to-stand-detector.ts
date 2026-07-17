@@ -37,6 +37,7 @@ import {
   StsBiomechanicalCaptureFsm,
   stsCapturePhaseToStandPhase,
   type StsAttemptSummary,
+  type StsAttemptType,
   type StsBiomechanicalCaptureConfig,
   type StsBiomechanicalCaptureState,
   type StsCapturePhase,
@@ -101,6 +102,12 @@ export type SitToStandDetectorSnapshot = {
   standPhase?: "up" | "down";
   /** PR86: temporal capture phase when biomechanical capture v2 is active. */
   capturePhase?: StsCapturePhase;
+  /** Tracking observability foundation: calibration progress 0-100 while collecting the seated baseline; null/undefined outside biomechanical capture v2 or once calibration finishes. */
+  calibrationProgressPct?: number | null;
+  /** Tracking observability foundation: outcome of the most recently finalized STS attempt (biomechanical capture v2 only). */
+  lastAttemptType?: StsAttemptType | null;
+  /** Tracking observability foundation: raw internal reason for the most recent attempt outcome — debug/clinician use only, never patient-facing text directly. */
+  lastAttemptReason?: string | null;
 };
 
 type PoseLandmarkerInstance = {
@@ -140,6 +147,23 @@ export function evaluatePoseFrameReadiness(
 
   if (trackingQuality === "good") return "ready";
   return "partial";
+}
+
+/**
+ * Tracking observability foundation: calibration progress (0-100), or null when not
+ * currently calibrating. Pure/derived — does not affect calibration timing or thresholds.
+ */
+export function computeStsCalibrationProgressPct(
+  isCalibrating: boolean,
+  nowMs: number,
+  baselineWindowEndMs: number,
+  baselineDurationMs: number,
+): number | null {
+  if (!isCalibrating || baselineWindowEndMs <= 0 || baselineDurationMs <= 0) return null;
+  const startMs = baselineWindowEndMs - baselineDurationMs;
+  const elapsed = nowMs - startMs;
+  const pct = (elapsed / baselineDurationMs) * 100;
+  return Math.max(0, Math.min(100, Math.round(pct)));
 }
 
 export function formatSitToStandDuration(seconds: number): string {
@@ -350,6 +374,9 @@ export class SitToStandDetector {
   }
 
   getSnapshot(): SitToStandDetectorSnapshot {
+    const attempts = this.stsCaptureState?.attempts;
+    const lastAttempt = attempts && attempts.length > 0 ? attempts[attempts.length - 1] : null;
+
     return {
       trackingStatus: this.trackingStatus,
       trackingQuality: this.trackingQuality,
@@ -369,6 +396,14 @@ export class SitToStandDetector {
       isBaselineCalibrating: this.isBaselineCalibrating,
       standPhase: this.standPhase,
       capturePhase: this.stsCaptureState?.phase,
+      calibrationProgressPct: computeStsCalibrationProgressPct(
+        this.stsCaptureState?.phase === "calibrating",
+        performance.now(),
+        this.stsCaptureState?.baselineWindowEndMs ?? 0,
+        this.resolveStsBiomechCaptureConfig().baselineDurationMs,
+      ),
+      lastAttemptType: lastAttempt?.attemptType ?? null,
+      lastAttemptReason: lastAttempt?.reason ?? null,
     };
   }
 
