@@ -383,16 +383,15 @@ function PatientCameraPreviewStack({
   expanded,
 }: PatientCameraPreviewStackProps) {
   const aspectRatio = aspectRatioOverride ?? canvasWidth / canvasHeight;
-  // Both wrapper divs are always mounted — only classNames/styles toggle with
-  // `expanded`. This keeps the video/canvas DOM nodes stable across the toggle
-  // (never unmounted), so the already-assigned camera srcObject is preserved
-  // instead of being lost to a remount.
+  // Both wrapper divs stay mounted — only classNames/styles toggle with `expanded`.
+  // Keeps video/canvas DOM stable (no remount / stream loss). When not expanded the
+  // outer wrapper is in-flow (`relative w-full`) and must not widen past the column.
   return (
     <div
       className={
         expanded
           ? "fixed inset-0 z-50 flex items-center justify-center bg-black/95 p-4"
-          : "contents"
+          : "relative w-full"
       }
     >
       <div
@@ -400,9 +399,12 @@ function PatientCameraPreviewStack({
         className={
           expanded
             ? "relative w-full max-w-5xl overflow-hidden rounded-[8px] border border-[#D1E7DE] bg-black"
-            : "relative mt-3 w-full overflow-hidden rounded-[8px] border border-[#D1E7DE] bg-black"
+            : "relative mt-3 w-full max-w-full overflow-hidden rounded-[8px] border border-[#D1E7DE] bg-black"
         }
-        style={{ aspectRatio, maxHeight: expanded ? "calc(100vh - 2rem)" : undefined }}
+        style={{
+          aspectRatio,
+          maxHeight: expanded ? "calc(100vh - 2rem)" : undefined,
+        }}
         aria-label={ariaLabel}
       >
         <PatientCameraVideoLayer
@@ -1755,7 +1757,7 @@ export function PatientCvCapture({
   if (!consented) {
     return (
       <div
-        className={`border-b border-[#D1E7DE] bg-white px-4 py-4 lg:relative lg:left-1/2 lg:w-screen lg:max-w-[960px] lg:-translate-x-1/2 lg:px-8 ${arClass}`}
+        className={`border-b border-[#D1E7DE] bg-white px-4 py-4 ${arClass}`}
         dir={textDir}
         lang={language}
       >
@@ -1836,7 +1838,7 @@ export function PatientCvCapture({
   if (stanceLegRequired) {
     return (
       <div
-        className={`border-b border-[#D1E7DE] bg-white px-4 py-4 lg:relative lg:left-1/2 lg:w-screen lg:max-w-[960px] lg:-translate-x-1/2 lg:px-8 ${arClass}`}
+        className={`border-b border-[#D1E7DE] bg-white px-4 py-4 ${arClass}`}
         dir={textDir}
         lang={language}
       >
@@ -1876,7 +1878,7 @@ export function PatientCvCapture({
 
   return (
     <div
-      className={`border-b border-[#D1E7DE] bg-white px-4 py-4 lg:relative lg:left-1/2 lg:w-screen lg:max-w-[960px] lg:-translate-x-1/2 lg:px-8 ${arClass}`}
+      className={`border-b border-[#D1E7DE] bg-white px-4 py-4 ${arClass}`}
       dir={textDir}
       lang={language}
     >
