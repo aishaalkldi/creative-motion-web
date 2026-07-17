@@ -34,6 +34,8 @@ export type ExerciseMediaAreaProps = {
     minimumMet: boolean;
     previewActive: boolean;
   }) => void;
+  /** Prescribed rep target for live STS rocket overlay / HUD. */
+  target?: number;
 };
 
 type VisualRegion =
@@ -430,6 +432,7 @@ export function ExerciseMediaArea({
   onRegisterStsPilotRecordFlush,
   onRegisterCaptureConsent,
   onCaptureReadinessChange,
+  target,
 }: ExerciseMediaAreaProps) {
   const ui = exerciseMediaUi(language);
   const resolvedMedia = mediaUrl?.trim() || null;
@@ -456,6 +459,7 @@ export function ExerciseMediaArea({
           onRegisterStsPilotRecordFlush={onRegisterStsPilotRecordFlush}
           onRegisterCaptureConsent={onRegisterCaptureConsent}
           onCaptureReadinessChange={onCaptureReadinessChange}
+          target={target}
         />
       )}
 

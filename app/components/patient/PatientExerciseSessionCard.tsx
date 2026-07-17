@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import type { PatientCvDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
 import type { PatientCvCameraConsentRecord } from "@/app/lib/cv/patient-cv-consent";
@@ -8,6 +8,7 @@ import type { ResolvedExerciseView } from "@/app/lib/exercise-resolve";
 import { getLibraryExerciseById } from "@/app/lib/exercise-library-v1";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import { ExerciseMediaArea } from "@/app/components/patient/ExerciseMediaArea";
+import { parsePrescribedRepsTarget } from "@/app/components/patient/cv/RocketLaunchOverlay";
 import {
   PatientGuidedCvReadinessBanner,
   PatientGuidedCvSetupCard,
@@ -114,10 +115,18 @@ export function PatientExerciseSessionCard({
     isPatientCvCaptureWired(view.exerciseId) && step === "active";
   const [cvReadinessState, setCvReadinessState] =
     useState<PatientCvReadinessDisplayState | null>(null);
+  const [cvReadinessResetKey, setCvReadinessResetKey] = useState({
+    exerciseId: view.exerciseId,
+    step,
+  });
 
-  useEffect(() => {
+  if (
+    cvReadinessResetKey.exerciseId !== view.exerciseId ||
+    cvReadinessResetKey.step !== step
+  ) {
+    setCvReadinessResetKey({ exerciseId: view.exerciseId, step });
     setCvReadinessState(null);
-  }, [view.exerciseId, step]);
+  }
 
   const handleCaptureReadinessChange = useCallback(
     (payload: {
@@ -142,6 +151,8 @@ export function PatientExerciseSessionCard({
 
   const doseValue = (v: number | string | undefined) =>
     v != null && String(v).trim() !== "" ? String(v) : flowUi.doseNotSet;
+
+  const prescribedRepsTarget = parsePrescribedRepsTarget(view.reps);
 
   const durationDisplay =
     view.durationSec != null
@@ -219,6 +230,7 @@ export function PatientExerciseSessionCard({
           onRegisterStsPilotRecordFlush={onRegisterStsPilotRecordFlush}
           onRegisterCaptureConsent={onRegisterCaptureConsent}
           onCaptureReadinessChange={handleCaptureReadinessChange}
+          target={prescribedRepsTarget}
         />
 
         <div className="space-y-4 p-5">

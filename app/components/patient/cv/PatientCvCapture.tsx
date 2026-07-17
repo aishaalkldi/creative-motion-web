@@ -139,6 +139,7 @@ import {
   type CameraHudMode,
   type CameraHudTrackingSignal,
 } from "@/app/components/patient/cv/CameraHUD";
+import { RocketLaunchOverlay } from "@/app/components/patient/cv/RocketLaunchOverlay";
 import { PatientCvCaptureReliabilityPanel } from "@/app/components/patient/cv/PatientCvCaptureReliabilityPanel";
 import { PatientCvSetupPanel } from "@/app/components/patient/cv/PatientCvSetupPanel";
 import {
@@ -1826,16 +1827,28 @@ export function PatientCvCapture({
         loadingHint={previewLoadingHint}
         overlay={
           showCameraHud ? (
-            <CameraHUD
-              mode={cameraHudMode}
-              count={repCount}
-              target={target}
-              trackingSignal={mapTrackingSignal(trackingQuality)}
-              sessionSeconds={sessionSeconds}
-              holdSeconds={holdExercise ? sessionSeconds : undefined}
-              lastRepAccepted={lastRepAccepted}
-              isRtl={textDir === "rtl"}
-            />
+            exerciseId === "sit-to-stand" ? (
+              <RocketLaunchOverlay
+                repCount={repCount}
+                target={target}
+                standPhase={detectorPhase}
+                lastRepAccepted={lastRepAccepted}
+                trackingQuality={trackingQuality}
+                sessionSeconds={sessionSeconds}
+                isRtl={textDir === "rtl"}
+              />
+            ) : (
+              <CameraHUD
+                mode={cameraHudMode}
+                count={repCount}
+                target={target}
+                trackingSignal={mapTrackingSignal(trackingQuality)}
+                sessionSeconds={sessionSeconds}
+                holdSeconds={holdExercise ? sessionSeconds : undefined}
+                lastRepAccepted={lastRepAccepted}
+                isRtl={textDir === "rtl"}
+              />
+            )
           ) : null
         }
       />
