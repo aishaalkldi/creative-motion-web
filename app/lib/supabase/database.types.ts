@@ -22,11 +22,12 @@
  *        npx supabase gen types typescript --linked > app/lib/supabase/database.types.ts
  *
  * Fallback (no live DB — hand-sync from SQL):
- *   Update this file to match supabase/migrations/001–010 and schema.sql after
+ *   Update this file to match supabase/migrations/001–011 and schema.sql after
  *   every new migration. Run `npm run build` and fix any row-type overlays in
  *   app/api/plans/route.ts and app/api/assessments/route.ts.
  *
  * Sprint 1 D1: initial file hand-synced from migrations 001–010 + schema.sql.
+ * Sprint 1 D2: ai_clinician_summaries added (migration 011).
  */
 
 export type Json =
@@ -123,6 +124,51 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      ai_clinician_summaries: {
+        Row: {
+          id: string;
+          provider_id: string;
+          patient_id: string;
+          plan_id: string | null;
+          draft_text: string;
+          approved_text: string | null;
+          inputs_snapshot: Json;
+          schema_version: string;
+          status: string;
+          created_at: string;
+          approved_at: string | null;
+          approved_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          provider_id: string;
+          patient_id: string;
+          plan_id?: string | null;
+          draft_text: string;
+          approved_text?: string | null;
+          inputs_snapshot: Json;
+          schema_version: string;
+          status?: string;
+          created_at?: string;
+          approved_at?: string | null;
+          approved_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          provider_id?: string;
+          patient_id?: string;
+          plan_id?: string | null;
+          draft_text?: string;
+          approved_text?: string | null;
+          inputs_snapshot?: Json;
+          schema_version?: string;
+          status?: string;
+          created_at?: string;
+          approved_at?: string | null;
+          approved_by?: string | null;
+        };
+        Relationships: [];
       };
       clinical_review_acknowledgments: {
         Row: {
@@ -539,3 +585,4 @@ export type PatientsRow = Tables<"patients">;
 export type TreatmentPlansRow = Tables<"treatment_plans">;
 export type PlanSessionsRow = Tables<"plan_sessions">;
 export type AssessmentsRow = Tables<"assessments">;
+export type AiClinicianSummariesRow = Tables<"ai_clinician_summaries">;

@@ -7,6 +7,7 @@
 import OpenAI from "openai";
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
@@ -35,15 +36,16 @@ import {
   buildClinicianSummaryUserPrompt,
 } from "@/app/lib/ai/clinician-summary-prompt";
 import {
-  buildSafeFallbackSummary,
   buildSafeFallbackSummaryV2,
   parseAiV2SectionsFromJson,
   sectionsToDraftSummary,
   validateAndNormalizeAiSummary,
   validateV2Sections,
 } from "@/app/lib/ai/clinician-summary-validate";
+import { persistAiClinicianSummaryDraft, fetchLatestApprovedAiClinicianSummary, parseAiSessionSummaryGetParams } from "@/app/lib/ai/clinician-summary-persistence";
 import {
   genericServerErrorResponse,
+  ownershipErrorResponse,
   serviceUnavailableResponse,
   unableToCompleteResponse,
 } from "@/app/lib/api/safe-errors";
@@ -98,6 +100,75 @@ export function parseAiSessionSummaryRequestBody(
       : null;
 
   return { ok: true, patientId, planId };
+}
+
+async function attachPersistedSummaryId(
+  adminClient: SupabaseClient,
+  response: Record<string, unknown>,
+  persistInput: {
+    providerId: string;
+    patientId: string;
+    planId: string | null;
+    draftText: string;
+    inputsSnapshot: ReturnType<typeof buildClinicianSummaryPayload>["inputsSnapshot"];
+    schemaVersion: string;
+  },
+): Promise<Record<string, unknown>> {
+  const summaryId = await persistAiClinicianSummaryDraft(adminClient, persistInput);
+  if (summaryId) {
+    return { ...response, summaryId };
+  }
+  return response;
+}
+
+/**
+ * GET /api/clinician/ai-session-summary?patientId=UUID&planId=UUID
+ *
+ * Returns the latest approved AI summary for the provider-owned patient/plan scope.
+ */
+export async function GET(req: NextRequest) {
+  const clients = await buildClients();
+  if (!clients) {
+    return serviceUnavailableResponse();
+  }
+  const { sessionClient, adminClient } = clients;
+
+  const {
+    data: { user },
+    error: authErr,
+  } = await sessionClient.auth.getUser();
+  if (authErr ?? !user) {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const parsed = parseAiSessionSummaryGetParams(new URL(req.url).searchParams);
+  if (!parsed.ok) {
+    return NextResponse.json({ error: "patientId is required." }, { status: 400 });
+  }
+
+  const ownership = await validatePatientOwnership(
+    adminClient,
+    parsed.patientId,
+    user.id,
+  );
+  if (!ownership.ok) {
+    return ownershipErrorResponse(ownership);
+  }
+
+  const result = await fetchLatestApprovedAiClinicianSummary(adminClient, {
+    providerId: user.id,
+    patientId: parsed.patientId,
+    planId: parsed.planId,
+  });
+
+  if (!result.ok) {
+    if (result.migrationPending) {
+      return genericServerErrorResponse();
+    }
+    return NextResponse.json({ error: result.message }, { status: result.httpStatus });
+  }
+
+  return NextResponse.json({ summary: result.summary });
 }
 
 export async function POST(req: NextRequest) {
@@ -231,28 +302,49 @@ export async function POST(req: NextRequest) {
     const classified = classifyOpenAiError(error);
     const code = fromOpenAiClassified(classified.code);
     console.error("[POST /api/clinician/ai-session-summary] OpenAI error:", code);
+    const fallbackResponse = {
+      draftSummary: fallbackSummary,
+      sections: fallbackSections,
+      disclaimer: AI_CLINICIAN_SUMMARY_DISCLAIMER,
+      generatedAt,
+      schemaVersion: AI_CLINICIAN_SUMMARY_SCHEMA_VERSION,
+      inputsSnapshot,
+      fallback: true,
+      warning: aiErrorMessage(code),
+    };
     return NextResponse.json(
-      {
-        draftSummary: fallbackSummary,
-        sections: fallbackSections,
-        disclaimer: AI_CLINICIAN_SUMMARY_DISCLAIMER,
-        generatedAt,
-        schemaVersion: AI_CLINICIAN_SUMMARY_SCHEMA_VERSION,
+      await attachPersistedSummaryId(adminClient, fallbackResponse, {
+        providerId: user.id,
+        patientId,
+        planId,
+        draftText: fallbackSummary,
         inputsSnapshot,
-        fallback: true,
-        warning: aiErrorMessage(code),
-      },
+        schemaVersion: AI_CLINICIAN_SUMMARY_SCHEMA_VERSION,
+      }),
       { status: 200 },
     );
   }
 
-  return NextResponse.json({
-    draftSummary,
-    sections,
-    disclaimer: AI_CLINICIAN_SUMMARY_DISCLAIMER,
-    generatedAt,
-    schemaVersion: AI_CLINICIAN_SUMMARY_SCHEMA_VERSION,
-    inputsSnapshot,
-    fallback: usedFallback,
-  });
+  return NextResponse.json(
+    await attachPersistedSummaryId(
+      adminClient,
+      {
+        draftSummary,
+        sections,
+        disclaimer: AI_CLINICIAN_SUMMARY_DISCLAIMER,
+        generatedAt,
+        schemaVersion: AI_CLINICIAN_SUMMARY_SCHEMA_VERSION,
+        inputsSnapshot,
+        fallback: usedFallback,
+      },
+      {
+        providerId: user.id,
+        patientId,
+        planId,
+        draftText: draftSummary,
+        inputsSnapshot,
+        schemaVersion: AI_CLINICIAN_SUMMARY_SCHEMA_VERSION,
+      },
+    ),
+  );
 }
