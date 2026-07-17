@@ -37,6 +37,56 @@ export type BodyFramingEvaluateInput = {
   trackingQuality: "good" | "fair" | "poor" | null;
 };
 
+/**
+ * Diagnostic foundation (debug use only): the exact rule that produced a
+ * BodyFramingState, matching one-to-one with evaluateBodyFraming's decision
+ * points. Purely additive/read-only — does not affect the returned state.
+ */
+export type BodyFramingDiagnosticReason =
+  | "checking"
+  | "landmark_clipped"
+  | "hip_visibility_below_min"
+  | "hip_visibility_asymmetric"
+  | "shoulder_visibility_below_min"
+  | "shoulder_visibility_asymmetric"
+  | "nose_visibility_below_min"
+  | "nose_near_top"
+  | "knee_visibility_below_min"
+  | "torso_span_above_max"
+  | "torso_span_below_min"
+  | "bbox_height_above_max"
+  | "bbox_height_below_min"
+  | "shoulder_visibility_marginal"
+  | "ok";
+
+export type BodyFramingClipDiagnostic = {
+  landmark:
+    | "leftShoulder"
+    | "rightShoulder"
+    | "leftHip"
+    | "rightHip"
+    | "nose"
+    | "leftKnee"
+    | "rightKnee";
+  x: number;
+  y: number;
+} | null;
+
+export type BodyFramingDiagnostics = {
+  state: BodyFramingState;
+  reason: BodyFramingDiagnosticReason;
+  torsoSpan: number | null;
+  bboxHeight: number | null;
+  clip: BodyFramingClipDiagnostic;
+  profile: {
+    torsoSpanMin: number;
+    torsoSpanMax: number;
+    bboxHeightMin: number;
+    bboxHeightMax: number;
+    frameMargin: number;
+  };
+};
+
 export const FRAMING_OVERLAY_COLORS = {
   good: "#1D9E75",
   amber: "#F59E0B",
@@ -92,35 +142,64 @@ function bodyBBoxHeight(landmarks: PoseLandmark[], profile: BodyFramingProfile):
   return bottomY - topY;
 }
 
-function clipState(
-  landmarks: PoseLandmark[],
-  margin: number,
-): "move_back" | "adjust_camera_angle" | null {
-  const points = [
-    landmarks[L_SHOULDER],
-    landmarks[R_SHOULDER],
-    landmarks[L_HIP],
-    landmarks[R_HIP],
-    landmarks[NOSE],
-    landmarks[L_KNEE],
-    landmarks[R_KNEE],
-  ].filter(Boolean) as PoseLandmark[];
+type ClipDiagnostic = {
+  state: "move_back" | "adjust_camera_angle";
+  landmark: NonNullable<BodyFramingClipDiagnostic>["landmark"];
+  x: number;
+  y: number;
+};
 
-  for (const p of points) {
+function clipStateDetailed(landmarks: PoseLandmark[], margin: number): ClipDiagnostic | null {
+  const points: Array<[NonNullable<BodyFramingClipDiagnostic>["landmark"], PoseLandmark | undefined]> = [
+    ["leftShoulder", landmarks[L_SHOULDER]],
+    ["rightShoulder", landmarks[R_SHOULDER]],
+    ["leftHip", landmarks[L_HIP]],
+    ["rightHip", landmarks[R_HIP]],
+    ["nose", landmarks[NOSE]],
+    ["leftKnee", landmarks[L_KNEE]],
+    ["rightKnee", landmarks[R_KNEE]],
+  ];
+
+  for (const [name, p] of points) {
+    if (!p) continue;
     if (!inFrame(p.x, p.y, margin)) {
-      if (p.y < margin || p.y > 1 - margin) return "move_back";
-      return "adjust_camera_angle";
+      const state = p.y < margin || p.y > 1 - margin ? "move_back" : "adjust_camera_angle";
+      return { state, landmark: name, x: p.x, y: p.y };
     }
   }
   return null;
 }
 
-export function evaluateBodyFraming(
+/**
+ * Same decision path as evaluateBodyFraming, additionally returning the
+ * intermediate computed values and the exact rule that produced the final
+ * state — for debug-only observability. Never changes the decision itself.
+ */
+export function evaluateBodyFramingDetailed(
   landmarks: PoseLandmark[],
   profile: BodyFramingProfile,
   input: BodyFramingEvaluateInput,
-): BodyFramingState {
-  if (input.checking) return "checking";
+): BodyFramingDiagnostics {
+  const profileSnapshot = {
+    torsoSpanMin: profile.torsoSpanMin,
+    torsoSpanMax: profile.torsoSpanMax,
+    bboxHeightMin: profile.bboxHeightMin,
+    bboxHeightMax: profile.bboxHeightMax,
+    frameMargin: profile.frameMargin,
+  };
+
+  const span = torsoSpan(landmarks);
+  const bboxH = bodyBBoxHeight(landmarks, profile);
+
+  const base = {
+    torsoSpan: span,
+    bboxHeight: bboxH,
+    profile: profileSnapshot,
+  };
+
+  if (input.checking) {
+    return { ...base, state: "checking", reason: "checking", clip: null };
+  }
 
   const ls = landmarks[L_SHOULDER];
   const rs = landmarks[R_SHOULDER];
@@ -130,8 +209,15 @@ export function evaluateBodyFraming(
   const lk = landmarks[L_KNEE];
   const rk = landmarks[R_KNEE];
 
-  const clipped = clipState(landmarks, profile.frameMargin);
-  if (clipped) return clipped;
+  const clipped = clipStateDetailed(landmarks, profile.frameMargin);
+  if (clipped) {
+    return {
+      ...base,
+      state: clipped.state,
+      reason: "landmark_clipped",
+      clip: { landmark: clipped.landmark, x: clipped.x, y: clipped.y },
+    };
+  }
 
   const hipVisL = landmarkVis(lh);
   const hipVisR = landmarkVis(rh);
@@ -139,50 +225,106 @@ export function evaluateBodyFraming(
   const shoulderVisR = landmarkVis(rs);
 
   if (hipVisL < profile.minHipVisibility || hipVisR < profile.minHipVisibility) {
-    if (input.trackingQuality === "poor") return "low_visibility";
-    if (Math.abs(hipVisL - hipVisR) > 0.35) return "adjust_camera_angle";
-    return "low_visibility";
+    if (input.trackingQuality === "poor") {
+      return { ...base, state: "low_visibility", reason: "hip_visibility_below_min", clip: null };
+    }
+    if (Math.abs(hipVisL - hipVisR) > 0.35) {
+      return {
+        ...base,
+        state: "adjust_camera_angle",
+        reason: "hip_visibility_asymmetric",
+        clip: null,
+      };
+    }
+    return { ...base, state: "low_visibility", reason: "hip_visibility_below_min", clip: null };
   }
 
   if (
     shoulderVisL < profile.minShoulderVisibility ||
     shoulderVisR < profile.minShoulderVisibility
   ) {
-    if (Math.abs(shoulderVisL - shoulderVisR) > 0.35) return "adjust_camera_angle";
-    return "low_visibility";
+    if (Math.abs(shoulderVisL - shoulderVisR) > 0.35) {
+      return {
+        ...base,
+        state: "adjust_camera_angle",
+        reason: "shoulder_visibility_asymmetric",
+        clip: null,
+      };
+    }
+    return {
+      ...base,
+      state: "low_visibility",
+      reason: "shoulder_visibility_below_min",
+      clip: null,
+    };
   }
 
   if (profile.requireNose) {
     const noseVis = landmarkVis(nose);
-    if (noseVis < (profile.minNoseVisibility ?? 0.25)) return "low_visibility";
-    if (nose && nose.y < profile.frameMargin) return "move_back";
+    if (noseVis < (profile.minNoseVisibility ?? 0.25)) {
+      return {
+        ...base,
+        state: "low_visibility",
+        reason: "nose_visibility_below_min",
+        clip: null,
+      };
+    }
+    if (nose && nose.y < profile.frameMargin) {
+      return { ...base, state: "move_back", reason: "nose_near_top", clip: null };
+    }
   }
 
   if (profile.requireKnee) {
     const kneeVis = Math.max(landmarkVis(lk), landmarkVis(rk));
-    if (kneeVis < profile.minKneeVisibility) return "low_visibility";
+    if (kneeVis < profile.minKneeVisibility) {
+      return {
+        ...base,
+        state: "low_visibility",
+        reason: "knee_visibility_below_min",
+        clip: null,
+      };
+    }
   }
 
-  const span = torsoSpan(landmarks);
   if (span !== null) {
-    if (span > profile.torsoSpanMax) return "move_back";
-    if (span < profile.torsoSpanMin) return "move_closer";
+    if (span > profile.torsoSpanMax) {
+      return { ...base, state: "move_back", reason: "torso_span_above_max", clip: null };
+    }
+    if (span < profile.torsoSpanMin) {
+      return { ...base, state: "move_closer", reason: "torso_span_below_min", clip: null };
+    }
   }
 
-  const bboxH = bodyBBoxHeight(landmarks, profile);
   if (bboxH !== null) {
-    if (bboxH > profile.bboxHeightMax) return "move_back";
-    if (bboxH < profile.bboxHeightMin) return "move_closer";
+    if (bboxH > profile.bboxHeightMax) {
+      return { ...base, state: "move_back", reason: "bbox_height_above_max", clip: null };
+    }
+    if (bboxH < profile.bboxHeightMin) {
+      return { ...base, state: "move_closer", reason: "bbox_height_below_min", clip: null };
+    }
   }
 
   if (
     shoulderVisL < profile.minShoulderVisibility * 0.75 ||
     shoulderVisR < profile.minShoulderVisibility * 0.75
   ) {
-    return "adjust_camera_angle";
+    return {
+      ...base,
+      state: "adjust_camera_angle",
+      reason: "shoulder_visibility_marginal",
+      clip: null,
+    };
   }
 
-  return "good_distance";
+  return { ...base, state: "good_distance", reason: "ok", clip: null };
+}
+
+export function evaluateBodyFraming(
+  landmarks: PoseLandmark[],
+  profile: BodyFramingProfile,
+  input: BodyFramingEvaluateInput,
+): BodyFramingState {
+  return evaluateBodyFramingDetailed(landmarks, profile, input).state;
 }
 
 /** Dashed target frame — green when good distance, amber otherwise. */
