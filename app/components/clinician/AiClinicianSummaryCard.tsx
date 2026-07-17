@@ -20,6 +20,7 @@ type AiSessionSummaryResponse = {
   disclaimer: string;
   generatedAt: string;
   schemaVersion: string;
+  summaryId?: string;
   inputsSnapshot: {
     sessionsCompleted: number;
     totalSessions: number;
@@ -28,6 +29,17 @@ type AiSessionSummaryResponse = {
   };
   fallback?: boolean;
   warning?: string;
+};
+
+type HydratedSummaryResponse = {
+  summary: {
+    id: string;
+    status: string;
+    draftText: string;
+    approvedText: string | null;
+    createdAt: string;
+    approvedAt: string | null;
+  } | null;
 };
 
 type CardState = "idle" | "loading" | "ready" | "approved" | "dismissed";
@@ -41,32 +53,77 @@ function dismissStorageKey(patientId: string, planId: string | null): string {
   return `rasq-ai-summary-dismissed:${patientId}:${planId ?? "latest"}`;
 }
 
+function buildSummaryQuery(patientId: string, planId: string | null): string {
+  const params = new URLSearchParams({ patientId });
+  if (planId) params.set("planId", planId);
+  return `/api/clinician/ai-session-summary?${params.toString()}`;
+}
+
 export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummaryCardProps) {
   const [cardState, setCardState] = useState<CardState>("idle");
   const [draftSummary, setDraftSummary] = useState<string | null>(null);
   const [editedSummary, setEditedSummary] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
+  const [summaryId, setSummaryId] = useState<string | null>(null);
   const [sections, setSections] = useState<AiClinicianSummaryV2Sections | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [fallbackNotice, setFallbackNotice] = useState<string | null>(null);
+  const [isHydrating, setIsHydrating] = useState(true);
+  const [isApproving, setIsApproving] = useState(false);
+  const [approvedOnServer, setApprovedOnServer] = useState(false);
 
   useEffect(() => {
-    try {
-      const dismissed = sessionStorage.getItem(dismissStorageKey(patientId, planId));
-      if (dismissed === "1") {
-        setCardState("dismissed");
-        return;
+    let cancelled = false;
+
+    async function hydrateApprovedState() {
+      setIsHydrating(true);
+      try {
+        const dismissed = sessionStorage.getItem(dismissStorageKey(patientId, planId));
+        if (dismissed === "1") {
+          if (!cancelled) setCardState("dismissed");
+          return;
+        }
+      } catch {
+        /* sessionStorage unavailable */
       }
-      const approved = loadApprovedAiSummary(patientId, planId);
-      if (approved) {
-        setDraftSummary(approved.summary);
-        setGeneratedAt(approved.generatedAt);
-        setCardState("approved");
+
+      try {
+        const res = await fetch(buildSummaryQuery(patientId, planId));
+        if (res.ok) {
+          const data = (await res.json()) as HydratedSummaryResponse;
+          if (!cancelled && data.summary?.status === "approved") {
+            const approvedText = data.summary.approvedText ?? data.summary.draftText;
+            setSummaryId(data.summary.id);
+            setDraftSummary(approvedText);
+            setGeneratedAt(data.summary.approvedAt ?? data.summary.createdAt);
+            setApprovedOnServer(true);
+            setCardState("approved");
+            return;
+          }
+        }
+      } catch {
+        /* fall through to local compatibility cache */
       }
-    } catch {
-      /* sessionStorage unavailable */
+
+      if (!cancelled) {
+        const cached = loadApprovedAiSummary(patientId, planId);
+        if (cached) {
+          setDraftSummary(cached.summary);
+          setGeneratedAt(cached.generatedAt);
+          setApprovedOnServer(false);
+          setCardState("approved");
+        }
+      }
     }
+
+    void hydrateApprovedState().finally(() => {
+      if (!cancelled) setIsHydrating(false);
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [patientId, planId]);
 
   const generateSummary = useCallback(async () => {
@@ -74,6 +131,7 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
     setError(null);
     setFallbackNotice(null);
     setIsEditing(false);
+    setApprovedOnServer(false);
 
     try {
       const res = await fetch("/api/clinician/ai-session-summary", {
@@ -108,6 +166,7 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
 
       setDraftSummary(data.draftSummary);
       setSections(data.sections ?? null);
+      setSummaryId(data.summaryId ?? null);
       setEditedSummary(null);
       setGeneratedAt(data.generatedAt);
       if (data.fallback) {
@@ -132,9 +191,11 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
     setCardState("dismissed");
     setDraftSummary(null);
     setEditedSummary(null);
+    setSummaryId(null);
     setIsEditing(false);
     setGeneratedAt(null);
     setFallbackNotice(null);
+    setApprovedOnServer(false);
     clearApprovedAiSummary(patientId, planId);
     try {
       sessionStorage.setItem(dismissStorageKey(patientId, planId), "1");
@@ -143,21 +204,59 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
     }
   };
 
-  const handleApprove = () => {
+  const handleApprove = async () => {
     const text = (editedSummary ?? draftSummary)?.trim();
-    if (text && generatedAt) {
+    if (!text || !generatedAt) return;
+
+    if (!summaryId) {
+      setError(
+        "This summary is not saved on the server yet. Regenerate the summary, then approve again.",
+      );
+      return;
+    }
+
+    setIsApproving(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/clinician/ai-session-summary/approve", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          summaryId,
+          approvedText: text,
+        }),
+      });
+
+      const data = (await res.json()) as { error?: string; approvedAt?: string };
+
+      if (!res.ok) {
+        setError(
+          data.error ??
+            "Unable to save approval to the server. Your summary remains unapproved — please try again.",
+        );
+        return;
+      }
+
       saveApprovedAiSummary(patientId, planId, {
         summary: text,
         generatedAt,
-        approvedAt: new Date().toISOString(),
+        approvedAt: data.approvedAt ?? new Date().toISOString(),
       });
-    }
-    setCardState("approved");
-    setIsEditing(false);
-    try {
-      sessionStorage.removeItem(dismissStorageKey(patientId, planId));
+      setApprovedOnServer(true);
+      setCardState("approved");
+      setIsEditing(false);
+      try {
+        sessionStorage.removeItem(dismissStorageKey(patientId, planId));
+      } catch {
+        /* ignore */
+      }
     } catch {
-      /* ignore */
+      setError(
+        "Unable to save approval to the server. Your summary remains unapproved — check your connection and try again.",
+      );
+    } finally {
+      setIsApproving(false);
     }
   };
 
@@ -180,7 +279,7 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
         </div>
         {cardState === "approved" && (
           <span className="rounded-[5px] border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-cyan-300">
-            Approved locally
+            {approvedOnServer ? "Approved" : "Approved locally"}
           </span>
         )}
       </div>
@@ -234,7 +333,7 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
         <button
           type="button"
           onClick={() => void generateSummary()}
-          disabled={cardState === "loading"}
+          disabled={cardState === "loading" || isHydrating || isApproving}
           className="rounded-[7px] border border-[#1D9E75]/30 bg-[#1D9E75]/10 px-3.5 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15 disabled:opacity-50"
         >
           {cardState === "loading"
@@ -248,10 +347,11 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
           <>
             <button
               type="button"
-              onClick={handleApprove}
-              className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
+              onClick={() => void handleApprove()}
+              disabled={isApproving || isHydrating || !summaryId}
+              className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/70 transition hover:text-white disabled:opacity-50"
             >
-              Approve
+              {isApproving ? "Approving…" : "Approve"}
             </button>
             <button
               type="button"
@@ -261,7 +361,8 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
                   setEditedSummary(draftSummary);
                 }
               }}
-              className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
+              disabled={isApproving}
+              className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/70 transition hover:text-white disabled:opacity-50"
             >
               {isEditing ? "Done editing" : "Edit"}
             </button>
@@ -272,7 +373,8 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
           <button
             type="button"
             onClick={handleDismiss}
-            className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/50 transition hover:text-white/70"
+            disabled={isApproving}
+            className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/50 transition hover:text-white/70 disabled:opacity-50"
           >
             Dismiss
           </button>
