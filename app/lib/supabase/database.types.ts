@@ -22,12 +22,13 @@
  *        npx supabase gen types typescript --linked > app/lib/supabase/database.types.ts
  *
  * Fallback (no live DB — hand-sync from SQL):
- *   Update this file to match supabase/migrations/001–011 and schema.sql after
+ *   Update this file to match supabase/migrations/001–012 and schema.sql after
  *   every new migration. Run `npm run build` and fix any row-type overlays in
  *   app/api/plans/route.ts and app/api/assessments/route.ts.
  *
  * Sprint 1 D1: initial file hand-synced from migrations 001–010 + schema.sql.
  * Sprint 1 D2: ai_clinician_summaries added (migration 011).
+ * Speech AI S1: speech_transcription_sessions added (migration 012).
  */
 
 export type Json =
@@ -518,6 +519,92 @@ export type Database = {
         };
         Relationships: [];
       };
+      speech_transcription_sessions: {
+        Row: {
+          id: string;
+          provider_id: string | null;
+          patient_id: string | null;
+          remote_request_id: string | null;
+          assessment_id: string | null;
+          source: string;
+          provider_name: string;
+          external_job_id: string | null;
+          language_code: string;
+          status: string;
+          transcript_text: string | null;
+          duration_ms: number | null;
+          byte_size: number | null;
+          schema_version: string;
+          created_at: string;
+          completed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          provider_id?: string | null;
+          patient_id?: string | null;
+          remote_request_id?: string | null;
+          assessment_id?: string | null;
+          source: string;
+          provider_name: string;
+          external_job_id?: string | null;
+          language_code: string;
+          status?: string;
+          transcript_text?: string | null;
+          duration_ms?: number | null;
+          byte_size?: number | null;
+          schema_version: string;
+          created_at?: string;
+          completed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          provider_id?: string | null;
+          patient_id?: string | null;
+          remote_request_id?: string | null;
+          assessment_id?: string | null;
+          source?: string;
+          provider_name?: string;
+          external_job_id?: string | null;
+          language_code?: string;
+          status?: string;
+          transcript_text?: string | null;
+          duration_ms?: number | null;
+          byte_size?: number | null;
+          schema_version?: string;
+          created_at?: string;
+          completed_at?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "speech_transcription_sessions_provider_id_fkey";
+            columns: ["provider_id"];
+            isOneToOne: false;
+            referencedRelation: "providers";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "speech_transcription_sessions_patient_id_fkey";
+            columns: ["patient_id"];
+            isOneToOne: false;
+            referencedRelation: "patients";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "speech_transcription_sessions_remote_request_id_fkey";
+            columns: ["remote_request_id"];
+            isOneToOne: false;
+            referencedRelation: "remote_assessment_requests";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "speech_transcription_sessions_assessment_id_fkey";
+            columns: ["assessment_id"];
+            isOneToOne: false;
+            referencedRelation: "assessments";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       treatment_plans: {
         Row: {
           id: string;
@@ -586,3 +673,4 @@ export type TreatmentPlansRow = Tables<"treatment_plans">;
 export type PlanSessionsRow = Tables<"plan_sessions">;
 export type AssessmentsRow = Tables<"assessments">;
 export type AiClinicianSummariesRow = Tables<"ai_clinician_summaries">;
+export type SpeechTranscriptionSessionsRow = Tables<"speech_transcription_sessions">;
