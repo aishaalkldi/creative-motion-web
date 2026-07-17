@@ -1,26 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PatientsRow } from "./supabase/database.types";
 import { API_ERRORS } from "./api/safe-errors";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-/**
- * Shape of a row from public.patients (post-migration 003).
- * provider_id is the direct ownership column added in migration 003.
- */
-export type PatientRow = {
-  id: string;
-  provider_id: string;
-  full_name: string;
-  phone: string;
-  age: number | null;
-  gender: string | null;
-  diagnosis: string | null;
-  sport: string | null;
-  status: string;
-  file_number: string | null;
-  created_at: string;
-  updated_at: string;
-};
+/** Row from `public.patients` — sourced from generated Supabase schema types (D1). */
+export type PatientRow = PatientsRow;
 
 export type OwnershipOk = { ok: true; patient: PatientRow };
 export type OwnershipFail = {

@@ -23,6 +23,7 @@ import {
   ownershipErrorResponse,
   serviceUnavailableResponse,
 } from "../../lib/api/safe-errors";
+import type { PlanSessionsRow, TreatmentPlansRow } from "../../lib/supabase/database.types";
 
 const PLAN_CREATE_ERROR = "Failed to create plan.";
 
@@ -40,32 +41,14 @@ export type PlanStructuredData = {
   phases?: unknown[]; // phase config used in the custom plan builder
 } & PlanProgramMetadata;
 
-export type PlanSessionRow = {
-  id: string;
-  plan_id: string;
-  provider_id: string;
-  session_number: number;
-  title: string;
+/** Row from `public.plan_sessions` with typed exercises jsonb. */
+export type PlanSessionRow = Omit<PlanSessionsRow, "exercises"> & {
   exercises: StoredExercise[];
-  status: string;
-  scheduled_at: string | null;
-  completed_at: string | null;
-  created_at: string;
 };
 
-export type PlanRow = {
-  id: string;
-  provider_id: string;
-  patient_id: string;
-  assessment_id: string | null;
-  title: string;
+/** Row from `public.treatment_plans` with typed structured_data and optional joins. */
+export type PlanRow = Omit<TreatmentPlansRow, "structured_data"> & {
   structured_data: PlanStructuredData | null;
-  status: string;
-  total_weeks: number | null;
-  current_week: number | null;
-  clinician_note: string | null;
-  created_at: string;
-  updated_at: string;
   /** Joined: sessions belonging to this plan */
   sessions?: PlanSessionRow[];
   /** Joined: active patient portal token */
