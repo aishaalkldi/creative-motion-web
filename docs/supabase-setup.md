@@ -25,9 +25,39 @@ Add to **Vercel → Project → Settings → Environment Variables**:
 
 Do not commit real contact values or API keys to the repo.
 
+## Database migrations
+
+All schema changes live in `supabase/migrations/`, applied in **numeric filename
+order**. `000_schema_baseline.sql` must execute first — it creates the base
+`public.patients` and `public.assessments` tables that every later migration
+depends on. Without it, a genuinely empty database fails at
+`002_core_tables.sql` with a missing-table error.
+
+Do not skip files, do not apply them out of order, and do not hand-pick a
+subset. On an already-linked project, `supabase db push` applies every
+migration not yet recorded as applied, in filename order, automatically —
+that is the only supported way to bring a database up to date. The
+repository-root `schema.sql` is a historical reference only (see the notice
+at the top of that file); it is not part of the applied migration chain and
+must not be run directly.
+
+### `supabase db reset` is destructive
+
+`supabase db reset --linked` drops and rebuilds the entire linked database
+from `supabase/migrations/` (and, if configured, seed data). It permanently
+discards all existing rows in that project.
+
+- Only run it against a project you have explicitly verified is a local
+  development or Staging project — confirm the linked project ref before
+  running it.
+- **Never run it against Production.** There is no confirmation step that
+  distinguishes environments for you; that verification is entirely on the
+  person running the command.
+
 ## Health / migration readiness
 
-After setting env vars and applying migrations `001`–`010`, verify the pilot schema:
+After setting env vars and applying all migrations in `supabase/migrations/`
+(currently `000` through `012`), verify the schema:
 
 ```bash
 curl -s https://your-deployment.vercel.app/api/health/supabase | jq
