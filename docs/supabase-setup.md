@@ -57,7 +57,7 @@ discards all existing rows in that project.
 ## Health / migration readiness
 
 After setting env vars and applying all migrations in `supabase/migrations/`
-(currently `000` through `012`), verify the schema:
+(currently `000` through `013`), verify the schema:
 
 ```bash
 curl -s https://your-deployment.vercel.app/api/health/supabase | jq
