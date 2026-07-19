@@ -42,3 +42,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local development artifacts
+.claude/settings.local.json
+.claude/launch.json
+.tmp/
+supabase/.temp/
