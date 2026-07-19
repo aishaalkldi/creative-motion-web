@@ -1,4 +1,5 @@
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
@@ -10,8 +11,17 @@ import {
   validateRemoteAssessmentStructuredData,
 } from "@/app/lib/remote-assessment-validation";
 import { serviceUnavailableResponse } from "@/app/lib/api/safe-errors";
+import { backfillTranscriptionSessionAssessmentId } from "@/app/lib/speech-ai/transcription-session-persistence";
+
+let serviceRoleClientOverride: SupabaseClient | null = null;
+
+/** Test-only hook for route tests — not used in production. */
+export function __setServiceRoleClientForTests(client: SupabaseClient | null): void {
+  serviceRoleClientOverride = client;
+}
 
 function adminClient() {
+  if (serviceRoleClientOverride) return serviceRoleClientOverride;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const svc = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !svc) return null;
@@ -129,6 +139,17 @@ export async function POST(
   if (updateError) {
     console.error("[POST /api/remote-assessments/[token]/submit] request update failed");
     return NextResponse.json({ error: "Failed to finalize submission." }, { status: 500 });
+  }
+
+  const backfilled = await backfillTranscriptionSessionAssessmentId(
+    admin,
+    requestRow.id,
+    assessment.id,
+  );
+  if (!backfilled) {
+    console.warn(
+      "[POST /api/remote-assessments/[token]/submit] transcription session assessment backfill skipped",
+    );
   }
 
   return NextResponse.json({
