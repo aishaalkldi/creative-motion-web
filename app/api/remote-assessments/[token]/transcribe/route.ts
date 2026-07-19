@@ -5,6 +5,7 @@
  * Audio is processed in memory only — not stored by RASQ.
  */
 import { createClient as createAdminClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
@@ -12,6 +13,11 @@ import {
   rateLimitExceededResponse,
 } from "@/app/lib/rate-limit";
 import { serviceUnavailableResponse } from "@/app/lib/api/safe-errors";
+import {
+  createPendingPatientRemoteSession,
+  markTranscriptionSessionCompleted,
+  markTranscriptionSessionFailed,
+} from "@/app/lib/speech-ai/transcription-session-persistence";
 import {
   isAllowedAssessmentAudioMime,
   isElevenLabsSttEnabled,
@@ -22,7 +28,15 @@ import {
 
 export const runtime = "nodejs";
 
+let serviceRoleClientOverride: SupabaseClient | null = null;
+
+/** Test-only hook for route tests — not used in production. */
+export function __setServiceRoleClientForTests(client: SupabaseClient | null): void {
+  serviceRoleClientOverride = client;
+}
+
 function adminClient() {
+  if (serviceRoleClientOverride) return serviceRoleClientOverride;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const svc = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !svc) return null;
@@ -33,6 +47,8 @@ function adminClient() {
 
 type RequestRow = {
   id: string;
+  patient_id: string;
+  provider_id: string;
   status: string;
 };
 
@@ -83,7 +99,7 @@ export async function POST(
 
   const { data: requestRow, error: fetchError } = await admin
     .from("remote_assessment_requests")
-    .select("id, status")
+    .select("id, patient_id, provider_id, status")
     .eq("token", trimmed)
     .eq("status", "pending")
     .gt("expires_at", new Date().toISOString())
@@ -126,10 +142,43 @@ export async function POST(
   );
 
   const audio = Buffer.from(await blob.arrayBuffer());
+
+  const sessionId = await createPendingPatientRemoteSession(admin, {
+    remoteRequest: requestRow,
+    languageCode: language,
+    byteSize: audio.length,
+  });
+  if (!sessionId) {
+    console.warn(
+      "[POST /api/remote-assessments/[token]/transcribe] transcription session pending insert skipped",
+    );
+  }
+
   const result = await transcribeAssessmentAudio({ audio, mimeType, language });
 
   if (!result.ok) {
+    if (sessionId) {
+      const markedFailed = await markTranscriptionSessionFailed(admin, sessionId);
+      if (!markedFailed) {
+        console.warn(
+          "[POST /api/remote-assessments/[token]/transcribe] transcription session failed update skipped",
+        );
+      }
+    }
     return NextResponse.json({ error: result.error, fallback: "manual" }, { status: 502 });
+  }
+
+  if (sessionId) {
+    const markedCompleted = await markTranscriptionSessionCompleted(
+      admin,
+      sessionId,
+      result.text,
+    );
+    if (!markedCompleted) {
+      console.warn(
+        "[POST /api/remote-assessments/[token]/transcribe] transcription session completed update skipped",
+      );
+    }
   }
 
   return NextResponse.json({ text: result.text });
