@@ -1,11 +1,9 @@
-import OpenAI from "openai";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { validatePatientOwnership } from "../../../../lib/validate-patient-ownership";
-import { classifyOpenAiError } from "@/app/lib/openai/classify-openai-error";
 import { getOpenAiKeyConfig } from "@/app/lib/openai/server-env";
 import {
   AI_ERROR_CODES,
@@ -15,6 +13,7 @@ import {
   fromOpenAiClassified,
 } from "@/app/lib/ai/ai-errors";
 import { checkAiRateLimit } from "@/app/lib/ai/rate-limit";
+import { translateClinicalText } from "@/app/lib/ai/translate-clinical-text";
 
 async function buildClients() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -148,49 +147,13 @@ export async function POST(
     return aiErrorJson(AI_ERROR_CODES.AI_RATE_LIMITED);
   }
 
-  const openai = new OpenAI({ apiKey: keyConfig.apiKey });
+  const result = await translateClinicalText(keyConfig.apiKey, text);
 
-  let translation: string;
-  try {
-    const response = await openai.chat.completions.create({
-      model: "gpt-4o",
-      max_tokens: 500,
-      messages: [
-        {
-          role: "system",
-          content: `You are a clinical Arabic-to-English translator for physiotherapy assessment reports.
-
-Your task: translate the provided Arabic patient statement into clear, accurate clinical English for clinician review.
-
-Rules:
-- Translate only what the patient stated.
-- Preserve the original meaning; do not change, add, or omit clinical content.
-- Do not add clinical interpretation, diagnosis, or pathology labels.
-- Do not infer symptoms not explicitly mentioned.
-- Do not generate diagnosis or clinical impression.
-- Do not add medical terminology not supported by the original wording.
-- Use concise clinical English phrasing suitable for physiotherapy documentation.
-- If a word is ambiguous, use the most literal translation and add [translator note: ambiguous term] in brackets.
-- Return only the translated text.
-- Do not include preamble, explanation, or quotation marks.
-- Do not translate numeric values.
-
-Example:
-Arabic: الألم في الكتف الأيمن عند رفع الذراع
-English: Pain in the right shoulder when lifting the arm.
-
-Output format: translated clinical English text only, one paragraph.`,
-        },
-        {
-          role: "user",
-          content: text,
-        },
-      ],
-    });
-    translation = response.choices[0]?.message?.content?.trim() ?? "";
-  } catch (error) {
-    const classified = classifyOpenAiError(error);
-    const code = fromOpenAiClassified(classified.code);
+  if (!result.ok) {
+    if (result.code === "no_content") {
+      return aiErrorJson(AI_ERROR_CODES.AI_NO_CONTENT);
+    }
+    const code = fromOpenAiClassified(result.code);
     console.error("[POST /api/assessments/[id]/translate] OpenAI error:", code);
     return NextResponse.json(
       { error: aiErrorMessage(code), code },
@@ -198,9 +161,7 @@ Output format: translated clinical English text only, one paragraph.`,
     );
   }
 
-  if (!translation) {
-    return aiErrorJson(AI_ERROR_CODES.AI_NO_CONTENT);
-  }
+  const translation = result.translation;
 
   const generatedAt = new Date().toISOString();
   const updatedData: Record<string, unknown> = {
