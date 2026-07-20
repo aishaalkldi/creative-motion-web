@@ -89,15 +89,15 @@ import { resolveCurrentAndPreviousPlans } from "../../../lib/clinician/resolve-c
 import { PreviousPlansSummary } from "../../../components/clinician/PreviousPlansSummary";
 import { DemoOfflineBanner } from "@/app/components/clinician/DemoOfflineBanner";
 import { extractDemoMeta } from "@/app/lib/api/demo-fallback-client";
+import { parseNumericDemoPatientId } from "@/app/lib/api/patient-id-utils";
 
 export default function PatientProfilePage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = String(params.id || "");
-  // numericId is kept for legacy numeric-based features (therapy, FastAPI assessments).
-  // It will be NaN for UUID-based Supabase patients — those sections will show empty.
-  const numericId = parseInt(id, 10);
+  // Pure numeric route ids only — UUID Supabase patients skip legacy FastAPI assessment fetch.
+  const legacyNumericPatientId = parseNumericDemoPatientId(id);
 
   const [patient, setPatient] = useState<PatientRow | null>(null);
   const [assessments, setAssessments] = useState<AssessmentRecord[]>([]);
@@ -184,10 +184,10 @@ export default function PatientProfilePage() {
       const localAssessments = assessmentsRepository.listByPatientId(id);
       if (isMounted) setAssessments(localAssessments);
 
-      // Backend assessment history (FastAPI — will be empty for new Supabase-only patients)
-      if (!isNaN(numericId)) {
+      // Backend assessment history (FastAPI — numeric legacy ids only; Supabase uses /api/assessments)
+      if (legacyNumericPatientId != null) {
         try {
-          const history = await getPatientAssessments(numericId);
+          const history = await getPatientAssessments(legacyNumericPatientId);
           if (isMounted) setBackendAssessmentHistory(history);
         } catch { /* ignore — FastAPI may be offline */ }
       }
@@ -196,7 +196,7 @@ export default function PatientProfilePage() {
     }
     load();
     return () => { isMounted = false; };
-  }, [id, numericId]);
+  }, [id, legacyNumericPatientId]);
 
   useEffect(() => {
     if (!patient) return;
@@ -214,7 +214,7 @@ export default function PatientProfilePage() {
       window.removeEventListener("focus", refresh);
       window.removeEventListener("cm-therapy-saved", refresh);
     };
-  }, [patient, numericId]);
+  }, [patient]);
 
   useEffect(() => {
     if (!patient) return;
