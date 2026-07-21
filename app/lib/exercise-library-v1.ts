@@ -1473,7 +1473,7 @@ const EXERCISE_LIBRARY_V1_BASE: ExerciseLibraryEntryV1[] = [
     exerciseId: "upper-limb-reaching-seated",
     nameEn: "Upper Limb Reaching (Seated)",
     nameAr: "الوصول بالذراع العلوي (جالس)",
-    bodyRegion: "general",
+    bodyRegion: "shoulder",
     conditionCategory: ["Neurological mobility", "deconditioning"],
     targetImpairment: "Reach control and shoulder-elbow coordination",
     functionalGoal: "Improve reaching for objects during seated daily tasks",

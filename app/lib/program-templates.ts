@@ -870,6 +870,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
       "Doorway Chest Stretch",
       "Prone Y-T-W",
       "Serratus Anterior Punch",
+      "Upper Limb Reaching (Seated)",
     ],
   }),
 
