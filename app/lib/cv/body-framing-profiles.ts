@@ -4,7 +4,7 @@
 
 import type { BodyFramingProfile } from "@/app/lib/cv/body-framing-evaluator";
 
-export type BodyFramingProfileId = "seated-rise" | "standing-sagittal-rep";
+export type BodyFramingProfileId = "seated-rise" | "standing-sagittal-rep" | "upper-limb-reach";
 
 /** Sit-to-Stand — seated start; hips, shoulders, at least one knee visible. */
 export const SEATED_RISE_FRAMING_PROFILE: BodyFramingProfile = {
@@ -37,9 +37,33 @@ export const STANDING_SAGITTAL_REP_FRAMING_PROFILE: BodyFramingProfile = {
   frameMargin: 0.04,
 };
 
+/**
+ * Shoulder Abduction Reach — seated or standing; knee visibility is
+ * irrelevant to an upper-limb reach movement, unlike the lower-body
+ * profiles above. One profile serves both supported positions: the camera
+ * geometry requirement (shoulder/elbow/wrist/hip-as-trunk-reference
+ * visible) does not meaningfully differ between seated and standing for
+ * this exercise. Thresholds are starting values pending pilot tuning, same
+ * status as the other profiles in this file when they first shipped.
+ */
+export const UPPER_LIMB_REACH_FRAMING_PROFILE: BodyFramingProfile = {
+  id: "upper-limb-reach",
+  minHipVisibility: 0.3,
+  minShoulderVisibility: 0.35,
+  requireNose: false,
+  requireKnee: false,
+  minKneeVisibility: 0,
+  torsoSpanMin: 0.08,
+  torsoSpanMax: 0.6,
+  bboxHeightMin: 0.25,
+  bboxHeightMax: 0.95,
+  frameMargin: 0.04,
+};
+
 const PROFILES: Record<BodyFramingProfileId, BodyFramingProfile> = {
   "seated-rise": SEATED_RISE_FRAMING_PROFILE,
   "standing-sagittal-rep": STANDING_SAGITTAL_REP_FRAMING_PROFILE,
+  "upper-limb-reach": UPPER_LIMB_REACH_FRAMING_PROFILE,
 };
 
 export function resolveBodyFramingProfile(
