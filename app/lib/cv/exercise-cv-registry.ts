@@ -72,7 +72,7 @@ const SHOULDER_ABDUCTION_REACH_ENTRY: ExerciseCvRegistryEntry = {
   },
   requiredLandmarks: ["left_hip", "left_shoulder", "left_elbow", "left_wrist"],
   detectorResolver: () => ShoulderAbductionReachPoseDetector,
-  feedbackLayerKey: null,
+  feedbackLayerKey: "shoulder-therapeutic-target",
   shadowModeStatus: "live",
 };
 
