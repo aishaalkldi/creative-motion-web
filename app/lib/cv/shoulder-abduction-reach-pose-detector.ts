@@ -307,9 +307,10 @@ export class ShoulderAbductionReachPoseDetector {
     if (frame) {
       const wristJointId = SHOULDER_ABDUCTION_REACH_BONUS_JOINTS[this.primarySide].wrist;
       const wristJoint = frame.joints[wristJointId];
-      this.lastPrimaryWristNormalized = wristJoint
-        ? { x: wristJoint.landmark.x, y: wristJoint.landmark.y }
-        : null;
+      this.lastPrimaryWristNormalized =
+        wristJoint?.confidence.present === true
+          ? { x: wristJoint.landmark.x, y: wristJoint.landmark.y }
+          : null;
 
       const wasFlagged = this.compensationState.flagged;
       const status = updateShoulderAbductionReachCompensation(
@@ -331,6 +332,8 @@ export class ShoulderAbductionReachPoseDetector {
           capturedAtMs,
         });
       }
+    } else {
+      this.lastPrimaryWristNormalized = null;
     }
   }
 

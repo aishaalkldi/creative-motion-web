@@ -37,6 +37,10 @@ import {
 } from "@/app/lib/interactive-shoulder/dev-mouse-simulation";
 import { INTERACTIVE_SHOULDER_CV_EXERCISE_ID } from "@/app/lib/interactive-shoulder/interactive-shoulder-exercise-ids";
 import {
+  resolveInteractiveShoulderSide,
+  type ResolvedInteractiveShoulderSide,
+} from "@/app/lib/interactive-shoulder/resolve-interactive-shoulder-side";
+import {
   mapShoulderMeasuredEventToSessionInput,
   mapTargetHitToSessionInput,
 } from "@/app/lib/session-orchestrator/adapters/shoulder-session-adapter";
@@ -50,6 +54,8 @@ type InteractiveShoulderSessionProps = {
   language: PatientExerciseLanguage;
   arClass?: string;
   textDir?: "rtl" | "ltr";
+  /** Future-safe: pass when an existing session/prescription side field is available. */
+  prescribedSide?: string | null;
   onSkipped?: () => void;
   onRegisterMetricsFlush?: (flush: () => void) => void;
   onRegisterCaptureConsent?: (getter: () => ReturnType<typeof createPatientCvCameraConsentRecord> | null) => void;
@@ -126,6 +132,7 @@ export function InteractiveShoulderSession({
   language,
   arClass = "",
   textDir = "ltr",
+  prescribedSide,
   onSkipped,
   onRegisterMetricsFlush,
   onRegisterCaptureConsent,
@@ -133,6 +140,11 @@ export function InteractiveShoulderSession({
 }: InteractiveShoulderSessionProps) {
   const entry = getExerciseCvRegistryEntry(INTERACTIVE_SHOULDER_CV_EXERCISE_ID);
   const profile = entry?.calibrationProfile;
+  const interactiveBlock = SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION.blocks[0];
+  const resolvedTherapeuticSide: ResolvedInteractiveShoulderSide = resolveInteractiveShoulderSide({
+    prescribedSide,
+    blockSide: interactiveBlock?.side,
+  });
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -144,6 +156,8 @@ export function InteractiveShoulderSession({
   const sessionStartedRef = useRef(false);
   const devMouseRef = useRef<{ x: number; y: number } | null>(null);
   const snapshotRef = useRef<ShoulderAbductionReachPoseDetectorSnapshot | null>(null);
+  const therapeuticSideRef = useRef(resolvedTherapeuticSide.side);
+  therapeuticSideRef.current = resolvedTherapeuticSide.side;
 
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
@@ -245,7 +259,7 @@ export function InteractiveShoulderSession({
         },
         onMeasuredEvent: handleOrchestratorEvent,
       },
-      "right",
+      resolvedTherapeuticSide.side,
     );
     detectorRef.current = detector;
     return () => {
@@ -253,7 +267,7 @@ export function InteractiveShoulderSession({
       detectorRef.current = null;
       cancelAnimationFrame(rafRef.current);
     };
-  }, [entry, handleOrchestratorEvent, profile, reportReadiness]);
+  }, [entry, handleOrchestratorEvent, profile, reportReadiness, resolvedTherapeuticSide.side]);
 
   useEffect(() => {
     if (!consentAccepted || !profile) return;
@@ -285,7 +299,7 @@ export function InteractiveShoulderSession({
           const ticked = tickTargetLifecycle(targetStateRef.current, {
             wrist,
             nowMs: now,
-            side: poseSnap?.primarySide ?? "right",
+            side: therapeuticSideRef.current,
             bounds: DEFAULT_SAFE_TARGET_BOUNDS,
           });
           targetStateRef.current = ticked.state;
@@ -330,7 +344,7 @@ export function InteractiveShoulderSession({
       safetyStatus: "normal",
       isPaused: false,
       patientFeedbackState: { message: null, encouragement: null },
-      currentBlock: SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION.blocks[0],
+      currentBlock: interactiveBlock,
     } as SessionOrchestratorSnapshot);
 
   return (
@@ -361,6 +375,11 @@ export function InteractiveShoulderSession({
         </div>
       ) : (
         <>
+          {resolvedTherapeuticSide.usedFallback ? (
+            <p className="mb-2 rounded-[6px] border border-[#E2E8E5] bg-[#F9FAFB] px-2 py-1 text-[11px] text-[#6B7280]">
+              Reach guidance is using a temporary default side until your therapist assigns a specific arm.
+            </p>
+          ) : null}
           {isDevMouseSimulationEnabled() && !snapshot?.primaryWristNormalized && (
             <p className="mb-2 rounded-[6px] border border-amber-300/40 bg-amber-50 px-2 py-1 text-[11px] text-amber-900">
               Development simulation: move the mouse over the preview when pose wrist is unavailable.
