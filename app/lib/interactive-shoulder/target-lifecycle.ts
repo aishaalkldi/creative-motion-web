@@ -17,6 +17,10 @@ import {
 
 export type TargetLifecycleState = {
   currentTarget: TherapeuticTarget | null;
+  /** Target currently playing an exit animation — hit registration is locked. */
+  exitingTarget: TherapeuticTarget | null;
+  /** Blocks spawn and additional hits until the exit transition completes. */
+  spawnLockedUntilMs: number | null;
   wristInside: boolean;
   targetHit: boolean;
   sequence: number;
@@ -26,6 +30,8 @@ export type TargetLifecycleState = {
 export function createInitialTargetLifecycle(): TargetLifecycleState {
   return {
     currentTarget: null,
+    exitingTarget: null,
+    spawnLockedUntilMs: null,
     wristInside: false,
     targetHit: false,
     sequence: 0,
@@ -40,6 +46,8 @@ export type TargetLifecycleTickInput = {
   bounds: SafeTargetBounds;
   hitConfig?: TargetHitConfig;
   random?: () => number;
+  /** Presentation-only delay before the next target spawns after a hit. Default 0. */
+  hitExitTransitionMs?: number;
 };
 
 export type TargetLifecycleTickResult = {
@@ -78,10 +86,27 @@ export function tickTargetLifecycle(
   input: TargetLifecycleTickInput,
 ): TargetLifecycleTickResult {
   const config = input.hitConfig ?? DEFAULT_TARGET_HIT_CONFIG;
+  const exitTransitionMs = input.hitExitTransitionMs ?? 0;
   let next = state;
   let hitEvent: TargetHitEvent | null = null;
 
-  if (!next.currentTarget) {
+  if (next.spawnLockedUntilMs !== null) {
+    if (input.nowMs < next.spawnLockedUntilMs) {
+      return { state: { ...next, wristInside: false }, hitEvent: null };
+    }
+    next = spawnNextTarget(
+      {
+        ...next,
+        exitingTarget: null,
+        spawnLockedUntilMs: null,
+        wristInside: false,
+        targetHit: false,
+      },
+      input,
+    );
+  }
+
+  if (!next.currentTarget && !next.spawnLockedUntilMs) {
     next = spawnNextTarget(next, input);
   }
 
@@ -94,9 +119,10 @@ export function tickTargetLifecycle(
     shouldRegisterTargetHit(next.wristInside, isInside, next.targetHit) &&
     next.currentTarget
   ) {
-    const reactionTimeMs = Math.max(0, input.nowMs - next.currentTarget.spawnedAtMs);
+    const hitTarget = next.currentTarget;
+    const reactionTimeMs = Math.max(0, input.nowMs - hitTarget.spawnedAtMs);
     hitEvent = {
-      targetId: next.currentTarget.id,
+      targetId: hitTarget.id,
       capturedAtMs: input.nowMs,
       reactionTimeMs,
     };
@@ -111,6 +137,17 @@ export function tickTargetLifecycle(
         reactionTimesMs: [...next.interaction.reactionTimesMs, reactionTimeMs],
       },
     };
+    if (exitTransitionMs > 0) {
+      next = {
+        ...next,
+        currentTarget: null,
+        exitingTarget: hitTarget,
+        spawnLockedUntilMs: input.nowMs + exitTransitionMs,
+        wristInside: false,
+        targetHit: false,
+      };
+      return { state: next, hitEvent };
+    }
     next = spawnNextTarget(next, input);
     return { state: { ...next, wristInside: false }, hitEvent };
   }

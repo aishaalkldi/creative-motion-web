@@ -318,3 +318,25 @@ body {
   0%, 100% { border-color: #1D9E75; }
   50% { border-color: #9CA3AF; }
 }
+
+/* ── Reach the Light — interactive shoulder experience ── */
+@keyframes reach-light-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.92; }
+  50% { transform: scale(1.06); opacity: 1; }
+}
+
+@keyframes reach-light-exit {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(1.35); opacity: 0; }
+}
+
+@keyframes reach-light-hit {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.12); }
+  100% { transform: scale(1); }
+}
+
+@keyframes reach-light-burst {
+  0% { transform: translate(0, 0) scale(1); opacity: 0.95; }
+  100% { transform: translate(var(--burst-x), var(--burst-y)) scale(0.2); opacity: 0; }
+}

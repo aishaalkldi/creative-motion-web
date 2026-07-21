@@ -34,7 +34,9 @@ import {
   normalizedPointFromMouseEvent,
 } from "@/app/lib/interactive-shoulder/dev-mouse-simulation";
 import { interactiveShoulderUi, resolveInteractiveShoulderStartError } from "@/app/lib/interactive-shoulder/interactive-shoulder-ui";
+import { resolveHitExitTransitionMs } from "@/app/lib/interactive-shoulder/reach-the-light-motion";
 import { tickTargetLifecycleIfActive } from "@/app/lib/interactive-shoulder/target-lifecycle-gating";
+import type { TherapeuticTarget } from "@/app/lib/interactive-shoulder/types";
 import { INTERACTIVE_SHOULDER_CV_EXERCISE_ID } from "@/app/lib/interactive-shoulder/interactive-shoulder-exercise-ids";
 import {
   resolveInteractiveShoulderSide,
@@ -49,6 +51,8 @@ import type { SessionOrchestratorSnapshot } from "@/app/lib/session-orchestrator
 import { ShoulderSessionHud } from "./ShoulderSessionHud";
 import { ShoulderTargetLayer } from "./ShoulderTargetLayer";
 import { TrackedHandCursor } from "./TrackedHandCursor";
+import { ReachTheLightEnvironment } from "./ReachTheLightEnvironment";
+import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 
 type InteractiveShoulderSessionProps = {
   language: PatientExerciseLanguage;
@@ -80,13 +84,13 @@ const PatientCameraVideoLayer = memo(function PatientCameraVideoLayer({
 }) {
   return (
     <>
-      <video ref={videoRef} autoPlay muted playsInline className="block h-full w-full object-cover opacity-90" />
+      <video ref={videoRef} autoPlay muted playsInline className="block h-full w-full object-cover opacity-95" />
       <canvas
         ref={canvasRef}
         width={canvasWidth}
         height={canvasHeight}
         aria-hidden
-        className="pointer-events-none absolute inset-0 h-full w-full opacity-70"
+        className="pointer-events-none absolute inset-0 h-full w-full opacity-60 mix-blend-screen"
       />
     </>
   );
@@ -114,7 +118,7 @@ function PreviewStack({
   return (
     <div
       ref={containerRef}
-      className="relative mt-3 w-full overflow-hidden rounded-[8px] border border-[#D1E7DE] bg-black"
+      className="relative mt-3 w-full overflow-hidden rounded-[12px] border border-[#1E2D42]/50 bg-[#0A0F1A] shadow-[0_8px_28px_rgba(10,15,26,0.18)]"
       style={{ aspectRatio: `${canvasWidth} / ${canvasHeight}` }}
       onMouseMove={onDevMouseMove}
       aria-label={previewAriaLabel}
@@ -141,6 +145,8 @@ export function InteractiveShoulderSession({
   onCaptureReadinessChange,
 }: InteractiveShoulderSessionProps) {
   const ui = interactiveShoulderUi(language);
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const hitExitTransitionMs = resolveHitExitTransitionMs(prefersReducedMotion);
   const entry = getExerciseCvRegistryEntry(INTERACTIVE_SHOULDER_CV_EXERCISE_ID);
   const profile = entry?.calibrationProfile;
   const interactiveBlock = SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION.blocks[0];
@@ -170,13 +176,22 @@ export function InteractiveShoulderSession({
   const [orchestratorSnapshot, setOrchestratorSnapshot] = useState<SessionOrchestratorSnapshot | null>(null);
   const [targetState, setTargetState] = useState<TargetLifecycleState>(createInitialTargetLifecycle());
   const [showBlockSummary, setShowBlockSummary] = useState(false);
-  const [summaryMetrics, setSummaryMetrics] = useState({ targets: 0, reps: 0 });
-  const [recentHitFlash, setRecentHitFlash] = useState(false);
+  const [summaryMetrics, setSummaryMetrics] = useState({ targets: 0, reps: 0, durationSeconds: 0 });
   const [targetHitAnnouncement, setTargetHitAnnouncement] = useState<string | null>(null);
+  const [hitBurstTarget, setHitBurstTarget] = useState<TherapeuticTarget | null>(null);
+  const hitFeedbackTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     snapshotRef.current = snapshot;
   }, [snapshot]);
+
+  useEffect(() => {
+    return () => {
+      if (hitFeedbackTimeoutRef.current !== null) {
+        window.clearTimeout(hitFeedbackTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (readPatientCvCameraConsentFromSession()) {
@@ -291,6 +306,7 @@ export function InteractiveShoulderSession({
           setSummaryMetrics({
             targets: blockResult?.interaction.targetsContacted ?? targetStateRef.current.interaction.targetsReached,
             reps: blockResult?.measured.validRepetitions ?? snapshot?.primaryRepCount ?? 0,
+            durationSeconds: Math.max(0, Math.round(snap.blockElapsedSeconds)),
           });
           setShowBlockSummary(true);
         }
@@ -305,17 +321,25 @@ export function InteractiveShoulderSession({
             nowMs: now,
             side: therapeuticSideRef.current,
             bounds: DEFAULT_SAFE_TARGET_BOUNDS,
+            hitExitTransitionMs,
           });
           targetStateRef.current = ticked.state;
           setTargetState(ticked.state);
           if (ticked.hitEvent) {
             orchestrator.reportInputEvent(mapTargetHitToSessionInput(ticked.hitEvent), now);
-            setRecentHitFlash(true);
+            const burstTarget = ticked.state.exitingTarget;
+            if (burstTarget) {
+              setHitBurstTarget(burstTarget);
+            }
             setTargetHitAnnouncement(ui.targetReached);
-            window.setTimeout(() => {
-              setRecentHitFlash(false);
+            if (hitFeedbackTimeoutRef.current !== null) {
+              window.clearTimeout(hitFeedbackTimeoutRef.current);
+            }
+            hitFeedbackTimeoutRef.current = window.setTimeout(() => {
+              setHitBurstTarget(null);
               setTargetHitAnnouncement(null);
-            }, 350);
+              hitFeedbackTimeoutRef.current = null;
+            }, Math.max(hitExitTransitionMs, 480));
           }
         }
       }
@@ -323,7 +347,7 @@ export function InteractiveShoulderSession({
     };
     rafRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [language, showBlockSummary, ui.targetReached]);
+  }, [hitExitTransitionMs, showBlockSummary, ui.targetReached]);
 
   const acceptConsent = () => {
     if (!consentChecked) return;
@@ -401,13 +425,20 @@ export function InteractiveShoulderSession({
             onDevMouseMove={handleDevMouseMove}
             overlay={
               <>
-                <ShoulderTargetLayer target={targetState.currentTarget} highlight={recentHitFlash} />
+                <ReachTheLightEnvironment reducedMotion={prefersReducedMotion} />
+                <ShoulderTargetLayer
+                  target={targetState.currentTarget}
+                  exitingTarget={targetState.exitingTarget}
+                  hitBurstTarget={hitBurstTarget}
+                  reducedMotion={prefersReducedMotion}
+                />
                 <TrackedHandCursor
                   wrist={
                     snapshot?.primaryWristNormalized ??
                     (isDevMouseSimulationEnabled() ? devMouseRef.current : null)
                   }
                   visible={hudSnapshot.sessionState === "active" || hudSnapshot.sessionState === "safetyHold"}
+                  reducedMotion={prefersReducedMotion}
                 />
                 <ShoulderSessionHud
                   language={language}
@@ -420,6 +451,7 @@ export function InteractiveShoulderSession({
                   showBlockSummary={showBlockSummary}
                   blockSummaryTargetsReached={summaryMetrics.targets}
                   blockSummaryMeasuredReps={summaryMetrics.reps}
+                  blockSummaryDurationSeconds={summaryMetrics.durationSeconds}
                   targetHitAnnouncement={targetHitAnnouncement}
                 />
               </>
