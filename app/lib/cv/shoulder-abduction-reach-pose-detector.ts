@@ -19,6 +19,7 @@
 import {
   createShoulderAbductionReachDetectorState,
   updateShoulderAbductionReachDetector,
+  SHOULDER_ABDUCTION_REACH_BONUS_JOINTS,
   type ShoulderAbductionReachDetectorState,
   type ShoulderAbductionReachFrameResult,
   type ShoulderAbductionReachSide,
@@ -79,6 +80,8 @@ export type ShoulderAbductionReachPoseDetectorSnapshot = {
   initPhase: SitToStandInitPhase;
   previewActive: boolean;
   trackingError: string | null;
+  /** Primary-side wrist in normalized preview coordinates for interactive target UI. */
+  primaryWristNormalized: { x: number; y: number } | null;
 };
 
 /**
@@ -169,6 +172,7 @@ export class ShoulderAbductionReachPoseDetector {
   private trackerWasLost = false;
   private lastFrameResult: ShoulderAbductionReachFrameResult | null = null;
   private lastBodyFramingState: BodyFramingState = "checking";
+  private lastPrimaryWristNormalized: { x: number; y: number } | null = null;
 
   constructor(
     callbacks: ShoulderAbductionReachPoseDetectorCallbacks,
@@ -214,6 +218,7 @@ export class ShoulderAbductionReachPoseDetector {
       initPhase: this.initPhase,
       previewActive: this.previewActive,
       trackingError: this.trackingError,
+      primaryWristNormalized: this.lastPrimaryWristNormalized,
     };
   }
 
@@ -300,6 +305,13 @@ export class ShoulderAbductionReachPoseDetector {
     // second implementation of it.
     const frame = BLAZEPOSE_ACQUISITION_ADAPTER.normalize(landmarks, context);
     if (frame) {
+      const wristJointId = SHOULDER_ABDUCTION_REACH_BONUS_JOINTS[this.primarySide].wrist;
+      const wristJoint = frame.joints[wristJointId];
+      this.lastPrimaryWristNormalized =
+        wristJoint?.confidence.present === true
+          ? { x: wristJoint.landmark.x, y: wristJoint.landmark.y }
+          : null;
+
       const wasFlagged = this.compensationState.flagged;
       const status = updateShoulderAbductionReachCompensation(
         this.compensationState,
@@ -320,6 +332,8 @@ export class ShoulderAbductionReachPoseDetector {
           capturedAtMs,
         });
       }
+    } else {
+      this.lastPrimaryWristNormalized = null;
     }
   }
 

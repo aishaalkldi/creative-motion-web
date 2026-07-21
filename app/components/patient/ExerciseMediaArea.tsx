@@ -4,7 +4,9 @@ import { useState } from "react";
 import type { PatientCvDerivedMetrics } from "@/app/lib/cv/bio-0-contracts";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import { PatientCvCapture } from "@/app/components/patient/cv/PatientCvCapture";
+import { InteractiveShoulderSession } from "@/app/components/patient/interactive-shoulder/InteractiveShoulderSession";
 import { isPatientCvCaptureWired, type CvY1ExerciseId } from "@/app/lib/cv/cv-patient-config";
+import { isInteractiveShoulderSessionWired } from "@/app/lib/interactive-shoulder/interactive-shoulder-exercise-ids";
 import type { CaptureSetupGuidance } from "@/app/lib/cv/patient-cv-capture-readiness";
 import type { CvMotionQualityPayload } from "@/app/lib/cv/sts-motion-pilot-record";
 import type { PatientCvCameraConsentRecord } from "@/app/lib/cv/patient-cv-consent";
@@ -435,7 +437,12 @@ export function ExerciseMediaArea({
   const resolvedMedia = mediaUrl?.trim() || null;
   const poster = thumbnailUrl?.trim() || undefined;
 
-  const showPatientCv = exerciseStep === "active" && isPatientCvCaptureWired(exerciseId);
+  const showInteractiveShoulder =
+    exerciseStep === "active" && isInteractiveShoulderSessionWired(exerciseId);
+  const showPatientCv =
+    exerciseStep === "active" &&
+    isPatientCvCaptureWired(exerciseId) &&
+    !showInteractiveShoulder;
   const cvExerciseId = exerciseId as CvY1ExerciseId | undefined;
 
   return (
@@ -443,6 +450,18 @@ export function ExerciseMediaArea({
       className="relative overflow-hidden border-b border-[#D1E7DE] bg-gradient-to-b from-[#E8F5F1] via-[#F0FAF6] to-[#F4F6F5]"
       data-exercise-id={exerciseId ?? undefined}
     >
+      {showInteractiveShoulder && (
+        <InteractiveShoulderSession
+          language={language}
+          arClass={arClass}
+          textDir={textDir}
+          onSkipped={onCvSkipped}
+          onRegisterMetricsFlush={onRegisterCvMetricsFlush}
+          onRegisterCaptureConsent={onRegisterCaptureConsent}
+          onCaptureReadinessChange={onCaptureReadinessChange}
+        />
+      )}
+
       {showPatientCv && cvExerciseId && (
         <PatientCvCapture
           exerciseId={cvExerciseId}
@@ -459,6 +478,7 @@ export function ExerciseMediaArea({
         />
       )}
 
+      {!showInteractiveShoulder && (
       <div className="relative">
         {resolvedMedia ? (
           <div className="relative min-h-[220px] w-full bg-[#0A0F1A]/5">
@@ -492,6 +512,7 @@ export function ExerciseMediaArea({
           />
         )}
       </div>
+      )}
 
       {/* future: side-by-side video + CV layout wrapper */}
     </div>

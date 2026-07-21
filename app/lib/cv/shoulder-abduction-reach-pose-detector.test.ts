@@ -12,6 +12,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PoseLandmark } from "@/app/lib/cv/pose-landmark-overlay";
+import { MIN_PRESENT_VISIBILITY } from "@/app/lib/cv/motion-quality-confidence";
 import {
   ShoulderAbductionReachPoseDetector,
   type ShoulderAbductionReachMeasuredEvent,
@@ -185,5 +186,57 @@ describe("ShoulderAbductionReachPoseDetector", () => {
       );
     }
     void detector;
+  });
+
+  it("populates primaryWristNormalized for the configured primary side with normalized coordinates", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    const landmarks = restingLandmarks();
+    landmarks[R_WRIST] = { x: 0.62, y: 0.41, visibility: 0.95 };
+    landmarks[L_WRIST] = { x: 0.18, y: 0.77, visibility: 0.95 };
+
+    driveFrames(detector, [landmarks]);
+
+    const wrist = detector.getSnapshot().primaryWristNormalized;
+    assert.ok(wrist);
+    assert.equal(wrist.x, 0.62);
+    assert.equal(wrist.y, 0.41);
+    assert.ok(wrist.x >= 0 && wrist.x <= 1);
+    assert.ok(wrist.y >= 0 && wrist.y <= 1);
+  });
+
+  it("returns the primary-side wrist, not the opposite wrist", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "left");
+    const landmarks = restingLandmarks();
+    landmarks[L_WRIST] = { x: 0.22, y: 0.58, visibility: 0.95 };
+    landmarks[R_WRIST] = { x: 0.81, y: 0.33, visibility: 0.95 };
+
+    driveFrames(detector, [landmarks]);
+
+    const wrist = detector.getSnapshot().primaryWristNormalized;
+    assert.deepEqual(wrist, { x: 0.22, y: 0.58 });
+  });
+
+  it("sets primaryWristNormalized to null when the primary wrist is below the present visibility rule", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    const landmarks = restingLandmarks();
+    landmarks[R_WRIST] = {
+      x: 0.62,
+      y: 0.41,
+      visibility: MIN_PRESENT_VISIBILITY - 0.05,
+    };
+
+    driveFrames(detector, [landmarks]);
+
+    assert.equal(detector.getSnapshot().primaryWristNormalized, null);
+  });
+
+  it("sets primaryWristNormalized to null when the primary wrist landmark is missing from the frame", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    const landmarks = restingLandmarks();
+    landmarks[R_WRIST] = { x: 0.62, y: 0.41, visibility: 0 };
+
+    driveFrames(detector, [landmarks]);
+
+    assert.equal(detector.getSnapshot().primaryWristNormalized, null);
   });
 });

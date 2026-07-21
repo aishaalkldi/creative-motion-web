@@ -42,8 +42,8 @@ describe("exercise-cv-registry", () => {
     assert.deepEqual(ids, ["shoulder-abduction-reach"]);
   });
 
-  it("feedbackLayerKey is reserved but unset until PR3", () => {
+  it("feedbackLayerKey wires the therapeutic target layer for PR3", () => {
     const entry = getExerciseCvRegistryEntry("shoulder-abduction-reach");
-    assert.equal(entry?.feedbackLayerKey, null);
+    assert.equal(entry?.feedbackLayerKey, "shoulder-therapeutic-target");
   });
 });

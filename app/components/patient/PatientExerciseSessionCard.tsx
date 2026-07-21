@@ -16,6 +16,7 @@ import {
   isCvEnabledExercise,
   isPatientCvCaptureWired,
 } from "@/app/lib/cv/cv-patient-config";
+import { isInteractiveShoulderSessionWired } from "@/app/lib/interactive-shoulder/interactive-shoulder-exercise-ids";
 import type { CaptureSetupGuidance } from "@/app/lib/cv/patient-cv-capture-readiness";
 import {
   formatBodyRegionForPatient,
@@ -105,13 +106,15 @@ export function PatientExerciseSessionCard({
   const cardUi = sessionExerciseUi(lang);
   const guidedUi = guidedSessionUi(lang);
   const libraryEntry = getLibraryExerciseById(view.exerciseId);
+  const isInteractiveShoulder = isInteractiveShoulderSessionWired(view.exerciseId);
   const showManualCvNote =
     !isCvEnabledExercise(view.exerciseId) &&
+    !isInteractiveShoulder &&
     (step === "preview" || step === "active");
   const showCvSetupCard =
-    isCvEnabledExercise(view.exerciseId) && step === "preview";
+    (isCvEnabledExercise(view.exerciseId) || isInteractiveShoulder) && step === "preview";
   const showCvReadinessBanner =
-    isPatientCvCaptureWired(view.exerciseId) && step === "active";
+    (isPatientCvCaptureWired(view.exerciseId) || isInteractiveShoulder) && step === "active";
   const [cvReadinessState, setCvReadinessState] =
     useState<PatientCvReadinessDisplayState | null>(null);
 
