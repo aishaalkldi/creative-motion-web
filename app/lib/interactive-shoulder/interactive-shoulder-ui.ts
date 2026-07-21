@@ -36,6 +36,7 @@ export type InteractiveShoulderUi = {
   paused: string;
   blockInstructions: string;
   targetReached: string;
+  patternPathComplete: string;
   encouragementNiceWork: string;
   blockCompleteTitle: string;
   blockCompleteSummary: (targets: number, reps: number) => string;
@@ -90,6 +91,7 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     blockInstructions:
       "Lift your arm out to the side and reach toward each therapeutic light. Move at a comfortable pace.",
     targetReached: "Light reached — nice controlled reach.",
+    patternPathComplete: "Path completed — nice controlled movement.",
     encouragementNiceWork: "Nice work.",
     blockCompleteTitle: "Movement block complete",
     blockCompleteSummary: (targets, reps) =>
@@ -149,6 +151,7 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     blockInstructions:
       "ارفع ذراعك جانبًا وامدُد نحو كل ضوء علاجي. تحرّك بوتيرة مريحة.",
     targetReached: "تم الوصول للضوء — وصول متحكم وجيد.",
+    patternPathComplete: "اكتمل المسار — حركة متحكم وجيدة.",
     encouragementNiceWork: "عمل رائع.",
     blockCompleteTitle: "اكتملت كتلة الحركة",
     blockCompleteSummary: (targets, reps) =>

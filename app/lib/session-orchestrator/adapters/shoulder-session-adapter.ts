@@ -1,6 +1,7 @@
 import type { ShoulderAbductionReachMeasuredEvent } from "@/app/lib/cv/shoulder-abduction-reach-pose-detector";
 import type { SessionInputEvent } from "@/app/lib/session-orchestrator/types";
 import type { TargetHitEvent } from "@/app/lib/interactive-shoulder/types";
+import type { PatternCompletionEvent } from "@/app/lib/interactive-shoulder/motion-patterns/pattern-lifecycle";
 
 /**
  * Translates shoulder detector measured events into generic SessionInputEvent
@@ -37,6 +38,13 @@ export function mapShoulderMeasuredEventToSessionInput(
 
 export function mapTargetHitToSessionInput(hit: TargetHitEvent): SessionInputEvent {
   return { type: "targetContact", capturedAtMs: hit.capturedAtMs };
+}
+
+/** Pattern completion maps to the same interaction channel as target contact. */
+export function mapPatternCompletionToSessionInput(
+  completion: PatternCompletionEvent,
+): SessionInputEvent {
+  return { type: "targetContact", capturedAtMs: completion.capturedAtMs };
 }
 
 /** Rep completion must never imply a target hit — callers use separate paths. */
