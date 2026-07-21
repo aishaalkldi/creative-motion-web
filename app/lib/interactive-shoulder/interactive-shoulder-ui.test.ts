@@ -25,6 +25,9 @@ describe("interactiveShoulderUi", () => {
     assert.ok(en.trackingLostHold.length > 0);
     assert.ok(ar.trackingLostHold.length > 0);
     assert.equal(en.experienceTitle, "Reach the Light");
+    assert.ok(ar.experienceTitle.length > 0);
+    assert.notEqual(en.experienceTitle, ar.experienceTitle);
+    assert.equal(ar.experienceTitle, "الوصول إلى الضوء");
     assert.ok(en.interactionTargetsLabel(2, 5).includes("Interaction targets"));
     assert.ok(ar.interactionTargetsLabel(2, 5).includes("أهداف التفاعل"));
     assert.ok(en.blockCompleteTitle.length > 0);

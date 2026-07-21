@@ -87,6 +87,8 @@ describe("Reach the Light — bilingual experience copy", () => {
     const ar = interactiveShoulderUi("ar");
     assert.equal(en.experienceTitle, "Reach the Light");
     assert.ok(ar.experienceTitle.length > 0);
+    assert.notEqual(en.experienceTitle, ar.experienceTitle);
+    assert.equal(ar.experienceTitle, "الوصول إلى الضوء");
     assert.ok(en.targetReached.includes("Light"));
     assert.ok(ar.targetReached.length > 0);
     assert.notEqual(en.targetReached, ar.targetReached);

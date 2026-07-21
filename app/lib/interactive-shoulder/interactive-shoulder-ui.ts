@@ -125,7 +125,7 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     continueCamera: "متابعة",
     skipCamera: "تخطّي الكاميرا",
     startingCamera: "جاري تشغيل الكاميرا…",
-    experienceTitle: "Reach the Light",
+    experienceTitle: "الوصول إلى الضوء",
     sessionProgressLabel: "تقدّم الجلسة",
     interactionTargetsLabel: (reached, shown) => `أهداف التفاعل: ${reached}/${shown}`,
     measuredRepsLabel: (reps) => `التكرارات المقاسة: ${reps}`,
