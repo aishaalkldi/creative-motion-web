@@ -9,6 +9,8 @@ import type {
   SessionState,
 } from "@/app/lib/session-orchestrator/types";
 import { SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION } from "./shoulder-abduction-reach-session-definition";
+import type { FeedbackInteractionMode } from "./motion-patterns/motion-pattern-registry";
+import { D1_INSPIRED_DIAGONAL_REACH_PATTERN } from "./motion-patterns/d1-inspired-diagonal-reach-pattern";
 
 export type InteractiveShoulderUi = {
   consentTitle: string;
@@ -301,6 +303,19 @@ export function resolveInteractiveShoulderEncouragement(
   if (snapshot.safetyStatus === "hold") return null;
   if (!snapshot.patientFeedbackState.encouragement) return null;
   return interactiveShoulderUi(lang).encouragementNiceWork;
+}
+
+/** HUD experience title follows the active block feedback mode — not one global label. */
+export function resolveInteractiveShoulderExperienceTitle(
+  language: PatientExerciseLanguage,
+  feedbackMode: FeedbackInteractionMode,
+): string {
+  if (feedbackMode === "motion-pattern") {
+    return language === "ar"
+      ? D1_INSPIRED_DIAGONAL_REACH_PATTERN.nameAr
+      : D1_INSPIRED_DIAGONAL_REACH_PATTERN.nameEn;
+  }
+  return interactiveShoulderUi(language).experienceTitle;
 }
 
 export function shouldTickTargetLifecycle(sessionState: SessionState): boolean {

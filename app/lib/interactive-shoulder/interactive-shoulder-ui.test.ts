@@ -6,12 +6,17 @@ import { describe, it } from "node:test";
 import {
   interactiveShoulderSetupGuidanceCopy,
   interactiveShoulderUi,
+  resolveInteractiveShoulderExperienceTitle,
   resolveInteractiveShoulderLiveMessage,
   resolveInteractiveShoulderStartError,
   shouldTickTargetLifecycle,
 } from "./interactive-shoulder-ui";
+import { CLINICAL_MOTION_PATTERN_SEQUENCE_SESSION } from "./clinical-motion-pattern-session-definition";
+import { resolveFeedbackInteractionMode } from "./motion-patterns/motion-pattern-registry";
 import { PATIENT_CAMERA_NO_FRAMES_ERROR } from "../cv/patient-camera-stream";
 import { SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION } from "./shoulder-abduction-reach-session-definition";
+
+const FORBIDDEN_CLINICAL_UI_CLAIMS = ["PNF D1 Flexion", "PNF Accuracy", "Clinical Accuracy"];
 
 describe("interactiveShoulderUi", () => {
   it("provides English and Arabic copy for core patient messages", () => {
@@ -82,5 +87,64 @@ describe("interactiveShoulderUi", () => {
     assert.equal(arDenied, interactiveShoulderUi("ar").cameraAccessDenied);
     const noFrames = resolveInteractiveShoulderStartError("en", new Error(PATIENT_CAMERA_NO_FRAMES_ERROR));
     assert.equal(noFrames, interactiveShoulderUi("en").cameraNoFrames);
+  });
+});
+
+describe("resolveInteractiveShoulderExperienceTitle", () => {
+  it("shows Reach the Light in English and Arabic for target mode", () => {
+    assert.equal(
+      resolveInteractiveShoulderExperienceTitle("en", "reach-the-light-targets"),
+      "Reach the Light",
+    );
+    assert.equal(
+      resolveInteractiveShoulderExperienceTitle("ar", "reach-the-light-targets"),
+      "الوصول إلى الضوء",
+    );
+  });
+
+  it("shows D1-Inspired Diagonal Reach in English and Arabic for pattern mode", () => {
+    assert.equal(
+      resolveInteractiveShoulderExperienceTitle("en", "motion-pattern"),
+      "D1-Inspired Diagonal Reach",
+    );
+    assert.equal(
+      resolveInteractiveShoulderExperienceTitle("ar", "motion-pattern"),
+      "الوصول القطري المستوحى من D1",
+    );
+  });
+
+  it("updates the title when a sequential session transitions from pattern to target blocks", () => {
+    const patternBlock = CLINICAL_MOTION_PATTERN_SEQUENCE_SESSION.blocks[0]!;
+    const targetBlock = CLINICAL_MOTION_PATTERN_SEQUENCE_SESSION.blocks[1]!;
+    const patternMode = resolveFeedbackInteractionMode(patternBlock.feedbackProfile);
+    const targetMode = resolveFeedbackInteractionMode(targetBlock.feedbackProfile);
+
+    const patternTitleEn = resolveInteractiveShoulderExperienceTitle("en", patternMode);
+    const targetTitleEn = resolveInteractiveShoulderExperienceTitle("en", targetMode);
+    assert.notEqual(patternTitleEn, targetTitleEn);
+    assert.equal(targetTitleEn, "Reach the Light");
+    assert.equal(patternTitleEn, "D1-Inspired Diagonal Reach");
+
+    const patternTitleAr = resolveInteractiveShoulderExperienceTitle("ar", patternMode);
+    const targetTitleAr = resolveInteractiveShoulderExperienceTitle("ar", targetMode);
+    assert.notEqual(patternTitleAr, targetTitleAr);
+    assert.equal(targetTitleAr, "الوصول إلى الضوء");
+    assert.equal(patternTitleAr, "الوصول القطري المستوحى من D1");
+  });
+
+  it("does not expose PNF or clinical accuracy claims in experience titles", () => {
+    const titles = [
+      resolveInteractiveShoulderExperienceTitle("en", "motion-pattern"),
+      resolveInteractiveShoulderExperienceTitle("ar", "motion-pattern"),
+      resolveInteractiveShoulderExperienceTitle("en", "reach-the-light-targets"),
+      resolveInteractiveShoulderExperienceTitle("ar", "reach-the-light-targets"),
+      interactiveShoulderUi("en").interactionPatternsLabel(1, 2),
+      interactiveShoulderUi("ar").interactionPatternsLabel(1, 2),
+    ];
+    for (const copy of titles) {
+      for (const forbidden of FORBIDDEN_CLINICAL_UI_CLAIMS) {
+        assert.ok(!copy.includes(forbidden), `unexpected claim "${forbidden}" in "${copy}"`);
+      }
+    }
   });
 });

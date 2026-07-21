@@ -7,6 +7,7 @@ import type { FeedbackInteractionMode } from "@/app/lib/interactive-shoulder/mot
 import {
   interactiveShoulderUi,
   resolveInteractiveShoulderEncouragement,
+  resolveInteractiveShoulderExperienceTitle,
   resolveInteractiveShoulderLiveMessage,
 } from "@/app/lib/interactive-shoulder/interactive-shoulder-ui";
 import type { SessionOrchestratorSnapshot } from "@/app/lib/session-orchestrator/types";
@@ -55,6 +56,7 @@ export function ShoulderSessionHud({
 }: ShoulderSessionHudProps) {
   const ui = interactiveShoulderUi(language);
   const isPatternMode = feedbackMode === "motion-pattern";
+  const experienceTitle = resolveInteractiveShoulderExperienceTitle(language, feedbackMode);
   const remaining = formatRemainingSeconds(snapshot);
   const pausedOrHold = snapshot.isPaused || snapshot.safetyStatus === "hold";
   const liveMessage = resolveInteractiveShoulderLiveMessage(language, snapshot);
@@ -72,7 +74,7 @@ export function ShoulderSessionHud({
           aria-live="polite"
         >
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5DCAA5]/80">
-            {ui.experienceTitle}
+            {experienceTitle}
           </p>
           <p className="mt-1 text-base font-bold text-[#5DCAA5]">{ui.blockCompleteTitle}</p>
           <p className="mt-3 text-[13px] leading-relaxed text-white/85">
@@ -102,7 +104,7 @@ export function ShoulderSessionHud({
         <div className={`min-w-0 flex-1 rounded-[10px] border border-[#1E2D42]/70 bg-[#0F1825]/88 px-3 py-2.5 text-white backdrop-blur-sm ${arClass}`}>
           <div className="flex items-center justify-between gap-2">
             <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-[#5DCAA5]/80">
-              {ui.experienceTitle}
+              {experienceTitle}
             </p>
             <p className="text-[10px] text-white/45">{ui.movementBlockLabel}</p>
           </div>
