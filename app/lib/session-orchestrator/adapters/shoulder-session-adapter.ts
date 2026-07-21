@@ -40,11 +40,15 @@ export function mapTargetHitToSessionInput(hit: TargetHitEvent): SessionInputEve
   return { type: "targetContact", capturedAtMs: hit.capturedAtMs };
 }
 
-/** Pattern completion maps to the same interaction channel as target contact. */
+/** Pattern completion is a dedicated interaction event — not a target contact. */
 export function mapPatternCompletionToSessionInput(
   completion: PatternCompletionEvent,
 ): SessionInputEvent {
-  return { type: "targetContact", capturedAtMs: completion.capturedAtMs };
+  return {
+    type: "patternCompleted",
+    patternId: completion.patternId,
+    capturedAtMs: completion.capturedAtMs,
+  };
 }
 
 /** Rep completion must never imply a target hit — callers use separate paths. */

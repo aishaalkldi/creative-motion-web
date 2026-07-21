@@ -1,18 +1,19 @@
 import type { SessionDefinition } from "@/app/lib/session-orchestrator/types";
-import { PNF_D1_FLEXION_FEEDBACK_PROFILE } from "./motion-patterns/pnf-d1-flexion-pattern";
+import { D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE } from "./motion-patterns/d1-inspired-diagonal-reach-pattern";
 import { REACH_THE_LIGHT_TARGET_FEEDBACK_PROFILE } from "./motion-patterns/motion-pattern-registry";
+import { SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION } from "./shoulder-abduction-reach-session-definition";
 
-/** Clinical Motion Pattern Engine — sequential pattern blocks for production. */
+/** Clinical Motion Pattern Engine — diagonal reach pattern session (feature-flag gated). */
 export const CLINICAL_MOTION_PATTERN_SESSION: SessionDefinition = {
   sessionId: "clinical-motion-pattern-v1",
   title: "Clinical motion pattern session",
   recalibrationGraceSeconds: 5,
   blocks: [
     {
-      blockId: "pnf-d1-flexion-main",
+      blockId: "d1-inspired-diagonal-reach-main",
       movementId: "shoulder-abduction-reach",
       movementVersion: "v1",
-      title: "PNF D1 Flexion",
+      title: "D1-Inspired Diagonal Reach",
       instructions:
         "Follow the therapeutic light along the diagonal path. Move smoothly at a comfortable pace.",
       completionMode: "duration",
@@ -21,7 +22,7 @@ export const CLINICAL_MOTION_PATTERN_SESSION: SessionDefinition = {
       supportedPositions: ["seated", "standing"],
       side: "right",
       intensityLevel: 1,
-      feedbackProfile: PNF_D1_FLEXION_FEEDBACK_PROFILE,
+      feedbackProfile: D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE,
       safetyRules: {
         trackerLossGraceSeconds: 0,
         maxCompensationEventsBeforePause: 5,
@@ -31,8 +32,8 @@ export const CLINICAL_MOTION_PATTERN_SESSION: SessionDefinition = {
   ],
 };
 
-/** Backward-compatible Reach the Light session — isolated target mode. */
-export { SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION as REACH_THE_LIGHT_SESSION } from "./shoulder-abduction-reach-session-definition";
+/** Production-safe default — Reach the Light target session. */
+export const REACH_THE_LIGHT_SESSION = SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION;
 
 /** Sequential session exercising pattern then legacy target mode for compatibility tests. */
 export const CLINICAL_MOTION_PATTERN_SEQUENCE_SESSION: SessionDefinition = {
@@ -41,10 +42,10 @@ export const CLINICAL_MOTION_PATTERN_SEQUENCE_SESSION: SessionDefinition = {
   recalibrationGraceSeconds: 5,
   blocks: [
     {
-      blockId: "pnf-d1-flexion-sequence",
+      blockId: "d1-inspired-diagonal-reach-sequence",
       movementId: "shoulder-abduction-reach",
       movementVersion: "v1",
-      title: "PNF D1 Flexion",
+      title: "D1-Inspired Diagonal Reach",
       instructions: "Follow the therapeutic path along the diagonal reach.",
       completionMode: "duration",
       targetDurationSeconds: 60,
@@ -52,7 +53,7 @@ export const CLINICAL_MOTION_PATTERN_SEQUENCE_SESSION: SessionDefinition = {
       supportedPositions: ["seated", "standing"],
       side: "right",
       intensityLevel: 1,
-      feedbackProfile: PNF_D1_FLEXION_FEEDBACK_PROFILE,
+      feedbackProfile: D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE,
       safetyRules: {
         trackerLossGraceSeconds: 0,
         maxCompensationEventsBeforePause: 5,
@@ -81,6 +82,3 @@ export const CLINICAL_MOTION_PATTERN_SEQUENCE_SESSION: SessionDefinition = {
     },
   ],
 };
-
-/** Default interactive shoulder session — clinical motion pattern engine. */
-export const INTERACTIVE_SHOULDER_DEFAULT_SESSION = CLINICAL_MOTION_PATTERN_SESSION;

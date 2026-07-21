@@ -1,11 +1,7 @@
 import type { ShoulderAbductionReachSide } from "@/app/lib/shoulder-rehabilitation";
-import {
-  createEmptyShoulderInteractionMetrics,
-  type NormalizedPoint,
-  type ShoulderInteractionMetrics,
-} from "../types";
+import type { NormalizedPoint } from "../types";
 import { projectPointOntoPath, samplePathAtProgress } from "./bezier-path";
-import type { ResolvedMotionPattern } from "./motion-pattern-types";
+import type { PatternProgressionConfig, ResolvedMotionPattern } from "./motion-pattern-types";
 
 export type PatternCompletionEvent = {
   patternId: string;
@@ -14,16 +10,36 @@ export type PatternCompletionEvent = {
   pathProgress: number;
 };
 
+export type PatternInteractionMetrics = {
+  patternsShown: number;
+  patternsCompleted: number;
+  completionTimestampsMs: number[];
+  reactionTimesMs: number[];
+};
+
+export function createEmptyPatternInteractionMetrics(): PatternInteractionMetrics {
+  return {
+    patternsShown: 0,
+    patternsCompleted: 0,
+    completionTimestampsMs: [],
+    reactionTimesMs: [],
+  };
+}
+
 export type PatternLifecycleState = {
   patternId: string;
   pathProgress: number;
   furthestProgress: number;
   wristNearPath: boolean;
+  hasAcquiredStart: boolean;
+  awaitingReacquisition: boolean;
+  acceptedSampleCount: number;
+  completionEmittedForPass: boolean;
   sequence: number;
   startedAtMs: number | null;
   spawnLockedUntilMs: number | null;
   exitingProgress: number | null;
-  interaction: ShoulderInteractionMetrics;
+  interaction: PatternInteractionMetrics;
 };
 
 export function createInitialPatternLifecycle(patternId: string): PatternLifecycleState {
@@ -32,11 +48,15 @@ export function createInitialPatternLifecycle(patternId: string): PatternLifecyc
     pathProgress: 0,
     furthestProgress: 0,
     wristNearPath: false,
+    hasAcquiredStart: false,
+    awaitingReacquisition: false,
+    acceptedSampleCount: 0,
+    completionEmittedForPass: false,
     sequence: 0,
     startedAtMs: null,
     spawnLockedUntilMs: null,
     exitingProgress: null,
-    interaction: createEmptyShoulderInteractionMetrics(),
+    interaction: createEmptyPatternInteractionMetrics(),
   };
 }
 
@@ -52,27 +72,58 @@ export type PatternLifecycleTickResult = {
   completionEvent: PatternCompletionEvent | null;
 };
 
+function progressionConfig(pattern: ResolvedMotionPattern): PatternProgressionConfig {
+  return pattern.progression;
+}
+
 function resetForNextPass(state: PatternLifecycleState, nowMs: number): PatternLifecycleState {
   return {
     ...state,
     pathProgress: 0,
     furthestProgress: 0,
     wristNearPath: false,
+    hasAcquiredStart: false,
+    awaitingReacquisition: false,
+    acceptedSampleCount: 0,
+    completionEmittedForPass: false,
     sequence: state.sequence + 1,
     startedAtMs: nowMs,
     spawnLockedUntilMs: null,
     exitingProgress: null,
     interaction: {
       ...state.interaction,
-      targetsShown: state.interaction.targetsShown + 1,
+      patternsShown: state.interaction.patternsShown + 1,
     },
   };
+}
+
+function isNearAcceptedProgress(
+  progress: number,
+  furthestProgress: number,
+  window: number,
+): boolean {
+  return Math.abs(progress - furthestProgress) <= window;
+}
+
+function canEmitCompletion(
+  state: PatternLifecycleState,
+  cfg: PatternProgressionConfig,
+): boolean {
+  return (
+    state.hasAcquiredStart &&
+    !state.awaitingReacquisition &&
+    !state.completionEmittedForPass &&
+    state.spawnLockedUntilMs === null &&
+    state.acceptedSampleCount >= cfg.minimumAcceptedSamples &&
+    state.furthestProgress >= cfg.completionProgress
+  );
 }
 
 export function tickPatternLifecycle(
   state: PatternLifecycleState,
   input: PatternLifecycleTickInput,
 ): PatternLifecycleTickResult {
+  const cfg = progressionConfig(input.pattern);
   const exitTransitionMs = input.completionExitTransitionMs ?? 0;
   let next = state;
   let completionEvent: PatternCompletionEvent | null = null;
@@ -97,34 +148,132 @@ export function tickPatternLifecycle(
       startedAtMs: input.nowMs,
       interaction: {
         ...next.interaction,
-        targetsShown: next.interaction.targetsShown + 1,
+        patternsShown: next.interaction.patternsShown + 1,
       },
     };
   }
 
   if (!input.wrist) {
-    return { state: { ...next, wristNearPath: false }, completionEvent: null };
+    const awaitingReacquisition =
+      next.hasAcquiredStart || next.awaitingReacquisition ? true : next.awaitingReacquisition;
+    return {
+      state: {
+        ...next,
+        wristNearPath: false,
+        awaitingReacquisition,
+        pathProgress: next.furthestProgress,
+      },
+      completionEvent: null,
+    };
   }
 
   const projection = projectPointOntoPath(input.pattern.sampledPath, input.wrist);
-  const nearPath = projection.distance <= input.pattern.pathTolerance;
-  const minAdvance = input.pattern.minAdvanceDelta ?? 0.003;
+  const nearPath = projection.distance <= cfg.pathTolerance;
   let furthestProgress = next.furthestProgress;
+  let hasAcquiredStart = next.hasAcquiredStart;
+  let awaitingReacquisition = next.awaitingReacquisition;
+  let acceptedSampleCount = next.acceptedSampleCount;
 
-  if (nearPath && projection.progress >= furthestProgress + minAdvance) {
-    furthestProgress = Math.max(furthestProgress, projection.progress);
-  } else if (nearPath && projection.progress >= furthestProgress) {
+  if (awaitingReacquisition) {
+    if (nearPath && isNearAcceptedProgress(projection.progress, furthestProgress, cfg.reacquisitionProgressWindow)) {
+      awaitingReacquisition = false;
+    } else {
+      return {
+        state: {
+          ...next,
+          wristNearPath: nearPath,
+          awaitingReacquisition: true,
+          pathProgress: furthestProgress,
+        },
+        completionEvent: null,
+      };
+    }
+  }
+
+  if (!hasAcquiredStart) {
+    if (nearPath && projection.progress <= cfg.startAcquisitionMaxProgress) {
+      hasAcquiredStart = true;
+      acceptedSampleCount += 1;
+      furthestProgress = Math.max(furthestProgress, projection.progress);
+    }
+    return {
+      state: {
+        ...next,
+        wristNearPath: nearPath,
+        hasAcquiredStart,
+        awaitingReacquisition,
+        acceptedSampleCount,
+        furthestProgress,
+        pathProgress: furthestProgress,
+      },
+      completionEvent: null,
+    };
+  }
+
+  if (!nearPath) {
+    return {
+      state: {
+        ...next,
+        wristNearPath: false,
+        hasAcquiredStart,
+        awaitingReacquisition,
+        acceptedSampleCount,
+        furthestProgress,
+        pathProgress: furthestProgress,
+      },
+      completionEvent: null,
+    };
+  }
+
+  if (projection.progress > furthestProgress + cfg.maxForwardProgressWindow) {
+    awaitingReacquisition = true;
+    return {
+      state: {
+        ...next,
+        wristNearPath: nearPath,
+        hasAcquiredStart,
+        awaitingReacquisition,
+        acceptedSampleCount,
+        furthestProgress,
+        pathProgress: furthestProgress,
+      },
+      completionEvent: null,
+    };
+  }
+
+  if (projection.progress < furthestProgress - cfg.reverseTolerance) {
+    return {
+      state: {
+        ...next,
+        wristNearPath: nearPath,
+        hasAcquiredStart,
+        awaitingReacquisition,
+        acceptedSampleCount,
+        furthestProgress,
+        pathProgress: furthestProgress,
+      },
+      completionEvent: null,
+    };
+  }
+
+  if (projection.progress >= furthestProgress + cfg.minAdvanceDelta) {
+    furthestProgress = projection.progress;
+    acceptedSampleCount += 1;
+  } else if (projection.progress > furthestProgress) {
     furthestProgress = projection.progress;
   }
 
   next = {
     ...next,
     wristNearPath: nearPath,
+    hasAcquiredStart,
+    awaitingReacquisition,
+    acceptedSampleCount,
     furthestProgress,
     pathProgress: furthestProgress,
   };
 
-  if (furthestProgress >= input.pattern.completionProgress && next.spawnLockedUntilMs === null) {
+  if (canEmitCompletion(next, cfg)) {
     const reactionTimeMs = Math.max(0, input.nowMs - (next.startedAtMs ?? input.nowMs));
     completionEvent = {
       patternId: input.pattern.id,
@@ -134,10 +283,11 @@ export function tickPatternLifecycle(
     };
     next = {
       ...next,
+      completionEmittedForPass: true,
       interaction: {
         ...next.interaction,
-        targetsReached: next.interaction.targetsReached + 1,
-        targetHitTimestampsMs: [...next.interaction.targetHitTimestampsMs, input.nowMs],
+        patternsCompleted: next.interaction.patternsCompleted + 1,
+        completionTimestampsMs: [...next.interaction.completionTimestampsMs, input.nowMs],
         reactionTimesMs: [...next.interaction.reactionTimesMs, reactionTimeMs],
       },
       exitingProgress: furthestProgress,

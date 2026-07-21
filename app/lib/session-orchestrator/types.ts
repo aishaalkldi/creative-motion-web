@@ -115,6 +115,7 @@ export type SessionInputEvent =
   | { type: "validRepetition"; capturedAtMs: number; metrics?: Record<string, unknown> }
   | { type: "invalidRepetition"; capturedAtMs: number; reason?: string }
   | { type: "targetContact"; capturedAtMs: number }
+  | { type: "patternCompleted"; patternId: string; capturedAtMs: number }
   | { type: "holdStarted"; capturedAtMs: number }
   | { type: "holdCompleted"; capturedAtMs: number; durationSeconds: number }
   | { type: "compensationDetected"; capturedAtMs: number; signal?: string }
@@ -127,6 +128,7 @@ export type SessionInputEvent =
 
 export type InteractionPerformance = {
   targetsContacted: number;
+  patternsCompleted: number;
   timingSamplesMs: number[];
   responseConsistency: number | null;
   participationDurationSeconds: number;
@@ -180,6 +182,7 @@ export function createEmptyMovementBlockResult(block: MovementBlock, startedAtMs
     completionReason: null,
     interaction: {
       targetsContacted: 0,
+      patternsCompleted: 0,
       timingSamplesMs: [],
       responseConsistency: null,
       participationDurationSeconds: 0,

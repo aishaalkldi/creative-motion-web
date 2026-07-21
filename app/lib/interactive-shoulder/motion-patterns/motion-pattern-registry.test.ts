@@ -9,18 +9,20 @@ import {
   resolveFeedbackInteractionMode,
   resolveMotionPatternSequenceForSession,
 } from "./motion-pattern-registry";
-import { PNF_D1_FLEXION_FEEDBACK_PROFILE } from "./pnf-d1-flexion-pattern";
+import { D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE } from "./d1-inspired-diagonal-reach-pattern";
+import { samplePathAtProgress } from "./bezier-path";
 
 describe("motion-pattern-registry", () => {
-  it("resolves PNF D1 Flexion as a motion-pattern mode", () => {
-    assert.equal(resolveFeedbackInteractionMode(PNF_D1_FLEXION_FEEDBACK_PROFILE), "motion-pattern");
-    const pattern = resolveActiveMotionPattern(PNF_D1_FLEXION_FEEDBACK_PROFILE, "right");
+  it("resolves D1-Inspired Diagonal Reach as a motion-pattern mode", () => {
+    assert.equal(resolveFeedbackInteractionMode(D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE), "motion-pattern");
+    const pattern = resolveActiveMotionPattern(D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE, "right");
     assert.ok(pattern);
-    assert.equal(pattern.id, "pnf-d1-flexion");
-    assert.ok(pattern.sampledPath.totalLength > 0);
+    assert.equal(pattern.id, "d1-inspired-diagonal-reach");
+    assert.equal(pattern.nameEn, "D1-Inspired Diagonal Reach");
+    assert.equal(pattern.nameAr, "الوصول القطري المستوحى من D1");
   });
 
-  it("preserves Reach the Light target mode for the legacy feedback profile", () => {
+  it("falls back to reach-the-light-targets for unknown profiles", () => {
     assert.equal(
       resolveFeedbackInteractionMode(REACH_THE_LIGHT_TARGET_FEEDBACK_PROFILE),
       "reach-the-light-targets",
@@ -28,22 +30,22 @@ describe("motion-pattern-registry", () => {
     assert.equal(resolveActiveMotionPattern(REACH_THE_LIGHT_TARGET_FEEDBACK_PROFILE, "right"), null);
   });
 
-  it("mirrors pattern paths for the left therapeutic side", () => {
-    const right = resolveActiveMotionPattern(PNF_D1_FLEXION_FEEDBACK_PROFILE, "right");
-    const left = resolveActiveMotionPattern(PNF_D1_FLEXION_FEEDBACK_PROFILE, "left");
+  it("mirrors path coordinates for left side without claiming PNF validation", () => {
+    const right = resolveActiveMotionPattern(D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE, "right");
+    const left = resolveActiveMotionPattern(D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE, "left");
     assert.ok(right && left);
-    assert.notEqual(
-      right.sampledPath.segments[0]!.start.x,
-      left.sampledPath.segments[0]!.start.x,
-    );
+    const rightStart = samplePathAtProgress(right.sampledPath, 0);
+    const leftStart = samplePathAtProgress(left.sampledPath, 0);
+    assert.notEqual(rightStart.x, leftStart.x);
+    assert.equal(rightStart.y, leftStart.y);
   });
 
-  it("resolves sequential session patterns for orchestrator blocks", () => {
+  it("resolves sequential pattern then target profiles", () => {
     const sequence = resolveMotionPatternSequenceForSession(
-      [PNF_D1_FLEXION_FEEDBACK_PROFILE, REACH_THE_LIGHT_TARGET_FEEDBACK_PROFILE],
+      [D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE, REACH_THE_LIGHT_TARGET_FEEDBACK_PROFILE],
       "right",
     );
     assert.equal(sequence.length, 1);
-    assert.equal(sequence[0]?.id, "pnf-d1-flexion");
+    assert.equal(sequence[0]?.id, "d1-inspired-diagonal-reach");
   });
 });

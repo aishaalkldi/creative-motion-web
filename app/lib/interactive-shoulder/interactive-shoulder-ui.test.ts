@@ -30,6 +30,10 @@ describe("interactiveShoulderUi", () => {
     assert.equal(ar.experienceTitle, "الوصول إلى الضوء");
     assert.ok(en.interactionTargetsLabel(2, 5).includes("Interaction targets"));
     assert.ok(ar.interactionTargetsLabel(2, 5).includes("أهداف التفاعل"));
+    assert.ok(en.interactionPatternsLabel(1, 2).includes("Paths completed"));
+    assert.ok(ar.interactionPatternsLabel(1, 2).includes("المسارات المكتملة"));
+    assert.ok(!en.interactionPatternsLabel(1, 2).includes("PNF"));
+    assert.ok(!en.interactionPatternsLabel(1, 2).includes("Clinical Accuracy"));
     assert.ok(en.blockCompleteTitle.length > 0);
     assert.ok(ar.blockCompleteTitle.length > 0);
     assert.ok(en.devMouseSimulation.includes("Development"));

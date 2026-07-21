@@ -20,6 +20,7 @@ export type InteractiveShoulderUi = {
   experienceTitle: string;
   sessionProgressLabel: string;
   interactionTargetsLabel: (reached: number, shown: number) => string;
+  interactionPatternsLabel: (completed: number, shown: number) => string;
   measuredRepsLabel: (reps: number) => string;
   movementBlockLabel: string;
   timeRemainingSeconds: (seconds: number) => string;
@@ -42,7 +43,9 @@ export type InteractiveShoulderUi = {
   blockCompleteSummary: (targets: number, reps: number) => string;
   blockCompleteDuration: (seconds: number) => string;
   blockCompleteDetailedSummary: (targets: number, reps: number, seconds: number) => string;
+  blockCompleteDetailedSummaryPatterns: (patterns: number, reps: number, seconds: number) => string;
   metricsSeparationNote: string;
+  patternMetricsSeparationNote: string;
   devMouseSimulation: string;
   therapeuticSideFallback: string;
   cameraPreviewAriaLabel: string;
@@ -70,6 +73,7 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     experienceTitle: "Reach the Light",
     sessionProgressLabel: "Session progress",
     interactionTargetsLabel: (reached, shown) => `Interaction targets: ${reached}/${shown}`,
+    interactionPatternsLabel: (completed, shown) => `Paths completed: ${completed}/${shown}`,
     measuredRepsLabel: (reps) => `Measured repetitions: ${reps}`,
     movementBlockLabel: "Movement block",
     timeRemainingSeconds: (seconds) => `${seconds}s remaining`,
@@ -99,8 +103,12 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     blockCompleteDuration: (seconds) => `Session duration: ${seconds}s`,
     blockCompleteDetailedSummary: (targets, reps, seconds) =>
       `Targets reached: ${targets}. Measured repetitions completed: ${reps}. Session duration: ${seconds}s.`,
+    blockCompleteDetailedSummaryPatterns: (patterns, reps, seconds) =>
+      `Paths completed: ${patterns}. Measured repetitions completed: ${reps}. Session duration: ${seconds}s.`,
     metricsSeparationNote:
       "Interaction targets and measured movement repetitions are separate observations for therapist review.",
+    patternMetricsSeparationNote:
+      "Completed paths and measured movement repetitions are separate observations for therapist review.",
     devMouseSimulation:
       "Development simulation: move the mouse over the preview when pose wrist is unavailable.",
     therapeuticSideFallback:
@@ -130,6 +138,7 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     experienceTitle: "الوصول إلى الضوء",
     sessionProgressLabel: "تقدّم الجلسة",
     interactionTargetsLabel: (reached, shown) => `أهداف التفاعل: ${reached}/${shown}`,
+    interactionPatternsLabel: (completed, shown) => `المسارات المكتملة: ${completed}/${shown}`,
     measuredRepsLabel: (reps) => `التكرارات المقاسة: ${reps}`,
     movementBlockLabel: "كتلة الحركة",
     timeRemainingSeconds: (seconds) => `${seconds} ث متبقية`,
@@ -159,8 +168,12 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     blockCompleteDuration: (seconds) => `مدة الجلسة: ${seconds} ث`,
     blockCompleteDetailedSummary: (targets, reps, seconds) =>
       `الأهداف التي تم الوصول إليها: ${targets}. التكرارات المقاسة المكتملة: ${reps}. مدة الجلسة: ${seconds} ث.`,
+    blockCompleteDetailedSummaryPatterns: (patterns, reps, seconds) =>
+      `المسارات المكتملة: ${patterns}. التكرارات المقاسة المكتملة: ${reps}. مدة الجلسة: ${seconds} ث.`,
     metricsSeparationNote:
       "أهداف التفاعل والتكرارات المقاسة للحركة ملاحظات منفصلة لمراجعة المعالج.",
+    patternMetricsSeparationNote:
+      "المسارات المكتملة والتكرارات المقاسة للحركة ملاحظات منفصلة لمراجعة المعالج.",
     devMouseSimulation:
       "محاكاة للتطوير: حرّك المؤشر فوق المعاينة عندما لا يتوفر معصم التتبع.",
     therapeuticSideFallback:

@@ -7,10 +7,22 @@ import {
   type SampledPath,
 } from "./bezier-path";
 
-export type MotionPatternId = "pnf-d1-flexion" | "reach-the-light-targets";
+export type MotionPatternId = "d1-inspired-diagonal-reach" | "reach-the-light-targets";
 
 export type MotionPatternWaypoint = NormalizedPoint & {
   label?: string;
+};
+
+/** Configurable progression integrity thresholds — no unexplained magic numbers. */
+export type PatternProgressionConfig = {
+  startAcquisitionMaxProgress: number;
+  maxForwardProgressWindow: number;
+  reacquisitionProgressWindow: number;
+  minimumAcceptedSamples: number;
+  pathTolerance: number;
+  completionProgress: number;
+  minAdvanceDelta: number;
+  reverseTolerance: number;
 };
 
 /** Clinical motion pattern — waypoint-driven therapeutic path definition. */
@@ -19,16 +31,9 @@ export type MotionPattern = {
   nameEn: string;
   nameAr: string;
   feedbackProfileKey: string;
-  /** Ordered therapeutic waypoints in normalized screen space. */
   waypoints: readonly MotionPatternWaypoint[];
-  /** Optional explicit segments; otherwise derived from waypoints. */
   segments?: readonly BezierSegment[];
-  /** Max distance from path for progress advancement. */
-  pathTolerance: number;
-  /** Global progress required to complete one pattern pass. */
-  completionProgress: number;
-  /** Minimum monotonic progress delta per accepted frame. */
-  minAdvanceDelta?: number;
+  progression: PatternProgressionConfig;
   supportedSides: readonly ShoulderAbductionReachSide[];
 };
 

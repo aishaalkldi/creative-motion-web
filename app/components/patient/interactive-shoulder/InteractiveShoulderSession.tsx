@@ -28,7 +28,7 @@ import {
   createInitialTargetLifecycle,
   type TargetLifecycleState,
 } from "@/app/lib/interactive-shoulder/target-lifecycle";
-import { INTERACTIVE_SHOULDER_DEFAULT_SESSION } from "@/app/lib/interactive-shoulder/clinical-motion-pattern-session-definition";
+import { resolveInteractiveShoulderSessionFromEnv } from "@/app/lib/interactive-shoulder/resolve-interactive-shoulder-session";
 import {
   resolveActiveMotionPattern,
   resolveFeedbackInteractionMode,
@@ -65,6 +65,9 @@ import { TrackedHandCursor } from "./TrackedHandCursor";
 import { TherapeuticPathLayer } from "./TherapeuticPathLayer";
 import { ReachTheLightEnvironment } from "./ReachTheLightEnvironment";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
+
+const INTERACTIVE_SHOULDER_SESSION = resolveInteractiveShoulderSessionFromEnv();
+const DEFAULT_PATTERN_ID = "d1-inspired-diagonal-reach";
 
 type InteractiveShoulderSessionProps = {
   language: PatientExerciseLanguage;
@@ -161,7 +164,7 @@ export function InteractiveShoulderSession({
   const hitExitTransitionMs = resolveHitExitTransitionMs(prefersReducedMotion);
   const entry = getExerciseCvRegistryEntry(INTERACTIVE_SHOULDER_CV_EXERCISE_ID);
   const profile = entry?.calibrationProfile;
-  const interactiveBlock = INTERACTIVE_SHOULDER_DEFAULT_SESSION.blocks[0];
+  const interactiveBlock = INTERACTIVE_SHOULDER_SESSION.blocks[0];
   const resolvedTherapeuticSide: ResolvedInteractiveShoulderSide = resolveInteractiveShoulderSide({
     prescribedSide,
     blockSide: interactiveBlock?.side,
@@ -174,7 +177,7 @@ export function InteractiveShoulderSession({
   const orchestratorRef = useRef<SessionOrchestrator | null>(null);
   const targetStateRef = useRef<TargetLifecycleState>(createInitialTargetLifecycle());
   const patternStateRef = useRef<PatternLifecycleState>(
-    createInitialPatternLifecycle("pnf-d1-flexion"),
+    createInitialPatternLifecycle(DEFAULT_PATTERN_ID),
   );
   const activeBlockIdRef = useRef<string | null>(null);
   const rafRef = useRef<number>(0);
@@ -192,14 +195,14 @@ export function InteractiveShoulderSession({
   const [orchestratorSnapshot, setOrchestratorSnapshot] = useState<SessionOrchestratorSnapshot | null>(null);
   const [targetState, setTargetState] = useState<TargetLifecycleState>(createInitialTargetLifecycle());
   const [patternState, setPatternState] = useState<PatternLifecycleState>(
-    createInitialPatternLifecycle("pnf-d1-flexion"),
+    createInitialPatternLifecycle(DEFAULT_PATTERN_ID),
   );
   const [activeMotionPattern, setActiveMotionPattern] = useState<ResolvedMotionPattern | null>(null);
   const [feedbackMode, setFeedbackMode] = useState<"motion-pattern" | "reach-the-light-targets">(
-    "motion-pattern",
+    resolveFeedbackInteractionMode(interactiveBlock?.feedbackProfile),
   );
   const [showBlockSummary, setShowBlockSummary] = useState(false);
-  const [summaryMetrics, setSummaryMetrics] = useState({ targets: 0, reps: 0, durationSeconds: 0 });
+  const [summaryMetrics, setSummaryMetrics] = useState({ targets: 0, patterns: 0, reps: 0, durationSeconds: 0 });
   const [targetHitAnnouncement, setTargetHitAnnouncement] = useState<string | null>(null);
   const [hitBurstTarget, setHitBurstTarget] = useState<TherapeuticTarget | null>(null);
   const [hitBurstProgress, setHitBurstProgress] = useState<number | null>(null);
@@ -273,7 +276,7 @@ export function InteractiveShoulderSession({
     try {
       await detector.start(video, canvas);
       if (!orchestratorRef.current) {
-        orchestratorRef.current = new SessionOrchestrator(INTERACTIVE_SHOULDER_DEFAULT_SESSION);
+        orchestratorRef.current = new SessionOrchestrator(INTERACTIVE_SHOULDER_SESSION);
       }
       const now = performance.now();
       const orchestrator = orchestratorRef.current;
@@ -283,7 +286,7 @@ export function InteractiveShoulderSession({
       sessionStartedRef.current = true;
       targetStateRef.current = createInitialTargetLifecycle();
       setTargetState(targetStateRef.current);
-      patternStateRef.current = createInitialPatternLifecycle("pnf-d1-flexion");
+      patternStateRef.current = createInitialPatternLifecycle(DEFAULT_PATTERN_ID);
       setPatternState(patternStateRef.current);
       activeBlockIdRef.current = null;
       setOrchestratorSnapshot(orchestrator.getSnapshot(now));
@@ -333,12 +336,18 @@ export function InteractiveShoulderSession({
             (sum, result) => sum + result.interaction.targetsContacted,
             0,
           );
+          const totalPatterns = snap.accumulatedBlockResults.reduce(
+            (sum, result) => sum + result.interaction.patternsCompleted,
+            0,
+          );
           const totalReps = snap.accumulatedBlockResults.reduce(
             (sum, result) => sum + result.measured.validRepetitions,
             0,
           );
           setSummaryMetrics({
-            targets: totalTargets || patternStateRef.current.interaction.targetsReached || targetStateRef.current.interaction.targetsReached,
+            targets: totalTargets || targetStateRef.current.interaction.targetsReached,
+            patterns:
+              totalPatterns || patternStateRef.current.interaction.patternsCompleted,
             reps: totalReps || snapshot?.primaryRepCount || 0,
             durationSeconds: Math.max(0, Math.round(snap.blockElapsedSeconds)),
           });
@@ -363,6 +372,9 @@ export function InteractiveShoulderSession({
           if (resolvedPattern) {
             patternStateRef.current = resetPatternLifecycleForBlock(resolvedPattern.id);
             setPatternState(patternStateRef.current);
+          } else {
+            patternStateRef.current = createInitialPatternLifecycle(DEFAULT_PATTERN_ID);
+            setPatternState(patternStateRef.current);
           }
         } else if (resolvedPattern && !activeMotionPattern) {
           setActiveMotionPattern(resolvedPattern);
@@ -373,10 +385,10 @@ export function InteractiveShoulderSession({
         const wrist =
           poseSnap?.primaryWristNormalized ??
           (isDevMouseSimulationEnabled() ? devMouseRef.current : null);
-        if (snap.sessionState === "active" && wrist) {
+        if (snap.sessionState === "active") {
           if (currentFeedbackMode === "motion-pattern" && resolvedPattern) {
             const ticked = tickPatternLifecycleIfActive(snap.sessionState, patternStateRef.current, {
-              wrist,
+              wrist: wrist ?? null,
               nowMs: now,
               pattern: resolvedPattern,
               completionExitTransitionMs: hitExitTransitionMs,
@@ -399,7 +411,7 @@ export function InteractiveShoulderSession({
                 hitFeedbackTimeoutRef.current = null;
               }, Math.max(hitExitTransitionMs, 480));
             }
-          } else {
+          } else if (wrist) {
             const ticked = tickTargetLifecycleIfActive(snap.sessionState, targetStateRef.current, {
               wrist,
               nowMs: now,
@@ -466,10 +478,6 @@ export function InteractiveShoulderSession({
   const resolvedHudFeedbackMode = resolveFeedbackInteractionMode(
     hudSnapshot.currentBlock?.feedbackProfile,
   );
-  const interactionMetrics =
-    resolvedHudFeedbackMode === "motion-pattern"
-      ? patternState.interaction
-      : targetState.interaction;
   const renderPattern =
     activeMotionPattern ??
     resolveActiveMotionPattern(hudSnapshot.currentBlock?.feedbackProfile, resolvedTherapeuticSide.side);
@@ -548,12 +556,15 @@ export function InteractiveShoulderSession({
                   language={language}
                   arClass={arClass}
                   snapshot={hudSnapshot}
-                  interaction={interactionMetrics}
+                  feedbackMode={resolvedHudFeedbackMode}
+                  targetInteraction={targetState.interaction}
+                  patternInteraction={patternState.interaction}
                   measuredReps={measuredReps}
                   onPause={() => orchestratorRef.current?.pause(performance.now())}
                   onResume={() => orchestratorRef.current?.resume(performance.now())}
                   showBlockSummary={showBlockSummary}
                   blockSummaryTargetsReached={summaryMetrics.targets}
+                  blockSummaryPatternsCompleted={summaryMetrics.patterns}
                   blockSummaryMeasuredReps={summaryMetrics.reps}
                   blockSummaryDurationSeconds={summaryMetrics.durationSeconds}
                   targetHitAnnouncement={targetHitAnnouncement}

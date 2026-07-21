@@ -2,6 +2,8 @@
 
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import type { ShoulderInteractionMetrics } from "@/app/lib/interactive-shoulder/types";
+import type { PatternInteractionMetrics } from "@/app/lib/interactive-shoulder/motion-patterns/pattern-lifecycle";
+import type { FeedbackInteractionMode } from "@/app/lib/interactive-shoulder/motion-patterns/motion-pattern-registry";
 import {
   interactiveShoulderUi,
   resolveInteractiveShoulderEncouragement,
@@ -13,12 +15,15 @@ type ShoulderSessionHudProps = {
   language: PatientExerciseLanguage;
   arClass?: string;
   snapshot: SessionOrchestratorSnapshot;
-  interaction: ShoulderInteractionMetrics;
+  feedbackMode: FeedbackInteractionMode;
+  targetInteraction: ShoulderInteractionMetrics;
+  patternInteraction: PatternInteractionMetrics;
   measuredReps: number;
   onPause: () => void;
   onResume: () => void;
   showBlockSummary: boolean;
   blockSummaryTargetsReached: number;
+  blockSummaryPatternsCompleted: number;
   blockSummaryMeasuredReps: number;
   blockSummaryDurationSeconds: number;
   targetHitAnnouncement?: string | null;
@@ -35,17 +40,21 @@ export function ShoulderSessionHud({
   language,
   arClass = "",
   snapshot,
-  interaction,
+  feedbackMode,
+  targetInteraction,
+  patternInteraction,
   measuredReps,
   onPause,
   onResume,
   showBlockSummary,
   blockSummaryTargetsReached,
+  blockSummaryPatternsCompleted,
   blockSummaryMeasuredReps,
   blockSummaryDurationSeconds,
   targetHitAnnouncement = null,
 }: ShoulderSessionHudProps) {
   const ui = interactiveShoulderUi(language);
+  const isPatternMode = feedbackMode === "motion-pattern";
   const remaining = formatRemainingSeconds(snapshot);
   const pausedOrHold = snapshot.isPaused || snapshot.safetyStatus === "hold";
   const liveMessage = resolveInteractiveShoulderLiveMessage(language, snapshot);
@@ -67,13 +76,21 @@ export function ShoulderSessionHud({
           </p>
           <p className="mt-1 text-base font-bold text-[#5DCAA5]">{ui.blockCompleteTitle}</p>
           <p className="mt-3 text-[13px] leading-relaxed text-white/85">
-            {ui.blockCompleteDetailedSummary(
-              blockSummaryTargetsReached,
-              blockSummaryMeasuredReps,
-              blockSummaryDurationSeconds,
-            )}
+            {isPatternMode
+              ? ui.blockCompleteDetailedSummaryPatterns(
+                  blockSummaryPatternsCompleted,
+                  blockSummaryMeasuredReps,
+                  blockSummaryDurationSeconds,
+                )
+              : ui.blockCompleteDetailedSummary(
+                  blockSummaryTargetsReached,
+                  blockSummaryMeasuredReps,
+                  blockSummaryDurationSeconds,
+                )}
           </p>
-          <p className="mt-3 text-[12px] leading-relaxed text-white/60">{ui.metricsSeparationNote}</p>
+          <p className="mt-3 text-[12px] leading-relaxed text-white/60">
+            {isPatternMode ? ui.patternMetricsSeparationNote : ui.metricsSeparationNote}
+          </p>
         </div>
       </div>
     );
@@ -108,7 +125,15 @@ export function ShoulderSessionHud({
           </div>
           <div className="mt-2 space-y-1">
             <p className="text-[11px] text-[#5DCAA5]/90">
-              {ui.interactionTargetsLabel(interaction.targetsReached, interaction.targetsShown)}
+              {isPatternMode
+                ? ui.interactionPatternsLabel(
+                    patternInteraction.patternsCompleted,
+                    patternInteraction.patternsShown,
+                  )
+                : ui.interactionTargetsLabel(
+                    targetInteraction.targetsReached,
+                    targetInteraction.targetsShown,
+                  )}
             </p>
             <p className="text-[11px] text-white/70">{ui.measuredRepsLabel(measuredReps)}</p>
           </div>

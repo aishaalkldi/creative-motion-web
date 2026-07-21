@@ -1,5 +1,5 @@
 import type { ShoulderAbductionReachSide } from "@/app/lib/shoulder-rehabilitation";
-import { PNF_D1_FLEXION_PATTERN } from "./pnf-d1-flexion-pattern";
+import { D1_INSPIRED_DIAGONAL_REACH_PATTERN } from "./d1-inspired-diagonal-reach-pattern";
 import type { MotionPattern, ResolvedMotionPattern } from "./motion-pattern-types";
 import { resolveMotionPatternForSide } from "./motion-pattern-types";
 
@@ -8,7 +8,7 @@ export const REACH_THE_LIGHT_TARGET_FEEDBACK_PROFILE = "shoulder-therapeutic-tar
 export type FeedbackInteractionMode = "motion-pattern" | "reach-the-light-targets";
 
 const MOTION_PATTERN_REGISTRY: Record<string, MotionPattern> = {
-  [PNF_D1_FLEXION_PATTERN.feedbackProfileKey]: PNF_D1_FLEXION_PATTERN,
+  [D1_INSPIRED_DIAGONAL_REACH_PATTERN.feedbackProfileKey]: D1_INSPIRED_DIAGONAL_REACH_PATTERN,
 };
 
 export function getRegisteredMotionPattern(feedbackProfileKey: string): MotionPattern | null {
