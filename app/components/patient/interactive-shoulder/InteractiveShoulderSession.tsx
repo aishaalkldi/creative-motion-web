@@ -12,7 +12,6 @@ import {
 } from "react";
 import { getExerciseCvRegistryEntry } from "@/app/lib/cv/exercise-cv-registry";
 import {
-  mapShoulderAbductionReachStartError,
   ShoulderAbductionReachPoseDetector,
   type ShoulderAbductionReachMeasuredEvent,
   type ShoulderAbductionReachPoseDetectorSnapshot,
@@ -27,7 +26,6 @@ import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import { DEFAULT_SAFE_TARGET_BOUNDS } from "@/app/lib/interactive-shoulder/target-generator";
 import {
   createInitialTargetLifecycle,
-  tickTargetLifecycle,
   type TargetLifecycleState,
 } from "@/app/lib/interactive-shoulder/target-lifecycle";
 import { SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION } from "@/app/lib/interactive-shoulder/shoulder-abduction-reach-session-definition";
@@ -35,6 +33,8 @@ import {
   isDevMouseSimulationEnabled,
   normalizedPointFromMouseEvent,
 } from "@/app/lib/interactive-shoulder/dev-mouse-simulation";
+import { interactiveShoulderUi, resolveInteractiveShoulderStartError } from "@/app/lib/interactive-shoulder/interactive-shoulder-ui";
+import { tickTargetLifecycleIfActive } from "@/app/lib/interactive-shoulder/target-lifecycle-gating";
 import { INTERACTIVE_SHOULDER_CV_EXERCISE_ID } from "@/app/lib/interactive-shoulder/interactive-shoulder-exercise-ids";
 import {
   resolveInteractiveShoulderSide,
@@ -100,6 +100,7 @@ function PreviewStack({
   canvasHeight,
   overlay,
   onDevMouseMove,
+  previewAriaLabel,
 }: {
   videoRef: RefObject<HTMLVideoElement | null>;
   canvasRef: RefObject<HTMLCanvasElement | null>;
@@ -108,6 +109,7 @@ function PreviewStack({
   canvasHeight: number;
   overlay?: ReactNode;
   onDevMouseMove?: (event: React.MouseEvent) => void;
+  previewAriaLabel: string;
 }) {
   return (
     <div
@@ -115,7 +117,7 @@ function PreviewStack({
       className="relative mt-3 w-full overflow-hidden rounded-[8px] border border-[#D1E7DE] bg-black"
       style={{ aspectRatio: `${canvasWidth} / ${canvasHeight}` }}
       onMouseMove={onDevMouseMove}
-      aria-label="Interactive shoulder rehabilitation camera preview"
+      aria-label={previewAriaLabel}
     >
       <PatientCameraVideoLayer
         videoRef={videoRef}
@@ -138,6 +140,7 @@ export function InteractiveShoulderSession({
   onRegisterCaptureConsent,
   onCaptureReadinessChange,
 }: InteractiveShoulderSessionProps) {
+  const ui = interactiveShoulderUi(language);
   const entry = getExerciseCvRegistryEntry(INTERACTIVE_SHOULDER_CV_EXERCISE_ID);
   const profile = entry?.calibrationProfile;
   const interactiveBlock = SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION.blocks[0];
@@ -169,6 +172,7 @@ export function InteractiveShoulderSession({
   const [showBlockSummary, setShowBlockSummary] = useState(false);
   const [summaryMetrics, setSummaryMetrics] = useState({ targets: 0, reps: 0 });
   const [recentHitFlash, setRecentHitFlash] = useState(false);
+  const [targetHitAnnouncement, setTargetHitAnnouncement] = useState<string | null>(null);
 
   useEffect(() => {
     snapshotRef.current = snapshot;
@@ -242,11 +246,11 @@ export function InteractiveShoulderSession({
       setTargetState(targetStateRef.current);
       setOrchestratorSnapshot(orchestrator.getSnapshot(now));
     } catch (error) {
-      setStartError(mapShoulderAbductionReachStartError(error));
+      setStartError(resolveInteractiveShoulderStartError(language, error));
     } finally {
       setStarting(false);
     }
-  }, [profile]);
+  }, [profile, language]);
 
   useLayoutEffect(() => {
     if (!profile) return;
@@ -296,7 +300,7 @@ export function InteractiveShoulderSession({
           poseSnap?.primaryWristNormalized ??
           (isDevMouseSimulationEnabled() ? devMouseRef.current : null);
         if (snap.sessionState === "active" && wrist) {
-          const ticked = tickTargetLifecycle(targetStateRef.current, {
+          const ticked = tickTargetLifecycleIfActive(snap.sessionState, targetStateRef.current, {
             wrist,
             nowMs: now,
             side: therapeuticSideRef.current,
@@ -307,7 +311,11 @@ export function InteractiveShoulderSession({
           if (ticked.hitEvent) {
             orchestrator.reportInputEvent(mapTargetHitToSessionInput(ticked.hitEvent), now);
             setRecentHitFlash(true);
-            window.setTimeout(() => setRecentHitFlash(false), 350);
+            setTargetHitAnnouncement(ui.targetReached);
+            window.setTimeout(() => {
+              setRecentHitFlash(false);
+              setTargetHitAnnouncement(null);
+            }, 350);
           }
         }
       }
@@ -315,7 +323,7 @@ export function InteractiveShoulderSession({
     };
     rafRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [showBlockSummary]);
+  }, [language, showBlockSummary, ui.targetReached]);
 
   const acceptConsent = () => {
     if (!consentChecked) return;
@@ -351,13 +359,11 @@ export function InteractiveShoulderSession({
     <div className="px-4 pb-4 pt-3" dir={textDir} lang={language}>
       {!consentAccepted ? (
         <div className={`rounded-[10px] border border-[#E2E8E5] bg-white p-4 ${arClass}`}>
-          <p className="text-sm font-semibold text-[#0A0F1A]">Camera for movement guidance</p>
-          <p className="mt-2 text-[12px] leading-relaxed text-[#6B7280]">
-            Your camera helps guide reaching targets. Video stays on your device and is not stored as a recording.
-          </p>
+          <p className="text-sm font-semibold text-[#0A0F1A]">{ui.consentTitle}</p>
+          <p className="mt-2 text-[12px] leading-relaxed text-[#6B7280]">{ui.consentDescription}</p>
           <label className="mt-3 flex items-start gap-2 text-[12px] text-[#374151]">
             <input type="checkbox" checked={consentChecked} onChange={(e) => setConsentChecked(e.target.checked)} />
-            <span>I agree to use my camera for this guided session.</span>
+            <span>{ui.consentCheckbox}</span>
           </label>
           <div className="mt-3 flex gap-2">
             <button
@@ -366,23 +372,23 @@ export function InteractiveShoulderSession({
               disabled={!consentChecked}
               onClick={acceptConsent}
             >
-              Continue
+              {ui.continueCamera}
             </button>
             <button type="button" className="rounded-[8px] border border-[#E2E8E5] px-4 py-2 text-sm" onClick={onSkipped}>
-              Skip camera
+              {ui.skipCamera}
             </button>
           </div>
         </div>
       ) : (
         <>
           {resolvedTherapeuticSide.usedFallback ? (
-            <p className="mb-2 rounded-[6px] border border-[#E2E8E5] bg-[#F9FAFB] px-2 py-1 text-[11px] text-[#6B7280]">
-              Reach guidance is using a temporary default side until your therapist assigns a specific arm.
+            <p className={`mb-2 rounded-[6px] border border-[#E2E8E5] bg-[#F9FAFB] px-2 py-1 text-[11px] text-[#6B7280] ${arClass}`}>
+              {ui.therapeuticSideFallback}
             </p>
           ) : null}
           {isDevMouseSimulationEnabled() && !snapshot?.primaryWristNormalized && (
-            <p className="mb-2 rounded-[6px] border border-amber-300/40 bg-amber-50 px-2 py-1 text-[11px] text-amber-900">
-              Development simulation: move the mouse over the preview when pose wrist is unavailable.
+            <p className={`mb-2 rounded-[6px] border border-amber-300/40 bg-amber-50 px-2 py-1 text-[11px] text-amber-900 ${arClass}`}>
+              {ui.devMouseSimulation}
             </p>
           )}
           <PreviewStack
@@ -391,6 +397,7 @@ export function InteractiveShoulderSession({
             containerRef={containerRef}
             canvasWidth={canvasWidth}
             canvasHeight={canvasHeight}
+            previewAriaLabel={ui.cameraPreviewAriaLabel}
             onDevMouseMove={handleDevMouseMove}
             overlay={
               <>
@@ -403,6 +410,8 @@ export function InteractiveShoulderSession({
                   visible={hudSnapshot.sessionState === "active" || hudSnapshot.sessionState === "safetyHold"}
                 />
                 <ShoulderSessionHud
+                  language={language}
+                  arClass={arClass}
                   snapshot={hudSnapshot}
                   interaction={targetState.interaction}
                   measuredReps={measuredReps}
@@ -411,15 +420,20 @@ export function InteractiveShoulderSession({
                   showBlockSummary={showBlockSummary}
                   blockSummaryTargetsReached={summaryMetrics.targets}
                   blockSummaryMeasuredReps={summaryMetrics.reps}
+                  targetHitAnnouncement={targetHitAnnouncement}
                 />
               </>
             }
           />
           {starting ? (
-            <p className="mt-2 text-center text-[12px] text-[#6B7280]">Starting camera…</p>
+            <p className={`mt-2 text-center text-[12px] text-[#6B7280] ${arClass}`}>{ui.startingCamera}</p>
           ) : null}
           {startError ? (
-            <p className="mt-2 rounded-[8px] border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700">
+            <p
+              className={`mt-2 rounded-[8px] border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700 ${arClass}`}
+              role="status"
+              aria-live="polite"
+            >
               {startError}
             </p>
           ) : null}
