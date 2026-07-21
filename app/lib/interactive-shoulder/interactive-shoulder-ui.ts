@@ -17,6 +17,10 @@ export type InteractiveShoulderUi = {
   continueCamera: string;
   skipCamera: string;
   startingCamera: string;
+  experienceTitle: string;
+  sessionProgressLabel: string;
+  interactionTargetsLabel: (reached: number, shown: number) => string;
+  measuredRepsLabel: (reps: number) => string;
   movementBlockLabel: string;
   timeRemainingSeconds: (seconds: number) => string;
   blockProgressPercent: (percent: number) => string;
@@ -35,6 +39,9 @@ export type InteractiveShoulderUi = {
   encouragementNiceWork: string;
   blockCompleteTitle: string;
   blockCompleteSummary: (targets: number, reps: number) => string;
+  blockCompleteDuration: (seconds: number) => string;
+  blockCompleteDetailedSummary: (targets: number, reps: number, seconds: number) => string;
+  metricsSeparationNote: string;
   devMouseSimulation: string;
   therapeuticSideFallback: string;
   cameraPreviewAriaLabel: string;
@@ -59,6 +66,10 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     continueCamera: "Continue",
     skipCamera: "Skip camera",
     startingCamera: "Starting camera…",
+    experienceTitle: "Reach the Light",
+    sessionProgressLabel: "Session progress",
+    interactionTargetsLabel: (reached, shown) => `Interaction targets: ${reached}/${shown}`,
+    measuredRepsLabel: (reps) => `Measured repetitions: ${reps}`,
     movementBlockLabel: "Movement block",
     timeRemainingSeconds: (seconds) => `${seconds}s remaining`,
     blockProgressPercent: (percent) => `${percent}%`,
@@ -77,12 +88,17 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     trackingRecovered: "Tracking recovered — you can continue reaching.",
     paused: "Paused.",
     blockInstructions:
-      "Lift your arm out to the side and reach toward each glowing target. Move at a comfortable pace.",
-    targetReached: "Target reached — nice reach.",
+      "Lift your arm out to the side and reach toward each therapeutic light. Move at a comfortable pace.",
+    targetReached: "Light reached — nice controlled reach.",
     encouragementNiceWork: "Nice work.",
     blockCompleteTitle: "Movement block complete",
     blockCompleteSummary: (targets, reps) =>
       `Targets reached: ${targets}. Measured repetitions completed: ${reps}. These are separate observations for therapist review.`,
+    blockCompleteDuration: (seconds) => `Session duration: ${seconds}s`,
+    blockCompleteDetailedSummary: (targets, reps, seconds) =>
+      `Targets reached: ${targets}. Measured repetitions completed: ${reps}. Session duration: ${seconds}s.`,
+    metricsSeparationNote:
+      "Interaction targets and measured movement repetitions are separate observations for therapist review.",
     devMouseSimulation:
       "Development simulation: move the mouse over the preview when pose wrist is unavailable.",
     therapeuticSideFallback:
@@ -109,6 +125,10 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     continueCamera: "متابعة",
     skipCamera: "تخطّي الكاميرا",
     startingCamera: "جاري تشغيل الكاميرا…",
+    experienceTitle: "الوصول إلى الضوء",
+    sessionProgressLabel: "تقدّم الجلسة",
+    interactionTargetsLabel: (reached, shown) => `أهداف التفاعل: ${reached}/${shown}`,
+    measuredRepsLabel: (reps) => `التكرارات المقاسة: ${reps}`,
     movementBlockLabel: "كتلة الحركة",
     timeRemainingSeconds: (seconds) => `${seconds} ث متبقية`,
     blockProgressPercent: (percent) => `${percent}٪`,
@@ -127,12 +147,17 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     trackingRecovered: "عاد التتبع — يمكنك متابعة الوصول.",
     paused: "متوقف مؤقتًا.",
     blockInstructions:
-      "ارفع ذراعك جانبًا وامدُد نحو كل هدف متوهج. تحرّك بوتيرة مريحة.",
-    targetReached: "تم الوصول للهدف — وصول جيد.",
+      "ارفع ذراعك جانبًا وامدُد نحو كل ضوء علاجي. تحرّك بوتيرة مريحة.",
+    targetReached: "تم الوصول للضوء — وصول متحكم وجيد.",
     encouragementNiceWork: "عمل رائع.",
     blockCompleteTitle: "اكتملت كتلة الحركة",
     blockCompleteSummary: (targets, reps) =>
       `الأهداف التي تم الوصول إليها: ${targets}. التكرارات المقاسة المكتملة: ${reps}. هذه ملاحظات منفصلة لمراجعة المعالج.`,
+    blockCompleteDuration: (seconds) => `مدة الجلسة: ${seconds} ث`,
+    blockCompleteDetailedSummary: (targets, reps, seconds) =>
+      `الأهداف التي تم الوصول إليها: ${targets}. التكرارات المقاسة المكتملة: ${reps}. مدة الجلسة: ${seconds} ث.`,
+    metricsSeparationNote:
+      "أهداف التفاعل والتكرارات المقاسة للحركة ملاحظات منفصلة لمراجعة المعالج.",
     devMouseSimulation:
       "محاكاة للتطوير: حرّك المؤشر فوق المعاينة عندما لا يتوفر معصم التتبع.",
     therapeuticSideFallback:
