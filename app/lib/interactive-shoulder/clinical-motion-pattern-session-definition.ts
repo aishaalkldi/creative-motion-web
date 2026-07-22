@@ -22,6 +22,7 @@ export const CLINICAL_MOTION_PATTERN_SESSION: SessionDefinition = {
       supportedPositions: ["seated", "standing"],
       side: "right",
       intensityLevel: 1,
+      blockType: "movement-pattern",
       feedbackProfile: D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE,
       safetyRules: {
         trackerLossGraceSeconds: 0,
@@ -53,6 +54,7 @@ export const CLINICAL_MOTION_PATTERN_SEQUENCE_SESSION: SessionDefinition = {
       supportedPositions: ["seated", "standing"],
       side: "right",
       intensityLevel: 1,
+      blockType: "movement-pattern",
       feedbackProfile: D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE,
       safetyRules: {
         trackerLossGraceSeconds: 0,
@@ -73,6 +75,7 @@ export const CLINICAL_MOTION_PATTERN_SEQUENCE_SESSION: SessionDefinition = {
       supportedPositions: ["seated", "standing"],
       side: "right",
       intensityLevel: 1,
+      blockType: "movement-target",
       feedbackProfile: REACH_THE_LIGHT_TARGET_FEEDBACK_PROFILE,
       safetyRules: {
         trackerLossGraceSeconds: 0,
