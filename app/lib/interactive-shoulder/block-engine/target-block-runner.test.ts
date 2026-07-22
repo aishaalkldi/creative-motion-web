@@ -9,7 +9,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { DEFAULT_SAFE_TARGET_BOUNDS } from "../target-generator";
 import { getBlockRunnerForBlockType, registerBlockRunner } from "./block-runner-registry";
-import { TARGET_BLOCK_RUNNER } from "./target-block-runner";
+import {
+  TARGET_BLOCK_RUNNER,
+  registerTargetBlockRunner,
+  resolveTargetBlockRunner,
+} from "./target-block-runner";
 
 const T0 = 3_000_000;
 const WRIST_AT_TARGET = { x: 0.55, y: 0.35 };
@@ -89,5 +93,57 @@ describe("target-block-runner", () => {
   it("returns null for an unregistered blockType from within this isolated process", () => {
     assert.equal(getBlockRunnerForBlockType("movement-pattern"), null);
     assert.equal(getBlockRunnerForBlockType("instructional"), null);
+  });
+
+  it('resolveTargetBlockRunner resolves "movement-target" and fails safely for anything else', () => {
+    registerTargetBlockRunner();
+    assert.equal(resolveTargetBlockRunner("movement-target"), TARGET_BLOCK_RUNNER);
+
+    // Never silently hands back the target runner for a block that isn't
+    // declared movement-target — including undefined (no blockType set).
+    assert.equal(resolveTargetBlockRunner(undefined), null);
+    assert.equal(resolveTargetBlockRunner("movement-pattern"), null);
+    assert.equal(resolveTargetBlockRunner("instructional"), null);
+  });
+
+  it("registerTargetBlockRunner is idempotent — a second call does not throw", () => {
+    assert.doesNotThrow(() => registerTargetBlockRunner());
+    assert.equal(resolveTargetBlockRunner("movement-target"), TARGET_BLOCK_RUNNER);
+  });
+
+  it("tracking loss (wrist: null) and recovery behave identically through the runner", () => {
+    let state = TARGET_BLOCK_RUNNER.createInitialState();
+    state = TARGET_BLOCK_RUNNER.tick("active", state, {
+      wrist: null,
+      nowMs: T0,
+      side: "right",
+      bounds: DEFAULT_SAFE_TARGET_BOUNDS,
+      random: () => 0.5,
+    }).state;
+    const spawnedTarget = state.currentTarget;
+    assert.ok(spawnedTarget, "a target still spawns even while the wrist is unavailable");
+
+    // Tracker lost mid-block: no wrist sample this tick.
+    const lost = TARGET_BLOCK_RUNNER.tick("active", state, {
+      wrist: null,
+      nowMs: T0 + 100,
+      side: "right",
+      bounds: DEFAULT_SAFE_TARGET_BOUNDS,
+      random: () => 0.5,
+    });
+    assert.equal(lost.ticked, true);
+    assert.equal(lost.completionEvent, null);
+    assert.equal(lost.state.wristInside, false);
+    assert.equal(lost.state.currentTarget?.id, spawnedTarget!.id, "target is preserved, not reset, during tracker loss");
+
+    // Tracker recovers: wrist reappears at the same target and registers a hit normally.
+    const recovered = TARGET_BLOCK_RUNNER.tick("active", lost.state, {
+      wrist: { x: spawnedTarget!.x, y: spawnedTarget!.y },
+      nowMs: T0 + 200,
+      side: "right",
+      bounds: DEFAULT_SAFE_TARGET_BOUNDS,
+      random: () => 0.5,
+    });
+    assert.ok(recovered.completionEvent, "recovery lets a hit register exactly as it would without the runner wrapper");
   });
 });

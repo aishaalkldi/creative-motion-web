@@ -45,7 +45,10 @@ import {
 } from "@/app/lib/interactive-shoulder/dev-mouse-simulation";
 import { interactiveShoulderUi, resolveInteractiveShoulderStartError } from "@/app/lib/interactive-shoulder/interactive-shoulder-ui";
 import { resolveHitExitTransitionMs } from "@/app/lib/interactive-shoulder/reach-the-light-motion";
-import { tickTargetLifecycleIfActive } from "@/app/lib/interactive-shoulder/target-lifecycle-gating";
+import {
+  registerTargetBlockRunner,
+  resolveTargetBlockRunner,
+} from "@/app/lib/interactive-shoulder/block-engine/target-block-runner";
 import type { TherapeuticTarget } from "@/app/lib/interactive-shoulder/types";
 import { INTERACTIVE_SHOULDER_CV_EXERCISE_ID } from "@/app/lib/interactive-shoulder/interactive-shoulder-exercise-ids";
 import {
@@ -68,6 +71,23 @@ import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 
 const INTERACTIVE_SHOULDER_SESSION = resolveInteractiveShoulderSessionFromEnv();
 const DEFAULT_PATTERN_ID = "d1-inspired-diagonal-reach";
+
+/**
+ * Reach the Light now executes through the Block Runner registry instead
+ * of calling target-lifecycle functions directly. Registered and resolved
+ * once here, at module scope — same "resolved once at initialization, not
+ * per animation frame" rule INTERACTIVE_SHOULDER_SESSION above already
+ * follows. Resolution reads the active session's own first block's
+ * blockType rather than a hardcoded string, so this is null (not a crash,
+ * not a fallback to the wrong runner) whenever the resolved session isn't
+ * target-mode — e.g. NEXT_PUBLIC_RASQ_MOTION_PATTERNS_V1="true" selects
+ * the D1 pattern session instead, which this constant correctly ignores.
+ * The D1 pattern branch below is untouched by this migration.
+ */
+registerTargetBlockRunner();
+const RESOLVED_TARGET_BLOCK_RUNNER = resolveTargetBlockRunner(
+  INTERACTIVE_SHOULDER_SESSION.blocks[0]?.blockType,
+);
 
 type InteractiveShoulderSessionProps = {
   language: PatientExerciseLanguage;
@@ -411,8 +431,8 @@ export function InteractiveShoulderSession({
                 hitFeedbackTimeoutRef.current = null;
               }, Math.max(hitExitTransitionMs, 480));
             }
-          } else if (wrist) {
-            const ticked = tickTargetLifecycleIfActive(snap.sessionState, targetStateRef.current, {
+          } else if (wrist && RESOLVED_TARGET_BLOCK_RUNNER) {
+            const ticked = RESOLVED_TARGET_BLOCK_RUNNER.tick(snap.sessionState, targetStateRef.current, {
               wrist,
               nowMs: now,
               side: therapeuticSideRef.current,
@@ -421,8 +441,8 @@ export function InteractiveShoulderSession({
             });
             targetStateRef.current = ticked.state;
             setTargetState(ticked.state);
-            if (ticked.hitEvent) {
-              orchestrator.reportInputEvent(mapTargetHitToSessionInput(ticked.hitEvent), now);
+            if (ticked.completionEvent) {
+              orchestrator.reportInputEvent(mapTargetHitToSessionInput(ticked.completionEvent), now);
               const burstTarget = ticked.state.exitingTarget;
               if (burstTarget) {
                 setHitBurstTarget(burstTarget);
