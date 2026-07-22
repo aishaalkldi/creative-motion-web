@@ -19,6 +19,7 @@ export const SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION: SessionDefinition = {
       supportedPositions: ["seated", "standing"],
       side: "right",
       intensityLevel: 1,
+      blockType: "movement-target",
       feedbackProfile: "shoulder-therapeutic-target",
       safetyRules: {
         trackerLossGraceSeconds: 0,

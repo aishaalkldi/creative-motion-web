@@ -47,6 +47,16 @@ export type MovementBlockPosition = "seated" | "standing" | "configurable";
 
 export type MovementBlockSide = "left" | "right" | "bilateral";
 
+/**
+ * Which Block Runner drives this block's tick-by-tick interaction.
+ * Additive — optional so existing block definitions remain valid without it.
+ * Distinct from `feedbackProfile`: this selects behavior (which runner),
+ * `feedbackProfile` selects copy/feedback policy. The two happen to be
+ * combined into one string today in existing session definitions; this
+ * field lets them separate without a breaking change.
+ */
+export type SessionBlockType = "movement-target" | "movement-pattern" | "instructional";
+
 export type MovementBlockSafetyRules = {
   /** Consecutive/accumulated compensation events before this block auto-enters safetyHold. Undefined = no auto-pause on compensation. */
   maxCompensationEventsBeforePause?: number;
@@ -82,6 +92,8 @@ export type MovementBlock = {
   supportedPositions: readonly MovementBlockPosition[];
   side?: MovementBlockSide;
   intensityLevel?: 1 | 2 | 3;
+  /** Which Block Runner handles this block's interaction. See SessionBlockType. */
+  blockType?: SessionBlockType;
   /** Key into a future Feedback Layer / Target Sequence registry (PR3). Not resolved here. */
   feedbackProfile?: string;
   /** Key describing how to transition out of this block (e.g. "standard", "safety-priority"). Not resolved here. */
