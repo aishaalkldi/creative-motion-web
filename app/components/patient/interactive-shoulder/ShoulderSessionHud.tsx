@@ -2,9 +2,12 @@
 
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import type { ShoulderInteractionMetrics } from "@/app/lib/interactive-shoulder/types";
+import type { PatternInteractionMetrics } from "@/app/lib/interactive-shoulder/motion-patterns/pattern-lifecycle";
+import type { FeedbackInteractionMode } from "@/app/lib/interactive-shoulder/motion-patterns/motion-pattern-registry";
 import {
   interactiveShoulderUi,
   resolveInteractiveShoulderEncouragement,
+  resolveInteractiveShoulderExperienceTitle,
   resolveInteractiveShoulderLiveMessage,
 } from "@/app/lib/interactive-shoulder/interactive-shoulder-ui";
 import type { SessionOrchestratorSnapshot } from "@/app/lib/session-orchestrator/types";
@@ -13,12 +16,15 @@ type ShoulderSessionHudProps = {
   language: PatientExerciseLanguage;
   arClass?: string;
   snapshot: SessionOrchestratorSnapshot;
-  interaction: ShoulderInteractionMetrics;
+  feedbackMode: FeedbackInteractionMode;
+  targetInteraction: ShoulderInteractionMetrics;
+  patternInteraction: PatternInteractionMetrics;
   measuredReps: number;
   onPause: () => void;
   onResume: () => void;
   showBlockSummary: boolean;
   blockSummaryTargetsReached: number;
+  blockSummaryPatternsCompleted: number;
   blockSummaryMeasuredReps: number;
   blockSummaryDurationSeconds: number;
   targetHitAnnouncement?: string | null;
@@ -35,17 +41,22 @@ export function ShoulderSessionHud({
   language,
   arClass = "",
   snapshot,
-  interaction,
+  feedbackMode,
+  targetInteraction,
+  patternInteraction,
   measuredReps,
   onPause,
   onResume,
   showBlockSummary,
   blockSummaryTargetsReached,
+  blockSummaryPatternsCompleted,
   blockSummaryMeasuredReps,
   blockSummaryDurationSeconds,
   targetHitAnnouncement = null,
 }: ShoulderSessionHudProps) {
   const ui = interactiveShoulderUi(language);
+  const isPatternMode = feedbackMode === "motion-pattern";
+  const experienceTitle = resolveInteractiveShoulderExperienceTitle(language, feedbackMode);
   const remaining = formatRemainingSeconds(snapshot);
   const pausedOrHold = snapshot.isPaused || snapshot.safetyStatus === "hold";
   const liveMessage = resolveInteractiveShoulderLiveMessage(language, snapshot);
@@ -63,17 +74,25 @@ export function ShoulderSessionHud({
           aria-live="polite"
         >
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5DCAA5]/80">
-            {ui.experienceTitle}
+            {experienceTitle}
           </p>
           <p className="mt-1 text-base font-bold text-[#5DCAA5]">{ui.blockCompleteTitle}</p>
           <p className="mt-3 text-[13px] leading-relaxed text-white/85">
-            {ui.blockCompleteDetailedSummary(
-              blockSummaryTargetsReached,
-              blockSummaryMeasuredReps,
-              blockSummaryDurationSeconds,
-            )}
+            {isPatternMode
+              ? ui.blockCompleteDetailedSummaryPatterns(
+                  blockSummaryPatternsCompleted,
+                  blockSummaryMeasuredReps,
+                  blockSummaryDurationSeconds,
+                )
+              : ui.blockCompleteDetailedSummary(
+                  blockSummaryTargetsReached,
+                  blockSummaryMeasuredReps,
+                  blockSummaryDurationSeconds,
+                )}
           </p>
-          <p className="mt-3 text-[12px] leading-relaxed text-white/60">{ui.metricsSeparationNote}</p>
+          <p className="mt-3 text-[12px] leading-relaxed text-white/60">
+            {isPatternMode ? ui.patternMetricsSeparationNote : ui.metricsSeparationNote}
+          </p>
         </div>
       </div>
     );
@@ -85,7 +104,7 @@ export function ShoulderSessionHud({
         <div className={`min-w-0 flex-1 rounded-[10px] border border-[#1E2D42]/70 bg-[#0F1825]/88 px-3 py-2.5 text-white backdrop-blur-sm ${arClass}`}>
           <div className="flex items-center justify-between gap-2">
             <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-[#5DCAA5]/80">
-              {ui.experienceTitle}
+              {experienceTitle}
             </p>
             <p className="text-[10px] text-white/45">{ui.movementBlockLabel}</p>
           </div>
@@ -108,7 +127,15 @@ export function ShoulderSessionHud({
           </div>
           <div className="mt-2 space-y-1">
             <p className="text-[11px] text-[#5DCAA5]/90">
-              {ui.interactionTargetsLabel(interaction.targetsReached, interaction.targetsShown)}
+              {isPatternMode
+                ? ui.interactionPatternsLabel(
+                    patternInteraction.patternsCompleted,
+                    patternInteraction.patternsShown,
+                  )
+                : ui.interactionTargetsLabel(
+                    targetInteraction.targetsReached,
+                    targetInteraction.targetsShown,
+                  )}
             </p>
             <p className="text-[11px] text-white/70">{ui.measuredRepsLabel(measuredReps)}</p>
           </div>

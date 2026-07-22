@@ -309,6 +309,9 @@ export class SessionOrchestrator {
       case "targetContact":
         this.currentBlockResult.interaction.targetsContacted += 1;
         return;
+      case "patternCompleted":
+        this.currentBlockResult.interaction.patternsCompleted += 1;
+        return;
       case "holdCompleted": {
         this.currentBlockResult.measured.holdDurationSeconds = event.durationSeconds;
         if (

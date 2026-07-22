@@ -9,6 +9,8 @@ import type {
   SessionState,
 } from "@/app/lib/session-orchestrator/types";
 import { SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION } from "./shoulder-abduction-reach-session-definition";
+import type { FeedbackInteractionMode } from "./motion-patterns/motion-pattern-registry";
+import { D1_INSPIRED_DIAGONAL_REACH_PATTERN } from "./motion-patterns/d1-inspired-diagonal-reach-pattern";
 
 export type InteractiveShoulderUi = {
   consentTitle: string;
@@ -20,6 +22,7 @@ export type InteractiveShoulderUi = {
   experienceTitle: string;
   sessionProgressLabel: string;
   interactionTargetsLabel: (reached: number, shown: number) => string;
+  interactionPatternsLabel: (completed: number, shown: number) => string;
   measuredRepsLabel: (reps: number) => string;
   movementBlockLabel: string;
   timeRemainingSeconds: (seconds: number) => string;
@@ -36,12 +39,15 @@ export type InteractiveShoulderUi = {
   paused: string;
   blockInstructions: string;
   targetReached: string;
+  patternPathComplete: string;
   encouragementNiceWork: string;
   blockCompleteTitle: string;
   blockCompleteSummary: (targets: number, reps: number) => string;
   blockCompleteDuration: (seconds: number) => string;
   blockCompleteDetailedSummary: (targets: number, reps: number, seconds: number) => string;
+  blockCompleteDetailedSummaryPatterns: (patterns: number, reps: number, seconds: number) => string;
   metricsSeparationNote: string;
+  patternMetricsSeparationNote: string;
   devMouseSimulation: string;
   therapeuticSideFallback: string;
   cameraPreviewAriaLabel: string;
@@ -69,6 +75,7 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     experienceTitle: "Reach the Light",
     sessionProgressLabel: "Session progress",
     interactionTargetsLabel: (reached, shown) => `Interaction targets: ${reached}/${shown}`,
+    interactionPatternsLabel: (completed, shown) => `Paths completed: ${completed}/${shown}`,
     measuredRepsLabel: (reps) => `Measured repetitions: ${reps}`,
     movementBlockLabel: "Movement block",
     timeRemainingSeconds: (seconds) => `${seconds}s remaining`,
@@ -90,6 +97,7 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     blockInstructions:
       "Lift your arm out to the side and reach toward each therapeutic light. Move at a comfortable pace.",
     targetReached: "Light reached — nice controlled reach.",
+    patternPathComplete: "Path completed — nice controlled movement.",
     encouragementNiceWork: "Nice work.",
     blockCompleteTitle: "Movement block complete",
     blockCompleteSummary: (targets, reps) =>
@@ -97,8 +105,12 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     blockCompleteDuration: (seconds) => `Session duration: ${seconds}s`,
     blockCompleteDetailedSummary: (targets, reps, seconds) =>
       `Targets reached: ${targets}. Measured repetitions completed: ${reps}. Session duration: ${seconds}s.`,
+    blockCompleteDetailedSummaryPatterns: (patterns, reps, seconds) =>
+      `Paths completed: ${patterns}. Measured repetitions completed: ${reps}. Session duration: ${seconds}s.`,
     metricsSeparationNote:
       "Interaction targets and measured movement repetitions are separate observations for therapist review.",
+    patternMetricsSeparationNote:
+      "Completed paths and measured movement repetitions are separate observations for therapist review.",
     devMouseSimulation:
       "Development simulation: move the mouse over the preview when pose wrist is unavailable.",
     therapeuticSideFallback:
@@ -128,6 +140,7 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     experienceTitle: "الوصول إلى الضوء",
     sessionProgressLabel: "تقدّم الجلسة",
     interactionTargetsLabel: (reached, shown) => `أهداف التفاعل: ${reached}/${shown}`,
+    interactionPatternsLabel: (completed, shown) => `المسارات المكتملة: ${completed}/${shown}`,
     measuredRepsLabel: (reps) => `التكرارات المقاسة: ${reps}`,
     movementBlockLabel: "كتلة الحركة",
     timeRemainingSeconds: (seconds) => `${seconds} ث متبقية`,
@@ -149,6 +162,7 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     blockInstructions:
       "ارفع ذراعك جانبًا وامدُد نحو كل ضوء علاجي. تحرّك بوتيرة مريحة.",
     targetReached: "تم الوصول للضوء — وصول متحكم وجيد.",
+    patternPathComplete: "اكتمل المسار — حركة متحكم وجيدة.",
     encouragementNiceWork: "عمل رائع.",
     blockCompleteTitle: "اكتملت كتلة الحركة",
     blockCompleteSummary: (targets, reps) =>
@@ -156,8 +170,12 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     blockCompleteDuration: (seconds) => `مدة الجلسة: ${seconds} ث`,
     blockCompleteDetailedSummary: (targets, reps, seconds) =>
       `الأهداف التي تم الوصول إليها: ${targets}. التكرارات المقاسة المكتملة: ${reps}. مدة الجلسة: ${seconds} ث.`,
+    blockCompleteDetailedSummaryPatterns: (patterns, reps, seconds) =>
+      `المسارات المكتملة: ${patterns}. التكرارات المقاسة المكتملة: ${reps}. مدة الجلسة: ${seconds} ث.`,
     metricsSeparationNote:
       "أهداف التفاعل والتكرارات المقاسة للحركة ملاحظات منفصلة لمراجعة المعالج.",
+    patternMetricsSeparationNote:
+      "المسارات المكتملة والتكرارات المقاسة للحركة ملاحظات منفصلة لمراجعة المعالج.",
     devMouseSimulation:
       "محاكاة للتطوير: حرّك المؤشر فوق المعاينة عندما لا يتوفر معصم التتبع.",
     therapeuticSideFallback:
@@ -285,6 +303,19 @@ export function resolveInteractiveShoulderEncouragement(
   if (snapshot.safetyStatus === "hold") return null;
   if (!snapshot.patientFeedbackState.encouragement) return null;
   return interactiveShoulderUi(lang).encouragementNiceWork;
+}
+
+/** HUD experience title follows the active block feedback mode — not one global label. */
+export function resolveInteractiveShoulderExperienceTitle(
+  language: PatientExerciseLanguage,
+  feedbackMode: FeedbackInteractionMode,
+): string {
+  if (feedbackMode === "motion-pattern") {
+    return language === "ar"
+      ? D1_INSPIRED_DIAGONAL_REACH_PATTERN.nameAr
+      : D1_INSPIRED_DIAGONAL_REACH_PATTERN.nameEn;
+  }
+  return interactiveShoulderUi(language).experienceTitle;
 }
 
 export function shouldTickTargetLifecycle(sessionState: SessionState): boolean {

@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { SessionOrchestrator } from "./session-orchestrator";
 import { MOCK_NEURO_UPPER_LIMB_SESSION } from "./mock-neuro-upper-limb-session";
+import { SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION } from "@/app/lib/interactive-shoulder/shoulder-abduction-reach-session-definition";
 import type { MovementBlock, SessionDefinition } from "./types";
 
 const T0 = 1_000_000;
@@ -403,12 +404,31 @@ describe("SessionOrchestrator — result category separation", () => {
       "startedAtMs",
     ]);
     assert.equal(result.interaction.targetsContacted, 1);
+    assert.equal(result.interaction.patternsCompleted, 0);
     assert.equal(result.measured.validRepetitions, 1);
     assert.equal(result.interpreted.compensationEvents, 1);
     // No cross-contamination: a field recorded in one category must not also appear in another.
     assert.equal("targetsContacted" in result.measured, false);
+    assert.equal("patternsCompleted" in result.measured, false);
     assert.equal("validRepetitions" in result.interaction, false);
     assert.equal("compensationEvents" in result.measured, false);
+  });
+
+  it("records patternCompleted separately from targetsContacted and validRepetitions", () => {
+    const o = new SessionOrchestrator(SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION);
+    o.start(T0);
+    o.beginCalibration(T0);
+    o.completeCalibration(T0);
+    o.reportInputEvent(
+      { type: "patternCompleted", patternId: "d1-inspired-diagonal-reach", capturedAtMs: T0 + 500 },
+      T0 + 500,
+    );
+    o.reportInputEvent({ type: "targetContact", capturedAtMs: T0 + 1_000 }, T0 + 1_000);
+    o.reportInputEvent({ type: "validRepetition", capturedAtMs: T0 + 1_500 }, T0 + 1_500);
+    const result = o.getSnapshot(T0 + 2_000).accumulatedBlockResults[0]!;
+    assert.equal(result.interaction.patternsCompleted, 1);
+    assert.equal(result.interaction.targetsContacted, 1);
+    assert.equal(result.measured.validRepetitions, 1);
   });
 });
 

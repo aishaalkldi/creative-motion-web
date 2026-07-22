@@ -28,7 +28,17 @@ import {
   createInitialTargetLifecycle,
   type TargetLifecycleState,
 } from "@/app/lib/interactive-shoulder/target-lifecycle";
-import { SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION } from "@/app/lib/interactive-shoulder/shoulder-abduction-reach-session-definition";
+import { resolveInteractiveShoulderSessionFromEnv } from "@/app/lib/interactive-shoulder/resolve-interactive-shoulder-session";
+import {
+  resolveActiveMotionPattern,
+  resolveFeedbackInteractionMode,
+} from "@/app/lib/interactive-shoulder/motion-patterns/motion-pattern-registry";
+import {
+  createInitialPatternLifecycle,
+  type PatternLifecycleState,
+} from "@/app/lib/interactive-shoulder/motion-patterns/pattern-lifecycle";
+import { resetPatternLifecycleForBlock, tickPatternLifecycleIfActive } from "@/app/lib/interactive-shoulder/motion-patterns/pattern-lifecycle-gating";
+import type { ResolvedMotionPattern } from "@/app/lib/interactive-shoulder/motion-patterns/motion-pattern-types";
 import {
   isDevMouseSimulationEnabled,
   normalizedPointFromMouseEvent,
@@ -43,6 +53,7 @@ import {
   type ResolvedInteractiveShoulderSide,
 } from "@/app/lib/interactive-shoulder/resolve-interactive-shoulder-side";
 import {
+  mapPatternCompletionToSessionInput,
   mapShoulderMeasuredEventToSessionInput,
   mapTargetHitToSessionInput,
 } from "@/app/lib/session-orchestrator/adapters/shoulder-session-adapter";
@@ -51,8 +62,12 @@ import type { SessionOrchestratorSnapshot } from "@/app/lib/session-orchestrator
 import { ShoulderSessionHud } from "./ShoulderSessionHud";
 import { ShoulderTargetLayer } from "./ShoulderTargetLayer";
 import { TrackedHandCursor } from "./TrackedHandCursor";
+import { TherapeuticPathLayer } from "./TherapeuticPathLayer";
 import { ReachTheLightEnvironment } from "./ReachTheLightEnvironment";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
+
+const INTERACTIVE_SHOULDER_SESSION = resolveInteractiveShoulderSessionFromEnv();
+const DEFAULT_PATTERN_ID = "d1-inspired-diagonal-reach";
 
 type InteractiveShoulderSessionProps = {
   language: PatientExerciseLanguage;
@@ -149,7 +164,7 @@ export function InteractiveShoulderSession({
   const hitExitTransitionMs = resolveHitExitTransitionMs(prefersReducedMotion);
   const entry = getExerciseCvRegistryEntry(INTERACTIVE_SHOULDER_CV_EXERCISE_ID);
   const profile = entry?.calibrationProfile;
-  const interactiveBlock = SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION.blocks[0];
+  const interactiveBlock = INTERACTIVE_SHOULDER_SESSION.blocks[0];
   const resolvedTherapeuticSide: ResolvedInteractiveShoulderSide = resolveInteractiveShoulderSide({
     prescribedSide,
     blockSide: interactiveBlock?.side,
@@ -161,6 +176,10 @@ export function InteractiveShoulderSession({
   const detectorRef = useRef<ShoulderAbductionReachPoseDetector | null>(null);
   const orchestratorRef = useRef<SessionOrchestrator | null>(null);
   const targetStateRef = useRef<TargetLifecycleState>(createInitialTargetLifecycle());
+  const patternStateRef = useRef<PatternLifecycleState>(
+    createInitialPatternLifecycle(DEFAULT_PATTERN_ID),
+  );
+  const activeBlockIdRef = useRef<string | null>(null);
   const rafRef = useRef<number>(0);
   const sessionStartedRef = useRef(false);
   const devMouseRef = useRef<{ x: number; y: number } | null>(null);
@@ -175,10 +194,18 @@ export function InteractiveShoulderSession({
   const [snapshot, setSnapshot] = useState<ShoulderAbductionReachPoseDetectorSnapshot | null>(null);
   const [orchestratorSnapshot, setOrchestratorSnapshot] = useState<SessionOrchestratorSnapshot | null>(null);
   const [targetState, setTargetState] = useState<TargetLifecycleState>(createInitialTargetLifecycle());
+  const [patternState, setPatternState] = useState<PatternLifecycleState>(
+    createInitialPatternLifecycle(DEFAULT_PATTERN_ID),
+  );
+  const [activeMotionPattern, setActiveMotionPattern] = useState<ResolvedMotionPattern | null>(null);
+  const [feedbackMode, setFeedbackMode] = useState<"motion-pattern" | "reach-the-light-targets">(
+    resolveFeedbackInteractionMode(interactiveBlock?.feedbackProfile),
+  );
   const [showBlockSummary, setShowBlockSummary] = useState(false);
-  const [summaryMetrics, setSummaryMetrics] = useState({ targets: 0, reps: 0, durationSeconds: 0 });
+  const [summaryMetrics, setSummaryMetrics] = useState({ targets: 0, patterns: 0, reps: 0, durationSeconds: 0 });
   const [targetHitAnnouncement, setTargetHitAnnouncement] = useState<string | null>(null);
   const [hitBurstTarget, setHitBurstTarget] = useState<TherapeuticTarget | null>(null);
+  const [hitBurstProgress, setHitBurstProgress] = useState<number | null>(null);
   const hitFeedbackTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -249,7 +276,7 @@ export function InteractiveShoulderSession({
     try {
       await detector.start(video, canvas);
       if (!orchestratorRef.current) {
-        orchestratorRef.current = new SessionOrchestrator(SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION);
+        orchestratorRef.current = new SessionOrchestrator(INTERACTIVE_SHOULDER_SESSION);
       }
       const now = performance.now();
       const orchestrator = orchestratorRef.current;
@@ -259,6 +286,9 @@ export function InteractiveShoulderSession({
       sessionStartedRef.current = true;
       targetStateRef.current = createInitialTargetLifecycle();
       setTargetState(targetStateRef.current);
+      patternStateRef.current = createInitialPatternLifecycle(DEFAULT_PATTERN_ID);
+      setPatternState(patternStateRef.current);
+      activeBlockIdRef.current = null;
       setOrchestratorSnapshot(orchestrator.getSnapshot(now));
     } catch (error) {
       setStartError(resolveInteractiveShoulderStartError(language, error));
@@ -302,44 +332,111 @@ export function InteractiveShoulderSession({
         const snap = orchestrator.getSnapshot(now);
         setOrchestratorSnapshot(snap);
         if (snap.sessionState === "completed" && !showBlockSummary) {
-          const blockResult = snap.accumulatedBlockResults[0];
+          const totalTargets = snap.accumulatedBlockResults.reduce(
+            (sum, result) => sum + result.interaction.targetsContacted,
+            0,
+          );
+          const totalPatterns = snap.accumulatedBlockResults.reduce(
+            (sum, result) => sum + result.interaction.patternsCompleted,
+            0,
+          );
+          const totalReps = snap.accumulatedBlockResults.reduce(
+            (sum, result) => sum + result.measured.validRepetitions,
+            0,
+          );
           setSummaryMetrics({
-            targets: blockResult?.interaction.targetsContacted ?? targetStateRef.current.interaction.targetsReached,
-            reps: blockResult?.measured.validRepetitions ?? snapshot?.primaryRepCount ?? 0,
+            targets: totalTargets || targetStateRef.current.interaction.targetsReached,
+            patterns:
+              totalPatterns || patternStateRef.current.interaction.patternsCompleted,
+            reps: totalReps || snapshot?.primaryRepCount || 0,
             durationSeconds: Math.max(0, Math.round(snap.blockElapsedSeconds)),
           });
           setShowBlockSummary(true);
+        }
+
+        const currentBlock = snap.currentBlock;
+        const currentBlockId = currentBlock?.blockId ?? null;
+        const currentFeedbackProfile = currentBlock?.feedbackProfile;
+        const currentFeedbackMode = resolveFeedbackInteractionMode(currentFeedbackProfile);
+        const resolvedPattern = resolveActiveMotionPattern(
+          currentFeedbackProfile,
+          therapeuticSideRef.current,
+        );
+
+        if (currentBlockId && activeBlockIdRef.current !== currentBlockId) {
+          activeBlockIdRef.current = currentBlockId;
+          setFeedbackMode(currentFeedbackMode);
+          setActiveMotionPattern(resolvedPattern);
+          targetStateRef.current = createInitialTargetLifecycle();
+          setTargetState(targetStateRef.current);
+          if (resolvedPattern) {
+            patternStateRef.current = resetPatternLifecycleForBlock(resolvedPattern.id);
+            setPatternState(patternStateRef.current);
+          } else {
+            patternStateRef.current = createInitialPatternLifecycle(DEFAULT_PATTERN_ID);
+            setPatternState(patternStateRef.current);
+          }
+        } else if (resolvedPattern && !activeMotionPattern) {
+          setActiveMotionPattern(resolvedPattern);
+          setFeedbackMode(currentFeedbackMode);
         }
 
         const poseSnap = snapshotRef.current;
         const wrist =
           poseSnap?.primaryWristNormalized ??
           (isDevMouseSimulationEnabled() ? devMouseRef.current : null);
-        if (snap.sessionState === "active" && wrist) {
-          const ticked = tickTargetLifecycleIfActive(snap.sessionState, targetStateRef.current, {
-            wrist,
-            nowMs: now,
-            side: therapeuticSideRef.current,
-            bounds: DEFAULT_SAFE_TARGET_BOUNDS,
-            hitExitTransitionMs,
-          });
-          targetStateRef.current = ticked.state;
-          setTargetState(ticked.state);
-          if (ticked.hitEvent) {
-            orchestrator.reportInputEvent(mapTargetHitToSessionInput(ticked.hitEvent), now);
-            const burstTarget = ticked.state.exitingTarget;
-            if (burstTarget) {
-              setHitBurstTarget(burstTarget);
+        if (snap.sessionState === "active") {
+          if (currentFeedbackMode === "motion-pattern" && resolvedPattern) {
+            const ticked = tickPatternLifecycleIfActive(snap.sessionState, patternStateRef.current, {
+              wrist: wrist ?? null,
+              nowMs: now,
+              pattern: resolvedPattern,
+              completionExitTransitionMs: hitExitTransitionMs,
+            });
+            patternStateRef.current = ticked.state;
+            setPatternState(ticked.state);
+            if (ticked.completionEvent) {
+              orchestrator.reportInputEvent(
+                mapPatternCompletionToSessionInput(ticked.completionEvent),
+                now,
+              );
+              setHitBurstProgress(ticked.state.exitingProgress);
+              setTargetHitAnnouncement(ui.patternPathComplete);
+              if (hitFeedbackTimeoutRef.current !== null) {
+                window.clearTimeout(hitFeedbackTimeoutRef.current);
+              }
+              hitFeedbackTimeoutRef.current = window.setTimeout(() => {
+                setHitBurstProgress(null);
+                setTargetHitAnnouncement(null);
+                hitFeedbackTimeoutRef.current = null;
+              }, Math.max(hitExitTransitionMs, 480));
             }
-            setTargetHitAnnouncement(ui.targetReached);
-            if (hitFeedbackTimeoutRef.current !== null) {
-              window.clearTimeout(hitFeedbackTimeoutRef.current);
+          } else if (wrist) {
+            const ticked = tickTargetLifecycleIfActive(snap.sessionState, targetStateRef.current, {
+              wrist,
+              nowMs: now,
+              side: therapeuticSideRef.current,
+              bounds: DEFAULT_SAFE_TARGET_BOUNDS,
+              hitExitTransitionMs,
+            });
+            targetStateRef.current = ticked.state;
+            setTargetState(ticked.state);
+            if (ticked.hitEvent) {
+              orchestrator.reportInputEvent(mapTargetHitToSessionInput(ticked.hitEvent), now);
+              const burstTarget = ticked.state.exitingTarget;
+              if (burstTarget) {
+                setHitBurstTarget(burstTarget);
+              }
+              setTargetHitAnnouncement(ui.targetReached);
+              if (hitFeedbackTimeoutRef.current !== null) {
+                window.clearTimeout(hitFeedbackTimeoutRef.current);
+              }
+              hitFeedbackTimeoutRef.current = window.setTimeout(() => {
+                setHitBurstTarget(null);
+                setTargetHitAnnouncement(null);
+                hitFeedbackTimeoutRef.current = null;
+              }, Math.max(hitExitTransitionMs, 480));
             }
-            hitFeedbackTimeoutRef.current = window.setTimeout(() => {
-              setHitBurstTarget(null);
-              setTargetHitAnnouncement(null);
-              hitFeedbackTimeoutRef.current = null;
-            }, Math.max(hitExitTransitionMs, 480));
           }
         }
       }
@@ -347,7 +444,7 @@ export function InteractiveShoulderSession({
     };
     rafRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [hitExitTransitionMs, showBlockSummary, ui.targetReached]);
+  }, [hitExitTransitionMs, showBlockSummary, ui.patternPathComplete, ui.targetReached, activeMotionPattern]);
 
   const acceptConsent = () => {
     if (!consentChecked) return;
@@ -378,6 +475,12 @@ export function InteractiveShoulderSession({
       patientFeedbackState: { message: null, encouragement: null },
       currentBlock: interactiveBlock,
     } as SessionOrchestratorSnapshot);
+  const resolvedHudFeedbackMode = resolveFeedbackInteractionMode(
+    hudSnapshot.currentBlock?.feedbackProfile,
+  );
+  const renderPattern =
+    activeMotionPattern ??
+    resolveActiveMotionPattern(hudSnapshot.currentBlock?.feedbackProfile, resolvedTherapeuticSide.side);
 
   return (
     <div className="px-4 pb-4 pt-3" dir={textDir} lang={language}>
@@ -426,12 +529,21 @@ export function InteractiveShoulderSession({
             overlay={
               <>
                 <ReachTheLightEnvironment reducedMotion={prefersReducedMotion} />
-                <ShoulderTargetLayer
-                  target={targetState.currentTarget}
-                  exitingTarget={targetState.exitingTarget}
-                  hitBurstTarget={hitBurstTarget}
-                  reducedMotion={prefersReducedMotion}
-                />
+                {resolvedHudFeedbackMode === "motion-pattern" && renderPattern ? (
+                  <TherapeuticPathLayer
+                    pattern={renderPattern}
+                    lifecycle={patternState}
+                    hitBurstProgress={hitBurstProgress}
+                    reducedMotion={prefersReducedMotion}
+                  />
+                ) : (
+                  <ShoulderTargetLayer
+                    target={targetState.currentTarget}
+                    exitingTarget={targetState.exitingTarget}
+                    hitBurstTarget={hitBurstTarget}
+                    reducedMotion={prefersReducedMotion}
+                  />
+                )}
                 <TrackedHandCursor
                   wrist={
                     snapshot?.primaryWristNormalized ??
@@ -444,12 +556,15 @@ export function InteractiveShoulderSession({
                   language={language}
                   arClass={arClass}
                   snapshot={hudSnapshot}
-                  interaction={targetState.interaction}
+                  feedbackMode={resolvedHudFeedbackMode}
+                  targetInteraction={targetState.interaction}
+                  patternInteraction={patternState.interaction}
                   measuredReps={measuredReps}
                   onPause={() => orchestratorRef.current?.pause(performance.now())}
                   onResume={() => orchestratorRef.current?.resume(performance.now())}
                   showBlockSummary={showBlockSummary}
                   blockSummaryTargetsReached={summaryMetrics.targets}
+                  blockSummaryPatternsCompleted={summaryMetrics.patterns}
                   blockSummaryMeasuredReps={summaryMetrics.reps}
                   blockSummaryDurationSeconds={summaryMetrics.durationSeconds}
                   targetHitAnnouncement={targetHitAnnouncement}
