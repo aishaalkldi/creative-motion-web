@@ -37,7 +37,7 @@ import {
   createInitialPatternLifecycle,
   type PatternLifecycleState,
 } from "@/app/lib/interactive-shoulder/motion-patterns/pattern-lifecycle";
-import { resetPatternLifecycleForBlock, tickPatternLifecycleIfActive } from "@/app/lib/interactive-shoulder/motion-patterns/pattern-lifecycle-gating";
+import { resetPatternLifecycleForBlock } from "@/app/lib/interactive-shoulder/motion-patterns/pattern-lifecycle-gating";
 import type { ResolvedMotionPattern } from "@/app/lib/interactive-shoulder/motion-patterns/motion-pattern-types";
 import {
   isDevMouseSimulationEnabled,
@@ -49,6 +49,10 @@ import {
   registerTargetBlockRunner,
   resolveTargetBlockRunner,
 } from "@/app/lib/interactive-shoulder/block-engine/target-block-runner";
+import {
+  registerPatternBlockRunner,
+  resolvePatternBlockRunner,
+} from "@/app/lib/interactive-shoulder/block-engine/pattern-block-runner";
 import type { TherapeuticTarget } from "@/app/lib/interactive-shoulder/types";
 import { INTERACTIVE_SHOULDER_CV_EXERCISE_ID } from "@/app/lib/interactive-shoulder/interactive-shoulder-exercise-ids";
 import {
@@ -73,19 +77,25 @@ const INTERACTIVE_SHOULDER_SESSION = resolveInteractiveShoulderSessionFromEnv();
 const DEFAULT_PATTERN_ID = "d1-inspired-diagonal-reach";
 
 /**
- * Reach the Light now executes through the Block Runner registry instead
- * of calling target-lifecycle functions directly. Registered and resolved
- * once here, at module scope — same "resolved once at initialization, not
- * per animation frame" rule INTERACTIVE_SHOULDER_SESSION above already
- * follows. Resolution reads the active session's own first block's
- * blockType rather than a hardcoded string, so this is null (not a crash,
- * not a fallback to the wrong runner) whenever the resolved session isn't
- * target-mode — e.g. NEXT_PUBLIC_RASQ_MOTION_PATTERNS_V1="true" selects
- * the D1 pattern session instead, which this constant correctly ignores.
- * The D1 pattern branch below is untouched by this migration.
+ * Both Reach the Light and D1-Inspired Diagonal Reach now execute through
+ * the Block Runner registry instead of calling their respective lifecycle
+ * functions directly. Registered and resolved once here, at module scope
+ * — same "resolved once at initialization, not per animation frame" rule
+ * INTERACTIVE_SHOULDER_SESSION above already follows. Each resolution
+ * reads the active session's own first block's blockType rather than a
+ * hardcoded string, so exactly one of the two constants below is non-null
+ * for any given deployment: NEXT_PUBLIC_RASQ_MOTION_PATTERNS_V1="true"
+ * selects the D1 pattern session (blockType "movement-pattern"), any
+ * other value selects Reach the Light (blockType "movement-target") — the
+ * other constant correctly resolves to null in either case, never a
+ * fallback to the wrong runner.
  */
 registerTargetBlockRunner();
+registerPatternBlockRunner();
 const RESOLVED_TARGET_BLOCK_RUNNER = resolveTargetBlockRunner(
+  INTERACTIVE_SHOULDER_SESSION.blocks[0]?.blockType,
+);
+const RESOLVED_PATTERN_BLOCK_RUNNER = resolvePatternBlockRunner(
   INTERACTIVE_SHOULDER_SESSION.blocks[0]?.blockType,
 );
 
@@ -406,8 +416,8 @@ export function InteractiveShoulderSession({
           poseSnap?.primaryWristNormalized ??
           (isDevMouseSimulationEnabled() ? devMouseRef.current : null);
         if (snap.sessionState === "active") {
-          if (currentFeedbackMode === "motion-pattern" && resolvedPattern) {
-            const ticked = tickPatternLifecycleIfActive(snap.sessionState, patternStateRef.current, {
+          if (currentFeedbackMode === "motion-pattern" && resolvedPattern && RESOLVED_PATTERN_BLOCK_RUNNER) {
+            const ticked = RESOLVED_PATTERN_BLOCK_RUNNER.tick(snap.sessionState, patternStateRef.current, {
               wrist: wrist ?? null,
               nowMs: now,
               pattern: resolvedPattern,
