@@ -49,6 +49,15 @@
  * hand-maintained `Tables<T>` shorthand and Row aliases from the prior
  * regeneration are unchanged, and no new Row alias was needed since
  * TreatmentPlansRow/PlanSessionsRow already existed.
+ * PR 7: regenerated again via `npx supabase gen types typescript --linked`
+ * against Staging after migration 018 was applied there. This adds
+ * treatment_plans.catalog_assignment_request_id (`string | null`) and a
+ * typed Functions entry for create_plan_from_catalog_program (all six
+ * arguments, JSON return type) to the generated Database type body
+ * below. No existing table, relationship, helper, or alias was
+ * removed — the same hand-maintained `Tables<T>` shorthand and Row
+ * aliases from the prior regeneration are unchanged, and no new Row
+ * alias was needed since TreatmentPlansRow already existed.
  */
 
 export type Json =
@@ -1005,6 +1014,7 @@ export type Database = {
       treatment_plans: {
         Row: {
           assessment_id: string | null
+          catalog_assignment_request_id: string | null
           clinician_note: string | null
           created_at: string
           current_week: number
@@ -1022,6 +1032,7 @@ export type Database = {
         }
         Insert: {
           assessment_id?: string | null
+          catalog_assignment_request_id?: string | null
           clinician_note?: string | null
           created_at?: string
           current_week?: number
@@ -1039,6 +1050,7 @@ export type Database = {
         }
         Update: {
           assessment_id?: string | null
+          catalog_assignment_request_id?: string | null
           clinician_note?: string | null
           created_at?: string
           current_week?: number
@@ -1131,6 +1143,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      create_plan_from_catalog_program: {
+        Args: {
+          p_assessment_id: string
+          p_catalog_assignment_request_id: string
+          p_patient_id: string
+          p_patient_token: string
+          p_program_id: string
+          p_provider_id: string
+        }
+        Returns: Json
+      }
       rehab_catalog_program_status_for_session: {
         Args: { p_session_id: string }
         Returns: string
