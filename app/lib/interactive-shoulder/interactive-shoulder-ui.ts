@@ -11,6 +11,7 @@ import type {
 import { SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION } from "./shoulder-abduction-reach-session-definition";
 import type { FeedbackInteractionMode } from "./motion-patterns/motion-pattern-registry";
 import { D1_INSPIRED_DIAGONAL_REACH_PATTERN } from "./motion-patterns/d1-inspired-diagonal-reach-pattern";
+import type { OrchestratorCvRuntimeFault } from "./orchestrator-cv-block-dispatch";
 
 export type InteractiveShoulderUi = {
   consentTitle: string;
@@ -61,6 +62,9 @@ export type InteractiveShoulderUi = {
   repositionImproveLighting: string;
   repositionAdjustPosition: string;
   repositionReady: string;
+  runtimeFaultTitle: string;
+  runtimeFaultRunnerUnavailable: string;
+  runtimeFaultPatternUnresolved: string;
 };
 
 const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShoulderUi> = {
@@ -128,6 +132,11 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     repositionImproveLighting: "Improve lighting so your movement is easier to follow.",
     repositionAdjustPosition: "Adjust your position until your upper body is clearly visible.",
     repositionReady: "Ready — reach toward the glowing targets at a comfortable pace.",
+    runtimeFaultTitle: "Session paused",
+    runtimeFaultRunnerUnavailable:
+      "This movement block could not start safely. The session is paused — please reload and try again.",
+    runtimeFaultPatternUnresolved:
+      "This movement block could not load its guided path. The session is paused — please reload and try again.",
   },
   ar: {
     consentTitle: "الكاميرا لتوجيه الحركة",
@@ -193,6 +202,11 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     repositionImproveLighting: "حسّن الإضاءة لتسهيل متابعة حركتك.",
     repositionAdjustPosition: "عدّل وضعيتك حتى يظهر الجزء العلوي من جسمك بوضوح.",
     repositionReady: "جاهز — امتد نحو الأهداف المتوهجة بوتيرة مريحة.",
+    runtimeFaultTitle: "تم إيقاف الجلسة مؤقتًا",
+    runtimeFaultRunnerUnavailable:
+      "تعذّر بدء كتلة الحركة بأمان. الجلسة متوقفة — يرجى إعادة تحميل الصفحة والمحاولة مرة أخرى.",
+    runtimeFaultPatternUnresolved:
+      "تعذّر تحميل المسار الموجّه لكتلة الحركة. الجلسة متوقفة — يرجى إعادة تحميل الصفحة والمحاولة مرة أخرى.",
   },
 };
 
@@ -320,4 +334,15 @@ export function resolveInteractiveShoulderExperienceTitle(
 
 export function shouldTickTargetLifecycle(sessionState: SessionState): boolean {
   return sessionState === "active";
+}
+
+export function resolveInteractiveShoulderRuntimeFaultMessage(
+  language: PatientExerciseLanguage,
+  fault: OrchestratorCvRuntimeFault,
+): string {
+  const ui = interactiveShoulderUi(language);
+  if (fault.kind === "pattern_unresolved") {
+    return ui.runtimeFaultPatternUnresolved;
+  }
+  return ui.runtimeFaultRunnerUnavailable;
 }
