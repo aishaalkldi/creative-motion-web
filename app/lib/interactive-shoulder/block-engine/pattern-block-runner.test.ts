@@ -14,7 +14,11 @@ import { D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE } from "../motion-patterns/
 import { resolveActiveMotionPattern } from "../motion-patterns/motion-pattern-registry";
 import type { PatternLifecycleState } from "../motion-patterns/pattern-lifecycle";
 import { getBlockRunnerForBlockType, registerBlockRunner } from "./block-runner-registry";
-import { PATTERN_BLOCK_RUNNER } from "./pattern-block-runner";
+import {
+  PATTERN_BLOCK_RUNNER,
+  registerPatternBlockRunner,
+  resolvePatternBlockRunner,
+} from "./pattern-block-runner";
 
 const T0 = 6_000_000;
 
@@ -139,5 +143,18 @@ describe("pattern-block-runner", () => {
   it("returns null for an unregistered blockType from within this isolated process", () => {
     assert.equal(getBlockRunnerForBlockType("movement-target"), null);
     assert.equal(getBlockRunnerForBlockType("instructional"), null);
+  });
+
+  it('resolvePatternBlockRunner resolves "movement-pattern" and fails safely for anything else', () => {
+    registerPatternBlockRunner();
+    assert.equal(resolvePatternBlockRunner("movement-pattern"), PATTERN_BLOCK_RUNNER);
+    assert.equal(resolvePatternBlockRunner(undefined), null);
+    assert.equal(resolvePatternBlockRunner("movement-target"), null);
+    assert.equal(resolvePatternBlockRunner("instructional"), null);
+  });
+
+  it("registerPatternBlockRunner is idempotent — a second call does not throw", () => {
+    assert.doesNotThrow(() => registerPatternBlockRunner());
+    assert.equal(resolvePatternBlockRunner("movement-pattern"), PATTERN_BLOCK_RUNNER);
   });
 });
