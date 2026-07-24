@@ -5,7 +5,6 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -23,23 +22,20 @@ import {
   writePatientCvCameraConsentToSession,
 } from "@/app/lib/cv/patient-cv-consent";
 import type { CaptureSetupGuidance } from "@/app/lib/cv/patient-cv-capture-readiness";
-import { DEFAULT_SAFE_TARGET_BOUNDS } from "@/app/lib/interactive-shoulder/target-generator";
 import {
   createInitialTargetLifecycle,
   type TargetLifecycleState,
 } from "@/app/lib/interactive-shoulder/target-lifecycle";
+import { createInitialInstructionalLifecycle } from "@/app/lib/interactive-shoulder/instructional-lifecycle";
 import {
   resolveActiveMotionPattern,
   resolveFeedbackInteractionMode,
 } from "@/app/lib/interactive-shoulder/motion-patterns/motion-pattern-registry";
 import {
   createInitialPatternLifecycle,
+  createEmptyPatternInteractionMetrics,
   type PatternLifecycleState,
 } from "@/app/lib/interactive-shoulder/motion-patterns/pattern-lifecycle";
-import {
-  resetPatternLifecycleForBlock,
-  tickPatternLifecycleIfActive,
-} from "@/app/lib/interactive-shoulder/motion-patterns/pattern-lifecycle-gating";
 import type { ResolvedMotionPattern } from "@/app/lib/interactive-shoulder/motion-patterns/motion-pattern-types";
 import {
   isDevMouseSimulationEnabled,
@@ -47,13 +43,18 @@ import {
 } from "@/app/lib/interactive-shoulder/dev-mouse-simulation";
 import {
   interactiveShoulderUi,
+  resolveInteractiveShoulderRuntimeFaultMessage,
   resolveInteractiveShoulderStartError,
 } from "@/app/lib/interactive-shoulder/interactive-shoulder-ui";
 import { resolveHitExitTransitionMs } from "@/app/lib/interactive-shoulder/reach-the-light-motion";
+import { registerAllBlockRunners } from "@/app/lib/interactive-shoulder/block-engine/register-all-block-runners";
+import type { ActiveBlockRunnerStates } from "@/app/lib/interactive-shoulder/block-engine/tick-active-block-runner";
 import {
-  registerTargetBlockRunner,
-  resolveTargetBlockRunner,
-} from "@/app/lib/interactive-shoulder/block-engine/target-block-runner";
+  dispatchOrchestratorCvBlock,
+  resetRunnerStatesForBlockTransition,
+  resolveOrchestratorBlockType,
+  type OrchestratorCvRuntimeFault,
+} from "@/app/lib/interactive-shoulder/orchestrator-cv-block-dispatch";
 import type { TherapeuticTarget } from "@/app/lib/interactive-shoulder/types";
 import { INTERACTIVE_SHOULDER_CV_EXERCISE_ID } from "@/app/lib/interactive-shoulder/interactive-shoulder-exercise-ids";
 import {
@@ -69,15 +70,14 @@ import {
 import { SessionOrchestrator } from "@/app/lib/session-orchestrator/session-orchestrator";
 import type { SessionOrchestratorSnapshot } from "@/app/lib/session-orchestrator/types";
 import { ShoulderSessionHud } from "./ShoulderSessionHud";
+import { InstructionalBlockLayer } from "./InstructionalBlockLayer";
 import { ShoulderTargetLayer } from "./ShoulderTargetLayer";
 import { TrackedHandCursor } from "./TrackedHandCursor";
 import { TherapeuticPathLayer } from "./TherapeuticPathLayer";
 import { ReachTheLightEnvironment } from "./ReachTheLightEnvironment";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 
-const DEFAULT_PATTERN_ID = "d1-inspired-diagonal-reach";
-
-registerTargetBlockRunner();
+registerAllBlockRunners();
 
 const PatientCameraVideoLayer = memo(function PatientCameraVideoLayer({
   videoRef,
@@ -159,10 +159,6 @@ export function OrchestratorCvSessionCore({
   const entry = getExerciseCvRegistryEntry(INTERACTIVE_SHOULDER_CV_EXERCISE_ID);
   const profile = entry?.calibrationProfile;
   const interactiveBlock = sessionDefinition.blocks[0];
-  const resolvedTargetBlockRunner = useMemo(
-    () => resolveTargetBlockRunner(sessionDefinition.blocks[0]?.blockType),
-    [sessionDefinition],
-  );
   const resolvedTherapeuticSide: ResolvedInteractiveShoulderSide = resolveInteractiveShoulderSide({
     prescribedSide,
     blockSide: interactiveBlock?.side,
@@ -173,13 +169,18 @@ export function OrchestratorCvSessionCore({
   const containerRef = useRef<HTMLDivElement>(null);
   const detectorRef = useRef<ShoulderAbductionReachPoseDetector | null>(null);
   const orchestratorRef = useRef<SessionOrchestrator | null>(null);
+  const runnerStatesRef = useRef<ActiveBlockRunnerStates>({
+    instructional: createInitialInstructionalLifecycle(),
+    target: createInitialTargetLifecycle(),
+    pattern: createInitialPatternLifecycle(""),
+  });
   const targetStateRef = useRef<TargetLifecycleState>(createInitialTargetLifecycle());
-  const patternStateRef = useRef<PatternLifecycleState>(
-    createInitialPatternLifecycle(DEFAULT_PATTERN_ID),
-  );
+  const patternStateRef = useRef<PatternLifecycleState | null>(null);
   const activeBlockIdRef = useRef<string | null>(null);
   const rafRef = useRef<number>(0);
   const sessionStartedRef = useRef(false);
+  const runtimeFaultRef = useRef<OrchestratorCvRuntimeFault | null>(null);
+  const faultPauseAppliedRef = useRef(false);
   const devMouseRef = useRef<{ x: number; y: number } | null>(null);
   const snapshotRef = useRef<ShoulderAbductionReachPoseDetectorSnapshot | null>(null);
   const therapeuticSideRef = useRef(resolvedTherapeuticSide.side);
@@ -192,10 +193,11 @@ export function OrchestratorCvSessionCore({
   const [snapshot, setSnapshot] = useState<ShoulderAbductionReachPoseDetectorSnapshot | null>(null);
   const [orchestratorSnapshot, setOrchestratorSnapshot] = useState<SessionOrchestratorSnapshot | null>(null);
   const [targetState, setTargetState] = useState<TargetLifecycleState>(createInitialTargetLifecycle());
-  const [patternState, setPatternState] = useState<PatternLifecycleState>(
-    createInitialPatternLifecycle(DEFAULT_PATTERN_ID),
-  );
+  const [patternState, setPatternState] = useState<PatternLifecycleState | null>(null);
   const [activeMotionPattern, setActiveMotionPattern] = useState<ResolvedMotionPattern | null>(null);
+  const activeMotionPatternRef = useRef<ResolvedMotionPattern | null>(null);
+  const [presentationProgress, setPresentationProgress] = useState<number | null>(null);
+  const [runtimeFault, setRuntimeFault] = useState<OrchestratorCvRuntimeFault | null>(null);
   const [feedbackMode, setFeedbackMode] = useState<"motion-pattern" | "reach-the-light-targets">(
     resolveFeedbackInteractionMode(interactiveBlock?.feedbackProfile),
   );
@@ -205,6 +207,30 @@ export function OrchestratorCvSessionCore({
   const [hitBurstTarget, setHitBurstTarget] = useState<TherapeuticTarget | null>(null);
   const [hitBurstProgress, setHitBurstProgress] = useState<number | null>(null);
   const hitFeedbackTimeoutRef = useRef<number | null>(null);
+
+  const clearHitFeedback = useCallback(() => {
+    if (hitFeedbackTimeoutRef.current !== null) {
+      window.clearTimeout(hitFeedbackTimeoutRef.current);
+      hitFeedbackTimeoutRef.current = null;
+    }
+    setHitBurstTarget(null);
+    setHitBurstProgress(null);
+    setTargetHitAnnouncement(null);
+  }, []);
+
+  const applyRuntimeFault = useCallback(
+    (fault: OrchestratorCvRuntimeFault, orchestrator: SessionOrchestrator, now: number) => {
+      if (!faultPauseAppliedRef.current) {
+        orchestrator.pause(now);
+        faultPauseAppliedRef.current = true;
+      }
+      if (!runtimeFaultRef.current) {
+        runtimeFaultRef.current = fault;
+        setRuntimeFault(fault);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     snapshotRef.current = snapshot;
@@ -282,10 +308,20 @@ export function OrchestratorCvSessionCore({
       orchestrator.beginCalibration(now);
       orchestrator.completeCalibration(now);
       sessionStartedRef.current = true;
+      runnerStatesRef.current = {
+        instructional: createInitialInstructionalLifecycle(),
+        target: createInitialTargetLifecycle(),
+        pattern: createInitialPatternLifecycle(""),
+      };
       targetStateRef.current = createInitialTargetLifecycle();
       setTargetState(targetStateRef.current);
-      patternStateRef.current = createInitialPatternLifecycle(DEFAULT_PATTERN_ID);
-      setPatternState(patternStateRef.current);
+      patternStateRef.current = null;
+      setPatternState(null);
+      setActiveMotionPattern(null);
+      setPresentationProgress(null);
+      runtimeFaultRef.current = null;
+      faultPauseAppliedRef.current = false;
+      setRuntimeFault(null);
       activeBlockIdRef.current = null;
       setOrchestratorSnapshot(orchestrator.getSnapshot(now));
     } catch (error) {
@@ -345,7 +381,7 @@ export function OrchestratorCvSessionCore({
           setSummaryMetrics({
             targets: totalTargets || targetStateRef.current.interaction.targetsReached,
             patterns:
-              totalPatterns || patternStateRef.current.interaction.patternsCompleted,
+              totalPatterns || patternStateRef.current?.interaction.patternsCompleted || 0,
             reps: totalReps || snapshotRef.current?.primaryRepCount || 0,
             durationSeconds: Math.max(0, Math.round(snap.blockElapsedSeconds)),
           });
@@ -354,74 +390,65 @@ export function OrchestratorCvSessionCore({
 
         const currentBlock = snap.currentBlock;
         const currentBlockId = currentBlock?.blockId ?? null;
-        const currentFeedbackProfile = currentBlock?.feedbackProfile;
-        const currentFeedbackMode = resolveFeedbackInteractionMode(currentFeedbackProfile);
-        const resolvedPattern = resolveActiveMotionPattern(
-          currentFeedbackProfile,
-          therapeuticSideRef.current,
-        );
 
-        if (currentBlockId && activeBlockIdRef.current !== currentBlockId) {
+        if (currentBlockId && activeBlockIdRef.current !== currentBlockId && currentBlock) {
           activeBlockIdRef.current = currentBlockId;
-          setFeedbackMode(currentFeedbackMode);
-          setActiveMotionPattern(resolvedPattern);
-          targetStateRef.current = createInitialTargetLifecycle();
-          setTargetState(targetStateRef.current);
-          if (resolvedPattern) {
-            patternStateRef.current = resetPatternLifecycleForBlock(resolvedPattern.id);
-            setPatternState(patternStateRef.current);
-          } else {
-            patternStateRef.current = createInitialPatternLifecycle(DEFAULT_PATTERN_ID);
-            setPatternState(patternStateRef.current);
+          clearHitFeedback();
+          setPresentationProgress(null);
+          const transition = resetRunnerStatesForBlockTransition({
+            block: currentBlock,
+            side: therapeuticSideRef.current,
+          });
+          runnerStatesRef.current = transition.states;
+          targetStateRef.current = transition.states.target;
+          setTargetState(transition.states.target);
+          patternStateRef.current = transition.activeMotionPattern
+            ? transition.states.pattern
+            : null;
+          setPatternState(patternStateRef.current);
+          setActiveMotionPattern(transition.activeMotionPattern);
+          activeMotionPatternRef.current = transition.activeMotionPattern;
+          setFeedbackMode(transition.feedbackMode);
+          if (transition.fault) {
+            applyRuntimeFault(transition.fault, orchestrator, now);
           }
-        } else if (resolvedPattern && !activeMotionPattern) {
-          setActiveMotionPattern(resolvedPattern);
-          setFeedbackMode(currentFeedbackMode);
         }
 
         const poseSnap = snapshotRef.current;
         const wrist =
           poseSnap?.primaryWristNormalized ??
           (isDevMouseSimulationEnabled() ? devMouseRef.current : null);
-        if (snap.sessionState === "active") {
-          if (currentFeedbackMode === "motion-pattern" && resolvedPattern) {
-            const ticked = tickPatternLifecycleIfActive(snap.sessionState, patternStateRef.current, {
-              wrist: wrist ?? null,
-              nowMs: now,
-              pattern: resolvedPattern,
-              completionExitTransitionMs: hitExitTransitionMs,
-            });
-            patternStateRef.current = ticked.state;
-            setPatternState(ticked.state);
-            if (ticked.completionEvent) {
+
+        if (!runtimeFaultRef.current) {
+          const dispatch = dispatchOrchestratorCvBlock({
+            snap,
+            nowMs: now,
+            wrist: wrist ?? null,
+            side: therapeuticSideRef.current,
+            hitExitTransitionMs,
+            states: runnerStatesRef.current,
+            activeMotionPattern: activeMotionPatternRef.current,
+          });
+
+          if (dispatch.status === "fault") {
+            applyRuntimeFault(dispatch.fault, orchestrator, now);
+          } else if (dispatch.status === "dispatched") {
+            runnerStatesRef.current = dispatch.states;
+            targetStateRef.current = dispatch.states.target;
+            setTargetState(dispatch.states.target);
+            if (activeMotionPatternRef.current) {
+              patternStateRef.current = dispatch.states.pattern;
+              setPatternState(dispatch.states.pattern);
+            }
+            if (dispatch.presentationProgress != null) {
+              setPresentationProgress(dispatch.presentationProgress);
+            }
+            if (dispatch.targetContact) {
               orchestrator.reportInputEvent(
-                mapPatternCompletionToSessionInput(ticked.completionEvent),
+                mapTargetHitToSessionInput(dispatch.targetContact),
                 now,
               );
-              setHitBurstProgress(ticked.state.exitingProgress);
-              setTargetHitAnnouncement(ui.patternPathComplete);
-              if (hitFeedbackTimeoutRef.current !== null) {
-                window.clearTimeout(hitFeedbackTimeoutRef.current);
-              }
-              hitFeedbackTimeoutRef.current = window.setTimeout(() => {
-                setHitBurstProgress(null);
-                setTargetHitAnnouncement(null);
-                hitFeedbackTimeoutRef.current = null;
-              }, Math.max(hitExitTransitionMs, 480));
-            }
-          } else if (wrist && resolvedTargetBlockRunner) {
-            const ticked = resolvedTargetBlockRunner.tick(snap.sessionState, targetStateRef.current, {
-              wrist,
-              nowMs: now,
-              side: therapeuticSideRef.current,
-              bounds: DEFAULT_SAFE_TARGET_BOUNDS,
-              hitExitTransitionMs,
-            });
-            targetStateRef.current = ticked.state;
-            setTargetState(ticked.state);
-            if (ticked.completionEvent) {
-              orchestrator.reportInputEvent(mapTargetHitToSessionInput(ticked.completionEvent), now);
-              const burstTarget = ticked.state.exitingTarget;
+              const burstTarget = dispatch.states.target.exitingTarget;
               if (burstTarget) {
                 setHitBurstTarget(burstTarget);
               }
@@ -435,6 +462,22 @@ export function OrchestratorCvSessionCore({
                 hitFeedbackTimeoutRef.current = null;
               }, Math.max(hitExitTransitionMs, 480));
             }
+            if (dispatch.patternCompleted) {
+              orchestrator.reportInputEvent(
+                mapPatternCompletionToSessionInput(dispatch.patternCompleted),
+                now,
+              );
+              setHitBurstProgress(dispatch.states.pattern.exitingProgress);
+              setTargetHitAnnouncement(ui.patternPathComplete);
+              if (hitFeedbackTimeoutRef.current !== null) {
+                window.clearTimeout(hitFeedbackTimeoutRef.current);
+              }
+              hitFeedbackTimeoutRef.current = window.setTimeout(() => {
+                setHitBurstProgress(null);
+                setTargetHitAnnouncement(null);
+                hitFeedbackTimeoutRef.current = null;
+              }, Math.max(hitExitTransitionMs, 480));
+            }
           }
         }
       }
@@ -443,12 +486,12 @@ export function OrchestratorCvSessionCore({
     rafRef.current = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
   }, [
+    applyRuntimeFault,
+    clearHitFeedback,
     hitExitTransitionMs,
     showBlockSummary,
     ui.patternPathComplete,
     ui.targetReached,
-    activeMotionPattern,
-    resolvedTargetBlockRunner,
   ]);
 
   const acceptConsent = () => {
@@ -483,9 +526,14 @@ export function OrchestratorCvSessionCore({
   const resolvedHudFeedbackMode = resolveFeedbackInteractionMode(
     hudSnapshot.currentBlock?.feedbackProfile,
   );
+  const currentBlockType = resolveOrchestratorBlockType(hudSnapshot.currentBlock);
+  const isInstructionalBlock = currentBlockType === "instructional" && !showBlockSummary;
   const renderPattern =
     activeMotionPattern ??
     resolveActiveMotionPattern(hudSnapshot.currentBlock?.feedbackProfile, resolvedTherapeuticSide.side);
+  const runtimeFaultMessage = runtimeFault
+    ? resolveInteractiveShoulderRuntimeFaultMessage(language, runtimeFault)
+    : null;
 
   return (
     <div className="px-4 pb-4 pt-3" dir={textDir} lang={language}>
@@ -534,49 +582,90 @@ export function OrchestratorCvSessionCore({
             overlay={
               <>
                 <ReachTheLightEnvironment reducedMotion={prefersReducedMotion} />
-                {resolvedHudFeedbackMode === "motion-pattern" && renderPattern ? (
-                  <TherapeuticPathLayer
-                    pattern={renderPattern}
-                    lifecycle={patternState}
-                    hitBurstProgress={hitBurstProgress}
-                    reducedMotion={prefersReducedMotion}
+                {showBlockSummary ? (
+                  <ShoulderSessionHud
+                    language={language}
+                    arClass={arClass}
+                    snapshot={hudSnapshot}
+                    feedbackMode={resolvedHudFeedbackMode}
+                    targetInteraction={targetState.interaction}
+                    patternInteraction={patternState?.interaction ?? createEmptyPatternInteractionMetrics()}
+                    measuredReps={measuredReps}
+                    onPause={() => orchestratorRef.current?.pause(performance.now())}
+                    onResume={() => orchestratorRef.current?.resume(performance.now())}
+                    showBlockSummary={showBlockSummary}
+                    blockSummaryTargetsReached={summaryMetrics.targets}
+                    blockSummaryPatternsCompleted={summaryMetrics.patterns}
+                    blockSummaryMeasuredReps={summaryMetrics.reps}
+                    blockSummaryDurationSeconds={summaryMetrics.durationSeconds}
+                    targetHitAnnouncement={targetHitAnnouncement}
+                  />
+                ) : isInstructionalBlock ? (
+                  <InstructionalBlockLayer
+                    language={language}
+                    arClass={arClass}
+                    snapshot={hudSnapshot}
+                    presentationProgress={presentationProgress}
+                    onPause={() => orchestratorRef.current?.pause(performance.now())}
+                    onResume={() => orchestratorRef.current?.resume(performance.now())}
                   />
                 ) : (
-                  <ShoulderTargetLayer
-                    target={targetState.currentTarget}
-                    exitingTarget={targetState.exitingTarget}
-                    hitBurstTarget={hitBurstTarget}
-                    reducedMotion={prefersReducedMotion}
-                  />
+                  <>
+                    {resolvedHudFeedbackMode === "motion-pattern" && renderPattern && patternState ? (
+                      <TherapeuticPathLayer
+                        pattern={renderPattern}
+                        lifecycle={patternState}
+                        hitBurstProgress={hitBurstProgress}
+                        reducedMotion={prefersReducedMotion}
+                      />
+                    ) : (
+                      <ShoulderTargetLayer
+                        target={targetState.currentTarget}
+                        exitingTarget={targetState.exitingTarget}
+                        hitBurstTarget={hitBurstTarget}
+                        reducedMotion={prefersReducedMotion}
+                      />
+                    )}
+                    <TrackedHandCursor
+                      wrist={
+                        snapshot?.primaryWristNormalized ??
+                        (isDevMouseSimulationEnabled() ? devMouseRef.current : null)
+                      }
+                      visible={hudSnapshot.sessionState === "active" || hudSnapshot.sessionState === "safetyHold"}
+                      reducedMotion={prefersReducedMotion}
+                    />
+                    <ShoulderSessionHud
+                      language={language}
+                      arClass={arClass}
+                      snapshot={hudSnapshot}
+                      feedbackMode={resolvedHudFeedbackMode}
+                      targetInteraction={targetState.interaction}
+                      patternInteraction={patternState?.interaction ?? createEmptyPatternInteractionMetrics()}
+                      measuredReps={measuredReps}
+                      onPause={() => orchestratorRef.current?.pause(performance.now())}
+                      onResume={() => orchestratorRef.current?.resume(performance.now())}
+                      showBlockSummary={false}
+                      blockSummaryTargetsReached={summaryMetrics.targets}
+                      blockSummaryPatternsCompleted={summaryMetrics.patterns}
+                      blockSummaryMeasuredReps={summaryMetrics.reps}
+                      blockSummaryDurationSeconds={summaryMetrics.durationSeconds}
+                      targetHitAnnouncement={targetHitAnnouncement}
+                    />
+                  </>
                 )}
-                <TrackedHandCursor
-                  wrist={
-                    snapshot?.primaryWristNormalized ??
-                    (isDevMouseSimulationEnabled() ? devMouseRef.current : null)
-                  }
-                  visible={hudSnapshot.sessionState === "active" || hudSnapshot.sessionState === "safetyHold"}
-                  reducedMotion={prefersReducedMotion}
-                />
-                <ShoulderSessionHud
-                  language={language}
-                  arClass={arClass}
-                  snapshot={hudSnapshot}
-                  feedbackMode={resolvedHudFeedbackMode}
-                  targetInteraction={targetState.interaction}
-                  patternInteraction={patternState.interaction}
-                  measuredReps={measuredReps}
-                  onPause={() => orchestratorRef.current?.pause(performance.now())}
-                  onResume={() => orchestratorRef.current?.resume(performance.now())}
-                  showBlockSummary={showBlockSummary}
-                  blockSummaryTargetsReached={summaryMetrics.targets}
-                  blockSummaryPatternsCompleted={summaryMetrics.patterns}
-                  blockSummaryMeasuredReps={summaryMetrics.reps}
-                  blockSummaryDurationSeconds={summaryMetrics.durationSeconds}
-                  targetHitAnnouncement={targetHitAnnouncement}
-                />
               </>
             }
           />
+          {runtimeFaultMessage ? (
+            <p
+              className={`mt-2 rounded-[8px] border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700 ${arClass}`}
+              role="status"
+              aria-live="polite"
+            >
+              <span className="font-semibold">{ui.runtimeFaultTitle}: </span>
+              {runtimeFaultMessage}
+            </p>
+          ) : null}
           {starting ? (
             <p className={`mt-2 text-center text-[12px] text-[#6B7280] ${arClass}`}>{ui.startingCamera}</p>
           ) : null}
