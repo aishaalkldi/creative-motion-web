@@ -87,7 +87,7 @@ describe("stroke-upper-limb-recovery-foundation catalog", () => {
     assert.ok(getBlockRunnerForBlockType(reachTheLight!.blockType), "movement-target must resolve via the registry");
   });
 
-  it("movement-pattern (D1) is validated structurally only — PR #163 (which registers movement-pattern in production) remains unmerged, so no public registerPatternBlockRunner() exists on main yet", () => {
+  it("movement-pattern (D1) is validated structurally — blockType, identity, and content fields; registerPatternBlockRunner() is covered by the catalog block-runner foundation tests, not production wiring here", () => {
     const d1 = STROKE_UPPER_LIMB_RECOVERY_FOUNDATION_SESSION_1.blocks.find(
       (b) => b.blockType === "movement-pattern",
     );

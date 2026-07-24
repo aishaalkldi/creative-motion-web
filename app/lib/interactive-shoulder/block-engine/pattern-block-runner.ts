@@ -10,6 +10,7 @@
  * keeps calling `tickPatternLifecycleIfActive` directly until PR3
  * migrates that call site.
  */
+import type { SessionBlockType } from "@/app/lib/session-orchestrator/types";
 import {
   createInitialPatternLifecycle,
   type PatternCompletionEvent,
@@ -18,6 +19,11 @@ import {
 } from "../motion-patterns/pattern-lifecycle";
 import { tickPatternLifecycleIfActive } from "../motion-patterns/pattern-lifecycle-gating";
 import type { BlockRunner } from "./block-runner-types";
+import {
+  getBlockRunnerForBlockType,
+  isBlockTypeRegistered,
+  registerBlockRunner,
+} from "./block-runner-registry";
 
 export const PATTERN_BLOCK_RUNNER: BlockRunner<
   PatternLifecycleState,
@@ -37,3 +43,33 @@ export const PATTERN_BLOCK_RUNNER: BlockRunner<
     };
   },
 };
+
+/**
+ * Registers PATTERN_BLOCK_RUNNER under "movement-pattern". Idempotent —
+ * mirrors registerTargetBlockRunner/registerInstructionalBlockRunner's guard
+ * so a test file re-importing this module in the same process never throws on
+ * the registry's duplicate-registration check.
+ */
+export function registerPatternBlockRunner(): void {
+  if (isBlockTypeRegistered("movement-pattern")) return;
+  registerBlockRunner(PATTERN_BLOCK_RUNNER);
+}
+
+/**
+ * Resolves PATTERN_BLOCK_RUNNER through the shared registry rather than
+ * importing the constant directly — same blockType-driven resolution proof
+ * as resolveTargetBlockRunner/resolveInstructionalBlockRunner.
+ *
+ * Returns null whenever `blockType` isn't exactly "movement-pattern" —
+ * including undefined and every other SessionBlockType — so a caller can
+ * never be silently handed this runner for a block that isn't declared
+ * movement-pattern.
+ */
+export function resolvePatternBlockRunner(
+  blockType: SessionBlockType | undefined,
+): typeof PATTERN_BLOCK_RUNNER | null {
+  if (blockType !== "movement-pattern") return null;
+  const runner = getBlockRunnerForBlockType(blockType);
+  if (!runner) return null;
+  return runner as typeof PATTERN_BLOCK_RUNNER;
+}
