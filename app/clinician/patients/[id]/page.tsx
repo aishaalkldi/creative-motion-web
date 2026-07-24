@@ -41,6 +41,7 @@ import {
 } from "../../../lib/arabic-readability";
 import type { PatientRow } from "../../../lib/validate-patient-ownership";
 import { assessmentsRepository } from "../../../lib/repositories";
+import { isUuidPatientId } from "../../../lib/api/patient-id-utils";
 import ConfirmModal from "../../../components/ConfirmModal";
 import {
   DEFAULT_THERAPY_PHASE,
@@ -132,7 +133,9 @@ export default function PatientProfilePage() {
   });
 
   // Remote assessment state
-  const [sendModalOpen, setSendModalOpen] = useState(false);
+  const [sendModalOpen, setSendModalOpen] = useState(
+    searchParams.get("openRemoteAssessment") === "1"
+  );
   const [remoteAssessments, setRemoteAssessments] = useState<RemoteAssessmentRequest[]>([]);
 
   // RASQ new-style assessments (from rasq_assessments localStorage)
@@ -413,8 +416,11 @@ export default function PatientProfilePage() {
   const latestAssessment = useMemo(() => assessments[0] ?? null, [assessments]);
   const recentAssessments = useMemo(() => assessments.slice(0, 3), [assessments]);
   const latestRemoteAssessment = useMemo(
-    () => assessments.find((a) => a.mode === "remote") ?? null,
-    [assessments]
+    () =>
+      remoteAssessments.find(
+        (r) => r.status === "pending" || r.status === "in_progress"
+      ) ?? null,
+    [remoteAssessments]
   );
 
   const therapyTrends = useMemo(() => {
@@ -601,26 +607,10 @@ export default function PatientProfilePage() {
     );
   }, [clinicalSummary, clinicalSummaryRow]);
 
-  function handleCreateRemoteRequest() {
-    if (!patient) return;
-    const assessmentId = assessmentsRepository.newAssessmentId();
-    assessmentsRepository.create({
-      id: assessmentId,
-      patientId: String(patient.id),
-      mode: "remote",
-      selectedTests: [],
-      bodyRegion: "Full Body",
-      side: "Not Applicable",
-      visitType: "Follow-Up",
-      sessionLabel: "Remote Assessment Request",
-      createdAt: new Date().toISOString(),
-    });
-    router.push(`/clinician/request?patientId=${patient.id}&assessmentId=${assessmentId}`);
-  }
-
   async function handleCopyLatestLink() {
-    if (!latestRemoteAssessment || !patient) { alert("No remote assessment link available"); return; }
-    const link = `${window.location.origin}/assessment?patientId=${patient.id}&assessmentId=${latestRemoteAssessment.id}`;
+    if (!patient || !isUuidPatientId(patient.id)) return;
+    if (!latestRemoteAssessment) { alert("No remote assessment link available"); return; }
+    const link = `${window.location.origin}/assessment/${latestRemoteAssessment.id}`;
     try { await navigator.clipboard.writeText(link); setCopyFeedback("success"); }
     catch { setCopyFeedback("error"); }
   }
@@ -999,7 +989,12 @@ export default function PatientProfilePage() {
                 <button
                   type="button"
                   onClick={handleCopyLatestLink}
-                  disabled={!latestRemoteAssessment}
+                  disabled={!isUuidPatientId(patient.id) || !latestRemoteAssessment}
+                  title={
+                    !isUuidPatientId(patient.id)
+                      ? "Remote assessment sharing requires a saved patient record."
+                      : undefined
+                  }
                   className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-2 text-xs font-semibold text-white/50 transition hover:border-[#1D9E75]/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
                 >
                   Copy assessment link
@@ -1011,11 +1006,19 @@ export default function PatientProfilePage() {
                   Therapy session
                 </Link>
               </div>
-              {copyFeedback === "success" && (
-                <p className="mt-2.5 text-xs text-[#5DCAA5]">Assessment link copied to clipboard.</p>
-              )}
-              {copyFeedback === "error" && (
-                <p className="mt-2.5 text-xs text-rose-300">Could not copy link.</p>
+              {!isUuidPatientId(patient.id) ? (
+                <p className="mt-2.5 text-xs text-white/35">
+                  Remote assessment sharing requires a saved patient record.
+                </p>
+              ) : (
+                <>
+                  {copyFeedback === "success" && (
+                    <p className="mt-2.5 text-xs text-[#5DCAA5]">Assessment link copied to clipboard.</p>
+                  )}
+                  {copyFeedback === "error" && (
+                    <p className="mt-2.5 text-xs text-rose-300">Could not copy link.</p>
+                  )}
+                </>
               )}
             </section>
 
