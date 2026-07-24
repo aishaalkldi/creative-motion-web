@@ -130,6 +130,7 @@ import {
   type SitToStandTrackingQuality,
   type SitToStandTrackingStatus,
 } from "@/app/lib/cv/sit-to-stand-detector";
+import type { BodyFramingDiagnostics } from "@/app/lib/cv/body-framing-evaluator";
 import {
   resolveLiveBodySignal,
   type LiveBodySignal,
@@ -531,6 +532,9 @@ function applySnapshot(
     setCalibrationProgressPct?: (v: number | null) => void;
     setLastAttemptType?: (v: StsAttemptType | null) => void;
     setLastAttemptReason?: (v: string | null) => void;
+    /** Diagnostic foundation: STS-only, debug use only. */
+    setBodyFramingDiagnostics?: (v: BodyFramingDiagnostics | null) => void;
+    setCanCount?: (v: boolean) => void;
   },
 ): void {
   setters.setPreviewActive(snapshot.previewActive);
@@ -558,6 +562,12 @@ function applySnapshot(
   }
   if (setters.setLastAttemptReason && "lastAttemptReason" in snapshot) {
     setters.setLastAttemptReason(snapshot.lastAttemptReason ?? null);
+  }
+  if (setters.setBodyFramingDiagnostics && "bodyFramingDiagnostics" in snapshot) {
+    setters.setBodyFramingDiagnostics(snapshot.bodyFramingDiagnostics ?? null);
+  }
+  if (setters.setCanCount && "canCount" in snapshot) {
+    setters.setCanCount(Boolean(snapshot.canCount));
   }
   setters.setSessionSeconds(snapshot.sessionSeconds);
   setters.setMovementDetected(snapshot.movementDetected);
@@ -606,6 +616,10 @@ export function PatientCvCapture({
   const [calibrationProgressPct, setCalibrationProgressPct] = useState<number | null>(null);
   const [lastAttemptType, setLastAttemptType] = useState<StsAttemptType | null>(null);
   const [lastAttemptReason, setLastAttemptReason] = useState<string | null>(null);
+  // Body-framing diagnostic foundation (STS only, debug use only).
+  const [bodyFramingDiagnostics, setBodyFramingDiagnostics] =
+    useState<BodyFramingDiagnostics | null>(null);
+  const [canCount, setCanCount] = useState(false);
   const [sessionSeconds, setSessionSeconds] = useState(0);
   const [movementDetected, setMovementDetected] = useState(false);
   const [baselineCalibrating, setBaselineCalibrating] = useState(false);
@@ -755,6 +769,9 @@ export function PatientCvCapture({
           exerciseId === "sit-to-stand" ? setCalibrationProgressPct : undefined,
         setLastAttemptType: exerciseId === "sit-to-stand" ? setLastAttemptType : undefined,
         setLastAttemptReason: exerciseId === "sit-to-stand" ? setLastAttemptReason : undefined,
+        setBodyFramingDiagnostics:
+          exerciseId === "sit-to-stand" ? setBodyFramingDiagnostics : undefined,
+        setCanCount: exerciseId === "sit-to-stand" ? setCanCount : undefined,
         setSessionSeconds,
         setMovementDetected,
         setBaselineCalibrating,
@@ -2005,6 +2022,10 @@ export function PatientCvCapture({
                   calibrationProgressPct,
                   lastAttemptType,
                   lastAttemptReason,
+                  poseReadiness,
+                  stsLandmarkCoverageReady,
+                  canCount,
+                  bodyFramingDiagnostics,
                 }
               : undefined
           }

@@ -5,6 +5,8 @@ import type {
   StsAttemptType,
   StsCapturePhase,
 } from "@/app/lib/cv/sts-biomechanical-capture-fsm";
+import type { BodyFramingDiagnostics } from "@/app/lib/cv/body-framing-evaluator";
+import type { PoseReadiness } from "@/app/lib/cv/sit-to-stand-detector";
 
 /** Tracking observability foundation: STS-only, optional — raw internal reason text, debug use only. */
 type StsAttemptDebugInfo = {
@@ -12,6 +14,11 @@ type StsAttemptDebugInfo = {
   calibrationProgressPct: number | null;
   lastAttemptType: StsAttemptType | null;
   lastAttemptReason: string | null;
+  /** Body-framing diagnostic foundation: STS-only, debug use only. */
+  poseReadiness: PoseReadiness;
+  stsLandmarkCoverageReady: boolean;
+  canCount: boolean;
+  bodyFramingDiagnostics: BodyFramingDiagnostics | null;
 };
 
 type PatientCvCaptureReliabilityPanelProps = {
@@ -28,6 +35,10 @@ function BoolLine({ label, value }: { label: string; value: boolean }) {
       </span>
     </p>
   );
+}
+
+function formatNum(value: number | null): string {
+  return value === null ? "—" : value.toFixed(3);
 }
 
 export function PatientCvCaptureReliabilityPanel({
@@ -58,6 +69,43 @@ export function PatientCvCaptureReliabilityPanel({
           </p>
           <p>Last attempt type: {stsAttemptDebug.lastAttemptType ?? "—"}</p>
           <p>Last attempt reason (raw): {stsAttemptDebug.lastAttemptReason ?? "—"}</p>
+
+          <p className="mt-1.5 font-bold text-[#5DCAA5]">Body framing (raw)</p>
+          <p>poseReadiness: {stsAttemptDebug.poseReadiness}</p>
+          <p>stsLandmarkCoverageReady: {String(stsAttemptDebug.stsLandmarkCoverageReady)}</p>
+          <p>canCount: {String(stsAttemptDebug.canCount)}</p>
+          {stsAttemptDebug.bodyFramingDiagnostics ? (
+            <>
+              <p>
+                {stsAttemptDebug.bodyFramingDiagnostics.state} reason:{" "}
+                {stsAttemptDebug.bodyFramingDiagnostics.reason}
+              </p>
+              <p>
+                torsoSpan: {formatNum(stsAttemptDebug.bodyFramingDiagnostics.torsoSpan)} (min{" "}
+                {stsAttemptDebug.bodyFramingDiagnostics.profile.torsoSpanMin}, max{" "}
+                {stsAttemptDebug.bodyFramingDiagnostics.profile.torsoSpanMax})
+              </p>
+              <p>
+                bodyBBoxHeight: {formatNum(stsAttemptDebug.bodyFramingDiagnostics.bboxHeight)} (min{" "}
+                {stsAttemptDebug.bodyFramingDiagnostics.profile.bboxHeightMin}, max{" "}
+                {stsAttemptDebug.bodyFramingDiagnostics.profile.bboxHeightMax})
+              </p>
+              <p>frameMargin: {stsAttemptDebug.bodyFramingDiagnostics.profile.frameMargin}</p>
+              <p>
+                clipState:{" "}
+                {stsAttemptDebug.bodyFramingDiagnostics.clip ? "clipped" : "none"}
+              </p>
+              {stsAttemptDebug.bodyFramingDiagnostics.clip ? (
+                <p>
+                  landmark: {stsAttemptDebug.bodyFramingDiagnostics.clip.landmark}, x:{" "}
+                  {stsAttemptDebug.bodyFramingDiagnostics.clip.x.toFixed(3)}, y:{" "}
+                  {stsAttemptDebug.bodyFramingDiagnostics.clip.y.toFixed(3)}
+                </p>
+              ) : null}
+            </>
+          ) : (
+            <p>Body framing: — (no framing profile active)</p>
+          )}
         </>
       ) : null}
     </div>

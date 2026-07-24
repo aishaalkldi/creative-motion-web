@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   evaluateBodyFraming,
+  evaluateBodyFramingDetailed,
   FRAMING_OVERLAY_COLORS,
   type BodyFramingProfile,
 } from "@/app/lib/cv/body-framing-evaluator";
@@ -121,5 +122,87 @@ describe("evaluateBodyFraming", () => {
   it("uses green overlay color only for good_distance", () => {
     assert.equal(FRAMING_OVERLAY_COLORS.good, "#1D9E75");
     assert.equal(FRAMING_OVERLAY_COLORS.amber, "#F59E0B");
+  });
+});
+
+describe("evaluateBodyFramingDetailed", () => {
+  it("reports torso_span_above_max, matching evaluateBodyFraming's move_back", () => {
+    const lm = seatedGoodLandmarks();
+    lm[11] = { x: 0.42, y: 0.08, visibility: 0.9 };
+    lm[12] = { x: 0.58, y: 0.08, visibility: 0.9 };
+    lm[23] = { x: 0.42, y: 0.72, visibility: 0.9 };
+    lm[24] = { x: 0.58, y: 0.72, visibility: 0.9 };
+
+    const detailed = evaluateBodyFramingDetailed(lm, SEATED_RISE_FRAMING_PROFILE, {
+      checking: false,
+      trackingQuality: "good",
+    });
+
+    assert.equal(detailed.state, "move_back");
+    assert.equal(detailed.reason, "torso_span_above_max");
+    assert.equal(detailed.clip, null);
+    assert.ok(detailed.torsoSpan !== null && detailed.torsoSpan > SEATED_RISE_FRAMING_PROFILE.torsoSpanMax);
+    assert.equal(detailed.profile.torsoSpanMax, SEATED_RISE_FRAMING_PROFILE.torsoSpanMax);
+    // The plain evaluator must agree exactly with the detailed evaluator's state.
+    assert.equal(evaluate(lm, SEATED_RISE_FRAMING_PROFILE), detailed.state);
+  });
+
+  it("reports bbox_height_above_max without any landmark clipping or torso-span violation", () => {
+    const lm = emptyLandmarks();
+    lm[11] = { x: 0.42, y: 0.045, visibility: 0.9 }; // left shoulder
+    lm[12] = { x: 0.58, y: 0.045, visibility: 0.9 }; // right shoulder
+    lm[23] = { x: 0.42, y: 0.4, visibility: 0.9 }; // left hip
+    lm[24] = { x: 0.58, y: 0.4, visibility: 0.9 }; // right hip
+    lm[25] = { x: 0.42, y: 0.955, visibility: 0.85 }; // left knee
+    lm[26] = { x: 0.58, y: 0.955, visibility: 0.85 }; // right knee
+
+    const detailed = evaluateBodyFramingDetailed(lm, SEATED_RISE_FRAMING_PROFILE, {
+      checking: false,
+      trackingQuality: "good",
+    });
+
+    assert.equal(detailed.state, "move_back");
+    assert.equal(detailed.reason, "bbox_height_above_max");
+    assert.equal(detailed.clip, null);
+    assert.ok(
+      detailed.torsoSpan !== null && detailed.torsoSpan <= SEATED_RISE_FRAMING_PROFILE.torsoSpanMax,
+      "torso span must stay within bounds so bbox height is isolated as the trigger",
+    );
+    assert.ok(
+      detailed.bboxHeight !== null && detailed.bboxHeight > SEATED_RISE_FRAMING_PROFILE.bboxHeightMax,
+    );
+    assert.equal(detailed.profile.bboxHeightMax, SEATED_RISE_FRAMING_PROFILE.bboxHeightMax);
+    assert.equal(evaluate(lm, SEATED_RISE_FRAMING_PROFILE), detailed.state);
+  });
+
+  it("reports landmark_clipped with the exact triggering landmark and its x/y", () => {
+    const lm = seatedGoodLandmarks();
+    lm[0] = { x: 0.5, y: 0.01, visibility: 0.9 }; // nose clipped near top
+
+    const detailed = evaluateBodyFramingDetailed(lm, SEATED_RISE_FRAMING_PROFILE, {
+      checking: false,
+      trackingQuality: "good",
+    });
+
+    assert.equal(detailed.state, "move_back");
+    assert.equal(detailed.reason, "landmark_clipped");
+    assert.deepEqual(detailed.clip, { landmark: "nose", x: 0.5, y: 0.01 });
+    assert.equal(detailed.profile.frameMargin, SEATED_RISE_FRAMING_PROFILE.frameMargin);
+    assert.equal(evaluate(lm, SEATED_RISE_FRAMING_PROFILE), detailed.state);
+  });
+
+  it("reports ok / good_distance for acceptable framing with no clip and no diagnostic trigger", () => {
+    const detailed = evaluateBodyFramingDetailed(
+      seatedGoodLandmarks(),
+      SEATED_RISE_FRAMING_PROFILE,
+      { checking: false, trackingQuality: "good" },
+    );
+
+    assert.equal(detailed.state, "good_distance");
+    assert.equal(detailed.reason, "ok");
+    assert.equal(detailed.clip, null);
+    assert.ok(detailed.torsoSpan !== null);
+    assert.ok(detailed.bboxHeight !== null);
+    assert.equal(evaluate(seatedGoodLandmarks(), SEATED_RISE_FRAMING_PROFILE), detailed.state);
   });
 });

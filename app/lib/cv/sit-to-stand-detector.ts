@@ -61,7 +61,8 @@ import {
 } from "@/app/lib/cv/patient-camera-stream";
 import {
   drawBodyFramingOverlay,
-  evaluateBodyFraming,
+  evaluateBodyFramingDetailed,
+  type BodyFramingDiagnostics,
   type BodyFramingState,
 } from "@/app/lib/cv/body-framing-evaluator";
 import { resolveBodyFramingProfile } from "@/app/lib/cv/body-framing-profiles";
@@ -108,6 +109,10 @@ export type SitToStandDetectorSnapshot = {
   lastAttemptType?: StsAttemptType | null;
   /** Tracking observability foundation: raw internal reason for the most recent attempt outcome — debug/clinician use only, never patient-facing text directly. */
   lastAttemptReason?: string | null;
+  /** Diagnostic foundation (debug use only): exact rule that produced bodyFramingState, with intermediate computed values. Never patient-facing. */
+  bodyFramingDiagnostics?: BodyFramingDiagnostics | null;
+  /** Diagnostic foundation (debug use only): whether rep counting is currently permitted (mirrors canIncrementReps()). */
+  canCount?: boolean;
 };
 
 type PoseLandmarkerInstance = {
@@ -352,6 +357,8 @@ export class SitToStandDetector {
   private isBaselineCalibrating = false;
   private poseReadiness: PoseReadiness = "ready";
   private bodyFramingState: BodyFramingState = "good_distance";
+  /** Diagnostic foundation (debug use only): last body-framing decision path. */
+  private bodyFramingDiagnostics: BodyFramingDiagnostics | null = null;
   private stsLandmarkCoverageReady = false;
   private readinessCheckEndMs = 0;
   /** MQ-SIGNAL-1B: in-memory session visibility (saved summary only; not persisted). */
@@ -404,6 +411,8 @@ export class SitToStandDetector {
       ),
       lastAttemptType: lastAttempt?.attemptType ?? null,
       lastAttemptReason: lastAttempt?.reason ?? null,
+      bodyFramingDiagnostics: this.bodyFramingDiagnostics,
+      canCount: this.canIncrementReps(),
     };
   }
 
@@ -444,6 +453,7 @@ export class SitToStandDetector {
     this.readinessCheckEndMs = 0;
     this.poseReadiness = this.usesReadiness() ? "checking" : "ready";
     this.bodyFramingState = this.usesReadiness() ? "checking" : "good_distance";
+    this.bodyFramingDiagnostics = null;
     resetRepTemporalSmoothingState(this.repTemporal);
     this.resetStsBiomechCaptureState();
   }
@@ -546,12 +556,14 @@ export class SitToStandDetector {
     if (!this.usesReadiness()) {
       this.poseReadiness = "ready";
       this.bodyFramingState = "good_distance";
+      this.bodyFramingDiagnostics = null;
       return;
     }
 
     if (nowMs < this.readinessCheckEndMs) {
       this.poseReadiness = "checking";
       this.bodyFramingState = "checking";
+      this.bodyFramingDiagnostics = null;
       return;
     }
 
@@ -566,10 +578,12 @@ export class SitToStandDetector {
     }
 
     if (framingProfile) {
-      this.bodyFramingState = evaluateBodyFraming(landmarks, framingProfile, {
+      const framingDiagnostics = evaluateBodyFramingDetailed(landmarks, framingProfile, {
         checking: false,
         trackingQuality: quality,
       });
+      this.bodyFramingState = framingDiagnostics.state;
+      this.bodyFramingDiagnostics = framingDiagnostics;
 
       if (this.bodyFramingState !== "good_distance") {
         const stsFramingOverride =
@@ -585,6 +599,7 @@ export class SitToStandDetector {
       }
     } else {
       this.bodyFramingState = "good_distance";
+      this.bodyFramingDiagnostics = null;
       this.stsLandmarkCoverageReady = false;
     }
 
