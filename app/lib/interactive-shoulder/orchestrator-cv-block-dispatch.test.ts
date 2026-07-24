@@ -9,17 +9,17 @@ import { D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE } from "./motion-patterns/d
 import { resolveActiveMotionPattern } from "./motion-patterns/motion-pattern-registry";
 import { createInitialInstructionalLifecycle } from "./instructional-lifecycle";
 import { createInitialTargetLifecycle } from "./target-lifecycle";
-import { createInitialPatternLifecycle } from "./motion-patterns/pattern-lifecycle";
 import { samplePathAtProgress } from "./motion-patterns/bezier-path";
 import { toSessionDefinition } from "@/app/lib/rehab-programs/rehab-program-runtime-adapter";
 import { STROKE_UPPER_LIMB_RECOVERY_FOUNDATION_SESSION_1 } from "@/app/lib/rehab-programs/stroke-upper-limb-recovery-foundation";
 import { SessionOrchestrator } from "@/app/lib/session-orchestrator/session-orchestrator";
-import type { SessionOrchestratorSnapshot } from "@/app/lib/session-orchestrator/types";
+import type { SessionBlockType, SessionOrchestratorSnapshot } from "@/app/lib/session-orchestrator/types";
 import { SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION } from "./shoulder-abduction-reach-session-definition";
 import {
   dispatchOrchestratorCvBlock,
   resetRunnerStatesForBlockTransition,
   resolveOrchestratorBlockType,
+  resolveOrchestratorHudFeedbackMode,
 } from "./orchestrator-cv-block-dispatch";
 
 const T0 = 8_000_000;
@@ -28,7 +28,7 @@ function emptyStates() {
   return {
     instructional: createInitialInstructionalLifecycle(),
     target: createInitialTargetLifecycle(),
-    pattern: createInitialPatternLifecycle(""),
+    pattern: null,
   };
 }
 
@@ -66,17 +66,19 @@ describe("orchestrator-cv-block-dispatch", () => {
   it("movement-pattern may tick with wrist null", () => {
     const pattern = resolveActiveMotionPattern(D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE, "right")!;
     const patternBlock = toSessionDefinition(STROKE_UPPER_LIMB_RECOVERY_FOUNDATION_SESSION_1).blocks[2];
-    const states = resetRunnerStatesForBlockTransition({
+    const transition = resetRunnerStatesForBlockTransition({
       block: patternBlock,
       side: "right",
-    }).states;
+    });
+    assert.equal(transition.fault, null);
+    assert.ok(transition.states.pattern);
     const result = dispatchOrchestratorCvBlock({
       snap: activeSnap(patternBlock),
       nowMs: T0,
       wrist: null,
       side: "right",
       hitExitTransitionMs: 0,
-      states,
+      states: transition.states,
       activeMotionPattern: pattern,
     });
     assert.equal(result.status, "dispatched");
@@ -99,6 +101,7 @@ describe("orchestrator-cv-block-dispatch", () => {
     assert.equal(result.patternCompleted, null);
     assert.ok(result.presentationProgress != null);
     assert.equal(result.states.instructional.completed, false);
+    assert.equal(result.states.pattern, null);
   });
 
   it("paused session state does not dispatch runners", () => {
@@ -213,7 +216,7 @@ describe("orchestrator-cv-block-dispatch", () => {
     assert.equal(result.fault.blockType, "movement-target");
   });
 
-  it("unresolved motion pattern block produces pattern_unresolved fault on transition", () => {
+  it("unresolved motion pattern block produces pattern_unresolved fault on transition with null pattern state", () => {
     const transition = resetRunnerStatesForBlockTransition({
       block: {
         ...SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION.blocks[0],
@@ -226,16 +229,17 @@ describe("orchestrator-cv-block-dispatch", () => {
     assert.ok(transition.fault);
     assert.equal(transition.fault?.kind, "pattern_unresolved");
     assert.equal(transition.activeMotionPattern, null);
+    assert.equal(transition.states.pattern, null);
   });
 
-  it("dispatch returns pattern_unresolved when activeMotionPattern is missing at runtime", () => {
+  it("dispatch returns pattern_unresolved when activeMotionPattern or pattern state is missing at runtime", () => {
     const patternBlock = {
       ...SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION.blocks[0],
       blockId: "runtime-pattern-block",
       blockType: "movement-pattern" as const,
       feedbackProfile: D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE,
     };
-    const result = dispatchOrchestratorCvBlock({
+    const missingPattern = dispatchOrchestratorCvBlock({
       snap: activeSnap(patternBlock),
       nowMs: T0,
       wrist: { x: 0.5, y: 0.5 },
@@ -244,22 +248,68 @@ describe("orchestrator-cv-block-dispatch", () => {
       states: emptyStates(),
       activeMotionPattern: null,
     });
-    assert.equal(result.status, "fault");
-    if (result.status !== "fault") return;
-    assert.equal(result.fault.kind, "pattern_unresolved");
+    assert.equal(missingPattern.status, "fault");
+    if (missingPattern.status !== "fault") return;
+    assert.equal(missingPattern.fault.kind, "pattern_unresolved");
+
+    const pattern = resolveActiveMotionPattern(D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE, "right")!;
+    const missingState = dispatchOrchestratorCvBlock({
+      snap: activeSnap(patternBlock),
+      nowMs: T0,
+      wrist: null,
+      side: "right",
+      hitExitTransitionMs: 0,
+      states: emptyStates(),
+      activeMotionPattern: pattern,
+    });
+    assert.equal(missingState.status, "fault");
   });
 
-  it("block transition resets instructional, target, and pattern runner states", () => {
+  it("block transition resets instructional, target, and pattern runner states without placeholder pattern IDs", () => {
     const warmUp = toSessionDefinition(STROKE_UPPER_LIMB_RECOVERY_FOUNDATION_SESSION_1).blocks[0];
     const reach = toSessionDefinition(STROKE_UPPER_LIMB_RECOVERY_FOUNDATION_SESSION_1).blocks[1];
     const warmTransition = resetRunnerStatesForBlockTransition({ block: warmUp, side: "right" });
     assert.equal(resolveOrchestratorBlockType(warmUp), "instructional");
     assert.equal(warmTransition.fault, null);
+    assert.equal(warmTransition.states.pattern, null);
 
     const reachTransition = resetRunnerStatesForBlockTransition({ block: reach, side: "right" });
     assert.equal(resolveOrchestratorBlockType(reach), "movement-target");
     assert.equal(reachTransition.states.target.sequence, 0);
     assert.equal(reachTransition.states.instructional.completed, false);
+    assert.equal(reachTransition.states.pattern, null);
+  });
+
+  it("explicit blockType wins over conflicting feedbackProfile for dispatch and HUD visual mode", () => {
+    const conflictingBlock = {
+      ...SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION.blocks[0],
+      blockId: "conflicting-block",
+      blockType: "movement-target" as const,
+      feedbackProfile: D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE,
+    };
+    const blockType = resolveOrchestratorBlockType(conflictingBlock);
+    assert.equal(blockType, "movement-target");
+    assert.equal(resolveOrchestratorHudFeedbackMode(blockType), "reach-the-light-targets");
+
+    const transition = resetRunnerStatesForBlockTransition({
+      block: conflictingBlock,
+      side: "right",
+    });
+    assert.equal(transition.activeMotionPattern, null);
+    assert.equal(transition.states.pattern, null);
+
+    const skipped = dispatchOrchestratorCvBlock({
+      snap: activeSnap(conflictingBlock),
+      nowMs: T0,
+      wrist: null,
+      side: "right",
+      hitExitTransitionMs: 0,
+      states: transition.states,
+      activeMotionPattern: null,
+    });
+    assert.equal(skipped.status, "skipped");
+    if (skipped.status !== "skipped") return;
+    assert.equal(skipped.reason, "target_wrist_required");
   });
 
   it("injected instructional runner tick() is executed by dispatch", () => {
@@ -290,8 +340,8 @@ describe("orchestrator-cv-block-dispatch", () => {
   });
 });
 
-describe("orchestrator cv session core contract — stroke four-block session", () => {
-  it("accepts Stroke ULRF Session 1 and completes through orchestrator duration simulation", () => {
+describe("orchestrator cv session — stroke four-block real dispatch", () => {
+  it("runs each Stroke ULRF block through orchestrator, transition reset, and real dispatch", () => {
     registerAllBlockRunners();
     const definition = toSessionDefinition(STROKE_UPPER_LIMB_RECOVERY_FOUNDATION_SESSION_1);
     const orchestrator = new SessionOrchestrator(definition);
@@ -300,14 +350,58 @@ describe("orchestrator cv session core contract — stroke four-block session", 
     orchestrator.beginCalibration(nowMs);
     orchestrator.completeCalibration(nowMs);
 
-    for (const block of definition.blocks) {
-      assert.ok(resolveOrchestratorBlockType(block));
-      nowMs += (block.targetDurationSeconds ?? 0) * 1_000;
+    const visitedBlockIds: string[] = [];
+    const dispatchCounts: Record<SessionBlockType, number> = {
+      instructional: 0,
+      "movement-target": 0,
+      "movement-pattern": 0,
+    };
+
+    for (let index = 0; index < definition.blocks.length; index += 1) {
+      const block = definition.blocks[index];
       orchestrator.tick(nowMs);
+      const snap = orchestrator.getSnapshot(nowMs);
+      assert.equal(snap.currentBlock?.blockId, block.blockId);
+      visitedBlockIds.push(block.blockId);
+
+      const blockType = resolveOrchestratorBlockType(block);
+      assert.ok(blockType);
+
+      const transition = resetRunnerStatesForBlockTransition({
+        block,
+        side: "right",
+      });
+      assert.equal(transition.fault, null, `block ${block.blockId} must not fault`);
+
+      const wrist =
+        blockType === "movement-target"
+          ? ({ x: 0.5, y: 0.35 } as const)
+          : null;
+
+      const result = dispatchOrchestratorCvBlock({
+        snap,
+        nowMs,
+        wrist,
+        side: "right",
+        hitExitTransitionMs: 0,
+        states: transition.states,
+        activeMotionPattern: transition.activeMotionPattern,
+      });
+
+      assert.equal(result.status, "dispatched", `block ${block.blockId} must dispatch`);
+      dispatchCounts[blockType] += 1;
+
+      nowMs += (block.targetDurationSeconds ?? 0) * 1_000;
     }
 
-    const snap = orchestrator.getSnapshot(nowMs);
-    assert.equal(snap.sessionState, "completed");
+    orchestrator.tick(nowMs);
+    const finalSnap = orchestrator.getSnapshot(nowMs);
+    assert.equal(finalSnap.sessionState, "completed");
+    assert.deepEqual(visitedBlockIds, definition.blocks.map((block) => block.blockId));
+    assert.equal(dispatchCounts.instructional, 2);
+    assert.equal(dispatchCounts["movement-target"], 1);
+    assert.equal(dispatchCounts["movement-pattern"], 1);
+    assert.equal(finalSnap.accumulatedBlockResults.length, 4);
     assert.equal(orchestrator.getSessionPerformanceSummary(nowMs).blocksCompleted, 4);
   });
 });

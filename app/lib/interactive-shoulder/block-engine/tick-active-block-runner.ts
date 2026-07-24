@@ -53,6 +53,10 @@ const defaultResolvePatternRunner = (): PatternBlockRunner | null =>
 export type ActiveBlockRunnerStates = {
   instructional: InstructionalLifecycleState;
   target: TargetLifecycleState;
+  pattern: PatternLifecycleState | null;
+};
+
+export type PatternBlockRunnerStates = ActiveBlockRunnerStates & {
   pattern: PatternLifecycleState;
 };
 
@@ -60,18 +64,19 @@ type ActiveBlockTickBase = {
   sessionState: SessionState;
   nowMs: number;
   blockElapsedSeconds: number;
-  states: ActiveBlockRunnerStates;
   /** Optional typed resolver overrides — production callers omit this. */
   resolvers?: ActiveBlockRunnerResolvers;
 };
 
 export type InstructionalBlockTickInput = ActiveBlockTickBase & {
   blockType: "instructional";
+  states: ActiveBlockRunnerStates;
   targetDurationSeconds?: number;
 };
 
 export type TargetBlockTickInput = ActiveBlockTickBase & {
   blockType: "movement-target";
+  states: ActiveBlockRunnerStates;
   wrist: NormalizedPoint | null;
   side: ShoulderAbductionReachSide;
   bounds: SafeTargetBounds;
@@ -81,6 +86,7 @@ export type TargetBlockTickInput = ActiveBlockTickBase & {
 
 export type PatternBlockTickInput = ActiveBlockTickBase & {
   blockType: "movement-pattern";
+  states: PatternBlockRunnerStates;
   wrist: NormalizedPoint | null;
   pattern: ResolvedMotionPattern;
   completionExitTransitionMs?: number;
@@ -198,18 +204,18 @@ export function tickActiveBlockRunner(input: ActiveBlockTickInput): ActiveBlockT
       const runner = (resolvers?.resolvePatternRunner ?? defaultResolvePatternRunner)();
       if (!runner) return runnerUnavailable("movement-pattern");
 
-      const ticked = runner.tick("active", nextStates.pattern, {
+      const patternState = input.states.pattern;
+      const ticked = runner.tick("active", patternState, {
         wrist: input.wrist,
         nowMs: input.nowMs,
         pattern: input.pattern,
         completionExitTransitionMs: input.completionExitTransitionMs,
       });
-      nextStates.pattern = ticked.state;
       return {
         status: "ticked",
         ticked: true,
         blockType: "movement-pattern",
-        states: nextStates,
+        states: { ...input.states, pattern: ticked.state },
         targetContact: null,
         patternCompleted: ticked.completionEvent,
         presentationProgress: null,

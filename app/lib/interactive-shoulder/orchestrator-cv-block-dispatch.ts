@@ -15,7 +15,6 @@ import {
   type FeedbackInteractionMode,
 } from "./motion-patterns/motion-pattern-registry";
 import {
-  createInitialPatternLifecycle,
   type PatternCompletionEvent,
 } from "./motion-patterns/pattern-lifecycle";
 import { resetPatternLifecycleForBlock } from "./motion-patterns/pattern-lifecycle-gating";
@@ -26,6 +25,7 @@ import {
   type ActiveBlockRunnerStates,
   type ActiveBlockTickInput,
   type ActiveBlockTickResult,
+  type PatternBlockRunnerStates,
 } from "./block-engine/tick-active-block-runner";
 import { DEFAULT_SAFE_TARGET_BOUNDS } from "./target-generator";
 import { createInitialTargetLifecycle } from "./target-lifecycle";
@@ -46,7 +46,6 @@ export type OrchestratorCvRuntimeFault =
 export type OrchestratorCvBlockTransitionResult = {
   states: ActiveBlockRunnerStates;
   activeMotionPattern: ResolvedMotionPattern | null;
-  feedbackMode: FeedbackInteractionMode;
   presentationProgress: null;
   fault: OrchestratorCvRuntimeFault | null;
 };
@@ -84,27 +83,34 @@ export function resolveOrchestratorBlockType(
   return mode === "motion-pattern" ? "movement-pattern" : "movement-target";
 }
 
+/** Authoritative HUD/visual feedback mode — derived from blockType, not feedbackProfile alone. */
+export function resolveOrchestratorHudFeedbackMode(
+  blockType: SessionBlockType | null,
+): FeedbackInteractionMode {
+  if (blockType === "movement-pattern") return "motion-pattern";
+  return "reach-the-light-targets";
+}
+
 export function resetRunnerStatesForBlockTransition(input: {
   block: MovementBlock;
   side: ShoulderAbductionReachSide;
 }): OrchestratorCvBlockTransitionResult {
   const blockType = resolveOrchestratorBlockType(input.block);
-  const feedbackMode = resolveFeedbackInteractionMode(input.block.feedbackProfile);
   const resolvedPattern = resolveActiveMotionPattern(input.block.feedbackProfile, input.side);
 
   const states: ActiveBlockRunnerStates = {
     instructional: createInitialInstructionalLifecycle(),
     target: createInitialTargetLifecycle(),
-    pattern: resolvedPattern
-      ? resetPatternLifecycleForBlock(resolvedPattern.id)
-      : createInitialPatternLifecycle(""),
+    pattern:
+      blockType === "movement-pattern" && resolvedPattern
+        ? resetPatternLifecycleForBlock(resolvedPattern.id)
+        : null,
   };
 
   if (blockType === "movement-pattern" && !resolvedPattern) {
     return {
       states,
       activeMotionPattern: null,
-      feedbackMode,
       presentationProgress: null,
       fault: {
         kind: "pattern_unresolved",
@@ -116,8 +122,7 @@ export function resetRunnerStatesForBlockTransition(input: {
 
   return {
     states,
-    activeMotionPattern: resolvedPattern,
-    feedbackMode,
+    activeMotionPattern: blockType === "movement-pattern" ? resolvedPattern : null,
     presentationProgress: null,
     fault: null,
   };
@@ -162,17 +167,6 @@ export function dispatchOrchestratorCvBlock(
     return { status: "not_active" };
   }
 
-  if (blockType === "movement-pattern" && !input.activeMotionPattern) {
-    return {
-      status: "fault",
-      fault: {
-        kind: "pattern_unresolved",
-        blockId: currentBlock.blockId,
-        feedbackProfile: currentBlock.feedbackProfile,
-      },
-    };
-  }
-
   if (blockType === "movement-target" && !input.wrist) {
     return { status: "skipped", reason: "target_wrist_required" };
   }
@@ -203,15 +197,35 @@ export function dispatchOrchestratorCvBlock(
         hitExitTransitionMs: input.hitExitTransitionMs,
       };
       break;
-    case "movement-pattern":
+    case "movement-pattern": {
+      const activeMotionPattern = input.activeMotionPattern;
+      const patternState = input.states.pattern;
+      if (!activeMotionPattern || !patternState) {
+        return {
+          status: "fault",
+          fault: {
+            kind: "pattern_unresolved",
+            blockId: currentBlock.blockId,
+            feedbackProfile: currentBlock.feedbackProfile,
+          },
+        };
+      }
+      const patternStates: PatternBlockRunnerStates = {
+        ...input.states,
+        pattern: patternState,
+      };
       tickInput = {
-        ...base,
+        sessionState: snap.sessionState,
+        nowMs: input.nowMs,
+        blockElapsedSeconds: snap.blockElapsedSeconds,
+        states: patternStates,
         blockType: "movement-pattern",
         wrist: input.wrist,
-        pattern: input.activeMotionPattern!,
+        pattern: activeMotionPattern,
         completionExitTransitionMs: input.hitExitTransitionMs,
       };
       break;
+    }
     default: {
       const _exhaustive: never = blockType;
       return _exhaustive;

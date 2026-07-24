@@ -11,6 +11,8 @@ type InstructionalBlockLayerProps = {
   presentationProgress: number | null;
   onPause: () => void;
   onResume: () => void;
+  /** When true, pause/resume controls are hidden (runtime fault lock). */
+  controlsLocked?: boolean;
 };
 
 function formatRemainingSeconds(snapshot: SessionOrchestratorSnapshot): number | null {
@@ -27,6 +29,7 @@ export function InstructionalBlockLayer({
   presentationProgress,
   onPause,
   onResume,
+  controlsLocked = false,
 }: InstructionalBlockLayerProps) {
   const ui = interactiveShoulderUi(language);
   const block = snapshot.currentBlock;
@@ -70,14 +73,16 @@ export function InstructionalBlockLayer({
             </div>
           </div>
         </div>
-        <button
-          type="button"
-          className="pointer-events-auto shrink-0 rounded-[10px] border border-[#1E2D42] bg-[#0F1825]/92 px-3 py-2 text-[12px] font-semibold text-white/90"
-          onClick={pausedOrHold ? onResume : onPause}
-          aria-label={pausedOrHold ? ui.resumeAriaLabel : ui.pauseAriaLabel}
-        >
-          {pausedOrHold ? ui.resume : ui.pause}
-        </button>
+        {controlsLocked ? null : (
+          <button
+            type="button"
+            className="pointer-events-auto shrink-0 rounded-[10px] border border-[#1E2D42] bg-[#0F1825]/92 px-3 py-2 text-[12px] font-semibold text-white/90"
+            onClick={pausedOrHold ? onResume : onPause}
+            aria-label={pausedOrHold ? ui.resumeAriaLabel : ui.pauseAriaLabel}
+          >
+            {pausedOrHold ? ui.resume : ui.pause}
+          </button>
+        )}
       </div>
     </div>
   );
