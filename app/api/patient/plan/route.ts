@@ -30,6 +30,11 @@ import {
   type PatientLifetimeSummary,
 } from "../../../lib/patient-lifetime-summary";
 import { resolvePatientPortalAccess } from "../../../lib/patient-portal-access";
+import {
+  loadCatalogSessionForPlayback,
+  LoadCatalogSessionForPlaybackError,
+} from "../../../lib/rehab-programs/load-catalog-session-for-playback";
+import type { ProgramSession } from "../../../lib/rehab-programs/rehab-program-types";
 
 // Re-export for portal consumers
 export type { PatientLifetimeSummary };
@@ -46,6 +51,20 @@ export type PatientSession = {
   status: "upcoming" | "today" | "completed" | "skipped";
   scheduledAt?: string | null;
   completedAt?: string | null;
+  /**
+   * Present only for a session sourced from the persisted rehabilitation
+   * catalog (plan_sessions.source_program_session_id, migration 017).
+   * Absent (not present as a key at all) for every legacy/non-catalog
+   * session — additive, backward-compatible: existing consumers that
+   * don't know this field exists see no shape change whatsoever.
+   * `null` (present, but null) specifically means this session IS
+   * catalog-sourced but its runtime data failed to load — the rest of
+   * the plan response still returns successfully either way. This is
+   * read-only runtime data (a ProgramSession, from
+   * rehab-program-runtime-adapter.ts's own input contract) — nothing in
+   * this route calls toSessionDefinition() or renders it.
+   */
+  catalogSession?: ProgramSession | null;
 };
 
 export type PatientPlanData = {
@@ -85,6 +104,65 @@ function buildAdminClient() {
   return createAdminClient(url, svc, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
+}
+
+// ── Catalog session runtime data (additive) ────────────────────────────────────
+
+type SessionForCatalogLookup = {
+  id: string;
+  source_program_session_id: string | null;
+};
+
+/**
+ * For every session with a non-null source_program_session_id, loads
+ * its catalog runtime data independently and concurrently — a failure
+ * loading one session's data must never block another session's, and
+ * is always caught here rather than propagating. Read-only: this never
+ * writes anything, and never calls toSessionDefinition() or touches
+ * SessionOrchestrator — that wiring is a later, separate step. Failure
+ * context is logged server-side as structured JSON (planSessionId,
+ * sourceProgramSessionId, the loader's own stable reason) — never the
+ * raw underlying database error text, and never any patient-identifying
+ * data.
+ *
+ * Exported standalone (not inlined into GET) so this merge/failure-
+ * isolation behavior has direct, dependency-injected test coverage
+ * without needing to mock the rest of this route's token/patient/
+ * assessment/lifetime-summary flow.
+ */
+export async function loadCatalogSessionsById(
+  admin: Parameters<typeof loadCatalogSessionForPlayback>[0],
+  sessions: readonly SessionForCatalogLookup[],
+): Promise<Map<string, ProgramSession | null>> {
+  const catalogSessionById = new Map<string, ProgramSession | null>();
+  await Promise.all(
+    sessions
+      .filter((s): s is SessionForCatalogLookup & { source_program_session_id: string } =>
+        !!s.source_program_session_id,
+      )
+      .map(async (s) => {
+        try {
+          const catalogSession = await loadCatalogSessionForPlayback(
+            admin,
+            s.source_program_session_id,
+          );
+          catalogSessionById.set(s.id, catalogSession);
+        } catch (err) {
+          const reason =
+            err instanceof LoadCatalogSessionForPlaybackError ? err.reason : "unexpected";
+          console.error(
+            "[GET /api/patient/plan] catalog session load failed",
+            JSON.stringify({
+              planSessionId: s.id,
+              sourceProgramSessionId: s.source_program_session_id,
+              reason,
+            }),
+          );
+          catalogSessionById.set(s.id, null);
+        }
+      }),
+  );
+  return catalogSessionById;
 }
 
 // ── GET /api/patient/plan?token=... ───────────────────────────────────────────
@@ -133,13 +211,18 @@ export async function GET(req: NextRequest) {
     status: string;
     scheduled_at: string | null;
     completed_at: string | null;
+    source_program_session_id: string | null;
   };
   const { data: sessions } = await admin
     .from("plan_sessions")
-    .select("id, session_number, title, exercises, status, scheduled_at, completed_at")
+    .select(
+      "id, session_number, title, exercises, status, scheduled_at, completed_at, source_program_session_id",
+    )
     .eq("plan_id", access.currentPlanId)
     .order("session_number", { ascending: true })
     .returns<SessionRow[]>();
+
+  const catalogSessionById = await loadCatalogSessionsById(admin, sessions ?? []);
 
   // 4 — Fetch safe patient fields only
   type PatientRow = { diagnosis: string | null };
@@ -191,6 +274,11 @@ export async function GET(req: NextRequest) {
       status:        s.status as PatientSession["status"],
       scheduledAt:   s.scheduled_at,
       completedAt:   s.completed_at,
+      // Absent (no key at all) for a legacy session; present (value or
+      // null) only when source_program_session_id was set.
+      ...(s.source_program_session_id
+        ? { catalogSession: catalogSessionById.get(s.id) ?? null }
+        : {}),
     })),
     lifetimeSummary,
   };
