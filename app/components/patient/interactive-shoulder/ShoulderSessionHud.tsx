@@ -98,51 +98,51 @@ export function ShoulderSessionHud({
     );
   }
 
+  const interactionSummary = isPatternMode
+    ? ui.interactionPatternsLabel(
+        patternInteraction.patternsCompleted,
+        patternInteraction.patternsShown,
+      )
+    : ui.interactionTargetsLabel(
+        targetInteraction.targetsReached,
+        targetInteraction.targetsShown,
+      );
+
   return (
-    <div className="pointer-events-none absolute inset-0 z-30 flex flex-col justify-between p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className={`min-w-0 flex-1 rounded-[10px] border border-[#1E2D42]/70 bg-[#0F1825]/88 px-3 py-2.5 text-white backdrop-blur-sm ${arClass}`}>
-          <div className="flex items-center justify-between gap-2">
-            <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-[#5DCAA5]/80">
-              {experienceTitle}
-            </p>
-            <p className="text-[10px] text-white/45">{ui.movementBlockLabel}</p>
-          </div>
-          <p className="mt-1 text-sm font-bold">
+    <div className="pointer-events-none absolute inset-0 z-30 flex flex-col justify-between p-2">
+      <div className="flex items-start justify-between gap-1.5">
+        <div
+          className={`min-w-0 flex-1 rounded-[8px] border border-[#1E2D42]/60 bg-[#0F1825]/80 px-2.5 py-1.5 text-white backdrop-blur-sm ${arClass}`}
+        >
+          <p className="truncate text-[11px] font-bold leading-tight text-white">{experienceTitle}</p>
+          <p className="mt-0.5 text-[11px] font-semibold leading-tight text-[#5DCAA5]">
             {remaining !== null
               ? ui.timeRemainingSeconds(remaining)
               : ui.blockProgressPercent(progressPercent)}
           </p>
-          <div className="mt-2">
-            <div className="mb-1 flex items-center justify-between text-[10px] text-white/50">
+          <div className="mt-1">
+            <div className="mb-0.5 flex items-center justify-between gap-2 text-[9px] leading-none text-white/45">
               <span>{ui.sessionProgressLabel}</span>
               <span>{ui.blockProgressPercent(progressPercent)}</span>
             </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+            <div className="h-1 overflow-hidden rounded-full bg-white/10">
               <div
                 className="h-full rounded-full bg-gradient-to-r from-[#1D9E75] to-[#5DCAA5] transition-[width] duration-300"
                 style={{ width: `${Math.min(100, Math.max(0, progressPercent))}%` }}
               />
             </div>
           </div>
-          <div className="mt-2 space-y-1">
-            <p className="text-[11px] text-[#5DCAA5]/90">
-              {isPatternMode
-                ? ui.interactionPatternsLabel(
-                    patternInteraction.patternsCompleted,
-                    patternInteraction.patternsShown,
-                  )
-                : ui.interactionTargetsLabel(
-                    targetInteraction.targetsReached,
-                    targetInteraction.targetsShown,
-                  )}
-            </p>
-            <p className="text-[11px] text-white/70">{ui.measuredRepsLabel(measuredReps)}</p>
-          </div>
+          <p className="mt-1 truncate text-[10px] leading-tight text-white/75">
+            <span className="text-[#5DCAA5]/90">{interactionSummary}</span>
+            <span className="mx-1 text-white/30" aria-hidden>
+              ·
+            </span>
+            <span>{ui.measuredRepsLabel(measuredReps)}</span>
+          </p>
         </div>
         <button
           type="button"
-          className="pointer-events-auto shrink-0 rounded-[10px] border border-[#1E2D42] bg-[#0F1825]/92 px-3 py-2 text-[12px] font-semibold text-white/90"
+          className="pointer-events-auto shrink-0 rounded-[8px] border border-[#1E2D42] bg-[#0F1825]/88 px-2.5 py-1.5 text-[11px] font-semibold leading-tight text-white/90"
           onClick={pausedOrHold ? onResume : onPause}
           aria-label={pausedOrHold ? ui.resumeAriaLabel : ui.pauseAriaLabel}
         >
@@ -152,7 +152,7 @@ export function ShoulderSessionHud({
 
       {primaryLiveAnnouncement ? (
         <div
-          className={`rounded-[10px] border border-amber-400/30 bg-[#0F1825]/92 px-3 py-2.5 text-center text-[12px] font-medium text-amber-100 backdrop-blur-sm ${arClass}`}
+          className={`rounded-[8px] border border-amber-400/30 bg-[#0F1825]/88 px-2.5 py-2 text-center text-[11px] font-medium leading-snug text-amber-100 backdrop-blur-sm ${arClass}`}
           role="status"
           aria-live="polite"
         >
@@ -162,7 +162,7 @@ export function ShoulderSessionHud({
 
       {encouragement && snapshot.safetyStatus === "normal" ? (
         <div
-          className={`rounded-[10px] border border-[#1D9E75]/25 bg-[#0F1825]/82 px-3 py-2 text-center text-[12px] text-[#5DCAA5] backdrop-blur-sm ${arClass}`}
+          className={`rounded-[8px] border border-[#1D9E75]/25 bg-[#0F1825]/80 px-2.5 py-1.5 text-center text-[11px] leading-snug text-[#5DCAA5] backdrop-blur-sm ${arClass}`}
           role={encouragementIsLive ? "status" : undefined}
           aria-live={encouragementIsLive ? "polite" : undefined}
         >
