@@ -30,6 +30,17 @@ export type ProgramBodyRegion =
   | "lower-limb"
   | "general";
 
+/**
+ * Clinician-facing rehabilitation area for browsing/filtering pilot templates.
+ * Stable internal slug — do not rename without updating classification below.
+ * Pediatric is intentionally omitted until real pediatric content exists.
+ */
+export type RehabilitationArea =
+  | "neurorehabilitation"
+  | "orthopedic-sports-rehabilitation"
+  | "vestibular-balance-rehabilitation"
+  | "general-rehabilitation";
+
 export type PilotProgramSession = {
   sessionNumber: number;
   title: string;
@@ -44,6 +55,7 @@ export type PilotProgramTemplate = {
   programGoal: string;
   conditionCategory: string;
   bodyRegion: ProgramBodyRegion;
+  rehabilitationArea: RehabilitationArea;
   /** Weeks — expanded templates only; legacy pilots omit. */
   durationWeeks?: number;
   /** Sessions per week — expanded templates only; legacy pilots omit. */
@@ -453,6 +465,7 @@ function defineExpandedProgram(config: {
   programGoal: string;
   conditionCategory: string;
   bodyRegion: ProgramBodyRegion;
+  rehabilitationArea: RehabilitationArea;
   durationWeeks: number;
   sessionsPerWeek: number;
   suitableFor: string;
@@ -474,6 +487,7 @@ function defineExpandedProgram(config: {
     programGoal: config.programGoal,
     conditionCategory: config.conditionCategory,
     bodyRegion: config.bodyRegion,
+    rehabilitationArea: config.rehabilitationArea,
     durationWeeks: config.durationWeeks,
     sessionsPerWeek: config.sessionsPerWeek,
     suitableFor: config.suitableFor,
@@ -498,6 +512,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     programGoal: "Basic knee strength, mobility, and walking confidence.",
     conditionCategory: "ACL, knee OA, post-op knee, general knee rehab",
     bodyRegion: "knee",
+    rehabilitationArea: "orthopedic-sports-rehabilitation",
     suitableFor:
       "Patients with mild–moderate knee symptoms who can tolerate low-load activation, gentle ROM, and supported functional movement.",
     notSuitableFor:
@@ -552,6 +567,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     programGoal: "Gentle mobility, core activation, and functional confidence.",
     conditionCategory: "Lumbar disc herniation, mechanical low back pain, deconditioning",
     bodyRegion: "lumbar",
+    rehabilitationArea: "orthopedic-sports-rehabilitation",
     suitableFor:
       "Patients with mild–moderate lumbar symptoms who benefit from breathing, mobility, and gradual core activation.",
     notSuitableFor:
@@ -606,6 +622,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     programGoal: "Gentle shoulder mobility, scapular control, and pain-free movement.",
     conditionCategory: "Shoulder impingement, post-op shoulder, frozen shoulder, rotator cuff",
     bodyRegion: "shoulder",
+    rehabilitationArea: "orthopedic-sports-rehabilitation",
     suitableFor:
       "Patients with shoulder stiffness or mild impingement who need graded mobility and scapular control.",
     notSuitableFor:
@@ -662,6 +679,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     level: "Beginner",
     conditionCategory: "Orthopedic Rehabilitation",
     bodyRegion: "knee",
+    rehabilitationArea: "orthopedic-sports-rehabilitation",
     durationWeeks: 4,
     sessionsPerWeek: 3,
     programGoal:
@@ -705,6 +723,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
       "Structured four-week foundation for active patients: restore quadriceps activation and knee ROM, build closed-chain tolerance and single-leg control, and establish pain/effort reporting — with therapist review before any progression.",
     conditionCategory: "Sports / orthopedic rehabilitation (foundation phase)",
     bodyRegion: "knee",
+    rehabilitationArea: "orthopedic-sports-rehabilitation",
     durationWeeks: 4,
     sessionsPerWeek: 3,
     suitableFor:
@@ -738,6 +757,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     conditionCategory:
       "Early sports knee rehabilitation / functional strengthening / balance foundation",
     bodyRegion: "knee",
+    rehabilitationArea: "orthopedic-sports-rehabilitation",
     durationWeeks: 2,
     sessionsPerWeek: 3,
     suitableFor:
@@ -769,6 +789,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     programGoal: MOVE_BETTER_PERFORMANCE_V1.tagline,
     conditionCategory: "General public fitness / standing movement",
     bodyRegion: "general",
+    rehabilitationArea: "general-rehabilitation",
     durationWeeks: MOVE_BETTER_PERFORMANCE_V1.totalWeeks,
     sessionsPerWeek: MOVE_BETTER_PERFORMANCE_V1.sessionsPerWeek,
     suitableFor:
@@ -798,6 +819,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     level: "Beginner",
     conditionCategory: "MSK Rehabilitation",
     bodyRegion: "lumbar",
+    rehabilitationArea: "orthopedic-sports-rehabilitation",
     durationWeeks: 4,
     sessionsPerWeek: 3,
     programGoal:
@@ -839,6 +861,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     level: "Beginner",
     conditionCategory: "Orthopedic Rehabilitation",
     bodyRegion: "shoulder",
+    rehabilitationArea: "orthopedic-sports-rehabilitation",
     durationWeeks: 4,
     sessionsPerWeek: 3,
     programGoal:
@@ -881,6 +904,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     level: "Beginner",
     conditionCategory: "MSK Rehabilitation",
     bodyRegion: "cervical",
+    rehabilitationArea: "orthopedic-sports-rehabilitation",
     durationWeeks: 3,
     sessionsPerWeek: 3,
     programGoal:
@@ -920,6 +944,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     level: "Beginner",
     conditionCategory: "Orthopedic Rehabilitation",
     bodyRegion: "ankle",
+    rehabilitationArea: "orthopedic-sports-rehabilitation",
     durationWeeks: 3,
     sessionsPerWeek: 3,
     programGoal:
@@ -961,6 +986,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     level: "Beginner",
     conditionCategory: "Orthopedic Rehabilitation",
     bodyRegion: "hip",
+    rehabilitationArea: "orthopedic-sports-rehabilitation",
     durationWeeks: 4,
     sessionsPerWeek: 3,
     programGoal:
@@ -1002,6 +1028,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     level: "Beginner",
     conditionCategory: "Post-Operative Rehabilitation",
     bodyRegion: "knee",
+    rehabilitationArea: "orthopedic-sports-rehabilitation",
     durationWeeks: 4,
     sessionsPerWeek: 3,
     programGoal:
@@ -1042,6 +1069,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     level: "Beginner",
     conditionCategory: "Balance and Gait Rehabilitation",
     bodyRegion: "lower-limb",
+    rehabilitationArea: "vestibular-balance-rehabilitation",
     durationWeeks: 4,
     sessionsPerWeek: 3,
     programGoal:
@@ -1083,6 +1111,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     level: "Intermediate",
     conditionCategory: "Sports Rehabilitation",
     bodyRegion: "general",
+    rehabilitationArea: "orthopedic-sports-rehabilitation",
     durationWeeks: 4,
     sessionsPerWeek: 3,
     programGoal:
@@ -1124,6 +1153,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     level: "Beginner",
     conditionCategory: "Neurological Rehabilitation",
     bodyRegion: "general",
+    rehabilitationArea: "neurorehabilitation",
     durationWeeks: 6,
     sessionsPerWeek: 3,
     programGoal:
@@ -1164,6 +1194,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     level: "Beginner",
     conditionCategory: "General MSK Rehabilitation",
     bodyRegion: "general",
+    rehabilitationArea: "general-rehabilitation",
     durationWeeks: 4,
     sessionsPerWeek: 3,
     programGoal:
@@ -1204,6 +1235,7 @@ export const PILOT_PROGRAM_TEMPLATES: PilotProgramTemplate[] = [
     level: "Beginner",
     conditionCategory: "Pain and Mobility Rehabilitation",
     bodyRegion: "general",
+    rehabilitationArea: "general-rehabilitation",
     durationWeeks: 3,
     sessionsPerWeek: 3,
     programGoal:
@@ -1264,3 +1296,60 @@ export const EXPANDED_PROGRAM_TEMPLATE_COUNT = 12;
 
 /** Total pilot templates available in plan builder. */
 export const PILOT_PROGRAM_TEMPLATE_COUNT = PILOT_PROGRAM_TEMPLATES.length;
+
+/**
+ * Fixed clinician-facing display order for rehabilitation areas.
+ * Intentionally not sorted by template count or alphabetically — General
+ * Rehabilitation must always render last regardless of how many templates
+ * fall into it.
+ */
+export const REHABILITATION_AREA_DISPLAY_ORDER: RehabilitationArea[] = [
+  "neurorehabilitation",
+  "orthopedic-sports-rehabilitation",
+  "vestibular-balance-rehabilitation",
+  "general-rehabilitation",
+];
+
+/** English display labels — clinician workspace is English-only by product decision. */
+export const REHABILITATION_AREA_LABELS: Record<RehabilitationArea, string> = {
+  "neurorehabilitation": "Neurorehabilitation",
+  "orthopedic-sports-rehabilitation": "Orthopedic & Sports Rehabilitation",
+  "vestibular-balance-rehabilitation": "Vestibular & Balance Rehabilitation",
+  "general-rehabilitation": "General Rehabilitation",
+};
+
+/** Areas represented by at least one template in `templates`, in fixed display order. */
+export function visibleRehabilitationAreas(
+  templates: PilotProgramTemplate[],
+): RehabilitationArea[] {
+  const present = new Set(templates.map((t) => t.rehabilitationArea));
+  return REHABILITATION_AREA_DISPLAY_ORDER.filter((area) => present.has(area));
+}
+
+export type PilotTemplateFilter = {
+  area: RehabilitationArea | "all";
+  query: string;
+};
+
+/**
+ * Pure search + area filter over pilot templates. AND semantics: a template
+ * must match the area (when not "all") AND the search query (when non-empty).
+ * Never mutates or reorders `templates`; does not affect the source array.
+ */
+export function filterPilotTemplates(
+  templates: PilotProgramTemplate[],
+  filter: PilotTemplateFilter,
+): PilotProgramTemplate[] {
+  const query = filter.query.trim().toLowerCase();
+  return templates.filter((template) => {
+    if (filter.area !== "all" && template.rehabilitationArea !== filter.area) {
+      return false;
+    }
+    if (!query) return true;
+    return (
+      template.title.toLowerCase().includes(query) ||
+      template.conditionArea.toLowerCase().includes(query) ||
+      template.programGoal.toLowerCase().includes(query)
+    );
+  });
+}
