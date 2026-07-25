@@ -21,6 +21,8 @@ export type InteractiveShoulderUi = {
   skipCamera: string;
   startingCamera: string;
   experienceTitle: string;
+  clinicalHudExerciseLabel: string;
+  clinicalHudTimeRemainingLabel: string;
   sessionProgressLabel: string;
   interactionTargetsLabel: (reached: number, shown: number) => string;
   interactionPatternsLabel: (completed: number, shown: number) => string;
@@ -77,6 +79,8 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     skipCamera: "Skip camera",
     startingCamera: "Starting camera…",
     experienceTitle: "Reach the Light",
+    clinicalHudExerciseLabel: "Exercise:",
+    clinicalHudTimeRemainingLabel: "Time Remaining:",
     sessionProgressLabel: "Session progress",
     interactionTargetsLabel: (reached, shown) => `Interaction targets: ${reached}/${shown}`,
     interactionPatternsLabel: (completed, shown) => `Paths completed: ${completed}/${shown}`,
@@ -147,6 +151,8 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
     skipCamera: "تخطّي الكاميرا",
     startingCamera: "جاري تشغيل الكاميرا…",
     experienceTitle: "الوصول إلى الضوء",
+    clinicalHudExerciseLabel: "التمرين:",
+    clinicalHudTimeRemainingLabel: "الوقت المتبقي:",
     sessionProgressLabel: "تقدّم الجلسة",
     interactionTargetsLabel: (reached, shown) => `أهداف التفاعل: ${reached}/${shown}`,
     interactionPatternsLabel: (completed, shown) => `المسارات المكتملة: ${completed}/${shown}`,
