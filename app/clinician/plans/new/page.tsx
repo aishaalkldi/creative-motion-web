@@ -9,9 +9,13 @@ import type { AssessmentListRow } from "@/app/api/assessments/route";
 import type { PlanRow } from "@/app/api/plans/route";
 import {
   PILOT_PROGRAM_TEMPLATES,
+  REHABILITATION_AREA_LABELS,
   clonePilotTemplate,
+  filterPilotTemplates,
+  visibleRehabilitationAreas,
   type PilotProgramSession,
   type PilotProgramTemplate,
+  type RehabilitationArea,
 } from "@/app/lib/program-templates";
 import {
   ExerciseLibraryPicker,
@@ -432,6 +436,8 @@ function NewPlanInner() {
   const [notes,      setNotes]      = useState("");
   const [phases,     setPhases]     = useState<PhaseConfig[]>(DEFAULT_PHASES);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [templateQuery, setTemplateQuery] = useState("");
+  const [templateArea,  setTemplateArea]  = useState<RehabilitationArea | "all">("all");
   const [planTitle,  setPlanTitle]  = useState("");
   const [planGoal,   setPlanGoal]   = useState("");
   const [planSessions, setPlanSessions] = useState<PlanSessionDraft[]>([]);
@@ -476,6 +482,15 @@ function NewPlanInner() {
   }, [patientId]);
 
   const displayedAssessments = useMemo(() => assessments.slice(0, 5), [assessments]);
+
+  const visibleTemplateAreas = useMemo(
+    () => visibleRehabilitationAreas(PILOT_PROGRAM_TEMPLATES),
+    [],
+  );
+  const filteredTemplates = useMemo(
+    () => filterPilotTemplates(PILOT_PROGRAM_TEMPLATES, { area: templateArea, query: templateQuery }),
+    [templateArea, templateQuery],
+  );
 
   function updatePhase(i: number, key: keyof PhaseConfig, val: string) {
     setPhases((prev) => prev.map((p, idx) => idx === i ? { ...p, [key]: val } : p));
@@ -826,16 +841,61 @@ function NewPlanInner() {
                   clinical starting points — review and adapt before assigning.
                 </p>
               </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {PILOT_PROGRAM_TEMPLATES.map((template) => (
-                  <PilotTemplateCard
-                    key={template.id}
-                    template={template}
-                    selected={selectedTemplateId === template.id}
-                    onUse={() => applyPilotTemplate(template)}
-                  />
-                ))}
+
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={templateQuery}
+                  onChange={(e) => setTemplateQuery(e.target.value)}
+                  placeholder="Search programs"
+                  aria-label="Search programs"
+                  className="w-full rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-2.5 text-sm text-white outline-none placeholder:text-white/25 focus:border-[#1D9E75]/40"
+                />
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTemplateArea("all")}
+                    className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
+                      templateArea === "all"
+                        ? "border-[#1D9E75]/40 bg-[#1D9E75]/15 text-[#5DCAA5]"
+                        : "border-[#1E2D42] bg-[#0B1220] text-white/55 hover:text-white"
+                    }`}
+                  >
+                    All
+                  </button>
+                  {visibleTemplateAreas.map((area) => (
+                    <button
+                      key={area}
+                      type="button"
+                      onClick={() => setTemplateArea(area)}
+                      className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
+                        templateArea === area
+                          ? "border-[#1D9E75]/40 bg-[#1D9E75]/15 text-[#5DCAA5]"
+                          : "border-[#1E2D42] bg-[#0B1220] text-white/55 hover:text-white"
+                      }`}
+                    >
+                      {REHABILITATION_AREA_LABELS[area]}
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              {filteredTemplates.length > 0 ? (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {filteredTemplates.map((template) => (
+                    <PilotTemplateCard
+                      key={template.id}
+                      template={template}
+                      selected={selectedTemplateId === template.id}
+                      onUse={() => applyPilotTemplate(template)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-6 text-center text-xs text-white/35">
+                  No templates match your search or selected area
+                </p>
+              )}
             </div>
 
             {/* Editable plan from template */}
