@@ -18,7 +18,15 @@ import { tickActiveBlockRunner } from "./tick-active-block-runner";
 
 const T0 = 7_000_000;
 
-function emptyStates() {
+function nullPatternStates() {
+  return {
+    instructional: createInitialInstructionalLifecycle(),
+    target: createInitialTargetLifecycle(),
+    pattern: null,
+  };
+}
+
+function patternStates() {
   const pattern = resolveActiveMotionPattern(D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE, "right")!;
   return {
     instructional: createInitialInstructionalLifecycle(),
@@ -35,7 +43,7 @@ describe("tick-active-block-runner — missing runner", () => {
       blockType: "movement-target",
       nowMs: T0,
       blockElapsedSeconds: 0,
-      states: emptyStates(),
+      states: nullPatternStates(),
       wrist: null,
       side: "right",
       bounds: DEFAULT_SAFE_TARGET_BOUNDS,
@@ -70,7 +78,7 @@ describe("tick-active-block-runner — resolved runner is ticked", () => {
       nowMs: T0,
       blockElapsedSeconds: 10,
       targetDurationSeconds: 60,
-      states: emptyStates(),
+      states: nullPatternStates(),
       resolvers: { resolveInstructionalRunner: () => fakeRunner },
     });
 
@@ -97,7 +105,7 @@ describe("tick-active-block-runner — resolved runner is ticked", () => {
       blockType: "movement-target",
       nowMs: T0,
       blockElapsedSeconds: 0,
-      states: emptyStates(),
+      states: nullPatternStates(),
       wrist: null,
       side: "right",
       bounds: DEFAULT_SAFE_TARGET_BOUNDS,
@@ -127,7 +135,7 @@ describe("tick-active-block-runner — resolved runner is ticked", () => {
       blockType: "movement-pattern",
       nowMs: T0,
       blockElapsedSeconds: 0,
-      states: emptyStates(),
+      states: patternStates(),
       wrist: null,
       pattern,
       resolvers: { resolvePatternRunner: () => fakeRunner },
@@ -146,7 +154,7 @@ describe("tick-active-block-runner", () => {
       nowMs: T0,
       blockElapsedSeconds: 30,
       targetDurationSeconds: 60,
-      states: emptyStates(),
+      states: nullPatternStates(),
     });
     assert.equal(result.status, "ticked");
     if (result.status !== "ticked") return;
@@ -163,7 +171,7 @@ describe("tick-active-block-runner", () => {
       blockType: "movement-target",
       nowMs: T0,
       blockElapsedSeconds: 0,
-      states: emptyStates(),
+      states: nullPatternStates(),
       wrist: null,
       side: "right",
       bounds: DEFAULT_SAFE_TARGET_BOUNDS,
@@ -185,7 +193,7 @@ describe("tick-active-block-runner", () => {
       blockType: "movement-pattern",
       nowMs: T0,
       blockElapsedSeconds: 0,
-      states: emptyStates(),
+      states: patternStates(),
       wrist: samplePathAtProgress(pattern.sampledPath, 0.05),
       pattern,
     });
@@ -211,7 +219,7 @@ describe("tick-active-block-runner", () => {
         nowMs: T0,
         blockElapsedSeconds: 999,
         targetDurationSeconds: 1,
-        states: emptyStates(),
+        states: nullPatternStates(),
       });
       assert.equal(result.status, "not_active");
       if (result.status !== "not_active") return;
@@ -222,7 +230,7 @@ describe("tick-active-block-runner", () => {
 
   it("target completion maps to targetContact only — never patternCompleted", () => {
     registerAllBlockRunners();
-    let states = emptyStates();
+    let states = nullPatternStates();
     const spawned = tickActiveBlockRunner({
       sessionState: "active",
       blockType: "movement-target",
@@ -257,7 +265,7 @@ describe("tick-active-block-runner", () => {
   it("pattern completion maps to patternCompleted only — never targetContact", () => {
     registerAllBlockRunners();
     const pattern = resolveActiveMotionPattern(D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE, "right")!;
-    let states = emptyStates();
+    let states = patternStates();
     let completionCount = 0;
     for (let i = 0; i <= 24; i += 1) {
       const progress = 0.05 + (0.93 * i) / 24;
@@ -288,7 +296,7 @@ describe("tick-active-block-runner", () => {
       nowMs: T0,
       blockElapsedSeconds: 999,
       targetDurationSeconds: 1,
-      states: emptyStates(),
+      states: nullPatternStates(),
     });
     assert.equal(result.status, "ticked");
     if (result.status !== "ticked") return;
@@ -296,5 +304,55 @@ describe("tick-active-block-runner", () => {
     assert.equal(result.states.instructional.completed, false);
     assert.equal(result.targetContact, null);
     assert.equal(result.patternCompleted, null);
+  });
+
+  it("instructional and movement-target ticks accept pattern: null in shared runner states", () => {
+    registerAllBlockRunners();
+    const states = nullPatternStates();
+    assert.equal(states.pattern, null);
+
+    const instructional = tickActiveBlockRunner({
+      sessionState: "active",
+      blockType: "instructional",
+      nowMs: T0,
+      blockElapsedSeconds: 5,
+      targetDurationSeconds: 60,
+      states,
+    });
+    assert.equal(instructional.status, "ticked");
+
+    const target = tickActiveBlockRunner({
+      sessionState: "active",
+      blockType: "movement-target",
+      nowMs: T0,
+      blockElapsedSeconds: 0,
+      states,
+      wrist: null,
+      side: "right",
+      bounds: DEFAULT_SAFE_TARGET_BOUNDS,
+      random: () => 0.5,
+    });
+    assert.equal(target.status, "ticked");
+    if (target.status !== "ticked") return;
+    assert.equal(target.states.pattern, null);
+  });
+
+  it("movement-pattern tick requires non-null pattern lifecycle state at the type level", () => {
+    registerAllBlockRunners();
+    const pattern = resolveActiveMotionPattern(D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE, "right")!;
+    const states = patternStates();
+    assert.ok(states.pattern);
+    assert.equal(states.pattern.patternId, pattern.id);
+
+    const result = tickActiveBlockRunner({
+      sessionState: "active",
+      blockType: "movement-pattern",
+      nowMs: T0,
+      blockElapsedSeconds: 0,
+      states,
+      wrist: null,
+      pattern,
+    });
+    assert.equal(result.status, "ticked");
   });
 });
