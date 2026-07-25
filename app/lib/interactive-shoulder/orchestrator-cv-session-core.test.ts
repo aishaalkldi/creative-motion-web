@@ -66,6 +66,19 @@ describe("orchestrator cv session core wrapper contract", () => {
     assert.match(source, /resolveInteractiveShoulderSessionFromEnv\(\)/);
     assert.match(source, /sessionDefinition=\{LEGACY_INTERACTIVE_SHOULDER_SESSION\}/);
     assert.doesNotMatch(source, /lifecycle/);
+    assert.doesNotMatch(source, /CatalogSessionPlayer/);
+  });
+
+  it("InteractiveShoulderSessionProps accepts optional onSessionComplete without breaking existing call sites", () => {
+    const propsWithoutCallback: InteractiveShoulderSessionProps = {
+      language: "en",
+    };
+    const propsWithCallback: InteractiveShoulderSessionProps = {
+      language: "en",
+      onSessionComplete: () => {},
+    };
+    assert.equal(propsWithoutCallback.language, "en");
+    assert.equal(typeof propsWithCallback.onSessionComplete, "function");
   });
 
   it("four-block Stroke definition is accepted by the reusable core contract", () => {
