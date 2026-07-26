@@ -57,6 +57,7 @@ import {
   shouldAdvanceOrchestratorTick,
   shouldDispatchBlockRunner,
 } from "@/app/lib/interactive-shoulder/orchestrator-cv-runtime-fault";
+import { shouldFireSessionCompleteCallback } from "@/app/lib/interactive-shoulder/orchestrator-cv-session-completion";
 import type { TherapeuticTarget } from "@/app/lib/interactive-shoulder/types";
 import { INTERACTIVE_SHOULDER_CV_EXERCISE_ID } from "@/app/lib/interactive-shoulder/interactive-shoulder-exercise-ids";
 import {
@@ -154,6 +155,7 @@ export function OrchestratorCvSessionCore({
   onRegisterMetricsFlush,
   onRegisterCaptureConsent,
   onCaptureReadinessChange,
+  onSessionComplete,
 }: OrchestratorCvSessionCoreProps) {
   const ui = interactiveShoulderUi(language);
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -181,6 +183,7 @@ export function OrchestratorCvSessionCore({
   const activeBlockIdRef = useRef<string | null>(null);
   const rafRef = useRef<number>(0);
   const sessionStartedRef = useRef(false);
+  const sessionCompleteFiredRef = useRef(false);
   const runtimeFaultRef = useRef<OrchestratorCvRuntimeFault | null>(null);
   const faultPauseAppliedRef = useRef(false);
   const devMouseRef = useRef<{ x: number; y: number } | null>(null);
@@ -317,6 +320,7 @@ export function OrchestratorCvSessionCore({
       orchestrator.beginCalibration(now);
       orchestrator.completeCalibration(now);
       sessionStartedRef.current = true;
+      sessionCompleteFiredRef.current = false;
       runnerStatesRef.current = {
         instructional: createInitialInstructionalLifecycle(),
         target: createInitialTargetLifecycle(),
@@ -398,6 +402,10 @@ export function OrchestratorCvSessionCore({
             reps: totalReps || snapshotRef.current?.primaryRepCount || 0,
             durationSeconds: Math.max(0, Math.round(snap.blockElapsedSeconds)),
           });
+          if (shouldFireSessionCompleteCallback(snap.sessionState, sessionCompleteFiredRef.current)) {
+            sessionCompleteFiredRef.current = true;
+            onSessionComplete?.();
+          }
           setShowBlockSummary(true);
         }
 
@@ -500,6 +508,7 @@ export function OrchestratorCvSessionCore({
     clearHitFeedback,
     hitExitTransitionMs,
     showBlockSummary,
+    onSessionComplete,
     ui.patternPathComplete,
     ui.targetReached,
   ]);

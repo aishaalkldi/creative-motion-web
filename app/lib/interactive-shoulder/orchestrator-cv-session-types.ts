@@ -20,6 +20,8 @@ export type InteractiveShoulderSessionProps = {
     minimumMet: boolean;
     previewActive: boolean;
   }) => void;
+  /** Fires once when the orchestrator reaches full-session completion. */
+  onSessionComplete?: () => void;
 };
 
 export type OrchestratorCvSessionCoreProps = InteractiveShoulderSessionProps & {

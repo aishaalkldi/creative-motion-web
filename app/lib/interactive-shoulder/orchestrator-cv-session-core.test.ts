@@ -66,6 +66,19 @@ describe("orchestrator cv session core wrapper contract", () => {
     assert.match(source, /resolveInteractiveShoulderSessionFromEnv\(\)/);
     assert.match(source, /sessionDefinition=\{LEGACY_INTERACTIVE_SHOULDER_SESSION\}/);
     assert.doesNotMatch(source, /lifecycle/);
+    assert.doesNotMatch(source, /CatalogSessionPlayer/);
+  });
+
+  it("InteractiveShoulderSessionProps accepts optional onSessionComplete without breaking existing call sites", () => {
+    const propsWithoutCallback: InteractiveShoulderSessionProps = {
+      language: "en",
+    };
+    const propsWithCallback: InteractiveShoulderSessionProps = {
+      language: "en",
+      onSessionComplete: () => {},
+    };
+    assert.equal(propsWithoutCallback.language, "en");
+    assert.equal(typeof propsWithCallback.onSessionComplete, "function");
   });
 
   it("four-block Stroke definition is accepted by the reusable core contract", () => {
@@ -78,5 +91,22 @@ describe("orchestrator cv session core wrapper contract", () => {
       "movement-pattern",
       "instructional",
     ]);
+  });
+
+  it("startSession resets sessionCompleteFiredRef alongside sessionStartedRef", () => {
+    const corePath = join(
+      process.cwd(),
+      "app/components/patient/interactive-shoulder/OrchestratorCvSessionCore.tsx",
+    );
+    const source = readFileSync(corePath, "utf8");
+    const startSessionIndex = source.indexOf("const startSession = useCallback");
+    assert.ok(startSessionIndex >= 0);
+    const startSessionBody = source.slice(startSessionIndex, startSessionIndex + 2500);
+    assert.match(startSessionBody, /sessionStartedRef\.current = true;/);
+    assert.match(startSessionBody, /sessionCompleteFiredRef\.current = false;/);
+    assert.match(
+      startSessionBody,
+      /sessionStartedRef\.current = true;\s*\r?\n\s*sessionCompleteFiredRef\.current = false;/,
+    );
   });
 });

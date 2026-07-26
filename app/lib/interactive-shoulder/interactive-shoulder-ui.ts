@@ -67,6 +67,8 @@ export type InteractiveShoulderUi = {
   runtimeFaultTitle: string;
   runtimeFaultRunnerUnavailable: string;
   runtimeFaultPatternUnresolved: string;
+  catalogSessionConfigErrorTitle: string;
+  catalogSessionConfigErrorDescription: string;
 };
 
 const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShoulderUi> = {
@@ -141,6 +143,9 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
       "This movement block could not start safely. The session is paused — please reload and try again.",
     runtimeFaultPatternUnresolved:
       "This movement block could not load its guided path. The session is paused — please reload and try again.",
+    catalogSessionConfigErrorTitle: "Session could not start",
+    catalogSessionConfigErrorDescription:
+      "This rehabilitation session is not configured correctly. Please contact your care team for assistance.",
   },
   ar: {
     consentTitle: "الكاميرا لتوجيه الحركة",
@@ -213,6 +218,9 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
       "تعذّر بدء كتلة الحركة بأمان. الجلسة متوقفة — يرجى إعادة تحميل الصفحة والمحاولة مرة أخرى.",
     runtimeFaultPatternUnresolved:
       "تعذّر تحميل المسار الموجّه لكتلة الحركة. الجلسة متوقفة — يرجى إعادة تحميل الصفحة والمحاولة مرة أخرى.",
+    catalogSessionConfigErrorTitle: "تعذّر بدء الجلسة",
+    catalogSessionConfigErrorDescription:
+      "لم تُعدّ هذه الجلسة العلاجية بشكل صحيح. يرجى التواصل مع فريق الرعاية للمساعدة.",
   },
 };
 
