@@ -7,6 +7,7 @@ import { getBlockRunnerForBlockType } from "@/app/lib/interactive-shoulder/block
 import { registerInstructionalBlockRunner } from "@/app/lib/interactive-shoulder/block-engine/instructional-block-runner";
 import { registerTargetBlockRunner } from "@/app/lib/interactive-shoulder/block-engine/target-block-runner";
 import type { SessionBlockType } from "@/app/lib/session-orchestrator/types";
+import type { BlockLateralityPolicy } from "@/app/lib/therapy/treatment-laterality";
 import {
   NEURO_STROKE_CONDITION,
   STROKE_UPPER_LIMB_RECOVERY_FOUNDATION_PATHWAY,
@@ -19,6 +20,15 @@ const VALID_SESSION_BLOCK_TYPES: readonly SessionBlockType[] = [
   "movement-pattern",
   "instructional",
 ];
+
+const EXPECTED_LATERALITY_POLICY_BY_BLOCK_ID: Readonly<
+  Record<string, BlockLateralityPolicy>
+> = Object.freeze({
+  "stroke-ulrf-v1-session-1-warm-up": "not_applicable",
+  "stroke-ulrf-v1-session-1-reach-the-light": "use_prescription",
+  "stroke-ulrf-v1-session-1-d1-diagonal-reach": "use_prescription",
+  "stroke-ulrf-v1-session-1-cool-down": "not_applicable",
+});
 
 describe("stroke-upper-limb-recovery-foundation catalog", () => {
   it("the program has exactly one valid Session 1", () => {
@@ -101,6 +111,44 @@ describe("stroke-upper-limb-recovery-foundation catalog", () => {
     assert.ok(d1!.instructions.length > 0);
     assert.equal(typeof d1!.movementId, "string");
     assert.equal(typeof d1!.feedbackProfile, "string");
+  });
+
+  it("every block has an explicit lateralityPolicy — instructional warm-up/cool-down are not_applicable; both movement blocks use_prescription", () => {
+    const { blocks } = STROKE_UPPER_LIMB_RECOVERY_FOUNDATION_SESSION_1;
+
+    assert.deepEqual(
+      Object.fromEntries(blocks.map((block) => [block.blockId, block.lateralityPolicy])),
+      EXPECTED_LATERALITY_POLICY_BY_BLOCK_ID,
+    );
+
+    for (const block of blocks) {
+      assert.notEqual(
+        block.lateralityPolicy,
+        null,
+        `block "${block.blockId}" must not have null lateralityPolicy`,
+      );
+      assert.notEqual(
+        block.lateralityPolicy,
+        undefined,
+        `block "${block.blockId}" must not have undefined lateralityPolicy`,
+      );
+    }
+
+    const warmUp = blocks.find((b) => b.blockId === "stroke-ulrf-v1-session-1-warm-up");
+    const coolDown = blocks.find((b) => b.blockId === "stroke-ulrf-v1-session-1-cool-down");
+    const reachTheLight = blocks.find(
+      (b) => b.blockId === "stroke-ulrf-v1-session-1-reach-the-light",
+    );
+    const d1 = blocks.find((b) => b.blockId === "stroke-ulrf-v1-session-1-d1-diagonal-reach");
+
+    assert.ok(warmUp);
+    assert.ok(coolDown);
+    assert.ok(reachTheLight);
+    assert.ok(d1);
+    assert.equal(warmUp!.lateralityPolicy, "not_applicable");
+    assert.equal(coolDown!.lateralityPolicy, "not_applicable");
+    assert.equal(reachTheLight!.lateralityPolicy, "use_prescription");
+    assert.equal(d1!.lateralityPolicy, "use_prescription");
   });
 
   it("catalog objects cannot be accidentally mutated — every level is frozen", () => {

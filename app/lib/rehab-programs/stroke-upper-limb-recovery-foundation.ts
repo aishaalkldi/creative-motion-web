@@ -43,6 +43,7 @@ const WARM_UP_BLOCK: ProgramSessionBlock = Object.freeze({
   title: "Warm-up",
   instructions: "Small, slow reaches to prepare the shoulder before active movement.",
   targetDurationSeconds: 60,
+  lateralityPolicy: "not_applicable",
 });
 
 const REACH_THE_LIGHT_BLOCK: ProgramSessionBlock = Object.freeze({
@@ -54,6 +55,7 @@ const REACH_THE_LIGHT_BLOCK: ProgramSessionBlock = Object.freeze({
   movementId: "shoulder-abduction-reach",
   feedbackProfile: REACH_THE_LIGHT_TARGET_FEEDBACK_PROFILE,
   targetDurationSeconds: 240,
+  lateralityPolicy: "use_prescription",
 });
 
 const D1_DIAGONAL_REACH_BLOCK: ProgramSessionBlock = Object.freeze({
@@ -65,6 +67,7 @@ const D1_DIAGONAL_REACH_BLOCK: ProgramSessionBlock = Object.freeze({
   movementId: "shoulder-abduction-reach",
   feedbackProfile: D1_INSPIRED_DIAGONAL_REACH_FEEDBACK_PROFILE,
   targetDurationSeconds: 240,
+  lateralityPolicy: "use_prescription",
 });
 
 const COOL_DOWN_BLOCK: ProgramSessionBlock = Object.freeze({
@@ -73,6 +76,7 @@ const COOL_DOWN_BLOCK: ProgramSessionBlock = Object.freeze({
   title: "Cool-down",
   instructions: "Slow, reduced-range movement and breathing to finish the session.",
   targetDurationSeconds: 90,
+  lateralityPolicy: "not_applicable",
 });
 
 export const STROKE_UPPER_LIMB_RECOVERY_FOUNDATION_SESSION_1: ProgramSession = Object.freeze({

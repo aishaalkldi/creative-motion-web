@@ -25,6 +25,7 @@
  * values, no registry-resolved runner for either.
  */
 import type { SessionBlockType } from "@/app/lib/session-orchestrator/types";
+import type { BlockLateralityPolicy } from "@/app/lib/therapy/treatment-laterality";
 
 export type Condition = {
   readonly id: string;
@@ -58,6 +59,8 @@ export type ProgramSessionBlock = {
   readonly feedbackProfile?: string;
   /** Catalog-level target duration, in seconds. Absent for acknowledgement-only instructional blocks. */
   readonly targetDurationSeconds?: number;
+  /** Catalog-authored laterality execution policy for this block. */
+  readonly lateralityPolicy: BlockLateralityPolicy;
 };
 
 export type ProgramSessionSummaryMode = "standard" | "none";
