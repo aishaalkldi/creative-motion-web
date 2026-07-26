@@ -34,6 +34,7 @@ describe("rehab-program-types", () => {
       blockType: "instructional",
       title: "Warm-up",
       instructions: "Warm up gently.",
+      lateralityPolicy: "not_applicable",
     };
     const movementTarget: ProgramSessionBlock = {
       blockId: "b2",
@@ -41,6 +42,7 @@ describe("rehab-program-types", () => {
       title: "Reach the Light",
       instructions: "Reach toward the light.",
       movementId: "shoulder-abduction-reach",
+      lateralityPolicy: "use_prescription",
     };
     const movementPattern: ProgramSessionBlock = {
       blockId: "b3",
@@ -48,6 +50,7 @@ describe("rehab-program-types", () => {
       title: "D1-Inspired Diagonal Reach",
       instructions: "Follow the diagonal path.",
       movementId: "shoulder-abduction-reach",
+      lateralityPolicy: "use_prescription",
     };
     assert.equal(instructional.blockType, "instructional");
     assert.equal(movementTarget.blockType, "movement-target");
@@ -60,6 +63,7 @@ describe("rehab-program-types", () => {
       blockType: "instructional",
       title: "Warm-up",
       instructions: "Warm up gently.",
+      lateralityPolicy: "not_applicable",
     };
     const keys = Object.keys(block);
     for (const movementBlockOnlyField of [
@@ -90,6 +94,7 @@ describe("rehab-program-types", () => {
       blockType: "instructional",
       title: "Warm-up",
       instructions: "Warm up gently.",
+      lateralityPolicy: "not_applicable",
     };
     const session: ProgramSession = {
       id: "s1",

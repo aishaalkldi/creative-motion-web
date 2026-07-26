@@ -22,11 +22,17 @@
  * ProgramSessionBlock declares these as optional-absent properties
  * (`field?: T`), not `field: T | null` — a `null` value would not
  * structurally match the target type.
+ *
+ * laterality_policy is validated by load-catalog-session-for-playback.ts
+ * before rows reach this bridge. The bridge only copies the validated
+ * BlockLateralityPolicy onto lateralityPolicy — it does not invoke
+ * planBlockLateralityExecution or change runtime side selection.
  */
 import type {
   ProgramSession,
   ProgramSessionBlock,
 } from "./rehab-program-types";
+import type { BlockLateralityPolicy } from "@/app/lib/therapy/treatment-laterality";
 import type {
   ProgramSessionBlocksRow,
   ProgramSessionsRow,
@@ -62,14 +68,26 @@ export type ProgramSessionBlockRowForBridge = Pick<
   | "movement_id"
   | "feedback_profile"
   | "target_duration_seconds"
+  | "laterality_policy"
 >;
 
-function toProgramSessionBlock(row: ProgramSessionBlockRowForBridge): ProgramSessionBlock {
+/** Block row after load-catalog-session-for-playback.ts policy validation. */
+export type ValidatedProgramSessionBlockRowForBridge = Omit<
+  ProgramSessionBlockRowForBridge,
+  "laterality_policy"
+> & {
+  readonly laterality_policy: BlockLateralityPolicy;
+};
+
+function toProgramSessionBlock(
+  row: ValidatedProgramSessionBlockRowForBridge,
+): ProgramSessionBlock {
   return {
     blockId: row.block_key,
     blockType: row.block_type as ProgramSessionBlock["blockType"],
     title: row.title,
     instructions: row.instructions,
+    lateralityPolicy: row.laterality_policy,
     ...(row.movement_id !== null ? { movementId: row.movement_id } : {}),
     ...(row.feedback_profile !== null ? { feedbackProfile: row.feedback_profile } : {}),
     ...(row.target_duration_seconds !== null
@@ -84,14 +102,12 @@ function toProgramSessionBlock(row: ProgramSessionBlockRowForBridge): ProgramSes
  * sort, filter, or validate — the loader is responsible for ordering
  * (block_order, via the query itself) and for rejecting
  * draft-program/empty-blocks/unrecognized-value states before calling
- * this function. This function trusts its input completely, matching
- * the same "pure, no defensive re-checking" posture as
- * rehab-program-runtime-adapter.ts's own toMovementBlock()/
- * toSessionDefinition().
+ * this function. laterality_policy must already be validated as a
+ * non-null BlockLateralityPolicy by the loader.
  */
 export function toProgramSession(
   sessionRow: ProgramSessionRowForBridge,
-  blockRows: readonly ProgramSessionBlockRowForBridge[],
+  blockRows: readonly ValidatedProgramSessionBlockRowForBridge[],
 ): ProgramSession {
   return {
     id: sessionRow.id,

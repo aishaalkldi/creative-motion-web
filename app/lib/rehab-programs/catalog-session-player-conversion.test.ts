@@ -19,7 +19,8 @@ const INVALID_CATALOG_SESSION: ProgramSession = Object.freeze({
       blockType: "instructional" as const,
       title: "Invalid",
       instructions: "This block ID is not mapped in the runtime adapter.",
-       targetDurationSeconds: 60,
+      targetDurationSeconds: 60,
+      lateralityPolicy: "not_applicable" as const,
     }),
   ]),
 });

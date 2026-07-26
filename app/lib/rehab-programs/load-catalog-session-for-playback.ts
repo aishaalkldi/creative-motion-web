@@ -3,7 +3,11 @@ import type { Database } from "@/app/lib/supabase/database.types";
 import type { SessionBlockType } from "@/app/lib/session-orchestrator/types";
 import type { ProgramSession } from "@/app/lib/rehab-programs/rehab-program-types";
 import type { ProgramSessionSummaryMode } from "@/app/lib/rehab-programs/rehab-program-types";
-import { toProgramSession } from "./catalog-session-playback-bridge";
+import type { BlockLateralityPolicy } from "@/app/lib/therapy/treatment-laterality";
+import {
+  toProgramSession,
+  type ValidatedProgramSessionBlockRowForBridge,
+} from "./catalog-session-playback-bridge";
 
 /**
  * Server-only, read-only loader for an already-assigned catalog
@@ -72,6 +76,16 @@ const KNOWN_BLOCK_TYPES: readonly SessionBlockType[] = [
 const KNOWN_SUMMARY_MODES: readonly ProgramSessionSummaryMode[] = ["standard", "none"];
 
 const ELIGIBLE_PROGRAM_STATUSES: readonly string[] = ["published", "archived"];
+
+const KNOWN_LATERALITY_POLICIES = [
+  "use_prescription",
+  "bilateral",
+  "not_applicable",
+] as const satisfies readonly BlockLateralityPolicy[];
+
+function isKnownLateralityPolicy(value: string): value is BlockLateralityPolicy {
+  return (KNOWN_LATERALITY_POLICIES as readonly string[]).includes(value);
+}
 
 function logFailure(context: string, sourceProgramSessionId: string, detail: string): void {
   console.error(
@@ -142,7 +156,7 @@ export async function loadCatalogSessionForPlayback(
   const { data: blockRows, error: blocksError } = await client
     .from("program_session_blocks")
     .select(
-      "program_session_id, block_key, block_order, block_type, title, instructions, movement_id, feedback_profile, target_duration_seconds",
+      "program_session_id, block_key, block_order, block_type, title, instructions, movement_id, feedback_profile, target_duration_seconds, laterality_policy",
     )
     .eq("program_session_id", sourceProgramSessionId)
     .order("block_order", { ascending: true });
@@ -172,5 +186,34 @@ export async function loadCatalogSessionForPlayback(
     }
   }
 
-  return toProgramSession(sessionRow, blockRows);
+  const validatedBlockRows: ValidatedProgramSessionBlockRowForBridge[] = [];
+
+  for (const row of blockRows) {
+    if (row.laterality_policy === null) {
+      throw new LoadCatalogSessionForPlaybackError(
+        "invalid_data",
+        `program_session_blocks row "${row.block_key}" has no laterality_policy.`,
+      );
+    }
+
+    if (!isKnownLateralityPolicy(row.laterality_policy)) {
+      throw new LoadCatalogSessionForPlaybackError(
+        "invalid_data",
+        `program_session_blocks row "${row.block_key}" has an unrecognized laterality_policy: "${row.laterality_policy}".`,
+      );
+    }
+
+    validatedBlockRows.push({
+      block_key: row.block_key,
+      block_type: row.block_type,
+      title: row.title,
+      instructions: row.instructions,
+      movement_id: row.movement_id,
+      feedback_profile: row.feedback_profile,
+      target_duration_seconds: row.target_duration_seconds,
+      laterality_policy: row.laterality_policy,
+    });
+  }
+
+  return toProgramSession(sessionRow, validatedBlockRows);
 }

@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { toProgramSession } from "./catalog-session-playback-bridge";
+import type { ValidatedProgramSessionBlockRowForBridge } from "./catalog-session-playback-bridge";
 import { toSessionDefinition } from "./rehab-program-runtime-adapter";
 import type {
   ProgramSessionBlocksRow,
@@ -42,6 +43,7 @@ const BLOCK_ROWS: ProgramSessionBlocksRow[] = [
     movement_id: null,
     feedback_profile: null,
     target_duration_seconds: 60,
+    laterality_policy: "not_applicable",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   },
@@ -57,6 +59,7 @@ const BLOCK_ROWS: ProgramSessionBlocksRow[] = [
     movement_id: "shoulder-abduction-reach",
     feedback_profile: "shoulder-therapeutic-target",
     target_duration_seconds: 240,
+    laterality_policy: "use_prescription",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   },
@@ -71,6 +74,7 @@ const BLOCK_ROWS: ProgramSessionBlocksRow[] = [
     movement_id: "shoulder-abduction-reach",
     feedback_profile: "d1-inspired-diagonal-reach",
     target_duration_seconds: 240,
+    laterality_policy: "use_prescription",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   },
@@ -85,14 +89,59 @@ const BLOCK_ROWS: ProgramSessionBlocksRow[] = [
     movement_id: null,
     feedback_profile: null,
     target_duration_seconds: 90,
+    laterality_policy: "not_applicable",
     created_at: "2026-01-01T00:00:00Z",
     updated_at: "2026-01-01T00:00:00Z",
   },
 ];
 
+const VALIDATED_BLOCK_ROWS: ValidatedProgramSessionBlockRowForBridge[] = [
+  {
+    block_key: "stroke-ulrf-v1-session-1-warm-up",
+    block_type: "instructional",
+    title: "Warm-up",
+    instructions: "Small, slow reaches to prepare the shoulder before active movement.",
+    movement_id: null,
+    feedback_profile: null,
+    target_duration_seconds: 60,
+    laterality_policy: "not_applicable",
+  },
+  {
+    block_key: "stroke-ulrf-v1-session-1-reach-the-light",
+    block_type: "movement-target",
+    title: "Reach the Light",
+    instructions:
+      "Lift your arm out to the side and reach toward each therapeutic light. Move at a comfortable pace.",
+    movement_id: "shoulder-abduction-reach",
+    feedback_profile: "shoulder-therapeutic-target",
+    target_duration_seconds: 240,
+    laterality_policy: "use_prescription",
+  },
+  {
+    block_key: "stroke-ulrf-v1-session-1-d1-diagonal-reach",
+    block_type: "movement-pattern",
+    title: "D1-Inspired Diagonal Reach",
+    instructions: "Follow the therapeutic light along the diagonal path. Move smoothly at a comfortable pace.",
+    movement_id: "shoulder-abduction-reach",
+    feedback_profile: "d1-inspired-diagonal-reach",
+    target_duration_seconds: 240,
+    laterality_policy: "use_prescription",
+  },
+  {
+    block_key: "stroke-ulrf-v1-session-1-cool-down",
+    block_type: "instructional",
+    title: "Cool-down",
+    instructions: "Slow, reduced-range movement and breathing to finish the session.",
+    movement_id: null,
+    feedback_profile: null,
+    target_duration_seconds: 90,
+    laterality_policy: "not_applicable",
+  },
+];
+
 describe("toProgramSession", () => {
   it("1. maps every top-level ProgramSession field correctly", () => {
-    const result = toProgramSession(SESSION_ROW, BLOCK_ROWS);
+    const result = toProgramSession(SESSION_ROW, VALIDATED_BLOCK_ROWS);
     assert.equal(result.id, SESSION_ID);
     assert.equal(result.programId, PROGRAM_ID);
     assert.equal(result.sessionNumber, 1);
@@ -103,7 +152,7 @@ describe("toProgramSession", () => {
   });
 
   it("2. maps blockId from block_key, not the block's database id", () => {
-    const result = toProgramSession(SESSION_ROW, BLOCK_ROWS);
+    const result = toProgramSession(SESSION_ROW, VALIDATED_BLOCK_ROWS);
     assert.deepEqual(
       result.blocks.map((b) => b.blockId),
       [
@@ -119,7 +168,7 @@ describe("toProgramSession", () => {
   });
 
   it("3. an instructional block's null movement_id/feedback_profile become undefined, not null (target_duration_seconds is legitimately non-null even for instructional blocks, and passes through)", () => {
-    const result = toProgramSession(SESSION_ROW, [BLOCK_ROWS[0]]);
+    const result = toProgramSession(SESSION_ROW, [VALIDATED_BLOCK_ROWS[0]]);
     const block = result.blocks[0];
     assert.equal(block.movementId, undefined);
     assert.equal(block.feedbackProfile, undefined);
@@ -129,7 +178,7 @@ describe("toProgramSession", () => {
   });
 
   it("4. a movement block's non-null movement_id/feedback_profile/target_duration_seconds pass through", () => {
-    const result = toProgramSession(SESSION_ROW, [BLOCK_ROWS[1]]);
+    const result = toProgramSession(SESSION_ROW, [VALIDATED_BLOCK_ROWS[1]]);
     const block = result.blocks[0];
     assert.equal(block.movementId, "shoulder-abduction-reach");
     assert.equal(block.feedbackProfile, "shoulder-therapeutic-target");
@@ -137,7 +186,7 @@ describe("toProgramSession", () => {
   });
 
   it("5. blockType is passed through verbatim for every recognized value", () => {
-    const result = toProgramSession(SESSION_ROW, BLOCK_ROWS);
+    const result = toProgramSession(SESSION_ROW, VALIDATED_BLOCK_ROWS);
     assert.deepEqual(
       result.blocks.map((b) => b.blockType),
       ["instructional", "movement-target", "movement-pattern", "instructional"],
@@ -145,7 +194,12 @@ describe("toProgramSession", () => {
   });
 
   it("6. trusts caller-provided block order verbatim -- does not re-sort", () => {
-    const shuffled = [BLOCK_ROWS[2], BLOCK_ROWS[0], BLOCK_ROWS[3], BLOCK_ROWS[1]];
+    const shuffled = [
+      VALIDATED_BLOCK_ROWS[2],
+      VALIDATED_BLOCK_ROWS[0],
+      VALIDATED_BLOCK_ROWS[3],
+      VALIDATED_BLOCK_ROWS[1],
+    ];
     const result = toProgramSession(SESSION_ROW, shuffled);
     assert.deepEqual(
       result.blocks.map((b) => b.blockId),
@@ -158,8 +212,21 @@ describe("toProgramSession", () => {
     );
   });
 
+  it("8. maps validated laterality_policy to lateralityPolicy without inference", () => {
+    const result = toProgramSession(SESSION_ROW, VALIDATED_BLOCK_ROWS);
+    assert.deepEqual(
+      Object.fromEntries(result.blocks.map((block) => [block.blockId, block.lateralityPolicy])),
+      {
+        "stroke-ulrf-v1-session-1-warm-up": "not_applicable",
+        "stroke-ulrf-v1-session-1-reach-the-light": "use_prescription",
+        "stroke-ulrf-v1-session-1-d1-diagonal-reach": "use_prescription",
+        "stroke-ulrf-v1-session-1-cool-down": "not_applicable",
+      },
+    );
+  });
+
   it("7. integration proof: bridge output is accepted by rehab-program-runtime-adapter.ts's toSessionDefinition without throwing", () => {
-    const programSession = toProgramSession(SESSION_ROW, BLOCK_ROWS);
+    const programSession = toProgramSession(SESSION_ROW, VALIDATED_BLOCK_ROWS);
     const definition = toSessionDefinition(programSession);
     assert.equal(definition.sessionId, SESSION_ID);
     assert.equal(definition.blocks.length, 4);

@@ -62,6 +62,7 @@ describe("toMovementBlock — field mapping for the four real catalog blocks", (
       blockType: "instructional",
       title: "Warm-up",
       instructions: "Warm up gently.",
+      lateralityPolicy: "not_applicable",
     };
     assert.throws(() => toMovementBlock(invalid), /targetDurationSeconds/);
   });
@@ -74,6 +75,7 @@ describe("toMovementBlock — field mapping for the four real catalog blocks", (
         title: "Warm-up",
         instructions: "Warm up gently.",
         targetDurationSeconds: invalidDuration,
+        lateralityPolicy: "not_applicable",
       };
       assert.throws(
         () => toMovementBlock(invalid),
@@ -90,6 +92,7 @@ describe("toMovementBlock — field mapping for the four real catalog blocks", (
       title: "Future block",
       instructions: "Not part of this program.",
       targetDurationSeconds: 30,
+      lateralityPolicy: "not_applicable",
     };
     assert.throws(() => toMovementBlock(unknown), /supportedPositions/);
   });
@@ -114,6 +117,7 @@ describe("toMovementBlock — field mapping for the four real catalog blocks", (
       title: "Reach the Light",
       instructions: "Reach toward the light.",
       targetDurationSeconds: 240,
+      lateralityPolicy: "use_prescription",
       // movementId intentionally omitted
     };
     assert.throws(() => toMovementBlock(invalid), /movementId/);

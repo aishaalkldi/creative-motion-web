@@ -125,6 +125,7 @@ const BLOCK_ROWS = [
     movement_id: null,
     feedback_profile: null,
     target_duration_seconds: 60,
+    laterality_policy: "not_applicable",
   },
   {
     program_session_id: SESSION_ID,
@@ -136,6 +137,7 @@ const BLOCK_ROWS = [
     movement_id: "shoulder-abduction-reach",
     feedback_profile: "shoulder-therapeutic-target",
     target_duration_seconds: 240,
+    laterality_policy: "use_prescription",
   },
   {
     program_session_id: SESSION_ID,
@@ -147,6 +149,7 @@ const BLOCK_ROWS = [
     movement_id: "shoulder-abduction-reach",
     feedback_profile: "d1-inspired-diagonal-reach",
     target_duration_seconds: 240,
+    laterality_policy: "use_prescription",
   },
   {
     program_session_id: SESSION_ID,
@@ -158,6 +161,7 @@ const BLOCK_ROWS = [
     movement_id: null,
     feedback_profile: null,
     target_duration_seconds: 90,
+    laterality_policy: "not_applicable",
   },
 ];
 
@@ -337,5 +341,99 @@ describe("loadCatalogSessionForPlayback", () => {
       },
     );
     assert.deepEqual(client.writeCalls, []);
+  });
+
+  it("13. valid use_prescription laterality_policy is copied through to lateralityPolicy", async () => {
+    const client = fullClient(PUBLISHED_PROGRAM);
+    const result = await loadCatalogSessionForPlayback(client, SESSION_ID);
+    const reach = result.blocks.find((b) => b.blockId === "stroke-ulrf-v1-session-1-reach-the-light");
+    assert.ok(reach);
+    assert.equal(reach!.lateralityPolicy, "use_prescription");
+  });
+
+  it("14. valid not_applicable laterality_policy is copied through to lateralityPolicy", async () => {
+    const client = fullClient(PUBLISHED_PROGRAM);
+    const result = await loadCatalogSessionForPlayback(client, SESSION_ID);
+    const warmUp = result.blocks.find((b) => b.blockId === "stroke-ulrf-v1-session-1-warm-up");
+    assert.ok(warmUp);
+    assert.equal(warmUp!.lateralityPolicy, "not_applicable");
+  });
+
+  it("15. null laterality_policy is rejected as invalid_data", async () => {
+    const client = createMockClient({
+      program_sessions: { data: [SESSION_ROW], error: null },
+      treatment_programs: { data: [PUBLISHED_PROGRAM], error: null },
+      program_session_blocks: {
+        data: [{ ...BLOCK_ROWS[0], laterality_policy: null }],
+        error: null,
+      },
+    });
+    await assert.rejects(
+      () => loadCatalogSessionForPlayback(client, SESSION_ID),
+      (err: unknown) => {
+        assert.ok(err instanceof LoadCatalogSessionForPlaybackError);
+        assert.equal(err.reason, "invalid_data");
+        assert.match(err.message, /no laterality_policy/);
+        return true;
+      },
+    );
+  });
+
+  it("16. unknown laterality_policy is rejected as invalid_data", async () => {
+    const client = createMockClient({
+      program_sessions: { data: [SESSION_ROW], error: null },
+      treatment_programs: { data: [PUBLISHED_PROGRAM], error: null },
+      program_session_blocks: {
+        data: [{ ...BLOCK_ROWS[0], laterality_policy: "right" }],
+        error: null,
+      },
+    });
+    await assert.rejects(
+      () => loadCatalogSessionForPlayback(client, SESSION_ID),
+      (err: unknown) => {
+        assert.ok(err instanceof LoadCatalogSessionForPlaybackError);
+        assert.equal(err.reason, "invalid_data");
+        assert.match(err.message, /unrecognized laterality_policy/);
+        return true;
+      },
+    );
+  });
+
+  it("17. instructional block with null policy is not inferred as use_prescription", async () => {
+    const client = createMockClient({
+      program_sessions: { data: [SESSION_ROW], error: null },
+      treatment_programs: { data: [PUBLISHED_PROGRAM], error: null },
+      program_session_blocks: {
+        data: [{ ...BLOCK_ROWS[0], block_type: "instructional", laterality_policy: null }],
+        error: null,
+      },
+    });
+    await assert.rejects(
+      () => loadCatalogSessionForPlayback(client, SESSION_ID),
+      (err: unknown) => {
+        assert.ok(err instanceof LoadCatalogSessionForPlaybackError);
+        assert.equal(err.reason, "invalid_data");
+        return true;
+      },
+    );
+  });
+
+  it("18. movement block with null policy is not inferred as use_prescription or right", async () => {
+    const client = createMockClient({
+      program_sessions: { data: [SESSION_ROW], error: null },
+      treatment_programs: { data: [PUBLISHED_PROGRAM], error: null },
+      program_session_blocks: {
+        data: [{ ...BLOCK_ROWS[1], block_type: "movement-target", laterality_policy: null }],
+        error: null,
+      },
+    });
+    await assert.rejects(
+      () => loadCatalogSessionForPlayback(client, SESSION_ID),
+      (err: unknown) => {
+        assert.ok(err instanceof LoadCatalogSessionForPlaybackError);
+        assert.equal(err.reason, "invalid_data");
+        return true;
+      },
+    );
   });
 });

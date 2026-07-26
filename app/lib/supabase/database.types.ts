@@ -58,6 +58,13 @@
  * removed — the same hand-maintained `Tables<T>` shorthand and Row
  * aliases from the prior regeneration are unchanged, and no new Row
  * alias was needed since TreatmentPlansRow already existed.
+ * PR 180 (laterality schema): hand-synced from migration
+ * 019_add_prescribed_laterality_and_block_policy.sql before that
+ * migration was applied to Staging — adds
+ * treatment_plans.prescribed_laterality and
+ * program_session_blocks.laterality_policy (both `string | null`).
+ * Must be verified by regenerating from Staging after migration 019
+ * is applied there.
  */
 
 export type Json =
@@ -601,6 +608,7 @@ export type Database = {
           feedback_profile: string | null
           id: string
           instructions: string
+          laterality_policy: string | null
           movement_id: string | null
           program_session_id: string
           target_duration_seconds: number
@@ -615,6 +623,7 @@ export type Database = {
           feedback_profile?: string | null
           id?: string
           instructions: string
+          laterality_policy?: string | null
           movement_id?: string | null
           program_session_id: string
           target_duration_seconds: number
@@ -629,6 +638,7 @@ export type Database = {
           feedback_profile?: string | null
           id?: string
           instructions?: string
+          laterality_policy?: string | null
           movement_id?: string | null
           program_session_id?: string
           target_duration_seconds?: number
@@ -1022,6 +1032,7 @@ export type Database = {
           id: string
           patient_id: string
           phase: number
+          prescribed_laterality: string | null
           provider_id: string
           source_treatment_program_id: string | null
           status: string
@@ -1040,6 +1051,7 @@ export type Database = {
           id?: string
           patient_id: string
           phase?: number
+          prescribed_laterality?: string | null
           provider_id: string
           source_treatment_program_id?: string | null
           status?: string
@@ -1058,6 +1070,7 @@ export type Database = {
           id?: string
           patient_id?: string
           phase?: number
+          prescribed_laterality?: string | null
           provider_id?: string
           source_treatment_program_id?: string | null
           status?: string

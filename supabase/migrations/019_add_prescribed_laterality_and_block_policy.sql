@@ -16,11 +16,60 @@
 -- explicitly approved. Not applied anywhere at PR creation time.
 -- ============================================================
 
-alter table public.treatment_plans
-  add column if not exists prescribed_laterality text;
+do $laterality_schema_preconditions$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'treatment_plans'
+      and column_name = 'prescribed_laterality'
+  ) then
+    raise exception
+      'treatment_plans.prescribed_laterality already exists — migration 019 must not re-run additively';
+  end if;
+
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'program_session_blocks'
+      and column_name = 'laterality_policy'
+  ) then
+    raise exception
+      'program_session_blocks.laterality_policy already exists — migration 019 must not re-run additively';
+  end if;
+
+  if exists (
+    select 1
+    from pg_constraint c
+    join pg_class t on t.oid = c.conrelid
+    join pg_namespace n on n.oid = t.relnamespace
+    where n.nspname = 'public'
+      and t.relname = 'treatment_plans'
+      and c.conname = 'treatment_plans_prescribed_laterality_chk'
+  ) then
+    raise exception
+      'treatment_plans_prescribed_laterality_chk already exists — migration 019 must not re-run additively';
+  end if;
+
+  if exists (
+    select 1
+    from pg_constraint c
+    join pg_class t on t.oid = c.conrelid
+    join pg_namespace n on n.oid = t.relnamespace
+    where n.nspname = 'public'
+      and t.relname = 'program_session_blocks'
+      and c.conname = 'program_session_blocks_laterality_policy_chk'
+  ) then
+    raise exception
+      'program_session_blocks_laterality_policy_chk already exists — migration 019 must not re-run additively';
+  end if;
+end;
+$laterality_schema_preconditions$;
 
 alter table public.treatment_plans
-  drop constraint if exists treatment_plans_prescribed_laterality_chk;
+  add column prescribed_laterality text;
 
 alter table public.treatment_plans
   add constraint treatment_plans_prescribed_laterality_chk
@@ -35,10 +84,7 @@ comment on column public.treatment_plans.prescribed_laterality is
   'NULL until explicitly authored. Never backfilled by migration.';
 
 alter table public.program_session_blocks
-  add column if not exists laterality_policy text;
-
-alter table public.program_session_blocks
-  drop constraint if exists program_session_blocks_laterality_policy_chk;
+  add column laterality_policy text;
 
 alter table public.program_session_blocks
   add constraint program_session_blocks_laterality_policy_chk

@@ -111,6 +111,7 @@ const BLOCK_ROW = {
   movement_id: null,
   feedback_profile: null,
   target_duration_seconds: 60,
+  laterality_policy: "not_applicable",
 };
 
 function successfulCatalogClient() {
