@@ -9,6 +9,7 @@ import type { PatientSession } from "@/app/api/patient/plan/route";
 import { STROKE_UPPER_LIMB_RECOVERY_FOUNDATION_SESSION_1 } from "@/app/lib/rehab-programs/stroke-upper-limb-recovery-foundation";
 import {
   isCatalogPlaybackSession,
+  PATIENT_SESSION_COMPLETE_NETWORK_ERROR,
   submitPatientSessionComplete,
 } from "./catalog-session-playback";
 
@@ -242,6 +243,53 @@ describe("catalog session completion wiring", () => {
     }
   });
 
+  it("returns a safe failure when fetch rejects with a network error", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      throw new TypeError("Failed to fetch");
+    }) as typeof fetch;
+
+    try {
+      const result = await submitPatientSessionComplete({
+        token: "patient-token",
+        sessionId: "plan-session-id",
+        effortScore: 4,
+        painScore: 2,
+        exercisesCompleted: 0,
+      });
+      assert.equal(result.ok, false);
+      if (result.ok) return;
+      assert.equal(result.error, PATIENT_SESSION_COMPLETE_NETWORK_ERROR);
+      assert.equal(result.status, 0);
+      assert.doesNotMatch(result.error, /patient-token/);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("shows localized saveError instead of raw API/helper error text", () => {
+    const playbackPath = join(
+      process.cwd(),
+      "app/components/patient/session/CatalogPatientSessionPlayback.tsx",
+    );
+    const source = readFileSync(playbackPath, "utf8");
+    assert.match(source, /\{shellUi\.saveError\}/);
+    assert.doesNotMatch(source, /result\.error/);
+    assert.doesNotMatch(source, /setCompleteError\(result\.error\)/);
+    assert.match(source, /sessionShellUi\(patientLanguage\)/);
+  });
+
+  it("resets completing and submitStartedRef after failed save so the patient can retry", () => {
+    const playbackPath = join(
+      process.cwd(),
+      "app/components/patient/session/CatalogPatientSessionPlayback.tsx",
+    );
+    const source = readFileSync(playbackPath, "utf8");
+    assert.match(source, /setCompleting\(false\)/);
+    assert.match(source, /submitStartedRef\.current = false/);
+    assert.match(source, /try \{[\s\S]*submitPatientSessionComplete/);
+  });
+
   it("does not expose technical errors in CatalogSessionPlayer patient UI", () => {
     const playerPath = join(
       process.cwd(),
@@ -265,5 +313,52 @@ describe("catalog session route localization contracts", () => {
     assert.match(source, /textDir=\{textDir\}/);
     assert.match(source, /arClass=\{arClass\}/);
     assert.match(source, /language=\{patientLanguage\}/);
+  });
+});
+
+describe("catalog session completion display contracts", () => {
+  it("hides exercise count on catalog completion and already-complete screens", () => {
+    const playbackPath = join(
+      process.cwd(),
+      "app/components/patient/session/CatalogPatientSessionPlayback.tsx",
+    );
+    const source = readFileSync(playbackPath, "utf8");
+    assert.match(source, /<GuidedSessionCompleteScreen[\s\S]*hideExerciseCount/);
+    assert.match(source, /<GuidedSessionAlreadyCompleteScreen[\s\S]*hideExerciseCount/);
+    assert.match(source, /exercisesCompleted=\{0\}/);
+  });
+
+  it("GuidedSessionCompleteScreen hides exercise count only when hideExerciseCount is set", () => {
+    const flowPath = join(
+      process.cwd(),
+      "app/components/patient/session/PatientGuidedSessionFlow.tsx",
+    );
+    const source = readFileSync(flowPath, "utf8");
+    assert.match(source, /hideExerciseCount = false/);
+    assert.match(source, /!hideExerciseCount \? \([\s\S]*exercisesCompletedCount\(exercisesCompleted\)/);
+  });
+
+  it("GuidedSessionAlreadyCompleteScreen hides exercise count only when hideExerciseCount is set", () => {
+    const flowPath = join(
+      process.cwd(),
+      "app/components/patient/session/PatientGuidedSessionFlow.tsx",
+    );
+    const source = readFileSync(flowPath, "utf8");
+    const alreadyBlock = source.slice(
+      source.indexOf("export function GuidedSessionAlreadyCompleteScreen"),
+      source.indexOf("export type { ResolvedExerciseView }"),
+    );
+    assert.match(alreadyBlock, /hideExerciseCount = false/);
+    assert.match(alreadyBlock, /!hideExerciseCount \? ui\.exercisesCompletedCount\(totalExercises\)/);
+  });
+
+  it("legacy session page still shows exercise count by default", () => {
+    const pagePath = join(
+      process.cwd(),
+      "app/patient/[token]/session/[sessionId]/page.tsx",
+    );
+    const source = readFileSync(pagePath, "utf8");
+    assert.match(source, /exercisesCompleted=\{completionSummary\.exercisesCompleted\}/);
+    assert.doesNotMatch(source, /hideExerciseCount/);
   });
 });

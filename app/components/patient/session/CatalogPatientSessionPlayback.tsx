@@ -77,7 +77,7 @@ export function CatalogPatientSessionPlayback({
   const [painAfter, setPainAfter] = useState<number | null>(null);
   const [patientNote, setPatientNote] = useState("");
   const [completing, setCompleting] = useState(false);
-  const [completeError, setCompleteError] = useState("");
+  const [saveFailed, setSaveFailed] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [completionSummary, setCompletionSummary] = useState<{
     effortScore: number;
@@ -97,7 +97,7 @@ export function CatalogPatientSessionPlayback({
     setPainAfter(null);
     setPatientNote("");
     setCompleting(false);
-    setCompleteError("");
+    setSaveFailed(false);
     setCompleted(false);
     setCompletionSummary(null);
     cvSessionCompleteRef.current = false;
@@ -116,7 +116,7 @@ export function CatalogPatientSessionPlayback({
 
     submitStartedRef.current = true;
     setCompleting(true);
-    setCompleteError("");
+    setSaveFailed(false);
 
     const notes = encodeSessionCoachNotes({
       painBefore: null,
@@ -124,25 +124,31 @@ export function CatalogPatientSessionPlayback({
       patientNote: patientNote.trim() || null,
     });
 
-    const result = await submitPatientSessionComplete({
-      token,
-      sessionId: session.id,
-      effortScore,
-      painScore: painAfter,
-      exercisesCompleted: 0,
-      notes,
-    });
+    try {
+      const result = await submitPatientSessionComplete({
+        token,
+        sessionId: session.id,
+        effortScore,
+        painScore: painAfter,
+        exercisesCompleted: 0,
+        notes,
+      });
 
-    if (!result.ok) {
-      setCompleteError(result.error);
+      if (!result.ok) {
+        setSaveFailed(true);
+        setCompleting(false);
+        submitStartedRef.current = false;
+        return;
+      }
+
+      setCompleted(true);
+      setCompletionSummary({ effortScore, painAfter });
+      await onPlanRefresh();
+    } catch {
+      setSaveFailed(true);
       setCompleting(false);
       submitStartedRef.current = false;
-      return;
     }
-
-    setCompleted(true);
-    setCompletionSummary({ effortScore, painAfter });
-    await onPlanRefresh();
   }, [
     completed,
     completing,
@@ -171,6 +177,7 @@ export function CatalogPatientSessionPlayback({
         sessionTitle={session.title}
         totalExercises={0}
         completedLabel={completedLabel}
+        hideExerciseCount
       />
     );
   }
@@ -188,6 +195,7 @@ export function CatalogPatientSessionPlayback({
         painAfter={completionSummary.painAfter}
         effortLabel={shellUi.effort}
         painLabel={shellUi.painAfterLabel}
+        hideExerciseCount
       />
     );
   }
@@ -273,9 +281,9 @@ export function CatalogPatientSessionPlayback({
             />
           </div>
 
-          {completeError ? (
+          {saveFailed ? (
             <div className="rounded-[10px] border border-rose-200 bg-rose-50 px-4 py-3">
-              <p className="text-[13px] text-rose-600">{completeError}</p>
+              <p className="text-[13px] text-rose-600">{shellUi.saveError}</p>
             </div>
           ) : null}
 

@@ -352,6 +352,7 @@ export function GuidedSessionCompleteScreen({
   effortLabel,
   painLabel,
   onViewProgress,
+  hideExerciseCount = false,
 }: {
   lang: PatientExerciseLanguage;
   arClass: string;
@@ -364,6 +365,7 @@ export function GuidedSessionCompleteScreen({
   effortLabel: string;
   painLabel: string;
   onViewProgress?: boolean;
+  hideExerciseCount?: boolean;
 }) {
   const ui = guidedSessionUi(lang);
 
@@ -390,10 +392,14 @@ export function GuidedSessionCompleteScreen({
         <p className="mt-3 text-[15px] text-[#6B7280]">{ui.greatWork}</p>
 
         <div className="mt-5 rounded-[16px] border border-[#D1E7DE] bg-[#F0FAF6] px-5 py-4">
-          <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]">
-            {ui.exercisesCompletedCount(exercisesCompleted)}
+          {!hideExerciseCount ? (
+            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]">
+              {ui.exercisesCompletedCount(exercisesCompleted)}
+            </p>
+          ) : null}
+          <p className={`text-[13px] text-[#6B7280] ${hideExerciseCount ? "" : "mt-1"}`}>
+            {ui.sessionCompleteBody}
           </p>
-          <p className="mt-1 text-[13px] text-[#6B7280]">{ui.sessionCompleteBody}</p>
         </div>
 
         <div className="mx-auto mt-4 grid max-w-xs grid-cols-2 gap-2">
@@ -434,6 +440,7 @@ export function GuidedSessionAlreadyCompleteScreen({
   sessionTitle,
   totalExercises,
   completedLabel,
+  hideExerciseCount = false,
 }: {
   lang: PatientExerciseLanguage;
   arClass: string;
@@ -442,6 +449,7 @@ export function GuidedSessionAlreadyCompleteScreen({
   sessionTitle: string;
   totalExercises: number;
   completedLabel: string | null;
+  hideExerciseCount?: boolean;
 }) {
   const ui = guidedSessionUi(lang);
 
@@ -457,8 +465,9 @@ export function GuidedSessionAlreadyCompleteScreen({
         <h2 className="text-[24px] font-bold text-[#0A0F1A]">{ui.sessionCompleteTitle}</h2>
         <p className="mt-2 text-[16px] font-semibold text-[#374151]">{sessionTitle}</p>
         <p className="mt-3 text-[14px] text-[#6B7280]">
-          {ui.exercisesCompletedCount(totalExercises)}
-          {completedLabel ? ` · ${completedLabel}` : ""}
+          {!hideExerciseCount ? ui.exercisesCompletedCount(totalExercises) : null}
+          {!hideExerciseCount && completedLabel ? " · " : null}
+          {completedLabel ?? ""}
         </p>
       </div>
       <Link href={`/patient/${token}`} className={`${GUIDED_PRIMARY_BTN} max-w-xs`}>
