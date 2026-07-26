@@ -15,7 +15,14 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { loadCatalogSessionsById } from "./route";
+import {
+  handlePlanSessionQueryResult,
+  loadCatalogSessionsById,
+  mapPlanSessionRowsToPatientSessions,
+} from "./route";
+import { API_ERRORS } from "../../../lib/api/safe-errors";
+import type { PlanSessionRow } from "./plan-session-query";
+import type { ProgramSession } from "../../../lib/rehab-programs/rehab-program-types";
 
 // ── Minimal mocked Supabase client, matching
 // load-catalog-session-for-playback.test.ts's own mock shape, since
@@ -196,5 +203,93 @@ describe("loadCatalogSessionsById", () => {
       { id: "plan-session-3", source_program_session_id: SESSION_ID },
     ]);
     assert.equal(result.get("plan-session-3"), null);
+  });
+});
+
+describe("handlePlanSessionQueryResult", () => {
+  it("returns a generic 500 response for a failed session query instead of masking as success", async () => {
+    const handled = handlePlanSessionQueryResult({
+      ok: false,
+      errorCode: "42501",
+      queryMode: "modern",
+      reason: "query_failed",
+    });
+
+    assert.equal(handled.ok, false);
+    if (handled.ok) return;
+
+    const body = (await handled.response.json()) as { error: string };
+    assert.equal(handled.response.status, 500);
+    assert.equal(body.error, API_ERRORS.GENERIC);
+  });
+
+  it("passes successful session rows through unchanged", () => {
+    const rows: PlanSessionRow[] = [{
+      id: "legacy-session-1",
+      session_number: 1,
+      title: "Session 1",
+      exercises: [{ exerciseId: "sit-to-stand", sets: 3, reps: "8-10" }],
+      status: "upcoming",
+      scheduled_at: null,
+      completed_at: null,
+      source_program_session_id: null,
+    }];
+
+    const handled = handlePlanSessionQueryResult({
+      ok: true,
+      sessions: rows,
+      queryMode: "legacy",
+    });
+
+    assert.equal(handled.ok, true);
+    if (!handled.ok) return;
+    assert.deepEqual(handled.sessions, rows);
+  });
+});
+
+describe("mapPlanSessionRowsToPatientSessions", () => {
+  it("maps legacy fallback rows without a catalogSession key", () => {
+    const rows: PlanSessionRow[] = [{
+      id: "legacy-session-1",
+      session_number: 1,
+      title: "Session 1",
+      exercises: [],
+      status: "upcoming",
+      scheduled_at: null,
+      completed_at: null,
+      source_program_session_id: null,
+    }];
+
+    const mapped = mapPlanSessionRowsToPatientSessions(rows, new Map());
+
+    assert.equal(mapped.length, 1);
+    assert.equal(mapped[0]?.sessionNumber, 1);
+    assert.equal("catalogSession" in (mapped[0] ?? {}), false);
+    assert.deepEqual(mapped[0]?.exercises, []);
+  });
+
+  it("preserves modern catalog-compatible catalogSession attachment", () => {
+    const catalogSession = {
+      id: SESSION_ID,
+      blocks: [],
+    } as unknown as ProgramSession;
+
+    const rows: PlanSessionRow[] = [{
+      id: "plan-session-1",
+      session_number: 1,
+      title: "Session 1",
+      exercises: [],
+      status: "upcoming",
+      scheduled_at: null,
+      completed_at: null,
+      source_program_session_id: SESSION_ID,
+    }];
+
+    const mapped = mapPlanSessionRowsToPatientSessions(
+      rows,
+      new Map([["plan-session-1", catalogSession]]),
+    );
+
+    assert.equal(mapped[0]?.catalogSession, catalogSession);
   });
 });
