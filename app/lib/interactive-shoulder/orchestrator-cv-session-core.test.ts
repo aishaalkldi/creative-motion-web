@@ -92,4 +92,21 @@ describe("orchestrator cv session core wrapper contract", () => {
       "instructional",
     ]);
   });
+
+  it("startSession resets sessionCompleteFiredRef alongside sessionStartedRef", () => {
+    const corePath = join(
+      process.cwd(),
+      "app/components/patient/interactive-shoulder/OrchestratorCvSessionCore.tsx",
+    );
+    const source = readFileSync(corePath, "utf8");
+    const startSessionIndex = source.indexOf("const startSession = useCallback");
+    assert.ok(startSessionIndex >= 0);
+    const startSessionBody = source.slice(startSessionIndex, startSessionIndex + 2500);
+    assert.match(startSessionBody, /sessionStartedRef\.current = true;/);
+    assert.match(startSessionBody, /sessionCompleteFiredRef\.current = false;/);
+    assert.match(
+      startSessionBody,
+      /sessionStartedRef\.current = true;\s*\r?\n\s*sessionCompleteFiredRef\.current = false;/,
+    );
+  });
 });

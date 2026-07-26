@@ -15,7 +15,12 @@ export function convertCatalogProgramSession(
 ): CatalogSessionConversionResult {
   try {
     return { ok: true, sessionDefinition: toSessionDefinition(programSession) };
-  } catch {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("[CatalogSessionPlayer] Catalog session conversion failed", {
+      catalogSessionId: programSession.id,
+      message,
+    });
     return { ok: false };
   }
 }

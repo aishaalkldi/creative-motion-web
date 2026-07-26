@@ -44,6 +44,25 @@ describe("catalog-session-player-conversion", () => {
     assert.deepEqual(result, { ok: false });
   });
 
+  it("logs a developer diagnostic on conversion failure without changing patient result", () => {
+    const originalError = console.error;
+    const logs: unknown[][] = [];
+    console.error = (...args: unknown[]) => {
+      logs.push(args);
+    };
+    try {
+      const result = convertCatalogProgramSession(INVALID_CATALOG_SESSION);
+      assert.deepEqual(result, { ok: false });
+      assert.equal(logs.length, 1);
+      assert.equal(logs[0]?.[0], "[CatalogSessionPlayer] Catalog session conversion failed");
+      const payload = logs[0]?.[1] as { catalogSessionId?: string; message?: string };
+      assert.equal(payload.catalogSessionId, INVALID_CATALOG_SESSION.id);
+      assert.ok(typeof payload.message === "string" && payload.message.length > 0);
+    } finally {
+      console.error = originalError;
+    }
+  });
+
   it("CatalogSessionPlayer passes converted SessionDefinition to OrchestratorCvSessionCore", () => {
     const playerPath = join(
       process.cwd(),
@@ -71,6 +90,8 @@ describe("catalog-session-player-conversion", () => {
     assert.doesNotMatch(source, /<InteractiveShoulderSession/);
     assert.doesNotMatch(source, /REACH_THE_LIGHT_SESSION/);
     assert.doesNotMatch(source, /resolveInteractiveShoulderSessionFromEnv/);
+    assert.doesNotMatch(source, /conversion\.message/);
+    assert.doesNotMatch(source, /error\.message/);
   });
 
   it("catalog session config error copy is bilingual in interactiveShoulderUi", () => {
