@@ -15,10 +15,16 @@ import {
 } from "../../../lib/rate-limit";
 import {
   API_ERRORS,
+  genericServerErrorResponse,
   invalidPatientTokenResponse,
   serviceUnavailableResponse,
   unableToCompleteResponse,
 } from "../../../lib/api/safe-errors";
+import {
+  fetchPlanSessionsForPatientPortal,
+  type FetchPlanSessionsResult,
+  type PlanSessionRow,
+} from "./plan-session-query";
 import { parseStoredExercises, type PrescribedExerciseV1 } from "../../../lib/exercise-resolve";
 import { getAssessmentLanguage, type AssessmentLanguage } from "../../../lib/assessment-payload";
 import {
@@ -165,6 +171,44 @@ export async function loadCatalogSessionsById(
   return catalogSessionById;
 }
 
+export function mapPlanSessionRowsToPatientSessions(
+  sessions: readonly PlanSessionRow[],
+  catalogSessionById: Map<string, ProgramSession | null>,
+): PatientSession[] {
+  return sessions.map((s) => ({
+    id:            s.id,
+    sessionNumber: s.session_number,
+    title:         s.title,
+    exercises:     parseStoredExercises(s.exercises),
+    status:        s.status as PatientSession["status"],
+    scheduledAt:   s.scheduled_at,
+    completedAt:   s.completed_at,
+    ...(s.source_program_session_id
+      ? { catalogSession: catalogSessionById.get(s.id) ?? null }
+      : {}),
+  }));
+}
+
+export function handlePlanSessionQueryResult(
+  sessionFetch: FetchPlanSessionsResult,
+):
+  | { ok: true; sessions: PlanSessionRow[] }
+  | { ok: false; response: NextResponse } {
+  if (sessionFetch.ok) {
+    return { ok: true, sessions: sessionFetch.sessions };
+  }
+
+  console.error(
+    "[GET /api/patient/plan] plan_sessions query failed",
+    JSON.stringify({
+      errorCode: sessionFetch.errorCode,
+      queryMode: sessionFetch.queryMode,
+      reason: sessionFetch.reason,
+    }),
+  );
+  return { ok: false, response: genericServerErrorResponse() };
+}
+
 // ── GET /api/patient/plan?token=... ───────────────────────────────────────────
 
 export async function GET(req: NextRequest) {
@@ -202,27 +246,14 @@ export async function GET(req: NextRequest) {
     providerId: access.providerId,
   });
 
-  // Fetch sessions for the resolved current plan
-  type SessionRow = {
-    id: string;
-    session_number: number;
-    title: string;
-    exercises: unknown;
-    status: string;
-    scheduled_at: string | null;
-    completed_at: string | null;
-    source_program_session_id: string | null;
-  };
-  const { data: sessions } = await admin
-    .from("plan_sessions")
-    .select(
-      "id, session_number, title, exercises, status, scheduled_at, completed_at, source_program_session_id",
-    )
-    .eq("plan_id", access.currentPlanId)
-    .order("session_number", { ascending: true })
-    .returns<SessionRow[]>();
+  const sessionFetch = await fetchPlanSessionsForPatientPortal(admin, access.currentPlanId);
+  const handledSessions = handlePlanSessionQueryResult(sessionFetch);
+  if (!handledSessions.ok) {
+    return handledSessions.response;
+  }
 
-  const catalogSessionById = await loadCatalogSessionsById(admin, sessions ?? []);
+  const sessions = handledSessions.sessions;
+  const catalogSessionById = await loadCatalogSessionsById(admin, sessions);
 
   // 4 — Fetch safe patient fields only
   type PatientRow = { diagnosis: string | null };
@@ -266,20 +297,7 @@ export async function GET(req: NextRequest) {
     clinicianNotes:  plan.clinician_note ?? "",
     assignedBy:      sd?.assignedBy ?? "Your therapist",
     assignedAt:      plan.created_at,
-    sessions: (sessions ?? []).map((s) => ({
-      id:            s.id,
-      sessionNumber: s.session_number,
-      title:         s.title,
-      exercises:     parseStoredExercises(s.exercises),
-      status:        s.status as PatientSession["status"],
-      scheduledAt:   s.scheduled_at,
-      completedAt:   s.completed_at,
-      // Absent (no key at all) for a legacy session; present (value or
-      // null) only when source_program_session_id was set.
-      ...(s.source_program_session_id
-        ? { catalogSession: catalogSessionById.get(s.id) ?? null }
-        : {}),
-    })),
+    sessions: mapPlanSessionRowsToPatientSessions(sessions, catalogSessionById),
     lifetimeSummary,
   };
 
