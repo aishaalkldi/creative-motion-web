@@ -8,7 +8,7 @@ import type { InteractiveShoulderSessionProps } from "@/app/lib/interactive-shou
 import { OrchestratorCvSessionCore } from "./OrchestratorCvSessionCore";
 
 export type CatalogSessionPlayerProps = InteractiveShoulderSessionProps & {
-  programSession: ProgramSession;
+  programSession: ProgramSession | null;
 };
 
 export function CatalogSessionPlayer({
@@ -20,7 +20,7 @@ export function CatalogSessionPlayer({
 }: CatalogSessionPlayerProps) {
   const ui = interactiveShoulderUi(language);
   const conversion = useMemo(
-    () => convertCatalogProgramSession(programSession),
+    () => (programSession ? convertCatalogProgramSession(programSession) : { ok: false as const }),
     [programSession],
   );
 

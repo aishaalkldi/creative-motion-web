@@ -12,6 +12,7 @@ import {
   PatientExerciseSessionCard,
   type ExerciseCardStep,
 } from "@/app/components/patient/PatientExerciseSessionCard";
+import { CatalogPatientSessionPlayback } from "@/app/components/patient/session/CatalogPatientSessionPlayback";
 import {
   GUIDED_PRIMARY_BTN,
   GuidedSessionAlreadyCompleteScreen,
@@ -21,6 +22,7 @@ import {
   GuidedSessionShell,
   GuidedSessionStartScreen,
 } from "@/app/components/patient/session/PatientGuidedSessionFlow";
+import { isCatalogPlaybackSession } from "@/app/lib/patient-portal/catalog-session-playback";
 import { useCvSessionCapture } from "@/app/hooks/useCvSessionCapture";
 import {
   planHomeUi,
@@ -179,6 +181,19 @@ export default function SessionPlayerPage() {
           {planHomeUi(patientLanguage).loading}
         </p>
       </div>
+    );
+  }
+
+  if (isCatalogPlaybackSession(session)) {
+    return (
+      <CatalogPatientSessionPlayback
+        token={token}
+        session={session}
+        patientLanguage={patientLanguage}
+        textDir={textDir}
+        arClass={arClass}
+        onPlanRefresh={refreshPlan}
+      />
     );
   }
 

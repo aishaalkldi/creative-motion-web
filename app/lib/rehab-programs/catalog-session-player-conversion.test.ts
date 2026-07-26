@@ -63,6 +63,16 @@ describe("catalog-session-player-conversion", () => {
     }
   });
 
+  it("CatalogSessionPlayer shows fail-closed error when programSession is null", () => {
+    const playerPath = join(
+      process.cwd(),
+      "app/components/patient/interactive-shoulder/CatalogSessionPlayer.tsx",
+    );
+    const source = readFileSync(playerPath, "utf8");
+    assert.match(source, /programSession: ProgramSession \| null/);
+    assert.match(source, /programSession \? convertCatalogProgramSession\(programSession\) : \{ ok: false/);
+  });
+
   it("CatalogSessionPlayer passes converted SessionDefinition to OrchestratorCvSessionCore", () => {
     const playerPath = join(
       process.cwd(),
