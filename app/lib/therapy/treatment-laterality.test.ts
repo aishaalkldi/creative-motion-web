@@ -8,11 +8,11 @@ import {
   ALL_SESSION_BLOCK_TYPES,
   isProductionBilateralSupported,
   planBlockLateralityExecution,
-  planBlockLateralityExecutionWithResolver,
   type BlockLateralityPolicy,
-  type LateralityExecutionPlan,
+  type PlanBlockLateralityExecutionInput,
   type TreatmentLaterality,
 } from "./treatment-laterality";
+import { planBlockLateralityExecutionWithResolver } from "./treatment-laterality.test-support";
 
 const BLOCK_TYPE: SessionBlockType = "movement-target";
 
@@ -173,9 +173,14 @@ describe("tuple ordering and safety invariants", () => {
         prescribedLaterality: null,
       },
       bilateralSupportedResolver(),
-    ) as Extract<LateralityExecutionPlan, { ok: true; mode: "bilateral" }>;
-    assert.deepEqual(result.executableSides, ["left", "right"]);
-    assert.notDeepEqual(result.executableSides, ["right", "left"]);
+    );
+    assert.equal(result.ok, true);
+    if (result.ok && result.mode === "bilateral") {
+      assert.deepEqual(result.executableSides, ["left", "right"]);
+      assert.notDeepEqual(result.executableSides, ["right", "left"]);
+    } else {
+      assert.fail("expected bilateral success plan");
+    }
   });
 
   it("never silently defaults missing prescription to right", () => {
@@ -196,24 +201,20 @@ describe("tuple ordering and safety invariants", () => {
     }
   });
 
-  it("public planner cannot override production bilateral capability", () => {
-    const attempts: Array<{ blockType: SessionBlockType; bilateralSupported?: boolean }> = [
-      { blockType: "movement-target" },
-      { blockType: "movement-pattern" },
-      { blockType: "instructional" },
-    ];
-    for (const attempt of attempts) {
-      assert.equal(
-        "bilateralSupported" in attempt,
-        false,
-        "production input must not accept bilateralSupported overrides",
-      );
-      const result = planBlockLateralityExecution({
-        blockType: attempt.blockType,
-        blockPolicy: "bilateral",
-        prescribedLaterality: null,
-      });
-      assert.equal(result.ok, false);
+  it("public planner ignores spoofed bilateralSupported on extended input objects", () => {
+    const spoofedInput: PlanBlockLateralityExecutionInput & {
+      bilateralSupported: true;
+    } = {
+      blockType: BLOCK_TYPE,
+      blockPolicy: "bilateral",
+      prescribedLaterality: null,
+      bilateralSupported: true,
+    };
+
+    const result = planBlockLateralityExecution(spoofedInput);
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.reason, "unsupported_bilateral_execution");
     }
   });
 });
