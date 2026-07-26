@@ -1,5 +1,5 @@
 /**
- * Test-support planner core — not part of the public application API.
+ * Internal laterality planner core — not part of the public application API.
  * Imported only by treatment-laterality.ts and treatment-laterality.test.ts.
  */
 import type { SessionBlockType } from "@/app/lib/session-orchestrator/types";

@@ -1,5 +1,5 @@
 import type { SessionBlockType } from "@/app/lib/session-orchestrator/types";
-import { planBlockLateralityExecutionWithResolver } from "./treatment-laterality.test-support";
+import { planBlockLateralityExecutionWithResolver } from "./treatment-laterality.internal";
 
 export type TreatmentLaterality =
   | "left"
@@ -58,6 +58,15 @@ export const ALL_SESSION_BLOCK_TYPES = [
   "movement-target",
   "movement-pattern",
 ] as const satisfies readonly SessionBlockType[];
+
+type MissingSessionBlockTypes = Exclude<
+  SessionBlockType,
+  (typeof ALL_SESSION_BLOCK_TYPES)[number]
+>;
+
+const _assertAllSessionBlockTypesListed: MissingSessionBlockTypes extends never
+  ? true
+  : never = true;
 
 /**
  * Production capability table — every current catalog block type is

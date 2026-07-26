@@ -12,7 +12,7 @@ import {
   type PlanBlockLateralityExecutionInput,
   type TreatmentLaterality,
 } from "./treatment-laterality";
-import { planBlockLateralityExecutionWithResolver } from "./treatment-laterality.test-support";
+import { planBlockLateralityExecutionWithResolver } from "./treatment-laterality.internal";
 
 const BLOCK_TYPE: SessionBlockType = "movement-target";
 
