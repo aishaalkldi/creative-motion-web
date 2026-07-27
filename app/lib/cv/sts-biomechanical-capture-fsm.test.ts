@@ -59,7 +59,12 @@ function homeStsCycle(startMs: number): Array<{ hipY: number; nowMs: number }> {
 function tickSequence(
   fsm: StsBiomechanicalCaptureFsm,
   state: StsBiomechanicalCaptureState,
-  samples: Array<{ hipY: number; nowMs: number; posePresent?: boolean }>,
+  samples: Array<{
+    hipY: number;
+    nowMs: number;
+    posePresent?: boolean;
+    canCount?: boolean;
+  }>,
 ): void {
   for (const sample of samples) {
     fsm.tick(state, {
@@ -67,7 +72,7 @@ function tickSequence(
       nowMs: sample.nowMs,
       torsoSpan: 0.25,
       canCollectBaseline: true,
-      canCount: true,
+      canCount: sample.canCount ?? true,
       posePresent: sample.posePresent ?? true,
       hipVisibilitySum: 1.2,
     });
@@ -487,5 +492,193 @@ describe("StsBiomechanicalCaptureFsm — PR88 returning / seated-return", () => 
 
     assert.equal(state.repCount, 0);
     assert.equal(state.attempts.length, 0);
+  });
+});
+
+describe("StsBiomechanicalCaptureFsm — readiness drop tolerance", () => {
+  /** Full seated -> rising -> standing -> returning -> seated cycle, matching the existing baseline test. */
+  function fullCycleFrames(
+    standingSegment: Array<{ hipY: number; nowMs: number; canCount?: boolean }>,
+  ) {
+    return [
+      ...frames(400, 5, 0.54),
+      ...frames(480, 4, 0.49),
+      ...frames(544, 4, 0.48),
+      ...standingSegment,
+      ...frames(928, 4, 0.50),
+      ...frames(992, 4, 0.52),
+      ...frames(1_056, 6, 0.54),
+    ];
+  }
+
+  function withCanCountFalseAt(
+    seq: Array<{ hipY: number; nowMs: number }>,
+    falseIndices: number[],
+  ): Array<{ hipY: number; nowMs: number; canCount: boolean }> {
+    return seq.map((sample, i) => ({
+      ...sample,
+      canCount: !falseIndices.includes(i),
+    }));
+  }
+
+  it("counts a realistic seated -> rising -> standing -> returning -> seated cycle with no interruption", () => {
+    const fsm = new StsBiomechanicalCaptureFsm(BASELINE_CONFIG, CAPTURE_CONFIG);
+    const state = createStsBiomechanicalCaptureState();
+    calibrate(fsm, state);
+
+    tickSequence(fsm, state, fullCycleFrames(frames(608, 20, 0.47)));
+
+    assert.equal(state.repCount, 1);
+    assert.equal(state.attempts.length, 1);
+    assert.equal(state.attempts[0]!.attemptType, "complete");
+  });
+
+  it("tolerates a one-frame readiness drop mid-attempt and still counts the rep", () => {
+    const fsm = new StsBiomechanicalCaptureFsm(BASELINE_CONFIG, CAPTURE_CONFIG);
+    const state = createStsBiomechanicalCaptureState();
+    calibrate(fsm, state);
+
+    tickSequence(
+      fsm,
+      state,
+      fullCycleFrames(withCanCountFalseAt(frames(608, 20, 0.47), [10])),
+    );
+
+    assert.equal(state.repCount, 1);
+    assert.equal(state.attempts.length, 1);
+    assert.equal(state.attempts[0]!.attemptType, "complete");
+  });
+
+  it("tolerates a two-frame readiness drop mid-attempt and still recovers to count the rep", () => {
+    const fsm = new StsBiomechanicalCaptureFsm(BASELINE_CONFIG, CAPTURE_CONFIG);
+    const state = createStsBiomechanicalCaptureState();
+    calibrate(fsm, state);
+
+    tickSequence(
+      fsm,
+      state,
+      fullCycleFrames(withCanCountFalseAt(frames(608, 20, 0.47), [10, 11])),
+    );
+
+    assert.equal(state.repCount, 1);
+    assert.equal(state.attempts.length, 1);
+    assert.equal(state.attempts[0]!.attemptType, "complete");
+  });
+
+  it("aborts the active attempt as unclear once a readiness drop reaches the tolerance (3 frames)", () => {
+    const fsm = new StsBiomechanicalCaptureFsm(BASELINE_CONFIG, CAPTURE_CONFIG);
+    const state = createStsBiomechanicalCaptureState();
+    calibrate(fsm, state);
+
+    // Sequence ends immediately after the abort — no further frames — so we
+    // assert exactly the abort outcome without any downstream re-triggering.
+    tickSequence(fsm, state, [
+      ...frames(400, 5, 0.54),
+      ...frames(480, 4, 0.49),
+      ...frames(544, 4, 0.48),
+      ...withCanCountFalseAt(frames(608, 13, 0.47), [10, 11, 12]),
+    ]);
+
+    assert.equal(state.repCount, 0);
+    assert.equal(state.attempts.length, 1);
+    assert.equal(state.attempts[0]!.attemptType, "unclear");
+    assert.equal(
+      state.attempts[0]!.reason,
+      "Readiness or calibration gate interrupted attempt evidence.",
+    );
+  });
+
+  it("does not accumulate readiness drops across separate short interruptions", () => {
+    const fsm = new StsBiomechanicalCaptureFsm(BASELINE_CONFIG, CAPTURE_CONFIG);
+    const state = createStsBiomechanicalCaptureState();
+    calibrate(fsm, state);
+
+    // Two separate 2-frame drops (each below the 3-frame tolerance), separated
+    // by several healthy frames that must reset the streak in between.
+    tickSequence(
+      fsm,
+      state,
+      fullCycleFrames(
+        withCanCountFalseAt(frames(608, 20, 0.47), [3, 4, 10, 11]),
+      ),
+    );
+
+    assert.equal(state.repCount, 1);
+    assert.equal(state.attempts.length, 1);
+    assert.equal(state.attempts[0]!.attemptType, "complete");
+  });
+
+  it("aborts immediately on posePresent=false, without applying the readiness-drop tolerance", () => {
+    const fsm = new StsBiomechanicalCaptureFsm(BASELINE_CONFIG, CAPTURE_CONFIG);
+    const state = createStsBiomechanicalCaptureState();
+    calibrate(fsm, state);
+
+    // Sequence ends immediately after the single pose-lost frame.
+    tickSequence(fsm, state, [
+      ...frames(400, 5, 0.54),
+      ...frames(480, 4, 0.49),
+      ...frames(544, 4, 0.48),
+      { hipY: 0.47, nowMs: 608, posePresent: false },
+    ]);
+
+    assert.equal(state.repCount, 0);
+    assert.equal(state.attempts.length, 1);
+    assert.equal(state.attempts[0]!.attemptType, "unclear");
+    assert.equal(
+      state.attempts[0]!.reason,
+      "Unable to assess due to camera angle or limited landmark visibility.",
+    );
+  });
+
+  it("does not corrupt phase durations or hip displacement when a drop is tolerated", () => {
+    const baselineFsm = new StsBiomechanicalCaptureFsm(BASELINE_CONFIG, CAPTURE_CONFIG);
+    const baselineState = createStsBiomechanicalCaptureState();
+    calibrate(baselineFsm, baselineState);
+    tickSequence(baselineFsm, baselineState, fullCycleFrames(frames(608, 20, 0.47)));
+
+    const toleratedFsm = new StsBiomechanicalCaptureFsm(BASELINE_CONFIG, CAPTURE_CONFIG);
+    const toleratedState = createStsBiomechanicalCaptureState();
+    calibrate(toleratedFsm, toleratedState);
+    tickSequence(
+      toleratedFsm,
+      toleratedState,
+      fullCycleFrames(withCanCountFalseAt(frames(608, 20, 0.47), [10, 11])),
+    );
+
+    assert.equal(baselineState.repCount, 1);
+    assert.equal(toleratedState.repCount, 1);
+
+    const baselineAttempt = baselineState.attempts[0]!;
+    const toleratedAttempt = toleratedState.attempts[0]!;
+
+    assert.deepEqual(toleratedAttempt.phaseDurationsMs, baselineAttempt.phaseDurationsMs);
+    assert.equal(
+      toleratedAttempt.hipVerticalDisplacement,
+      baselineAttempt.hipVerticalDisplacement,
+    );
+  });
+
+  it("still finalizes a stalled attempt via attemptTimeoutMs, unaffected by the readiness-drop change", () => {
+    const fsm = new StsBiomechanicalCaptureFsm(BASELINE_CONFIG, CAPTURE_CONFIG);
+    const state = createStsBiomechanicalCaptureState();
+    calibrate(fsm, state);
+
+    // Rises just enough to leave "seated" but never reaches standConfirm and
+    // never returns to seatConfirm — holds in "rising" purely on elapsed time
+    // (canCount stays true throughout; only the pre-existing attemptTimeoutMs
+    // check should end this, confirming the readiness-drop change didn't
+    // interfere with it).
+    tickSequence(fsm, state, [
+      ...frames(400, 3, 0.54, 40),
+      ...frames(520, 40, 0.502, 500),
+    ]);
+
+    assert.equal(state.repCount, 0);
+    assert.equal(state.attempts.length, 1);
+    assert.equal(state.attempts[0]!.attemptType, "unclear");
+    assert.equal(
+      state.attempts[0]!.reason,
+      "Insufficient visibility or phase transition evidence during rising.",
+    );
   });
 });
