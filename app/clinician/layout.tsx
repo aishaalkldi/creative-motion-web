@@ -1,11 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { clearAuthSession, getClinician, type ClinicianInfo } from "../lib/auth";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { clearAuthSession } from "../lib/auth";
+import {
+  buildClinicianLoginRedirect,
+  performClinicianLogout,
+  probeClinicianSession,
+  type ClinicianAuthStatus,
+  type ClinicianDisplay,
+} from "../lib/auth/clinician-session-gate";
 import { hasDevAuthSession } from "../lib/dev-auth";
-import { supabaseSignOut } from "../lib/supabase/provider";
+import { getProviderSession, supabaseSignOut } from "../lib/supabase/provider";
 
 // ── Nav items ──────────────────────────────────────────────────────────────────
 
@@ -70,7 +77,6 @@ const NAV_ITEMS = [
 
 function NavLink({ href, children, icon }: { href: string; children: React.ReactNode; icon: React.ReactNode }) {
   const pathname = usePathname();
-  // Dashboard links are exact-match; section roots use prefix match
   const isActive =
     href === "/clinician"
       ? pathname === "/clinician" || pathname === "/clinician/dashboard"
@@ -93,39 +99,85 @@ function NavLink({ href, children, icon }: { href: string; children: React.React
 
 // ── Layout ─────────────────────────────────────────────────────────────────────
 
-export default function ClinicianLayout({ children }: { children: React.ReactNode }) {
+function ClinicianLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [clinician, setClinician] = useState<ClinicianInfo | null>(null);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const [authStatus, setAuthStatus] = useState<ClinicianAuthStatus>("loading");
+  const [clinician, setClinician] = useState<ClinicianDisplay | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [isDevBypass, setIsDevBypass] = useState(false);
 
   useEffect(() => {
-    setClinician(getClinician());
-    setIsDevBypass(hasDevAuthSession());
-  }, []);
+    let cancelled = false;
+
+    async function runProbe() {
+      const returnPath = searchParams.toString()
+        ? `${pathname}?${searchParams.toString()}`
+        : pathname;
+
+      try {
+        const probe = await probeClinicianSession({
+          getProviderSession,
+          devBypassActive: hasDevAuthSession(),
+          nodeEnv: process.env.NODE_ENV ?? "production",
+        });
+
+        if (cancelled) return;
+
+        if (probe.status === "unauthenticated") {
+          setAuthStatus("unauthenticated");
+          router.replace(buildClinicianLoginRedirect(returnPath));
+          return;
+        }
+
+        setClinician(probe.display);
+        setIsDevBypass(probe.devBypass);
+        setAuthStatus("authenticated");
+      } catch {
+        if (cancelled) return;
+        setAuthStatus("unauthenticated");
+        router.replace(buildClinicianLoginRedirect(returnPath));
+      }
+    }
+
+    void runProbe();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pathname, router, searchParams]);
 
   function handleLogout() {
-    // Sign out from Supabase (clears Supabase session cookies)
-    void supabaseSignOut();
-    // Clear FastAPI JWT + localStorage auth keys
-    clearAuthSession();
-    router.push("/login");
-    router.refresh();
+    void performClinicianLogout({
+      supabaseSignOut,
+      clearAuthSession,
+      navigateToLogin: () => router.replace("/login"),
+      refresh: () => router.refresh(),
+    });
   }
 
-  const initials = clinician?.full_name
-    ? clinician.full_name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
-    : "?";
+  if (authStatus === "loading") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#0B1220]">
+        <p className="text-sm text-white/35">Loading workspace…</p>
+      </div>
+    );
+  }
+
+  if (authStatus === "unauthenticated") {
+    return null;
+  }
+
+  const initials = clinician?.initials ?? "?";
 
   return (
     <div className="flex min-h-screen bg-[#0B1220]">
 
       {/* ── Sidebar ── */}
       <aside className="hidden md:flex w-[220px] shrink-0 flex-col border-r border-[#1E2D42] bg-[#0B1220]">
-        {/* Brand */}
         <div className="flex h-14 items-center border-b border-[#1E2D42] px-5">
           <Link href="/clinician" className="flex items-center gap-2">
-            {/* Arc mark */}
             <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="shrink-0">
               <path d="M10 2C5.582 2 2 5.582 2 10s3.582 8 8 8" stroke="#1D9E75" strokeWidth="2.2" strokeLinecap="round"/>
               <path d="M10 5.5C7.515 5.5 5.5 7.515 5.5 10S7.515 14.5 10 14.5" stroke="#5DCAA5" strokeWidth="1.8" strokeLinecap="round"/>
@@ -135,7 +187,6 @@ export default function ClinicianLayout({ children }: { children: React.ReactNod
           </Link>
         </div>
 
-        {/* Nav */}
         <nav className="flex-1 space-y-0.5 overflow-y-auto p-3">
           {NAV_ITEMS.map((item) => (
             <NavLink key={item.href} href={item.href} icon={item.icon}>
@@ -144,7 +195,6 @@ export default function ClinicianLayout({ children }: { children: React.ReactNod
           ))}
         </nav>
 
-        {/* Dev badge */}
         {isDevBypass && (
           <div className="mx-3 mb-3 flex items-center gap-1.5 rounded-[6px] border border-amber-400/20 bg-amber-400/6 px-3 py-2">
             <svg className="h-3 w-3 text-amber-300 shrink-0" fill="currentColor" viewBox="0 0 20 20">
@@ -154,7 +204,6 @@ export default function ClinicianLayout({ children }: { children: React.ReactNod
           </div>
         )}
 
-        {/* User chip */}
         <div className="border-t border-[#1E2D42] p-3">
           <div className="relative">
             <button
@@ -166,7 +215,7 @@ export default function ClinicianLayout({ children }: { children: React.ReactNod
                 {initials}
               </span>
               <div className="flex-1 min-w-0 text-left">
-                <p className="truncate text-sm font-semibold text-white">{clinician?.full_name ?? "Clinician"}</p>
+                <p className="truncate text-sm font-semibold text-white">{clinician?.fullName ?? "Clinician"}</p>
                 <p className="truncate text-[11px] text-white/35">{clinician?.email ?? "—"}</p>
               </div>
               <svg className={`h-3.5 w-3.5 shrink-0 text-white/25 transition-transform ${menuOpen ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -192,7 +241,6 @@ export default function ClinicianLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      {/* ── Mobile top bar ── */}
       <div className="fixed inset-x-0 top-0 z-50 flex h-14 items-center justify-between border-b border-[#1E2D42] bg-[#0B1220] px-4 md:hidden">
         <Link href="/clinician" className="flex items-center gap-2">
           <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
@@ -217,18 +265,30 @@ export default function ClinicianLayout({ children }: { children: React.ReactNod
         </div>
       </div>
 
-      {/* ── Mobile bottom nav ── */}
       <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-[#1E2D42] bg-[#0B1220] md:hidden">
         {NAV_ITEMS.map((item) => (
           <MobileNavLink key={item.href} href={item.href} icon={item.icon} label={item.label} />
         ))}
       </nav>
 
-      {/* ── Main content ── */}
       <main className="flex-1 min-w-0 pt-14 md:pt-0 pb-16 md:pb-0">
         {children}
       </main>
     </div>
+  );
+}
+
+export default function ClinicianLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-[#0B1220]">
+          <p className="text-sm text-white/35">Loading workspace…</p>
+        </div>
+      }
+    >
+      <ClinicianLayoutInner>{children}</ClinicianLayoutInner>
+    </Suspense>
   );
 }
 
