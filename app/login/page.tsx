@@ -4,7 +4,8 @@ import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TrustFooter } from "../components/trust/TrustFooter";
-import { loginClinician } from "../lib/api";
+import { attemptSupabaseLogin, LOGIN_GENERIC_ERROR_MESSAGE } from "../lib/auth/login-flow";
+import { sanitizeClinicianReturnTo } from "../lib/auth/clinician-session-gate";
 import { ensureProviderProfile } from "../lib/auth/ensure-provider-client";
 import { setupDevAuthSession } from "../lib/dev-auth";
 import { createClient as createSupabaseClient } from "../lib/supabase/browser";
@@ -58,56 +59,59 @@ function LoginForm() {
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
   const [error, setError]       = useState("");
+  const [showRecoveryLinks, setShowRecoveryLinks] = useState(false);
   const [loading, setLoading]   = useState(false);
 
   const cfg = ROLE_CONFIG[role];
-  const redirectDest = returnTo || cfg.defaultRedirect;
+  const redirectDest =
+    role === "clinician"
+      ? sanitizeClinicianReturnTo(returnTo || cfg.defaultRedirect)
+      : returnTo || cfg.defaultRedirect;
 
   async function handleLogin() {
     if (!email.trim() || !password) {
       setError("Please enter your email and password.");
+      setShowRecoveryLinks(false);
       return;
     }
     setError("");
+    setShowRecoveryLinks(false);
     setLoading(true);
 
     try {
-      // ── Primary: Supabase Auth ───────────────────────────────────────────
-      // Used for all new accounts created via /signup.
-      if (SUPABASE_CONFIGURED) {
-        const supabase = createSupabaseClient();
-        const { error: sbError } = await supabase.auth.signInWithPassword({
-          email: email.trim().toLowerCase(),
-          password,
-        });
-
-        if (!sbError) {
-          // Repair missing providers row from auth metadata before clinician entry
-          await ensureProviderProfile({
-            email: email.trim().toLowerCase(),
+      const supabase = SUPABASE_CONFIGURED ? createSupabaseClient() : null;
+      const result = await attemptSupabaseLogin({
+        supabaseConfigured: SUPABASE_CONFIGURED,
+        email,
+        password,
+        signInWithPassword: async (normalizedEmail, pwd) => {
+          if (!supabase) {
+            return { error: { message: "Supabase not configured" } };
+          }
+          return supabase.auth.signInWithPassword({
+            email: normalizedEmail,
+            password: pwd,
           });
-          router.push(redirectDest);
-          router.refresh();
-          return;
-        }
+        },
+        ensureProviderProfile,
+      });
 
-        // "Invalid login credentials" means either wrong password OR user doesn't
-        // exist in Supabase yet. Fall through to FastAPI for legacy accounts.
-        // All other Supabase errors (rate limit, service unavailable) surface directly.
-        if (sbError.message !== "Invalid login credentials") {
-          setError(sbError.message);
-          return;
-        }
+      if (result.ok) {
+        router.push(redirectDest);
+        router.refresh();
+        return;
       }
 
-      // ── Fallback: FastAPI JWT ────────────────────────────────────────────
-      // Handles accounts that pre-date Supabase migration.
-      // Sets cm_token cookie; proxy.ts accepts it during the transition period.
-      await loginClinician(email.trim(), password);
-      router.push(redirectDest);
-      router.refresh();
+      setError(result.error);
+      setShowRecoveryLinks(result.showRecoveryLinks);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      const message = err instanceof Error ? err.message : "";
+      const safeProviderSetup =
+        message.includes("provider account") ||
+        message.includes("Provider account setup") ||
+        message.includes("Could not set up");
+      setError(safeProviderSetup ? message : LOGIN_GENERIC_ERROR_MESSAGE);
+      setShowRecoveryLinks(false);
     } finally {
       setLoading(false);
     }
@@ -201,21 +205,29 @@ function LoginForm() {
                 autoComplete="current-password"
                 className="w-full rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-[#1D9E75]/40 focus:bg-[#0d1c14]"
               />
-              {SUPABASE_CONFIGURED && (
-                <div className="mt-1.5 text-right">
-                  <Link
-                    href="/reset-password"
-                    className="text-[11px] text-[#6B7280] transition hover:text-[#9CA3AF]"
-                  >
-                    Forgot your password?
-                  </Link>
-                </div>
-              )}
+              <div className="mt-1.5 text-right">
+                <Link
+                  href="/reset-password"
+                  className="text-[11px] text-[#6B7280] transition hover:text-[#9CA3AF]"
+                >
+                  Forgot your password?
+                </Link>
+              </div>
             </div>
 
             {error && (
               <div className="rounded-[7px] border border-rose-400/20 bg-rose-400/8 px-3.5 py-3 text-sm text-rose-300">
-                {error}
+                <p>{error}</p>
+                {showRecoveryLinks && (
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                    <Link href="/reset-password" className="font-semibold text-rose-200/90 underline-offset-2 hover:underline">
+                      Reset password
+                    </Link>
+                    <Link href="/signup" className="font-semibold text-rose-200/90 underline-offset-2 hover:underline">
+                      Create an account
+                    </Link>
+                  </div>
+                )}
               </div>
             )}
 
