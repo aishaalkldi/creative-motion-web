@@ -28,6 +28,7 @@ import {
   type UrgentClinicalReviewStatus,
 } from "../../../lib/clinical-review";
 import { parseSessionCoachNotes } from "../../../lib/session-coach-metadata";
+import { requireClinicianSession } from "../../../lib/api/require-clinician-session";
 
 type PostBody = {
   patientId?: string;
@@ -67,15 +68,11 @@ export async function POST(req: NextRequest) {
   if (!clients) {
     return serviceUnavailableResponse();
   }
-  const { sessionClient, adminClient } = clients;
+  const { adminClient } = clients;
 
-  const {
-    data: { user },
-    error: authErr,
-  } = await sessionClient.auth.getUser();
-  if (authErr ?? !user) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
+  const session = await requireClinicianSession();
+  if (!session.ok) return session.response;
+  const { user } = session;
 
   let body: PostBody;
   try {

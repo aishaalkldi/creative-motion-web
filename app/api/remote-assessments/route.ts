@@ -14,6 +14,7 @@ import {
   checkClinicianWriteLimit,
   rateLimitExceededResponse,
 } from "@/app/lib/rate-limit";
+import { requireClinicianSession } from "@/app/lib/api/require-clinician-session";
 
 async function buildClients() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -54,15 +55,11 @@ export async function POST(req: NextRequest) {
   if (!clients) {
     return serviceUnavailableResponse();
   }
-  const { sessionClient, adminClient } = clients;
+  const { adminClient } = clients;
 
-  const {
-    data: { user },
-    error: authError,
-  } = await sessionClient.auth.getUser();
-  if (authError ?? !user) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
+  const session = await requireClinicianSession();
+  if (!session.ok) return session.response;
+  const { user } = session;
 
   const limited = checkClinicianWriteLimit(user.id, "remote-assessments:create");
   if (!limited.allowed) {
@@ -143,15 +140,11 @@ export async function GET(req: NextRequest) {
   if (!clients) {
     return serviceUnavailableResponse();
   }
-  const { sessionClient, adminClient } = clients;
+  const { adminClient } = clients;
 
-  const {
-    data: { user },
-    error: authError,
-  } = await sessionClient.auth.getUser();
-  if (authError ?? !user) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
+  const session = await requireClinicianSession();
+  if (!session.ok) return session.response;
+  const { user } = session;
 
   const patientId = new URL(req.url).searchParams.get("patientId")?.trim();
   if (!patientId) {

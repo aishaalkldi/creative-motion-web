@@ -1,7 +1,5 @@
-import { createServerClient } from "@supabase/ssr";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
@@ -15,6 +13,7 @@ import {
   type RateLimitResult,
 } from "../../../lib/rate-limit";
 import { serviceUnavailableResponse } from "../../../lib/api/safe-errors";
+import { requireClinicianSession } from "../../../lib/api/require-clinician-session";
 
 const PLAN_CREATE_ERROR = "Failed to create plan.";
 
@@ -146,25 +145,15 @@ async function buildRealDependencies(): Promise<CatalogPlanPostDependencies | nu
   const svc  = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !anon || !svc) return null;
 
-  const cookieStore = await cookies();
-  const sessionClient = createServerClient(url, anon, {
-    cookies: {
-      getAll: () => cookieStore.getAll(),
-      setAll: (list) => {
-        try { list.forEach(({ name, value, options }) => cookieStore.set(name, value, options)); }
-        catch { /* Route Handler */ }
-      },
-    },
-  });
   const adminClient = createAdminClient(url, svc, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
   return {
     getAuthenticatedUser: async () => {
-      const { data: { user }, error } = await sessionClient.auth.getUser();
-      if (error || !user) return null;
-      return { id: user.id };
+      const session = await requireClinicianSession();
+      if (!session.ok) return null;
+      return { id: session.user.id };
     },
     adminClient,
     checkWriteLimit: checkClinicianWriteLimit,

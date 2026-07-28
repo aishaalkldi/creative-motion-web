@@ -20,6 +20,7 @@ import {
   getDemoCvSaveResponse,
   getDemoCvSessionMetrics,
 } from "@/app/lib/demo/local-demo-fallback";
+import { requireClinicianSession } from "@/app/lib/api/require-clinician-session";
 
 const FORBIDDEN_BODY_KEYS = new Set([
   "video",
@@ -141,15 +142,11 @@ export async function POST(req: NextRequest) {
     if (demo) return demo;
     return serviceUnavailableResponse();
   }
-  const { sessionClient, adminClient } = clients;
+  const { adminClient } = clients;
 
-  const {
-    data: { user },
-    error: authErr,
-  } = await sessionClient.auth.getUser();
-  if (authErr ?? !user) {
-    return NextResponse.json({ error: API_ERRORS.UNAUTHORIZED }, { status: 401 });
-  }
+  const session = await requireClinicianSession();
+  if (!session.ok) return session.response;
+  const { user } = session;
 
   let body: PostBody;
   try {
@@ -281,15 +278,11 @@ export async function GET(req: NextRequest) {
     if (demo) return demo;
     return serviceUnavailableResponse();
   }
-  const { sessionClient, adminClient } = clients;
+  const { adminClient } = clients;
 
-  const {
-    data: { user },
-    error: authErr,
-  } = await sessionClient.auth.getUser();
-  if (authErr ?? !user) {
-    return NextResponse.json({ error: API_ERRORS.UNAUTHORIZED }, { status: 401 });
-  }
+  const session = await requireClinicianSession();
+  if (!session.ok) return session.response;
+  const { user } = session;
 
   const planId = searchParams.get("planId")?.trim() || null;
   const planSessionId = searchParams.get("planSessionId")?.trim() || null;

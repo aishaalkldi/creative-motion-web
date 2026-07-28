@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import type { PlanRow, PlanSessionRow } from "../route";
 import { serviceUnavailableResponse } from "../../../lib/api/safe-errors";
+import { requireClinicianSession } from "../../../lib/api/require-clinician-session";
 
 // ── Client factory ─────────────────────────────────────────────────────────────
 
@@ -49,10 +50,11 @@ export async function GET(
 
   const clients = await buildClients();
   if (!clients) return serviceUnavailableResponse();
-  const { sessionClient, adminClient } = clients;
+  const { adminClient } = clients;
 
-  const { data: { user }, error: authErr } = await sessionClient.auth.getUser();
-  if (authErr ?? !user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const session = await requireClinicianSession();
+  if (!session.ok) return session.response;
+  const { user } = session;
 
   const { data: plan, error: planErr } = await adminClient
     .from("treatment_plans")

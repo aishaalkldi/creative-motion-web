@@ -15,6 +15,7 @@ import {
   checkClinicianWriteLimit,
   rateLimitExceededResponse,
 } from "../../../lib/rate-limit";
+import { requireClinicianSession } from "../../../lib/api/require-clinician-session";
 
 // ── Shared client factory (mirrors route.ts) ───────────────────────────────────
 async function buildClients() {
@@ -42,11 +43,11 @@ async function buildClients() {
 async function getAuthAndClients() {
   const clients = await buildClients();
   if (!clients) return { mode: "offline" as const };
-  const { data: { user }, error: authError } = await clients.sessionClient.auth.getUser();
-  if (authError ?? !user) {
-    return { mode: "unauthorized" as const, error: "Unauthorized.", status: 401 as const };
+  const session = await requireClinicianSession();
+  if (!session.ok) {
+    return { mode: "unauthorized" as const, response: session.response };
   }
-  return { mode: "live" as const, sessionClient: clients.sessionClient, adminClient: clients.adminClient, user };
+  return { mode: "live" as const, adminClient: clients.adminClient, user: session.user };
 }
 
 // ── GET /api/patients/[id] ─────────────────────────────────────────────────────
@@ -67,7 +68,7 @@ export async function GET(
 
   const auth = await getAuthAndClients();
   if (auth.mode === "unauthorized") {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
+    return auth.response;
   }
   if (auth.mode === "offline") {
     const demoPatient = getDemoPatientById(patientId);
@@ -115,7 +116,7 @@ export async function PATCH(
 
   const auth = await getAuthAndClients();
   if (auth.mode === "unauthorized") {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
+    return auth.response;
   }
   if (auth.mode !== "live") return serviceUnavailableResponse();
   const { adminClient, user } = auth;
@@ -178,7 +179,7 @@ export async function DELETE(
 
   const auth = await getAuthAndClients();
   if (auth.mode === "unauthorized") {
-    return NextResponse.json({ error: auth.error }, { status: auth.status });
+    return auth.response;
   }
   if (auth.mode !== "live") return serviceUnavailableResponse();
   const { adminClient, user } = auth;

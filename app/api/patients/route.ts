@@ -20,6 +20,7 @@ import {
   checkClinicianWriteLimit,
   rateLimitExceededResponse,
 } from "../../lib/rate-limit";
+import { requireClinicianSession } from "../../lib/api/require-clinician-session";
 
 // ── Shared client factory ──────────────────────────────────────────────────────
 
@@ -105,17 +106,11 @@ export async function GET(_req: NextRequest) {
   const clients = await buildClients();
   const demo = demoFallbackIfUnavailable(clients, { patients: getDemoPatients() });
   if (demo) return demo;
-  const { sessionClient, adminClient } = clients!;
+  const { adminClient } = clients!;
 
-  // ── Auth ────────────────────────────────────────────────────────────────────
-  const {
-    data: { user },
-    error: authError,
-  } = await sessionClient.auth.getUser();
-
-  if (authError ?? !user) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
+  const session = await requireClinicianSession();
+  if (!session.ok) return session.response;
+  const { user } = session;
 
   // ── Query own patients directly by provider_id ───────────────────────────────
   const { data: patients, error: queryError } = await adminClient
@@ -171,17 +166,11 @@ export async function POST(req: NextRequest) {
   if (!clients) {
     return serviceUnavailableResponse();
   }
-  const { sessionClient, adminClient } = clients;
+  const { adminClient } = clients;
 
-  // ── Auth ────────────────────────────────────────────────────────────────────
-  const {
-    data: { user },
-    error: authError,
-  } = await sessionClient.auth.getUser();
-
-  if (authError ?? !user) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
+  const session = await requireClinicianSession();
+  if (!session.ok) return session.response;
+  const { user } = session;
 
   const limited = checkClinicianWriteLimit(user.id, "patients:create");
   if (!limited.allowed) {
