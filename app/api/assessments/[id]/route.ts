@@ -171,6 +171,7 @@ export async function PATCH(
     notes?: string;
     fieldKey?: string;
     markTranslationReviewed?: boolean;
+    markChiefComplaintExtractionReviewed?: boolean;
   };
   try {
     body = (await req.json()) as typeof body;
@@ -214,6 +215,54 @@ export async function PATCH(
 
     if (updateErr) {
       console.error("[PATCH /api/assessments/[id]] translation review failed:", updateErr.message);
+      return NextResponse.json({ error: "Failed to update assessment." }, { status: 500 });
+    }
+
+    return NextResponse.json({ reviewed: true });
+  }
+
+  if (body.markChiefComplaintExtractionReviewed === true) {
+    const { data: row, error: fetchErr } = await adminClient
+      .from("assessments")
+      .select("id, patient_id, provider_id, structured_data")
+      .eq("id", assessmentId)
+      .eq("provider_id", user.id)
+      .maybeSingle<AssessmentDbRow>();
+
+    if (fetchErr || !row) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const ownership = await validatePatientOwnership(adminClient, row.patient_id, user.id);
+    if (!ownership.ok) {
+      return ownershipErrorResponse(ownership);
+    }
+
+    const existing =
+      typeof row.structured_data === "object" && row.structured_data !== null
+        ? (row.structured_data as Record<string, unknown>)
+        : {};
+
+    const existingExtraction = existing.chiefComplaint_extraction;
+    if (!existingExtraction || typeof existingExtraction !== "object" || Array.isArray(existingExtraction)) {
+      return NextResponse.json({ error: "No extraction to confirm." }, { status: 400 });
+    }
+
+    // Fixed key only — never derived from client input, unlike markTranslationReviewed's
+    // fieldKey. Extraction confirmation always targets exactly this one stored key.
+    const updatedData = {
+      ...existing,
+      chiefComplaint_extraction_reviewed: true,
+    };
+
+    const { error: updateErr } = await adminClient
+      .from("assessments")
+      .update({ structured_data: updatedData, updated_at: new Date().toISOString() })
+      .eq("id", assessmentId)
+      .eq("provider_id", user.id);
+
+    if (updateErr) {
+      console.error("[PATCH /api/assessments/[id]] extraction review failed:", updateErr.message);
       return NextResponse.json({ error: "Failed to update assessment." }, { status: 500 });
     }
 
