@@ -30,6 +30,7 @@ import {
 } from "../../../lib/assessment-snapshot";
 import { demoFallbackIfUnavailable } from "../../../lib/api/demo-fallback-server";
 import { getDemoClinicianResults } from "@/app/lib/demo/local-demo-fallback";
+import { requireClinicianSession } from "@/app/lib/api/require-clinician-session";
 
 export type ClinicianResultStatus = "pending_review" | "active" | "completed";
 
@@ -112,15 +113,11 @@ export async function GET(_req: NextRequest) {
   const clients = await buildClients();
   const demo = demoFallbackIfUnavailable(clients, getDemoClinicianResults());
   if (demo) return demo;
-  const { sessionClient, adminClient } = clients!;
+  const { adminClient } = clients!;
 
-  const {
-    data: { user },
-    error: authErr,
-  } = await sessionClient.auth.getUser();
-  if (authErr ?? !user) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
+  const session = await requireClinicianSession();
+  if (!session.ok) return session.response;
+  const { user } = session;
 
   type PatientRow = { id: string; full_name: string };
   const { data: patients, error: patientsErr } = await adminClient

@@ -14,6 +14,7 @@ import {
 } from "@/app/lib/ai/ai-errors";
 import { checkAiRateLimit } from "@/app/lib/ai/rate-limit";
 import { translateClinicalText } from "@/app/lib/ai/translate-clinical-text";
+import { requireClinicianSession } from "@/app/lib/api/require-clinician-session";
 
 async function buildClients() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -78,15 +79,11 @@ export async function POST(
   if (!clients) {
     return aiErrorJson(AI_ERROR_CODES.AI_PROVIDER_UNAVAILABLE);
   }
-  const { sessionClient, adminClient } = clients;
+  const { adminClient } = clients;
 
-  const {
-    data: { user },
-    error: authErr,
-  } = await sessionClient.auth.getUser();
-  if (authErr ?? !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const session = await requireClinicianSession({ unauthorizedMessage: "Unauthorized" });
+  if (!session.ok) return session.response;
+  const { user } = session;
 
   let body: { fieldKey?: unknown; text?: unknown };
   try {

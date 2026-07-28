@@ -6,6 +6,7 @@ import type { NextRequest } from "next/server";
 import { validatePatientOwnership } from "../../lib/validate-patient-ownership";
 import type { AssessmentData } from "../../lib/assessment-types";
 import { API_ERRORS, genericServerErrorResponse, ownershipErrorResponse, serviceUnavailableResponse } from "../../lib/api/safe-errors";
+import { requireClinicianSession } from "../../lib/api/require-clinician-session";
 import {
   checkClinicianWriteLimit,
   rateLimitExceededResponse,
@@ -85,11 +86,11 @@ function migrationPending(col: string) {
 export async function POST(req: NextRequest) {
   const clients = await buildClients();
   if (!clients) return serviceUnavailableResponse();
-  const { sessionClient, adminClient } = clients;
+  const { adminClient } = clients;
 
-  // ── Auth ─────────────────────────────────────────────────────────────────────
-  const { data: { user }, error: authError } = await sessionClient.auth.getUser();
-  if (authError ?? !user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const session = await requireClinicianSession();
+  if (!session.ok) return session.response;
+  const { user } = session;
 
   const limited = checkClinicianWriteLimit(user.id, "assessments:create");
   if (!limited.allowed) {
@@ -174,11 +175,11 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const clients = await buildClients();
   if (!clients) return serviceUnavailableResponse();
-  const { sessionClient, adminClient } = clients;
+  const { adminClient } = clients;
 
-  // ── Auth ─────────────────────────────────────────────────────────────────────
-  const { data: { user }, error: authError } = await sessionClient.auth.getUser();
-  if (authError ?? !user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const session = await requireClinicianSession();
+  if (!session.ok) return session.response;
+  const { user } = session;
 
   // ── Params ───────────────────────────────────────────────────────────────────
   const { searchParams } = new URL(req.url);

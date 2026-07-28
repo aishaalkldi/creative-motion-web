@@ -18,6 +18,7 @@ import {
   genericServerErrorResponse,
   serviceUnavailableResponse,
 } from "@/app/lib/api/safe-errors";
+import { requireClinicianSession } from "@/app/lib/api/require-clinician-session";
 
 async function buildClients() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -49,15 +50,11 @@ export async function POST(req: NextRequest) {
   if (!clients) {
     return serviceUnavailableResponse();
   }
-  const { sessionClient, adminClient } = clients;
+  const { adminClient } = clients;
 
-  const {
-    data: { user },
-    error: authErr,
-  } = await sessionClient.auth.getUser();
-  if (authErr ?? !user) {
-    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  }
+  const session = await requireClinicianSession();
+  if (!session.ok) return session.response;
+  const { user } = session;
 
   let body: ApproveSummaryRequestBody;
   try {

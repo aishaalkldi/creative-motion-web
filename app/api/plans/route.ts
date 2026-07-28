@@ -23,6 +23,7 @@ import {
   ownershipErrorResponse,
   serviceUnavailableResponse,
 } from "../../lib/api/safe-errors";
+import { requireClinicianSession } from "../../lib/api/require-clinician-session";
 import type { PlanSessionsRow, TreatmentPlansRow } from "../../lib/supabase/database.types";
 
 const PLAN_CREATE_ERROR = "Failed to create plan.";
@@ -129,10 +130,11 @@ type PostBody = {
 export async function POST(req: NextRequest) {
   const clients = await buildClients();
   if (!clients) return serviceUnavailableResponse();
-  const { sessionClient, adminClient } = clients;
+  const { adminClient } = clients;
 
-  const { data: { user }, error: authErr } = await sessionClient.auth.getUser();
-  if (authErr ?? !user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const session = await requireClinicianSession();
+  if (!session.ok) return session.response;
+  const { user } = session;
 
   const limited = checkClinicianWriteLimit(user.id, "plans:create");
   if (!limited.allowed) {
@@ -271,10 +273,11 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const clients = await buildClients();
   if (!clients) return serviceUnavailableResponse();
-  const { sessionClient, adminClient } = clients;
+  const { adminClient } = clients;
 
-  const { data: { user }, error: authErr } = await sessionClient.auth.getUser();
-  if (authErr ?? !user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const session = await requireClinicianSession();
+  if (!session.ok) return session.response;
+  const { user } = session;
 
   const patientId = new URL(req.url).searchParams.get("patientId")?.trim();
   if (!patientId) return NextResponse.json({ error: "patientId is required." }, { status: 400 });
