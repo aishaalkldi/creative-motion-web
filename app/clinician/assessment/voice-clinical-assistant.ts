@@ -504,46 +504,9 @@ export function buildChiefComplaintDraftLine(
   return "Speech capture — draft review required (no structured hints extracted).";
 }
 
-/** Optional English → Arabic via MyMemory (public tier; may rate-limit). */
-export async function translateEnglishToArabic(text: string): Promise<string | null> {
-  const q = text.trim();
-  if (!q) return null;
-  const chunk = q.slice(0, 450);
-  try {
-    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=en|ar`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      responseStatus?: number;
-      responseData?: { translatedText?: string };
-    };
-    if (data.responseStatus !== 200 || !data.responseData?.translatedText) return null;
-    const ar = data.responseData.translatedText.trim();
-    if (q.length > 450) return `${ar} […truncated]`;
-    return ar;
-  } catch {
-    return null;
-  }
-}
-
-/** Optional Arabic → English via MyMemory (public tier; may rate-limit). */
-export async function translateArabicToEnglish(text: string): Promise<string | null> {
-  const q = text.trim();
-  if (!q) return null;
-  const chunk = q.slice(0, 450);
-  try {
-    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=ar|en`;
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const data = (await res.json()) as {
-      responseStatus?: number;
-      responseData?: { translatedText?: string };
-    };
-    if (data.responseStatus !== 200 || !data.responseData?.translatedText) return null;
-    const en = data.responseData.translatedText.trim();
-    if (q.length > 450) return `${en} […truncated; translate remainder manually]`;
-    return en;
-  } catch {
-    return null;
-  }
-}
+// Arabic⇄English translation via the public MyMemory API has been removed
+// from this live-session flow and is not replaced by another provider.
+// translateEnglishToArabic / translateArabicToEnglish had no remaining
+// executable consumers once VoiceClinicalAssistant.tsx's translate buttons
+// and their imports were removed, so the functions were deleted rather than
+// kept as misleading always-null stubs.

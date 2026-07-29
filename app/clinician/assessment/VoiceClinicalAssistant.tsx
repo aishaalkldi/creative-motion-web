@@ -14,8 +14,6 @@ import {
   getPatientPrompt,
   getPatientPromptCount,
   normalizeTranscriptText,
-  translateArabicToEnglish,
-  translateEnglishToArabic,
 } from "./voice-clinical-assistant";
 
 export type VoiceAssistantPayload = {
@@ -124,7 +122,6 @@ export function VoiceClinicalAssistant({
   const [wasTranslated, setWasTranslated] = useState(false);
 
   const [processing, setProcessing] = useState(false);
-  const [translating, setTranslating] = useState(false);
   const [err, setErr] = useState("");
   const [assemblyAiConfigured, setAssemblyAiConfigured] = useState(false);
 
@@ -370,17 +367,13 @@ export function VoiceClinicalAssistant({
 
   const runClinicalPipeline = useCallback(
     async (rawStt: string) => {
-      let glossed = speechLang.startsWith("ar") ? applyArabicPtPhrasebook(rawStt) : rawStt;
-      let englishWorking = normalizeTranscriptText(glossed);
-      let translated = false;
-
-      if (speechLang.startsWith("ar")) {
-        const en = await translateArabicToEnglish(glossed);
-        if (en) {
-          englishWorking = normalizeTranscriptText(en);
-          translated = true;
-        }
-      }
+      // Automatic Arabic-to-English translation has been removed (no approved
+      // provider is wired for this flow); extraction runs directly on the
+      // glossed, untranslated text. Arabic capture and heuristic extraction
+      // still run — see the "Translation is currently unavailable" notice.
+      const glossed = speechLang.startsWith("ar") ? applyArabicPtPhrasebook(rawStt) : rawStt;
+      const englishWorking = normalizeTranscriptText(glossed);
+      const translated = false;
 
       setWasTranslated(translated);
       setLastEnglishWorking(englishWorking);
@@ -514,39 +507,6 @@ export function VoiceClinicalAssistant({
     setParagraphView("en");
   }, [clinicalParagraph, lastClinicalFields]);
 
-  const handleTranslateToArabic = useCallback(async () => {
-    if (!clinicalParagraph.trim()) return;
-    setTranslating(true);
-    setErr("");
-    const ar = await translateEnglishToArabic(clinicalParagraph);
-    setTranslating(false);
-    if (ar) {
-      setClinicalParagraphAr(ar);
-      setParagraphView("ar");
-    } else {
-      setErr("Arabic translation unavailable. Try again or shorten text.");
-    }
-  }, [clinicalParagraph]);
-
-  const handleTranslateToEnglish = useCallback(async () => {
-    if (paragraphView === "ar" && clinicalParagraphAr) {
-      setTranslating(true);
-      setErr("");
-      const back = await translateArabicToEnglish(clinicalParagraphAr);
-      setTranslating(false);
-      if (back) {
-        setClinicalParagraph(normalizeTranscriptText(back));
-        setClinicalParagraphAr(null);
-        setParagraphView("en");
-      } else {
-        setErr("Could not translate back to English.");
-      }
-    } else {
-      setParagraphView("en");
-      setClinicalParagraphAr(null);
-    }
-  }, [paragraphView, clinicalParagraphAr]);
-
   const effectivePayload: VoiceAssistantPayload | null =
     lastOriginalRaw && lastClinicalFields
       ? {
@@ -592,7 +552,7 @@ export function VoiceClinicalAssistant({
           <p className="text-xs font-semibold uppercase tracking-wider text-cyan-200/90">{featureTitle}</p>
           <p className="mt-1 text-[11px] text-white/50">
             {assemblyAiConfigured
-              ? "Cloud capture via AssemblyAI. Arabic path includes phrase hints and translation."
+              ? "Cloud capture via AssemblyAI. Arabic path includes phrase hints; translation is currently unavailable."
               : captureSupported
                 ? "Using browser speech recognition (no AssemblyAI key configured)."
                 : "Voice input is not available — type directly into the fields below."}
@@ -690,7 +650,6 @@ export function VoiceClinicalAssistant({
           </div>
 
           {processing ? <p className="text-xs text-white/55">Generating clinical translation…</p> : null}
-          {translating ? <p className="text-xs text-white/55">Translating…</p> : null}
           {err ? <p className="text-xs text-rose-300/90">{err}</p> : null}
 
           <div className="rounded-xl border border-white/10 bg-[#0B1220]/90 p-3">
@@ -755,23 +714,10 @@ export function VoiceClinicalAssistant({
                   >
                     Refine clinical translation
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleTranslateToArabic()}
-                    disabled={!clinicalParagraph.trim() || translating}
-                    className="rounded-lg border border-cyan-400/30 bg-cyan-400/10 px-3 py-1.5 text-[11px] font-semibold text-cyan-100 disabled:opacity-40"
-                  >
-                    Translate to Arabic
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleTranslateToEnglish()}
-                    disabled={translating}
-                    className="rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white disabled:opacity-40"
-                  >
-                    Translate to English
-                  </button>
                 </div>
+                <p className="mt-2 text-[11px] italic text-amber-200/80">
+                  Translation is currently unavailable. Please review the original text.
+                </p>
               </div>
 
               <div>

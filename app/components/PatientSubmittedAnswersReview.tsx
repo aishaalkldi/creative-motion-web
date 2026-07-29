@@ -14,6 +14,7 @@ import {
   type PatientReviewEntry,
 } from "@/app/lib/patient-assessment-questions";
 import { TranslatableField } from "@/app/components/clinician/TranslatableField";
+import { ExtractedFieldsPanel } from "@/app/components/clinician/ExtractedFieldsPanel";
 import {
   AI_TRANSLATION_SETUP_NOTICE,
   isAiTranslationEnabled,
@@ -264,6 +265,15 @@ export function PatientSubmittedAnswersReview({
                       </>
                     )}
                   </dd>
+                  {block.section === "pain" && fieldKey === "chiefComplaint" && assessmentId ? (
+                    <ExtractedFieldsPanel
+                      assessmentId={assessmentId}
+                      originalText={entry.value}
+                      initialExtraction={submissionMeta?.chiefComplaint_extraction}
+                      initialGeneratedAt={submissionMeta?.chiefComplaint_extraction_generated_at}
+                      initialReviewed={submissionMeta?.chiefComplaint_extraction_reviewed}
+                    />
+                  ) : null}
                 </div>
               );
             })}
