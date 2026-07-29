@@ -8,7 +8,10 @@
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { validatePostStrokeIntakeSubmission } from "./submission-validation";
+import {
+  validatePostStrokeIntakeDraftSave,
+  validatePostStrokeIntakeSubmission,
+} from "./submission-validation";
 
 function validPayload(overrides: Record<string, unknown> = {}) {
   return {
@@ -197,5 +200,120 @@ describe("validatePostStrokeIntakeSubmission — server-authoritative normalizat
       symptoms: string[];
     };
     assert.deepEqual(urgentGate.symptoms, selected);
+  });
+});
+
+function draftPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    postStrokeIntake: {
+      respondent: { type: "patient" },
+      urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+    },
+    assessmentLanguage: "en",
+    ...overrides,
+  };
+}
+
+describe("validatePostStrokeIntakeDraftSave — partial no-urgent draft", () => {
+  it("accepts exactly ['no_new_urgent_symptoms'] and produces stopped: false", () => {
+    const result = validatePostStrokeIntakeDraftSave(draftPayload());
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const urgentGate = (result.structuredData.postStrokeIntake as Record<string, unknown>).urgentGate as {
+      stopped: boolean;
+      flags: string[];
+      symptoms: string[];
+    };
+    assert.equal(urgentGate.stopped, false);
+    assert.deepEqual(urgentGate.flags, ["clinician_review_required"]);
+    assert.deepEqual(urgentGate.symptoms, ["no_new_urgent_symptoms"]);
+  });
+
+  it("generates a server-side recordedAt timestamp, ignoring any client value", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"], recordedAt: "1999-01-01T00:00:00.000Z" },
+        },
+      }),
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const urgentGate = (result.structuredData.postStrokeIntake as Record<string, unknown>).urgentGate as {
+      recordedAt: string;
+    };
+    assert.notEqual(urgentGate.recordedAt, "1999-01-01T00:00:00.000Z");
+    assert.ok(!Number.isNaN(Date.parse(urgentGate.recordedAt)));
+  });
+
+  it("rejects a real urgent symptom — must go through the submit endpoint instead", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: { respondent: { type: "patient" }, urgentGate: { symptoms: ["fall_with_injury"] } },
+      }),
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects no_new_urgent_symptoms combined with a real symptom", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms", "fall_with_injury"] },
+        },
+      }),
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects an empty or missing symptom list", () => {
+    assert.equal(
+      validatePostStrokeIntakeDraftSave(
+        draftPayload({ postStrokeIntake: { respondent: { type: "patient" }, urgentGate: { symptoms: [] } } }),
+      ).ok,
+      false,
+    );
+    assert.equal(
+      validatePostStrokeIntakeDraftSave(draftPayload({ postStrokeIntake: { respondent: { type: "patient" } } })).ok,
+      false,
+    );
+  });
+
+  it("discards spoofed stopped and flags entirely", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"], stopped: true, flags: ["urgent_symptoms_reported", "intake_stopped"] },
+        },
+      }),
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const urgentGate = (result.structuredData.postStrokeIntake as Record<string, unknown>).urgentGate as {
+      stopped: boolean;
+      flags: string[];
+    };
+    assert.equal(urgentGate.stopped, false);
+    assert.deepEqual(urgentGate.flags, ["clinician_review_required"]);
+  });
+
+  it("rejects an invalid respondent type", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: { respondent: { type: "not_real" }, urgentGate: { symptoms: ["no_new_urgent_symptoms"] } },
+      }),
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("never produces a diagnosis, severity, safety-clearance, or delivery-mode field", () => {
+    const result = validatePostStrokeIntakeDraftSave(draftPayload());
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const serialized = JSON.stringify(result.structuredData);
+    assert.doesNotMatch(serialized, /diagnos|severity|safe|unsafe|cleared|remote_self|remote_supervised|in_clinic/i);
   });
 });

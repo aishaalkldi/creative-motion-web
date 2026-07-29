@@ -144,6 +144,15 @@ export async function POST(
     if (!postStrokeValidation.ok) {
       return NextResponse.json({ error: postStrokeValidation.error }, { status: 400 });
     }
+    if (!postStrokeValidation.stopped) {
+      // This endpoint is the terminal urgent-stop path only. A cleared
+      // (no new urgent symptoms) post-stroke intake is not terminal and must
+      // go through /save-draft instead, so it is never marked "completed".
+      return NextResponse.json(
+        { error: "Not an urgent-stop submission. Use the draft-save endpoint instead." },
+        { status: 400 },
+      );
+    }
     finalStructuredData = postStrokeValidation.structuredData;
     stopped = postStrokeValidation.stopped;
   }

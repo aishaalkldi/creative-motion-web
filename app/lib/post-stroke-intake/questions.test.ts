@@ -187,6 +187,25 @@ describe("POST_STROKE_UI — continue affordance", () => {
   });
 });
 
+describe("POST_STROKE_UI — no-urgent draft saved notice", () => {
+  it("uses the approved bilingual wording", () => {
+    assert.equal(
+      POST_STROKE_UI.noUrgentDraftSavedNotice.en,
+      "No new urgent symptoms were reported. Your intake is incomplete and still requires completion and clinician review.",
+    );
+    assert.equal(
+      POST_STROKE_UI.noUrgentDraftSavedNotice.ar,
+      "لم يتم الإبلاغ عن أعراض عاجلة جديدة. لا يزال الاستبيان غير مكتمل ويتطلب استكماله ومراجعة الأخصائي.",
+    );
+  });
+
+  it("never implies the intake is cleared, approved, safe, or ready for assessment", () => {
+    const text = `${POST_STROKE_UI.noUrgentDraftSavedNotice.en}`;
+    assert.doesNotMatch(text, /\bcleared\b|\bapproved\b|\bsafe\b|ready for assessment/i);
+    assert.match(text, /incomplete/i);
+  });
+});
+
 describe("patientText / clinicianText re-export", () => {
   it("selects the correct language for a LocalizedText value", () => {
     assert.equal(patientText(RESPONDENT_TYPE_LABELS.patient, "ar"), RESPONDENT_TYPE_LABELS.patient.ar);

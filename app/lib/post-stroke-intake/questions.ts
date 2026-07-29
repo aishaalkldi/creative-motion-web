@@ -209,9 +209,11 @@ export const POST_STROKE_UI = {
     en: "Please select at least one option to continue.",
     ar: "يرجى اختيار خيار واحد على الأقل للمتابعة.",
   } satisfies LocalizedText,
-  moreQuestionsComingSoon: {
-    en: "Thank you. More questions about daily function, communication, and support will be added in a later update. Your clinician will follow up.",
-    ar: "شكرًا لك. سيتم إضافة المزيد من الأسئلة حول الأنشطة اليومية والتواصل والدعم في تحديث لاحق. سيتواصل معك معالجك.",
+  // Shown only after the partial no-urgent draft is successfully persisted.
+  // Must never imply cleared/approved/safe/ready-for-assessment.
+  noUrgentDraftSavedNotice: {
+    en: "No new urgent symptoms were reported. Your intake is incomplete and still requires completion and clinician review.",
+    ar: "لم يتم الإبلاغ عن أعراض عاجلة جديدة. لا يزال الاستبيان غير مكتمل ويتطلب استكماله ومراجعة الأخصائي.",
   } satisfies LocalizedText,
   submitting: { en: "Saving…", ar: "جارٍ الحفظ…" } satisfies LocalizedText,
   submitError: {

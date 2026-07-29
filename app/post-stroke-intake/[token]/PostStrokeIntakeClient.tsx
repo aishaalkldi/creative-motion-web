@@ -155,14 +155,20 @@ export function PostStrokeIntakeClient() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  // Partial no-urgent draft save (separate from the terminal urgent-stop submit above).
+  const [draftSaving, setDraftSaving] = useState(false);
+  const [draftSaveError, setDraftSaveError] = useState<string | null>(null);
+  const [draftSaved, setDraftSaved] = useState(false);
+
   // Local-only — never continues the intake or changes any persisted state.
   const [helpAcknowledged, setHelpAcknowledged] = useState(false);
 
-  // One-shot guard against a rapid double-click or re-render submitting the
-  // same urgent stop twice. A ref (not state) so the check-and-set is
-  // synchronous within a single event handler invocation — no render can
+  // One-shot guards against a rapid double-click or re-render submitting the
+  // same urgent stop / draft save twice. Refs (not state) so the check-and-set
+  // is synchronous within a single event handler invocation — no render can
   // race it. Cleared only on an explicit user-initiated retry after failure.
   const urgentStopSubmittedRef = useRef(false);
+  const noUrgentDraftSubmittedRef = useRef(false);
   const stoppedGateResultRef = useRef<PostStrokeUrgentGateResult | null>(null);
 
   useEffect(() => {
@@ -253,6 +259,47 @@ export function PostStrokeIntakeClient() {
     }
   }
 
+  /**
+   * Persists the partial no-urgent draft (assessments.status = "draft",
+   * urgentGate.stopped = false). Guarded the same way as submitUrgentStop —
+   * a one-shot ref plus an explicit retry-only reset on failure. Uses a
+   * dedicated draft-save endpoint (not /submit) so the request never becomes
+   * "submitted" and the token stays reusable for a later Stage 3 resume.
+   * The server independently revalidates and recomputes stopped/flags/
+   * recordedAt regardless of what is sent here.
+   */
+  async function saveNoUrgentDraft() {
+    if (!respondentType) return;
+    if (noUrgentDraftSubmittedRef.current) return;
+    noUrgentDraftSubmittedRef.current = true;
+
+    setDraftSaving(true);
+    setDraftSaveError(null);
+    try {
+      const res = await fetch(`/api/remote-assessments/${encodeURIComponent(token)}/save-draft`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          structuredData: {
+            postStrokeIntake: {
+              respondent: { type: respondentType, assistanceType },
+              urgentGate: { symptoms: [NO_NEW_URGENT_SYMPTOMS] },
+            },
+            assessmentLanguage: lang,
+          },
+        }),
+      });
+      if (!res.ok) throw new Error("save-draft failed");
+      setDraftSaved(true);
+    } catch {
+      // Allow exactly one explicit retry action to try again — never an automatic one.
+      noUrgentDraftSubmittedRef.current = false;
+      setDraftSaveError(patientText(POST_STROKE_UI.submitError, lang));
+    } finally {
+      setDraftSaving(false);
+    }
+  }
+
   async function handleUrgentGateContinue() {
     if (selectedSymptoms.length === 0) {
       setSymptomError(patientText(POST_STROKE_UI.selectSymptomRequired, lang));
@@ -264,8 +311,10 @@ export function PostStrokeIntakeClient() {
 
     if (!gateResult.stopped) {
       // Nothing more is implemented yet for a cleared intake in this stage —
-      // no functional/communication/caregiver questions exist to reach.
+      // no functional/communication/caregiver questions exist to reach. The
+      // partial draft is still persisted immediately so Stage 3 can resume it.
       setStage("cleared_placeholder");
+      await saveNoUrgentDraft();
       return;
     }
 
@@ -500,8 +549,30 @@ export function PostStrokeIntakeClient() {
         )}
 
         {stage === "cleared_placeholder" && (
-          <div className="space-y-5 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
-            <h2 className="text-xl font-bold text-white">{patientText(POST_STROKE_UI.moreQuestionsComingSoon, lang)}</h2>
+          <div className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.03] p-6">
+            {draftSaved ? (
+              <h2 className={`text-xl font-bold ${proseLeading} text-white`}>
+                {patientText(POST_STROKE_UI.noUrgentDraftSavedNotice, lang)}
+              </h2>
+            ) : draftSaving ? (
+              <p className="text-sm text-white/60">{patientText(POST_STROKE_UI.submitting, lang)}</p>
+            ) : null}
+
+            {draftSaveError ? (
+              <>
+                <p className="rounded-[10px] border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100">
+                  {draftSaveError}
+                </p>
+                <button
+                  type="button"
+                  disabled={draftSaving}
+                  onClick={() => void saveNoUrgentDraft()}
+                  className={`w-full rounded-2xl border border-white/12 bg-white/5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-50 ${FOCUS_RING}`}
+                >
+                  {patientText(POST_STROKE_UI.retry, lang)}
+                </button>
+              </>
+            ) : null}
           </div>
         )}
       </main>

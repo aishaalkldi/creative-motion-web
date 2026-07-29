@@ -17,9 +17,14 @@
  * already-submitted/insert success) are out of scope for this PR.
  */
 import assert from "node:assert/strict";
-import { after, before, describe, it } from "node:test";
+import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { NextRequest } from "next/server";
-import { POST, resolveAssessmentStatusForInsert, resolveAssessmentTypeForInsert } from "../[token]/submit/route";
+import {
+  __setServiceRoleClientForTests,
+  POST,
+  resolveAssessmentStatusForInsert,
+  resolveAssessmentTypeForInsert,
+} from "../[token]/submit/route";
 import { REMOTE_ASSESSMENT_MAX_JSON_BYTES } from "@/app/lib/remote-assessment-validation";
 
 const FAKE_SUPABASE_URL = "http://127.0.0.1:54321";
@@ -199,5 +204,157 @@ describe("resolveAssessmentStatusForInsert", () => {
     ] as const) {
       assert.notEqual(resolveAssessmentStatusForInsert(type, stopped), "interrupted");
     }
+  });
+});
+
+/**
+ * Full DB round-trip coverage using the route's __setServiceRoleClientForTests
+ * injection seam (a fake in-memory Supabase client — no real or fake network
+ * call). This is the regression proof that the urgent-stop path is unchanged
+ * after adding the no-urgent draft-save endpoint, plus the new guard that
+ * rejects a non-stopped post-stroke payload here (it must go through
+ * /save-draft instead).
+ */
+describe("POST /api/remote-assessments/[token]/submit — DB round trip", { concurrency: 1 }, () => {
+  type FakeRequestRow = {
+    id: string;
+    patient_id: string;
+    provider_id: string;
+    status: string;
+    assessment_id: string | null;
+    submitted_at: string | null;
+    assessment_type: string;
+  };
+
+  let requestRow: FakeRequestRow | null;
+  let insertedType: string | null;
+  let insertedStatus: string | null;
+  let finalizeCalls: Record<string, unknown>[];
+
+  function resetState() {
+    requestRow = {
+      id: "req-1",
+      patient_id: "patient-1",
+      provider_id: "provider-1",
+      status: "pending",
+      assessment_id: null,
+      submitted_at: null,
+      assessment_type: "post_stroke_intake",
+    };
+    insertedType = null;
+    insertedStatus = null;
+    finalizeCalls = [];
+  }
+
+  function makeFakeClient() {
+    return {
+      from(table: string) {
+        if (table === "remote_assessment_requests") {
+          return {
+            select: () => ({
+              eq: () => ({
+                gt: () => ({
+                  maybeSingle: async () => ({ data: requestRow, error: null }),
+                }),
+              }),
+            }),
+            update: (patch: Record<string, unknown>) => ({
+              eq: async () => {
+                finalizeCalls.push(patch);
+                if (requestRow) {
+                  requestRow = {
+                    ...requestRow,
+                    status: (patch.status as string) ?? requestRow.status,
+                    submitted_at: (patch.submitted_at as string) ?? requestRow.submitted_at,
+                    assessment_id: (patch.assessment_id as string) ?? requestRow.assessment_id,
+                  };
+                }
+                return { error: null };
+              },
+            }),
+          };
+        }
+        if (table === "assessments") {
+          return {
+            insert: (row: Record<string, unknown>) => ({
+              select: () => ({
+                single: async () => {
+                  insertedType = row.type as string;
+                  insertedStatus = row.status as string;
+                  return { data: { id: "assessment-1", created_at: "2026-07-29T00:00:00.000Z" }, error: null };
+                },
+              }),
+            }),
+          };
+        }
+        if (table === "speech_transcription_sessions") {
+          return {
+            update: () => ({
+              eq: () => ({
+                is: async () => ({ error: null }),
+              }),
+            }),
+          };
+        }
+        throw new Error(`unexpected table: ${table}`);
+      },
+    };
+  }
+
+  beforeEach(() => {
+    resetState();
+    __setServiceRoleClientForTests(makeFakeClient() as never);
+  });
+
+  afterEach(() => {
+    __setServiceRoleClientForTests(null);
+  });
+
+  it("preserves the existing urgent-stop path exactly: draft status, submitted request, server flags", async () => {
+    const req = makeRequest({
+      body: {
+        structuredData: {
+          postStrokeIntake: {
+            respondent: { type: "patient" },
+            urgentGate: { symptoms: ["fall_with_injury"] },
+          },
+          assessmentLanguage: "en",
+        },
+      },
+    });
+    const res = await POST(req, paramsFor("tok"));
+    assert.equal(res.status, 200);
+    assert.equal(insertedType, "post_stroke_intake");
+    assert.equal(insertedStatus, "draft");
+    assert.equal(requestRow!.status, "submitted");
+    assert.ok(requestRow!.submitted_at);
+  });
+
+  it("rejects a non-stopped post-stroke payload — must use /save-draft instead", async () => {
+    const req = makeRequest({
+      body: {
+        structuredData: {
+          postStrokeIntake: {
+            respondent: { type: "patient" },
+            urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          },
+          assessmentLanguage: "en",
+        },
+      },
+    });
+    const res = await POST(req, paramsFor("tok"));
+    assert.equal(res.status, 400);
+    assert.equal(insertedType, null, "no assessment should be inserted");
+    assert.equal(requestRow!.status, "pending", "the request must remain pending");
+  });
+
+  it("preserves existing remote_questionnaire behavior: completed status, submitted request", async () => {
+    requestRow!.assessment_type = "remote_questionnaire";
+    const req = makeRequest({ body: { structuredData: { pain: { chiefComplaint: "Shoulder pain" } } } });
+    const res = await POST(req, paramsFor("tok"));
+    assert.equal(res.status, 200);
+    assert.equal(insertedType, "remote_questionnaire");
+    assert.equal(insertedStatus, "completed");
+    assert.equal(requestRow!.status, "submitted");
   });
 });
