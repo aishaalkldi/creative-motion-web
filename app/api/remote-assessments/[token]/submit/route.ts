@@ -12,6 +12,7 @@ import {
 } from "@/app/lib/remote-assessment-validation";
 import { serviceUnavailableResponse } from "@/app/lib/api/safe-errors";
 import { backfillTranscriptionSessionAssessmentId } from "@/app/lib/speech-ai/transcription-session-persistence";
+import { validatePostStrokeIntakeSubmission } from "@/app/lib/post-stroke-intake/submission-validation";
 
 let serviceRoleClientOverride: SupabaseClient | null = null;
 
@@ -37,7 +38,31 @@ type RequestRow = {
   status: string;
   assessment_id: string | null;
   submitted_at: string | null;
+  assessment_type: string;
 };
+
+/** Assessment types allowed to persist as their own assessments.type value on submit. */
+const PASSTHROUGH_ASSESSMENT_TYPES = new Set(["post_stroke_intake"]);
+
+/** Existing remote_questionnaire behavior is the default for every other/unrecognized type. */
+export function resolveAssessmentTypeForInsert(requestAssessmentType: string): string {
+  return PASSTHROUGH_ASSESSMENT_TYPES.has(requestAssessmentType)
+    ? requestAssessmentType
+    : "remote_questionnaire";
+}
+
+/**
+ * A stopped urgent post-stroke intake is not clinically complete — it must
+ * never be persisted as "completed". Every other case (including a
+ * non-stopped post-stroke submission and every remote_questionnaire
+ * submission) keeps the existing "completed" behavior unchanged. No new
+ * "interrupted" status is introduced; the interruption itself remains
+ * detectable through structured_data.postStrokeIntake.urgentGate.stopped
+ * and its server-computed operational flags.
+ */
+export function resolveAssessmentStatusForInsert(resolvedType: string, stopped: boolean): string {
+  return resolvedType === "post_stroke_intake" && stopped ? "draft" : "completed";
+}
 
 /**
  * POST /api/remote-assessments/[token]/submit
@@ -81,7 +106,7 @@ export async function POST(
 
   const { data: requestRow, error: fetchError } = await admin
     .from("remote_assessment_requests")
-    .select("id, patient_id, provider_id, status, assessment_id, submitted_at")
+    .select("id, patient_id, provider_id, status, assessment_id, submitted_at, assessment_type")
     .eq("token", trimmed)
     .gt("expires_at", new Date().toISOString())
     .maybeSingle<RequestRow>();
@@ -107,14 +132,39 @@ export async function POST(
     return NextResponse.json({ error: "Invalid or expired link" }, { status: 404 });
   }
 
+  const resolvedType = resolveAssessmentTypeForInsert(requestRow.assessment_type);
+
+  let finalStructuredData: Record<string, unknown> = validated.data;
+  let stopped = false;
+
+  if (resolvedType === "post_stroke_intake") {
+    // Server-authoritative: recomputes stopped/flags/recordedAt from the
+    // validated symptom selection — never trusts the client's values.
+    const postStrokeValidation = validatePostStrokeIntakeSubmission(validated.data);
+    if (!postStrokeValidation.ok) {
+      return NextResponse.json({ error: postStrokeValidation.error }, { status: 400 });
+    }
+    if (!postStrokeValidation.stopped) {
+      // This endpoint is the terminal urgent-stop path only. A cleared
+      // (no new urgent symptoms) post-stroke intake is not terminal and must
+      // go through /save-draft instead, so it is never marked "completed".
+      return NextResponse.json(
+        { error: "Not an urgent-stop submission. Use the draft-save endpoint instead." },
+        { status: 400 },
+      );
+    }
+    finalStructuredData = postStrokeValidation.structuredData;
+    stopped = postStrokeValidation.stopped;
+  }
+
   const { data: assessment, error: insertError } = await admin
     .from("assessments")
     .insert({
       patient_id: requestRow.patient_id,
       provider_id: requestRow.provider_id,
-      type: "remote_questionnaire",
-      structured_data: validated.data,
-      status: "completed",
+      type: resolvedType,
+      structured_data: finalStructuredData,
+      status: resolveAssessmentStatusForInsert(resolvedType, stopped),
       mode: "remote",
       selected_tests: [],
     })

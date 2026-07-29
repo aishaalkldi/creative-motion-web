@@ -24,6 +24,10 @@ const PUBLIC_PREFIXES = [
   "/patient/",
   // Patient-facing remote assessment link (sent via secure URL)
   "/assessment",
+  // Patient-facing post-stroke intake link (sent via secure URL); token-gated,
+  // not a Supabase session — trailing slash anchors the boundary so a
+  // look-alike path (e.g. /post-stroke-intake-private) is never swept in.
+  "/post-stroke-intake/",
   // Next.js internals and static assets
   "/_next",
   "/favicon.ico",
@@ -39,7 +43,7 @@ const PUBLIC_PATHS = new Set([
   "/api/health/supabase",
 ]);
 
-function isPublic(pathname: string): boolean {
+export function isPublic(pathname: string): boolean {
   if (pathname === "/") return true;
   if (PUBLIC_PATHS.has(pathname)) return true;
   return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix));
