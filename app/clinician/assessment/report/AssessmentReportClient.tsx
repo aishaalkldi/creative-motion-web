@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useMemo, useCallback, type ReactNode } from "react";
+import { useEffect, useState, useMemo, useCallback, useRef, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import type { BackendPatient } from "@/app/lib/api";
 import type { AssessmentData } from "@/app/lib/assessment-types";
@@ -37,23 +37,25 @@ import { PatientSubmittedAnswersReview } from "@/app/components/PatientSubmitted
 import { PtMedicalReportDraftPanel } from "@/app/components/clinician/PtMedicalReportDraftPanel";
 import { readPtMedicalReportDraft, readPtMedicalReportApproved } from "@/app/lib/ai/generate-pt-medical-report";
 import {
+  PtMedicalReportPrintView,
+  readGate2ApprovedAt,
+  resolvePtMedicalReportExportEligibility,
+  shouldInvokeApprovedPtMedicalReportPrint,
+} from "@/app/components/reports/PtMedicalReportPrintView";
+import {
   readApprovedPatientReportFacts,
   type ApprovedPatientReportFacts,
 } from "@/app/lib/reports/approved-patient-facts";
 import type { PatientAssessmentDraft, PatientSectionId } from "@/app/lib/api/remote-assessments";
 import {
   detectRedFlag,
-  buildRemoteQuestionnaireSummary,
 } from "@/app/lib/remote-questionnaire-summary";
 import { ReportExportToolbar } from "@/app/components/reports/ReportExportToolbar";
-import { RemoteQuestionnairePrintReport } from "@/app/components/reports/RemoteQuestionnairePrintReport";
 import { CvCapturesClinicalSection } from "@/app/components/reports/CvCapturesClinicalSection";
 import { AssessmentInterpretationDraftSection } from "@/app/components/reports/AssessmentInterpretationDraftSection";
-import { PdfTranslationWarningModal } from "@/app/components/clinician/PdfTranslationWarningModal";
 import { useCvSessionMetrics } from "@/app/hooks/useCvSessionMetrics";
 import { getCvReadyExercises } from "@/app/lib/cv/cv-ready-exercises";
 import { GAIT_ASSESSMENT_EXERCISE_DISPLAY_NAMES } from "@/app/lib/cv/gait-assessment-exercise-ids";
-import { isAiTranslationEnabled } from "@/app/lib/ai/ai-features";
 import {
   BADGE_FOR_THERAPIST_REVIEW,
   CLINICAL_DISCLAIMER_FULL,
@@ -1043,8 +1045,6 @@ export function AssessmentReportClient() {
   const [soapSaving, setSoapSaving] = useState(false);
   const [soapSaveMessage, setSoapSaveMessage] = useState("");
   const [patientAnsweredInArabic, setPatientAnsweredInArabic] = useState(false);
-  const [showPdfWarning, setShowPdfWarning] = useState(false);
-  const [translateThenExportLoading, setTranslateThenExportLoading] = useState(false);
   const [approvedPatientFacts, setApprovedPatientFacts] = useState<ApprovedPatientReportFacts | null>(
     null,
   );
@@ -1054,6 +1054,8 @@ export function AssessmentReportClient() {
   const [ptMedicalReportApproved, setPtMedicalReportApproved] = useState(
     () => null as ReturnType<typeof readPtMedicalReportApproved>,
   );
+  const [gate2ApprovedAt, setGate2ApprovedAt] = useState<string | null>(null);
+  const approvedFactsVersionRef = useRef<number | null>(null);
   const [translationExport, setTranslationExport] = useState({
     doneCount: 0,
     totalCount: 0,
@@ -1086,35 +1088,36 @@ export function AssessmentReportClient() {
     [],
   );
 
-  const handleRemoteQuestionnaireExport = useCallback(() => {
-    if (!isAiTranslationEnabled()) {
-      window.print();
-      return;
-    }
-    const assessmentLanguage = patientAnsweredInArabic ? "ar" : "en";
-    const untranslatedCount = translationExport.totalCount - translationExport.doneCount;
-    if (untranslatedCount > 0 && assessmentLanguage === "ar") {
-      setShowPdfWarning(true);
-    } else {
-      window.print();
-    }
-  }, [patientAnsweredInArabic, translationExport.doneCount, translationExport.totalCount]);
+  const ptExportEligibility = useMemo(
+    () =>
+      resolvePtMedicalReportExportEligibility({
+        approvedFacts: approvedPatientFacts,
+        draft: ptMedicalReportDraft,
+        approved: ptMedicalReportApproved,
+        gate2ApprovedAt,
+      }),
+    [approvedPatientFacts, ptMedicalReportDraft, ptMedicalReportApproved, gate2ApprovedAt],
+  );
 
-  const handleTranslateThenExport = useCallback(async () => {
-    setTranslateThenExportLoading(true);
-    try {
-      await translationExport.translateAll();
-      window.print();
-      setShowPdfWarning(false);
-    } finally {
-      setTranslateThenExportLoading(false);
+  const handleApprovedPatientFactsChange = useCallback((facts: ApprovedPatientReportFacts) => {
+    const previousVersion = approvedFactsVersionRef.current;
+    approvedFactsVersionRef.current = facts.version;
+    setApprovedPatientFacts(facts);
+    if (previousVersion !== null && previousVersion !== facts.version) {
+      setPtMedicalReportDraft(null);
+      setPtMedicalReportApproved(null);
+      setGate2ApprovedAt(null);
     }
-  }, [translationExport.translateAll]);
-
-  const handleExportAnyway = useCallback(() => {
-    window.print();
-    setShowPdfWarning(false);
   }, []);
+
+  const handlePtMedicalReportPrint = useCallback(() => {
+    if (!shouldInvokeApprovedPtMedicalReportPrint(ptExportEligibility)) return;
+    window.print();
+  }, [ptExportEligibility]);
+
+  const handleRemoteQuestionnaireExport = useCallback(() => {
+    handlePtMedicalReportPrint();
+  }, [handlePtMedicalReportPrint]);
 
   const patientId = resolvedPatientId || patientIdParam;
 
@@ -1184,9 +1187,12 @@ export function AssessmentReportClient() {
           setStructuredData(resolved.structuredData);
           setReportKind(resolved.kind);
           if (resolved.remoteSubmissionMeta) {
-            setApprovedPatientFacts(readApprovedPatientReportFacts(resolved.remoteSubmissionMeta));
+            const facts = readApprovedPatientReportFacts(resolved.remoteSubmissionMeta);
+            setApprovedPatientFacts(facts);
+            approvedFactsVersionRef.current = facts?.version ?? null;
             setPtMedicalReportDraft(readPtMedicalReportDraft(resolved.remoteSubmissionMeta));
             setPtMedicalReportApproved(readPtMedicalReportApproved(resolved.remoteSubmissionMeta));
+            setGate2ApprovedAt(readGate2ApprovedAt(resolved.remoteSubmissionMeta));
           }
           if (resolved.loadError) {
             setLoadError(resolved.loadError);
@@ -1346,52 +1352,31 @@ export function AssessmentReportClient() {
 
   if (reportKind === "remote_questionnaire" && remoteQuestionnaireDraft) {
     const hasRedFlag = detectRedFlag(remoteQuestionnaireDraft);
-    const printSummary = buildRemoteQuestionnaireSummary(
-      remoteQuestionnaireDraft,
-      reportDate || new Date().toISOString(),
-    );
     const interpretationDraft = buildAssessmentInterpretationDraft({
       draft: remoteQuestionnaireDraft,
       includedSections: remoteIncludedSections,
       submissionMeta: remoteSubmissionMeta,
     });
     const backHref = patientId ? `/clinician/patients/${patientId}` : "/clinician/patients";
+    const approvedPrintSnapshot = ptExportEligibility.approvedSnapshot;
 
     return (
       <main className="assessment-report-root print-report min-h-screen bg-[#0B1220] text-white">
-        {printSummary ? (
+        {approvedPrintSnapshot && gate2ApprovedAt ? (
           <div className="print-only">
-            <RemoteQuestionnairePrintReport
-              summary={printSummary}
-              interpretationDraft={interpretationDraft}
+            <PtMedicalReportPrintView
+              approved={approvedPrintSnapshot}
               patientName={patient?.full_name ?? "Patient"}
-              patientId={patientId}
+              patientId={patientId ?? ""}
+              assessmentDate={reportDate || new Date().toISOString()}
+              sourceLanguage={patientAnsweredInArabic ? "Arabic" : "English"}
+              gate2ApprovedAt={gate2ApprovedAt}
               assessmentId={assessmentId || undefined}
-              clinicianNotes={serverNotes}
-              submissionMeta={remoteSubmissionMeta}
-              assessmentLanguage={patientAnsweredInArabic ? "ar" : "en"}
             />
-            <div className="mt-4">
-              <CvCapturesClinicalSection
-                metrics={cvMetricsForReport}
-                exerciseNameById={cvExerciseNameById}
-                variant="print"
-              />
-            </div>
           </div>
         ) : null}
 
         <ReportExportToolbar backHref={backHref} onExportClick={handleRemoteQuestionnaireExport} />
-        {showPdfWarning ? (
-          <PdfTranslationWarningModal
-            untranslatedCount={translationExport.totalCount - translationExport.doneCount}
-            onTranslateThenExport={() => void handleTranslateThenExport()}
-            onExportAnyway={handleExportAnyway}
-            translating={translationExport.anyLoading || translateThenExportLoading}
-            doneCount={translationExport.doneCount}
-            totalCount={translationExport.totalCount}
-          />
-        ) : null}
         <ReportScreenHeader
           patientName={patient?.full_name ?? "Patient"}
           displayDate={reportDate}
@@ -1435,7 +1420,7 @@ export function AssessmentReportClient() {
                 submissionMeta={remoteSubmissionMeta}
                 assessmentId={assessmentId || undefined}
                 onTranslationProgress={handleTranslationProgress}
-                onApprovedFactsChange={setApprovedPatientFacts}
+                onApprovedFactsChange={handleApprovedPatientFactsChange}
               />
             </div>
           </section>
@@ -1445,8 +1430,11 @@ export function AssessmentReportClient() {
               approvedFacts={approvedPatientFacts}
               initialDraft={ptMedicalReportDraft}
               initialApproved={ptMedicalReportApproved}
+              gate2ApprovedAt={gate2ApprovedAt}
               onDraftChange={setPtMedicalReportDraft}
               onApprovedChange={setPtMedicalReportApproved}
+              onGate2ApprovedAtChange={setGate2ApprovedAt}
+              onPrintApprovedReport={handlePtMedicalReportPrint}
             />
           </section>
           <AssessmentInterpretationDraftSection draft={interpretationDraft} />

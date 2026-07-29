@@ -11,6 +11,9 @@ import {
   type PtMedicalReportDraft,
 } from "@/app/lib/ai/generate-pt-medical-report";
 import {
+  PT_MEDICAL_REPORT_EXPORT_MESSAGES,
+} from "@/app/components/reports/PtMedicalReportPrintView";
+import {
   buildPtMedicalReportPanelViewModel,
   derivePtMedicalReportPanelState,
   parseApprovePtReportApiResponse,
@@ -45,6 +48,48 @@ const APPROVED: PtMedicalReportApproved = {
   },
 };
 
+const GATE2_AT = "2026-07-29T10:00:00.000Z";
+
+describe("buildPtMedicalReportPanelViewModel export states", () => {
+  it("blocks export without Gate 1 approval", () => {
+    const vm = buildPtMedicalReportPanelViewModel(null, null, null);
+    assert.equal(vm.showExport, false);
+    assert.equal(vm.exportBlockedMessage, PT_MEDICAL_REPORT_EXPORT_MESSAGES.gate1_required);
+  });
+
+  it("blocks export without a generated report", () => {
+    const vm = buildPtMedicalReportPanelViewModel(APPROVED_FACTS, null, null);
+    assert.equal(vm.showExport, false);
+    assert.equal(vm.exportBlockedMessage, PT_MEDICAL_REPORT_EXPORT_MESSAGES.draft_required);
+  });
+
+  it("blocks export while the report remains a draft", () => {
+    const vm = buildPtMedicalReportPanelViewModel(APPROVED_FACTS, DRAFT, null);
+    assert.equal(vm.showExport, false);
+    assert.equal(vm.exportBlockedMessage, PT_MEDICAL_REPORT_EXPORT_MESSAGES.approval_required);
+  });
+
+  it("enables export only with valid Gate 2 approval", () => {
+    const vm = buildPtMedicalReportPanelViewModel(APPROVED_FACTS, DRAFT, APPROVED, null, GATE2_AT);
+    assert.equal(vm.showExport, true);
+    assert.equal(vm.exportBlockedMessage, null);
+    assert.equal(vm.showApprove, false);
+  });
+
+  it("blocks export after post-approval edits invalidate Gate 2", () => {
+    const vm = buildPtMedicalReportPanelViewModel(
+      APPROVED_FACTS,
+      { ...DRAFT, version: 2 },
+      APPROVED,
+      null,
+      GATE2_AT,
+    );
+    assert.equal(vm.showExport, false);
+    assert.equal(vm.exportBlockedMessage, PT_MEDICAL_REPORT_EXPORT_MESSAGES.stale_approval);
+    assert.equal(vm.showApprove, true);
+  });
+});
+
 describe("derivePtMedicalReportPanelState", () => {
   it("requires Gate 1 approval before generation", () => {
     assert.equal(derivePtMedicalReportPanelState(null, null, null), "gate1_required");
@@ -74,9 +119,10 @@ describe("buildPtMedicalReportPanelViewModel", () => {
   });
 
   it("clearly distinguishes approved state from draft state", () => {
-    const vm = buildPtMedicalReportPanelViewModel(APPROVED_FACTS, DRAFT, APPROVED);
+    const vm = buildPtMedicalReportPanelViewModel(APPROVED_FACTS, DRAFT, APPROVED, null, GATE2_AT);
     assert.equal(vm.statusLabel, PT_MEDICAL_REPORT_APPROVED_LABEL);
     assert.equal(vm.showApprove, false);
+    assert.equal(vm.showExport, true);
     assert.equal(vm.state, "approved");
   });
 

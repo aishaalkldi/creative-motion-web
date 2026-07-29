@@ -14,6 +14,10 @@ import {
   type PtMedicalReportDraftSections,
   type PtMedicalReportSectionKey,
 } from "@/app/lib/ai/generate-pt-medical-report";
+import {
+  resolvePtMedicalReportExportEligibility,
+  shouldInvokeApprovedPtMedicalReportPrint,
+} from "@/app/components/reports/PtMedicalReportPrintView";
 
 export type PtMedicalReportPanelState =
   | "gate1_required"
@@ -31,6 +35,8 @@ export type PtMedicalReportPanelViewModel = {
   showRegenerate: boolean;
   showSaveDraft: boolean;
   showApprove: boolean;
+  showExport: boolean;
+  exportBlockedMessage: string | null;
 };
 
 export function derivePtMedicalReportPanelState(
@@ -49,28 +55,41 @@ export function buildPtMedicalReportPanelViewModel(
   draft: PtMedicalReportDraft | null,
   approved: PtMedicalReportApproved | null,
   editedSections: PtMedicalReportDraftSections | null = null,
+  gate2ApprovedAt: string | null = null,
 ): PtMedicalReportPanelViewModel {
   const state = derivePtMedicalReportPanelState(approvedFacts, draft, approved);
   const sectionSource = editedSections ?? draft?.sections ?? {};
   const editableSectionKeys = PT_MEDICAL_REPORT_SECTION_KEYS.filter((key) =>
     Boolean(sectionSource[key]?.trim()),
   );
+  const exportEligibility = resolvePtMedicalReportExportEligibility({
+    approvedFacts,
+    draft,
+    approved,
+    gate2ApprovedAt,
+  });
 
   return {
     state,
     statusLabel:
-      state === "approved"
+      exportEligibility.exportable
         ? PT_MEDICAL_REPORT_APPROVED_LABEL
         : state === "draft_ready"
           ? PT_MEDICAL_REPORT_DRAFT_LABEL
-          : null,
+          : state === "approved" && exportEligibility.blockReason === "stale_approval"
+            ? PT_MEDICAL_REPORT_DRAFT_LABEL
+            : state === "approved"
+              ? PT_MEDICAL_REPORT_APPROVED_LABEL
+              : null,
     editableSectionKeys,
     draft,
     approved,
     generateButtonLabel: "Generate English PT Medical Report",
     showRegenerate: Boolean(draft),
     showSaveDraft: Boolean(draft),
-    showApprove: Boolean(draft) && state !== "approved",
+    showApprove: Boolean(draft) && !exportEligibility.exportable,
+    showExport: exportEligibility.exportable,
+    exportBlockedMessage: exportEligibility.exportable ? null : exportEligibility.message,
   };
 }
 
@@ -145,8 +164,11 @@ type Props = {
   approvedFacts: ApprovedPatientReportFacts | null;
   initialDraft?: PtMedicalReportDraft | null;
   initialApproved?: PtMedicalReportApproved | null;
+  gate2ApprovedAt?: string | null;
   onDraftChange?: (draft: PtMedicalReportDraft | null) => void;
   onApprovedChange?: (approved: PtMedicalReportApproved | null) => void;
+  onGate2ApprovedAtChange?: (approvedAt: string | null) => void;
+  onPrintApprovedReport?: () => void;
 };
 
 export function PtMedicalReportDraftPanel({
@@ -154,8 +176,11 @@ export function PtMedicalReportDraftPanel({
   approvedFacts,
   initialDraft = null,
   initialApproved = null,
+  gate2ApprovedAt = null,
   onDraftChange,
   onApprovedChange,
+  onGate2ApprovedAtChange,
+  onPrintApprovedReport,
 }: Props) {
   const [draft, setDraft] = useState<PtMedicalReportDraft | null>(initialDraft);
   const [approved, setApproved] = useState<PtMedicalReportApproved | null>(initialApproved);
@@ -175,9 +200,32 @@ export function PtMedicalReportDraftPanel({
   }, [initialDraft, initialApproved]);
 
   const viewModel = useMemo(
-    () => buildPtMedicalReportPanelViewModel(approvedFacts, draft, approved, editedSections),
-    [approvedFacts, draft, approved, editedSections],
+    () =>
+      buildPtMedicalReportPanelViewModel(
+        approvedFacts,
+        draft,
+        approved,
+        editedSections,
+        gate2ApprovedAt,
+      ),
+    [approvedFacts, draft, approved, editedSections, gate2ApprovedAt],
   );
+
+  const exportEligibility = useMemo(
+    () =>
+      resolvePtMedicalReportExportEligibility({
+        approvedFacts,
+        draft,
+        approved,
+        gate2ApprovedAt,
+      }),
+    [approvedFacts, draft, approved, gate2ApprovedAt],
+  );
+
+  function handlePrintExport() {
+    if (!shouldInvokeApprovedPtMedicalReportPrint(exportEligibility)) return;
+    onPrintApprovedReport?.();
+  }
 
   function syncDraft(nextDraft: PtMedicalReportDraft | null) {
     setDraft(nextDraft);
@@ -204,6 +252,7 @@ export function PtMedicalReportDraftPanel({
       syncDraft(parsed.draft);
       setApproved(null);
       onApprovedChange?.(null);
+      onGate2ApprovedAtChange?.(null);
     } finally {
       setGenerating(false);
     }
@@ -230,6 +279,7 @@ export function PtMedicalReportDraftPanel({
       if (parsed.gate2Invalidated) {
         setApproved(null);
         onApprovedChange?.(null);
+        onGate2ApprovedAtChange?.(null);
       }
       setSuccessMessage("Report draft saved.");
     } finally {
@@ -256,6 +306,7 @@ export function PtMedicalReportDraftPanel({
       }
       setApproved(parsed.approved);
       onApprovedChange?.(parsed.approved);
+      onGate2ApprovedAtChange?.(parsed.approved.approvedAt);
       setSuccessMessage(PT_MEDICAL_REPORT_APPROVED_LABEL);
     } finally {
       setApproving(false);
@@ -361,6 +412,25 @@ export function PtMedicalReportDraftPanel({
               {approving ? "Approving report…" : "Approve report for print and PDF"}
             </button>
           ) : null}
+        </div>
+      ) : null}
+
+      {viewModel.exportBlockedMessage && !viewModel.showExport ? (
+        <p className="mt-3 text-xs leading-relaxed text-[#9CA3AF]">{viewModel.exportBlockedMessage}</p>
+      ) : null}
+
+      {viewModel.showExport ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handlePrintExport}
+            className="rounded-[6px] bg-[#1D9E75] px-3.5 py-[6px] text-[11px] font-medium text-white transition hover:bg-[#179165]"
+          >
+            Print / Export PDF
+          </button>
+          <p className="w-full text-[10px] leading-relaxed text-[#9CA3AF]">
+            Use your browser&apos;s print dialog and choose Save as PDF when ready.
+          </p>
         </div>
       ) : null}
 
