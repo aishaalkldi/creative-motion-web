@@ -1,23 +1,21 @@
 /**
  * Run: npx tsx --test app/components/clinician/PtMedicalReportDraftPanel.test.ts
- *
- * No React render harness exists in this repo, so these tests cover exported
- * pure helpers and panel view-model derivation. Component-mount behavior
- * ("no POST fires automatically") is confirmed by code inspection:
- * PtMedicalReportDraftPanel.tsx calls fetch only inside handleGenerate(),
- * which is invoked solely from onClick — no useEffect triggers generation.
  */
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { ApprovedPatientReportFacts } from "@/app/lib/reports/approved-patient-facts";
 import {
+  PT_MEDICAL_REPORT_APPROVED_LABEL,
   PT_MEDICAL_REPORT_DRAFT_LABEL,
+  type PtMedicalReportApproved,
   type PtMedicalReportDraft,
 } from "@/app/lib/ai/generate-pt-medical-report";
 import {
   buildPtMedicalReportPanelViewModel,
   derivePtMedicalReportPanelState,
+  parseApprovePtReportApiResponse,
   parseGeneratePtReportApiResponse,
+  parseSavePtReportDraftApiResponse,
 } from "./PtMedicalReportDraftPanel";
 
 const APPROVED_FACTS: ApprovedPatientReportFacts = {
@@ -37,34 +35,57 @@ const DRAFT: PtMedicalReportDraft = {
   },
 };
 
+const APPROVED: PtMedicalReportApproved = {
+  version: 1,
+  approvedAt: "2026-07-29T10:00:00.000Z",
+  sourceDraftVersion: 1,
+  sections: {
+    chiefComplaint: "The patient reports shoulder pain.",
+    clinicalReviewNote: "Therapist review required.",
+  },
+};
+
 describe("derivePtMedicalReportPanelState", () => {
   it("requires Gate 1 approval before generation", () => {
-    assert.equal(derivePtMedicalReportPanelState(null, null), "gate1_required");
+    assert.equal(derivePtMedicalReportPanelState(null, null, null), "gate1_required");
   });
 
   it("shows generate state after Gate 1 without a draft", () => {
-    assert.equal(derivePtMedicalReportPanelState(APPROVED_FACTS, null), "ready_to_generate");
+    assert.equal(derivePtMedicalReportPanelState(APPROVED_FACTS, null, null), "ready_to_generate");
   });
 
   it("shows draft state after generation", () => {
-    assert.equal(derivePtMedicalReportPanelState(APPROVED_FACTS, DRAFT), "draft_ready");
+    assert.equal(derivePtMedicalReportPanelState(APPROVED_FACTS, DRAFT, null), "draft_ready");
+  });
+
+  it("shows approved state after Gate 2 approval", () => {
+    assert.equal(derivePtMedicalReportPanelState(APPROVED_FACTS, DRAFT, APPROVED), "approved");
   });
 });
 
 describe("buildPtMedicalReportPanelViewModel", () => {
   it("labels generated output as a clinician-review-required draft", () => {
-    const vm = buildPtMedicalReportPanelViewModel(APPROVED_FACTS, DRAFT);
-    assert.equal(vm.draftLabel, PT_MEDICAL_REPORT_DRAFT_LABEL);
+    const vm = buildPtMedicalReportPanelViewModel(APPROVED_FACTS, DRAFT, null);
+    assert.equal(vm.statusLabel, PT_MEDICAL_REPORT_DRAFT_LABEL);
     assert.equal(vm.showRegenerate, true);
-    assert.deepEqual(vm.visibleSectionKeys, ["chiefComplaint", "clinicalReviewNote"]);
+    assert.equal(vm.showSaveDraft, true);
+    assert.equal(vm.showApprove, true);
+    assert.deepEqual(vm.editableSectionKeys, ["chiefComplaint", "clinicalReviewNote"]);
   });
 
-  it("omits empty sections from the visible list", () => {
+  it("clearly distinguishes approved state from draft state", () => {
+    const vm = buildPtMedicalReportPanelViewModel(APPROVED_FACTS, DRAFT, APPROVED);
+    assert.equal(vm.statusLabel, PT_MEDICAL_REPORT_APPROVED_LABEL);
+    assert.equal(vm.showApprove, false);
+    assert.equal(vm.state, "approved");
+  });
+
+  it("omits empty sections from the editable list", () => {
     const vm = buildPtMedicalReportPanelViewModel(APPROVED_FACTS, {
       ...DRAFT,
       sections: { chiefComplaint: "Only one section." },
-    });
-    assert.deepEqual(vm.visibleSectionKeys, ["chiefComplaint"]);
+    }, null);
+    assert.deepEqual(vm.editableSectionKeys, ["chiefComplaint"]);
   });
 });
 
@@ -77,12 +98,39 @@ describe("parseGeneratePtReportApiResponse", () => {
     assert.equal(parsed.ok, true);
     assert.deepEqual(parsed.draft?.sections.chiefComplaint, DRAFT.sections.chiefComplaint);
   });
+});
+
+describe("parseSavePtReportDraftApiResponse", () => {
+  it("parses a successful save response and reports Gate 2 invalidation", () => {
+    const parsed = parseSavePtReportDraftApiResponse({
+      saved: true,
+      gate2Invalidated: true,
+      ptMedicalReportDraft: {
+        ...DRAFT,
+        sections: { chiefComplaint: "Edited complaint.", clinicalReviewNote: "Review." },
+      },
+    });
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.gate2Invalidated, true);
+    assert.equal(parsed.draft?.sections.chiefComplaint, "Edited complaint.");
+  });
+});
+
+describe("parseApprovePtReportApiResponse", () => {
+  it("parses a successful approval response", () => {
+    const parsed = parseApprovePtReportApiResponse({
+      approved: true,
+      ptMedicalReportApproved: APPROVED,
+    });
+    assert.equal(parsed.ok, true);
+    assert.equal(parsed.approved?.sourceDraftVersion, 1);
+  });
 
   it("returns safe errors from API failures", () => {
-    const parsed = parseGeneratePtReportApiResponse({
-      error: "Approve patient-reported information before generating the PT report.",
+    const parsed = parseApprovePtReportApiResponse({
+      error: "Generate and review the PT report draft before approval.",
     });
     assert.equal(parsed.ok, false);
-    assert.match(parsed.error ?? "", /Approve patient-reported information/i);
+    assert.match(parsed.error ?? "", /Generate and review/i);
   });
 });

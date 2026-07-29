@@ -73,6 +73,16 @@ export const PT_MEDICAL_REPORT_SECTION_LABELS: Record<PtMedicalReportSectionKey,
 export const PT_MEDICAL_REPORT_DRAFT_LABEL =
   "Draft — clinician review required" as const;
 
+export const PT_MEDICAL_REPORT_APPROVED_LABEL =
+  "Report approved for print and PDF." as const;
+
+export type PtMedicalReportApproved = {
+  version: number;
+  approvedAt: string;
+  sourceDraftVersion: number;
+  sections: PtMedicalReportDraftSections;
+};
+
 const DEFAULT_TITLE = PT_MEDICAL_REPORT_SECTION_LABELS.title;
 
 const DEFAULT_CLINICAL_REVIEW_NOTE =
@@ -160,6 +170,39 @@ export function omitEmptyPtReportSections(
   return result;
 }
 
+/** Parses client-supplied section edits — unknown keys are ignored. */
+export function parseClientPtReportSections(raw: unknown): PtMedicalReportDraftSections | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+
+  const sections: PtMedicalReportDraftSections = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!(PT_MEDICAL_REPORT_SECTION_KEYS as readonly string[]).includes(key)) continue;
+    if (typeof value !== "string") return null;
+    sections[key as PtMedicalReportSectionKey] = value;
+  }
+
+  if (Object.keys(sections).length === 0) return null;
+  return sections;
+}
+
+export function clearPtMedicalReportGate2Approval(
+  structuredData: Record<string, unknown>,
+): Record<string, unknown> {
+  const next = { ...structuredData };
+  delete next.ptMedicalReportApproved;
+  delete next.gate2ApprovedAt;
+  return next;
+}
+
+/** Removes draft and Gate 2 approval when Gate 1 facts are re-approved. */
+export function invalidatePtMedicalReportForGate1Reapproval(
+  structuredData: Record<string, unknown>,
+): Record<string, unknown> {
+  const next = clearPtMedicalReportGate2Approval(structuredData);
+  delete next.ptMedicalReportDraft;
+  return next;
+}
+
 export function parsePtReportSectionsFromJson(raw: string): PtMedicalReportDraftSections | null {
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
@@ -224,6 +267,73 @@ export function buildPtMedicalReportDraftRecord(
     generatedAt,
     sourceFactsVersion: facts.version,
     sections: omitEmptyPtReportSections(sections),
+  };
+}
+
+export function applyEditedSectionsToDraft(
+  existingDraft: PtMedicalReportDraft,
+  sections: PtMedicalReportDraftSections,
+): PtMedicalReportDraft {
+  return {
+    ...existingDraft,
+    sections: omitEmptyPtReportSections(sections),
+  };
+}
+
+export function buildPtMedicalReportApprovedSnapshot(
+  draft: PtMedicalReportDraft,
+  approvedAt: string,
+  existingApproved: PtMedicalReportApproved | null,
+): PtMedicalReportApproved {
+  const version = existingApproved ? existingApproved.version + 1 : 1;
+  return {
+    version,
+    approvedAt,
+    sourceDraftVersion: draft.version,
+    sections: { ...draft.sections },
+  };
+}
+
+export function readPtMedicalReportApproved(structuredData: unknown): PtMedicalReportApproved | null {
+  if (typeof structuredData !== "object" || structuredData === null) return null;
+  const record = structuredData as Record<string, unknown>;
+  const raw = record.ptMedicalReportApproved;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+
+  const candidate = raw as Record<string, unknown>;
+  if (typeof candidate.version !== "number" || !Number.isFinite(candidate.version) || candidate.version < 1) {
+    return null;
+  }
+  if (typeof candidate.approvedAt !== "string" || !candidate.approvedAt.trim()) return null;
+  if (
+    typeof candidate.sourceDraftVersion !== "number" ||
+    !Number.isFinite(candidate.sourceDraftVersion) ||
+    candidate.sourceDraftVersion < 1
+  ) {
+    return null;
+  }
+  if (!candidate.sections || typeof candidate.sections !== "object" || Array.isArray(candidate.sections)) {
+    return null;
+  }
+
+  const sections: PtMedicalReportDraftSections = {};
+  for (const [key, value] of Object.entries(candidate.sections as Record<string, unknown>)) {
+    if (
+      (PT_MEDICAL_REPORT_SECTION_KEYS as readonly string[]).includes(key) &&
+      typeof value === "string" &&
+      value.trim()
+    ) {
+      sections[key as PtMedicalReportSectionKey] = sanitizeSectionText(value);
+    }
+  }
+
+  if (Object.keys(sections).length === 0) return null;
+
+  return {
+    version: candidate.version,
+    approvedAt: candidate.approvedAt.trim(),
+    sourceDraftVersion: candidate.sourceDraftVersion,
+    sections,
   };
 }
 

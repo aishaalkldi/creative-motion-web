@@ -15,6 +15,7 @@ import {
 import { checkAiRateLimit } from "@/app/lib/ai/rate-limit";
 import {
   buildPtMedicalReportDraftRecord,
+  clearPtMedicalReportGate2Approval,
   generatePtMedicalReportSections,
   readPtMedicalReportDraft,
 } from "@/app/lib/ai/generate-pt-medical-report";
@@ -169,10 +170,10 @@ export async function POST(
     generatedAt,
   );
 
-  const updatedData: Record<string, unknown> = {
+  const updatedData: Record<string, unknown> = clearPtMedicalReportGate2Approval({
     ...structuredData,
     ptMedicalReportDraft,
-  };
+  });
 
   const { error: updateError } = await adminClient
     .from("assessments")

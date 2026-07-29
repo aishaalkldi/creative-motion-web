@@ -24,6 +24,17 @@ import {
 import {
   buildApprovedPatientReportFactsSnapshot,
 } from "../../../lib/reports/approved-patient-facts";
+import { readApprovedPatientReportFacts } from "../../../lib/reports/approved-patient-facts";
+import {
+  applyEditedSectionsToDraft,
+  buildPtMedicalReportApprovedSnapshot,
+  clearPtMedicalReportGate2Approval,
+  invalidatePtMedicalReportForGate1Reapproval,
+  parseClientPtReportSections,
+  readPtMedicalReportApproved,
+  readPtMedicalReportDraft,
+  validateAndSanitizePtReportSections,
+} from "../../../lib/ai/generate-pt-medical-report";
 import {
   extractRemoteQuestionnaireDraft,
   inferIncludedSections,
@@ -180,6 +191,8 @@ export async function PATCH(
     markTranslationReviewed?: boolean;
     markChiefComplaintExtractionReviewed?: boolean;
     approvePatientReportFacts?: boolean;
+    savePtMedicalReportDraft?: { sections?: Record<string, unknown> };
+    approvePtMedicalReport?: boolean;
   };
   try {
     body = (await req.json()) as typeof body;
@@ -277,6 +290,165 @@ export async function PATCH(
     return NextResponse.json({ reviewed: true });
   }
 
+  if (body.savePtMedicalReportDraft?.sections) {
+    const { data: row, error: fetchErr } = await adminClient
+      .from("assessments")
+      .select("id, patient_id, provider_id, type, structured_data")
+      .eq("id", assessmentId)
+      .eq("provider_id", user.id)
+      .maybeSingle<AssessmentDbRow>();
+
+    if (fetchErr || !row) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    if (row.type !== "remote_questionnaire") {
+      return NextResponse.json(
+        { error: "Only remote questionnaire assessments support PT report editing." },
+        { status: 400 },
+      );
+    }
+
+    const ownership = await validatePatientOwnership(adminClient, row.patient_id, user.id);
+    if (!ownership.ok) {
+      return ownershipErrorResponse(ownership);
+    }
+
+    const existing =
+      typeof row.structured_data === "object" && row.structured_data !== null
+        ? (row.structured_data as Record<string, unknown>)
+        : {};
+
+    if (!readApprovedPatientReportFacts(existing)) {
+      return NextResponse.json(
+        { error: "Approve patient-reported information before saving the PT report." },
+        { status: 400 },
+      );
+    }
+
+    const currentDraft = readPtMedicalReportDraft(existing);
+    if (!currentDraft) {
+      return NextResponse.json(
+        { error: "Generate the PT report draft before saving edits." },
+        { status: 400 },
+      );
+    }
+
+    const parsedSections = parseClientPtReportSections(body.savePtMedicalReportDraft.sections);
+    if (!parsedSections) {
+      return NextResponse.json({ error: "Invalid report sections." }, { status: 400 });
+    }
+
+    const validated = validateAndSanitizePtReportSections(parsedSections);
+    if (!validated.ok) {
+      return NextResponse.json(
+        { error: "Report content includes unsupported clinical claims." },
+        { status: 400 },
+      );
+    }
+
+    const ptMedicalReportDraft = applyEditedSectionsToDraft(currentDraft, validated.sections);
+    const hadGate2Approval = Boolean(readPtMedicalReportApproved(existing) || existing.gate2ApprovedAt);
+
+    let updatedData: Record<string, unknown> = {
+      ...existing,
+      ptMedicalReportDraft,
+    };
+    if (hadGate2Approval) {
+      updatedData = clearPtMedicalReportGate2Approval(updatedData);
+    }
+
+    const updatedAt = new Date().toISOString();
+    const { error: updateErr } = await adminClient
+      .from("assessments")
+      .update({ structured_data: updatedData, updated_at: updatedAt })
+      .eq("id", assessmentId)
+      .eq("provider_id", user.id);
+
+    if (updateErr) {
+      console.error("[PATCH /api/assessments/[id]] PT report draft save failed:", updateErr.message);
+      return NextResponse.json({ error: "Failed to update assessment." }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      saved: true,
+      ptMedicalReportDraft,
+      gate2Invalidated: hadGate2Approval,
+    });
+  }
+
+  if (body.approvePtMedicalReport === true) {
+    const { data: row, error: fetchErr } = await adminClient
+      .from("assessments")
+      .select("id, patient_id, provider_id, type, structured_data")
+      .eq("id", assessmentId)
+      .eq("provider_id", user.id)
+      .maybeSingle<AssessmentDbRow>();
+
+    if (fetchErr || !row) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    if (row.type !== "remote_questionnaire") {
+      return NextResponse.json(
+        { error: "Only remote questionnaire assessments support PT report approval." },
+        { status: 400 },
+      );
+    }
+
+    const ownership = await validatePatientOwnership(adminClient, row.patient_id, user.id);
+    if (!ownership.ok) {
+      return ownershipErrorResponse(ownership);
+    }
+
+    const existing =
+      typeof row.structured_data === "object" && row.structured_data !== null
+        ? (row.structured_data as Record<string, unknown>)
+        : {};
+
+    if (!readApprovedPatientReportFacts(existing)) {
+      return NextResponse.json(
+        { error: "Approve patient-reported information before approving the PT report." },
+        { status: 400 },
+      );
+    }
+
+    const currentDraft = readPtMedicalReportDraft(existing);
+    if (!currentDraft) {
+      return NextResponse.json(
+        { error: "Generate and review the PT report draft before approval." },
+        { status: 400 },
+      );
+    }
+
+    const approvedAt = new Date().toISOString();
+    const existingApproved = readPtMedicalReportApproved(existing);
+    const ptMedicalReportApproved = buildPtMedicalReportApprovedSnapshot(
+      currentDraft,
+      approvedAt,
+      existingApproved,
+    );
+
+    const updatedData = {
+      ...existing,
+      ptMedicalReportApproved,
+      gate2ApprovedAt: approvedAt,
+    };
+
+    const { error: updateErr } = await adminClient
+      .from("assessments")
+      .update({ structured_data: updatedData, updated_at: approvedAt })
+      .eq("id", assessmentId)
+      .eq("provider_id", user.id);
+
+    if (updateErr) {
+      console.error("[PATCH /api/assessments/[id]] PT report approval failed:", updateErr.message);
+      return NextResponse.json({ error: "Failed to update assessment." }, { status: 500 });
+    }
+
+    return NextResponse.json({ approved: true, ptMedicalReportApproved });
+  }
+
   if (body.approvePatientReportFacts === true) {
     const { data: row, error: fetchErr } = await adminClient
       .from("assessments")
@@ -322,11 +494,11 @@ export async function PATCH(
       approvedAt,
     );
 
-    const updatedData = {
+    const updatedData = invalidatePtMedicalReportForGate1Reapproval({
       ...existing,
       approvedPatientReportFacts,
       gate1ApprovedAt: approvedAt,
-    };
+    });
 
     const { error: updateErr } = await adminClient
       .from("assessments")

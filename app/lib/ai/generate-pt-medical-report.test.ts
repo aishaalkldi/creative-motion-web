@@ -7,9 +7,14 @@ import type { ApprovedPatientReportFacts } from "@/app/lib/reports/approved-pati
 import {
   buildPtMedicalReportDraftRecord,
   buildPtMedicalReportGeneratorInput,
+  buildPtMedicalReportApprovedSnapshot,
+  clearPtMedicalReportGate2Approval,
   generatePtMedicalReportSections,
+  invalidatePtMedicalReportForGate1Reapproval,
   omitEmptyPtReportSections,
+  parseClientPtReportSections,
   parsePtReportSectionsFromJson,
+  readPtMedicalReportApproved,
   readPtMedicalReportDraft,
   validateAndSanitizePtReportSections,
 } from "./generate-pt-medical-report";
@@ -100,6 +105,83 @@ describe("omitEmptyPtReportSections", () => {
       functionalLimitations: "  ",
     });
     assert.deepEqual(Object.keys(sections), ["chiefComplaint"]);
+  });
+});
+
+describe("parseClientPtReportSections", () => {
+  it("accepts known section keys and ignores unknown keys", () => {
+    const parsed = parseClientPtReportSections({
+      chiefComplaint: "Edited complaint.",
+      unknownSection: "ignored",
+    });
+    assert.deepEqual(parsed, { chiefComplaint: "Edited complaint." });
+  });
+
+  it("rejects invalid value types", () => {
+    assert.equal(parseClientPtReportSections({ chiefComplaint: 42 }), null);
+  });
+});
+
+describe("buildPtMedicalReportApprovedSnapshot", () => {
+  it("freezes the current draft and records source draft version", () => {
+    const draft = buildPtMedicalReportDraftRecord(
+      null,
+      APPROVED_FACTS,
+      { chiefComplaint: "Draft text." },
+      "2026-07-29T09:00:00.000Z",
+    );
+    const approved = buildPtMedicalReportApprovedSnapshot(
+      draft,
+      "2026-07-29T10:00:00.000Z",
+      null,
+    );
+    assert.equal(approved.version, 1);
+    assert.equal(approved.sourceDraftVersion, draft.version);
+    assert.deepEqual(approved.sections, draft.sections);
+  });
+});
+
+describe("clearPtMedicalReportGate2Approval", () => {
+  it("removes approved snapshot and gate2 timestamp", () => {
+    const cleared = clearPtMedicalReportGate2Approval({
+      ptMedicalReportDraft: { version: 1 },
+      ptMedicalReportApproved: { version: 1 },
+      gate2ApprovedAt: "2026-07-29T10:00:00.000Z",
+      pain: { chiefComplaint: "Arabic" },
+    });
+    assert.equal("ptMedicalReportApproved" in cleared, false);
+    assert.equal("gate2ApprovedAt" in cleared, false);
+    assert.deepEqual(cleared.ptMedicalReportDraft, { version: 1 });
+  });
+});
+
+describe("invalidatePtMedicalReportForGate1Reapproval", () => {
+  it("clears draft and Gate 2 approval on Gate 1 re-approval", () => {
+    const invalidated = invalidatePtMedicalReportForGate1Reapproval({
+      ptMedicalReportDraft: { version: 2 },
+      ptMedicalReportApproved: { version: 1 },
+      gate2ApprovedAt: "2026-07-29T10:00:00.000Z",
+      approvedPatientReportFacts: { version: 1 },
+    });
+    assert.equal("ptMedicalReportDraft" in invalidated, false);
+    assert.equal("ptMedicalReportApproved" in invalidated, false);
+    assert.equal("gate2ApprovedAt" in invalidated, false);
+    assert.ok(invalidated.approvedPatientReportFacts);
+  });
+});
+
+describe("readPtMedicalReportApproved", () => {
+  it("reads a stored approved snapshot", () => {
+    const approved = readPtMedicalReportApproved({
+      ptMedicalReportApproved: {
+        version: 1,
+        approvedAt: "2026-07-29T10:00:00.000Z",
+        sourceDraftVersion: 2,
+        sections: { chiefComplaint: "Approved text." },
+      },
+    });
+    assert.equal(approved?.sourceDraftVersion, 2);
+    assert.equal(approved?.sections.chiefComplaint, "Approved text.");
   });
 });
 

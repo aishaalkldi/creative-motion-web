@@ -161,6 +161,12 @@ mock.module("@/app/lib/ai/generate-pt-medical-report", {
         ? (raw as { version: number })
         : null;
     },
+    clearPtMedicalReportGate2Approval: (structuredData: Record<string, unknown>) => {
+      const next = { ...structuredData };
+      delete next.ptMedicalReportApproved;
+      delete next.gate2ApprovedAt;
+      return next;
+    },
   },
 });
 
@@ -312,6 +318,13 @@ describe("POST /api/assessments/[id]/generate-pt-report", { concurrency: 1 }, ()
           sourceFactsVersion: 1,
           sections: { chiefComplaint: "Old draft." },
         },
+        ptMedicalReportApproved: {
+          version: 1,
+          approvedAt: "2026-07-29T09:30:00.000Z",
+          sourceDraftVersion: 1,
+          sections: { chiefComplaint: "Old draft." },
+        },
+        gate2ApprovedAt: "2026-07-29T09:30:00.000Z",
       },
     };
     generateOutcome = {
@@ -327,6 +340,10 @@ describe("POST /api/assessments/[id]/generate-pt-report", { concurrency: 1 }, ()
     };
     assert.equal(body.ptMedicalReportDraft.version, 2);
     assert.equal(body.ptMedicalReportDraft.sections.chiefComplaint, "Regenerated draft.");
+    assert.equal(updateCalls.length, 1);
+    const patch = updateCalls[0]!.patch.structured_data as Record<string, unknown>;
+    assert.equal("ptMedicalReportApproved" in patch, false);
+    assert.equal("gate2ApprovedAt" in patch, false);
   });
 
   it("returns safe generic errors for provider failures", async () => {

@@ -35,7 +35,7 @@ import {
 } from "@/app/lib/api/treatment-plans";
 import { PatientSubmittedAnswersReview } from "@/app/components/PatientSubmittedAnswersReview";
 import { PtMedicalReportDraftPanel } from "@/app/components/clinician/PtMedicalReportDraftPanel";
-import { readPtMedicalReportDraft } from "@/app/lib/ai/generate-pt-medical-report";
+import { readPtMedicalReportDraft, readPtMedicalReportApproved } from "@/app/lib/ai/generate-pt-medical-report";
 import {
   readApprovedPatientReportFacts,
   type ApprovedPatientReportFacts,
@@ -1051,6 +1051,9 @@ export function AssessmentReportClient() {
   const [ptMedicalReportDraft, setPtMedicalReportDraft] = useState(
     () => null as ReturnType<typeof readPtMedicalReportDraft>,
   );
+  const [ptMedicalReportApproved, setPtMedicalReportApproved] = useState(
+    () => null as ReturnType<typeof readPtMedicalReportApproved>,
+  );
   const [translationExport, setTranslationExport] = useState({
     doneCount: 0,
     totalCount: 0,
@@ -1155,6 +1158,7 @@ export function AssessmentReportClient() {
       setPatientAnsweredInArabic(false);
       setApprovedPatientFacts(null);
       setPtMedicalReportDraft(null);
+      setPtMedicalReportApproved(null);
 
       if (assessmentId) {
         try {
@@ -1182,6 +1186,7 @@ export function AssessmentReportClient() {
           if (resolved.remoteSubmissionMeta) {
             setApprovedPatientFacts(readApprovedPatientReportFacts(resolved.remoteSubmissionMeta));
             setPtMedicalReportDraft(readPtMedicalReportDraft(resolved.remoteSubmissionMeta));
+            setPtMedicalReportApproved(readPtMedicalReportApproved(resolved.remoteSubmissionMeta));
           }
           if (resolved.loadError) {
             setLoadError(resolved.loadError);
@@ -1439,7 +1444,9 @@ export function AssessmentReportClient() {
               assessmentId={assessmentId || undefined}
               approvedFacts={approvedPatientFacts}
               initialDraft={ptMedicalReportDraft}
+              initialApproved={ptMedicalReportApproved}
               onDraftChange={setPtMedicalReportDraft}
+              onApprovedChange={setPtMedicalReportApproved}
             />
           </section>
           <AssessmentInterpretationDraftSection draft={interpretationDraft} />
