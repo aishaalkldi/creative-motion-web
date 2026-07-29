@@ -19,7 +19,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, it } from "node:test";
 import { NextRequest } from "next/server";
-import { POST } from "../[token]/submit/route";
+import { POST, resolveAssessmentStatusForInsert, resolveAssessmentTypeForInsert } from "../[token]/submit/route";
 import { REMOTE_ASSESSMENT_MAX_JSON_BYTES } from "@/app/lib/remote-assessment-validation";
 
 const FAKE_SUPABASE_URL = "http://127.0.0.1:54321";
@@ -139,6 +139,65 @@ describe("POST /api/remote-assessments/[token]/submit", { concurrency: 1 }, () =
     } finally {
       process.env.NEXT_PUBLIC_SUPABASE_URL = FAKE_SUPABASE_URL;
       process.env.SUPABASE_SERVICE_ROLE_KEY = FAKE_SUPABASE_SERVICE_ROLE_KEY;
+    }
+  });
+});
+
+/**
+ * Regression coverage for the assessments.type hard-code fix: this used to be
+ * `type: "remote_questionnaire"` unconditionally on insert, ignoring
+ * remote_assessment_requests.assessment_type entirely. The DB round trip
+ * itself is out of scope for this suite (see file header) — these tests
+ * cover the exported pure decision function directly.
+ */
+describe("resolveAssessmentTypeForInsert", () => {
+  it("passes post_stroke_intake through unchanged", () => {
+    assert.equal(resolveAssessmentTypeForInsert("post_stroke_intake"), "post_stroke_intake");
+  });
+
+  it("preserves existing behavior: remote_questionnaire stays remote_questionnaire", () => {
+    assert.equal(resolveAssessmentTypeForInsert("remote_questionnaire"), "remote_questionnaire");
+  });
+
+  it("preserves existing behavior: any other/unrecognized request type still defaults to remote_questionnaire", () => {
+    for (const value of ["general_msk", "sports", "gait", "pain_function", "", "unknown_future_type"]) {
+      assert.equal(
+        resolveAssessmentTypeForInsert(value),
+        "remote_questionnaire",
+        `expected "${value}" to default to remote_questionnaire`,
+      );
+    }
+  });
+});
+
+/**
+ * Regression coverage for the persisted-status fix: a stopped urgent
+ * post-stroke intake must never be recorded as "completed" (that would read
+ * as clinically finished / cleared). It must also never introduce a new
+ * "interrupted" status — "draft" (an existing, already-used value) is reused
+ * instead. Every other case keeps the prior universal "completed" default.
+ */
+describe("resolveAssessmentStatusForInsert", () => {
+  it('persists a stopped post_stroke_intake as "draft", never "completed"', () => {
+    assert.equal(resolveAssessmentStatusForInsert("post_stroke_intake", true), "draft");
+  });
+
+  it('persists a non-stopped post_stroke_intake as "completed" (existing behavior preserved)', () => {
+    assert.equal(resolveAssessmentStatusForInsert("post_stroke_intake", false), "completed");
+  });
+
+  it('existing remote_questionnaire submissions retain "completed" regardless of the stopped flag', () => {
+    assert.equal(resolveAssessmentStatusForInsert("remote_questionnaire", true), "completed");
+    assert.equal(resolveAssessmentStatusForInsert("remote_questionnaire", false), "completed");
+  });
+
+  it('never produces a new "interrupted" status value', () => {
+    for (const [type, stopped] of [
+      ["post_stroke_intake", true],
+      ["post_stroke_intake", false],
+      ["remote_questionnaire", true],
+    ] as const) {
+      assert.notEqual(resolveAssessmentStatusForInsert(type, stopped), "interrupted");
     }
   });
 });
