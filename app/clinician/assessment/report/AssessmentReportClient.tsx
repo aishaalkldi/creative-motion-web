@@ -34,6 +34,12 @@ import {
   type RehabProgram,
 } from "@/app/lib/api/treatment-plans";
 import { PatientSubmittedAnswersReview } from "@/app/components/PatientSubmittedAnswersReview";
+import { PtMedicalReportDraftPanel } from "@/app/components/clinician/PtMedicalReportDraftPanel";
+import { readPtMedicalReportDraft } from "@/app/lib/ai/generate-pt-medical-report";
+import {
+  readApprovedPatientReportFacts,
+  type ApprovedPatientReportFacts,
+} from "@/app/lib/reports/approved-patient-facts";
 import type { PatientAssessmentDraft, PatientSectionId } from "@/app/lib/api/remote-assessments";
 import {
   detectRedFlag,
@@ -1039,6 +1045,12 @@ export function AssessmentReportClient() {
   const [patientAnsweredInArabic, setPatientAnsweredInArabic] = useState(false);
   const [showPdfWarning, setShowPdfWarning] = useState(false);
   const [translateThenExportLoading, setTranslateThenExportLoading] = useState(false);
+  const [approvedPatientFacts, setApprovedPatientFacts] = useState<ApprovedPatientReportFacts | null>(
+    null,
+  );
+  const [ptMedicalReportDraft, setPtMedicalReportDraft] = useState(
+    () => null as ReturnType<typeof readPtMedicalReportDraft>,
+  );
   const [translationExport, setTranslationExport] = useState({
     doneCount: 0,
     totalCount: 0,
@@ -1141,6 +1153,8 @@ export function AssessmentReportClient() {
       setReportKind(null);
       setServerBacked(false);
       setPatientAnsweredInArabic(false);
+      setApprovedPatientFacts(null);
+      setPtMedicalReportDraft(null);
 
       if (assessmentId) {
         try {
@@ -1165,6 +1179,10 @@ export function AssessmentReportClient() {
           setRemoteIncludedSections(resolved.remoteIncludedSections);
           setStructuredData(resolved.structuredData);
           setReportKind(resolved.kind);
+          if (resolved.remoteSubmissionMeta) {
+            setApprovedPatientFacts(readApprovedPatientReportFacts(resolved.remoteSubmissionMeta));
+            setPtMedicalReportDraft(readPtMedicalReportDraft(resolved.remoteSubmissionMeta));
+          }
           if (resolved.loadError) {
             setLoadError(resolved.loadError);
           }
@@ -1412,8 +1430,17 @@ export function AssessmentReportClient() {
                 submissionMeta={remoteSubmissionMeta}
                 assessmentId={assessmentId || undefined}
                 onTranslationProgress={handleTranslationProgress}
+                onApprovedFactsChange={setApprovedPatientFacts}
               />
             </div>
+          </section>
+          <section className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+            <PtMedicalReportDraftPanel
+              assessmentId={assessmentId || undefined}
+              approvedFacts={approvedPatientFacts}
+              initialDraft={ptMedicalReportDraft}
+              onDraftChange={setPtMedicalReportDraft}
+            />
           </section>
           <AssessmentInterpretationDraftSection draft={interpretationDraft} />
           {serverNotes?.trim() ? (
