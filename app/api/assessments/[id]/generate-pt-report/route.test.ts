@@ -21,7 +21,7 @@ type GenerateOutcome =
   | { ok: true; sections: PtMedicalReportDraftSections }
   | {
       ok: false;
-      code: "invalid_key" | "quota_or_billing" | "rate_limit" | "provider_error" | "no_content" | "invalid_output";
+      code: "invalid_key" | "quota_or_billing" | "rate_limit" | "invalid_request" | "provider_error" | "no_content" | "invalid_output";
     };
 
 const APPROVED_FACTS: ApprovedPatientReportFacts = {
@@ -34,7 +34,7 @@ const APPROVED_FACTS: ApprovedPatientReportFacts = {
 };
 
 const GENERATED_SECTIONS: PtMedicalReportDraftSections = {
-  title: "Physical Therapy Assessment Report",
+  title: "Patient-Reported Subjective Summary",
   chiefComplaint: "The patient reports right shoulder pain.",
   clinicalReviewNote: "Patient-reported draft for therapist review.",
 };
@@ -354,6 +354,25 @@ describe("POST /api/assessments/[id]/generate-pt-report", { concurrency: 1 }, ()
     const body = JSON.parse(text) as { error: string; code: string };
     assert.equal(body.code, "AI_PROVIDER_UNAVAILABLE");
     assert.doesNotMatch(text, /provider_error|OpenAI|sk-test/i);
+  });
+
+  it("returns a safe configuration error for invalid provider request schema", async () => {
+    generateOutcome = { ok: false, code: "invalid_request" };
+    const res = await POST(makeRequest(), ctx());
+    assert.equal(res.status, 502);
+    const body = (await res.json()) as { error: string; code: string };
+    assert.equal(body.code, "AI_CONFIGURATION_ERROR");
+    assert.doesNotMatch(body.error, /invalid_request|response_format|invalid_json_schema/i);
+  });
+
+  it("returns a distinct safe error for invalid structured output", async () => {
+    generateOutcome = { ok: false, code: "invalid_output" };
+    const res = await POST(makeRequest(), ctx());
+    assert.equal(res.status, 502);
+    const body = (await res.json()) as { error: string; code: string };
+    assert.equal(body.code, "AI_INVALID_OUTPUT");
+    assert.match(body.error, /could not be structured safely/i);
+    assert.doesNotMatch(body.error, /AI service is temporarily unavailable/i);
   });
 
   it("returns safe generic errors when the assessment query fails", async () => {

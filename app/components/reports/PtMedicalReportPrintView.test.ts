@@ -8,9 +8,14 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { ApprovedPatientReportFacts } from "@/app/lib/reports/approved-patient-facts";
 import type { PtMedicalReportApproved, PtMedicalReportDraft } from "@/app/lib/ai/generate-pt-medical-report";
+import { PT_MEDICAL_REPORT_SECTION_LABELS, PT_MEDICAL_REPORT_STATUS_LINE } from "@/app/lib/ai/generate-pt-medical-report";
 import {
+  formatPatientAgeForPrint,
+  formatPatientReferenceForPrint,
   getApprovedPrintSectionKeys,
   PT_MEDICAL_REPORT_EXPORT_MESSAGES,
+  PT_MEDICAL_REPORT_NO_AGE_LABEL,
+  PT_MEDICAL_REPORT_NO_FILE_NUMBER_LABEL,
   PT_MEDICAL_REPORT_PRINT_BODY_SECTION_KEYS,
   PT_MEDICAL_REPORT_PRINT_FOOTER,
   readGate2ApprovedAt,
@@ -192,5 +197,62 @@ describe("PT_MEDICAL_REPORT_PRINT_FOOTER", () => {
   it("includes required safety wording", () => {
     assert.match(PT_MEDICAL_REPORT_PRINT_FOOTER, /Clinician-reviewed patient-reported information/i);
     assert.match(PT_MEDICAL_REPORT_PRINT_FOOTER, /does not constitute an automated diagnosis/i);
+  });
+});
+
+describe("print document title and status line", () => {
+  it("falls back to the confirmed Subjective-only title, not the old complete-report name", () => {
+    assert.equal(PT_MEDICAL_REPORT_SECTION_LABELS.title, "Patient-Reported Subjective Summary");
+    assert.notEqual(PT_MEDICAL_REPORT_SECTION_LABELS.title, "Physical Therapy Assessment Report");
+  });
+
+  it("prints the Subjective-approved / Objective-pending status line", () => {
+    assert.equal(PT_MEDICAL_REPORT_STATUS_LINE, "Subjective findings approved; Objective assessment pending");
+  });
+
+  it("no longer prompts to generate the old complete-report name before export", () => {
+    assert.equal(
+      PT_MEDICAL_REPORT_EXPORT_MESSAGES.draft_required,
+      "Generate the Patient-Reported Subjective Summary before export.",
+    );
+    assert.doesNotMatch(PT_MEDICAL_REPORT_EXPORT_MESSAGES.draft_required, /PT Medical Report/i);
+  });
+});
+
+describe("formatPatientReferenceForPrint", () => {
+  it("uses the clinic-visible file number when present", () => {
+    assert.equal(formatPatientReferenceForPrint("P-0001"), "P-0001");
+  });
+
+  it("trims surrounding whitespace", () => {
+    assert.equal(formatPatientReferenceForPrint("  P-0001  "), "P-0001");
+  });
+
+  it('shows "Not assigned" when file_number is missing, empty, or whitespace-only', () => {
+    assert.equal(formatPatientReferenceForPrint(null), PT_MEDICAL_REPORT_NO_FILE_NUMBER_LABEL);
+    assert.equal(formatPatientReferenceForPrint(undefined), PT_MEDICAL_REPORT_NO_FILE_NUMBER_LABEL);
+    assert.equal(formatPatientReferenceForPrint(""), PT_MEDICAL_REPORT_NO_FILE_NUMBER_LABEL);
+    assert.equal(formatPatientReferenceForPrint("   "), PT_MEDICAL_REPORT_NO_FILE_NUMBER_LABEL);
+  });
+
+  it("never returns a UUID-shaped fallback (no patient/assessment ID substitution)", () => {
+    const uuidLike = "3fa85f64-5717-4562-b3fc-2c963f66afa6";
+    // A missing file_number must render the fixed label, never a UUID by any path.
+    assert.notEqual(formatPatientReferenceForPrint(null), uuidLike);
+    assert.equal(formatPatientReferenceForPrint(null), "Not assigned");
+  });
+});
+
+describe("formatPatientAgeForPrint", () => {
+  it("renders a valid recorded age", () => {
+    assert.equal(formatPatientAgeForPrint(42), "42");
+  });
+
+  it('shows "Not recorded" when age is missing or invalid', () => {
+    assert.equal(formatPatientAgeForPrint(null), PT_MEDICAL_REPORT_NO_AGE_LABEL);
+    assert.equal(formatPatientAgeForPrint(undefined), PT_MEDICAL_REPORT_NO_AGE_LABEL);
+    assert.equal(formatPatientAgeForPrint(0), PT_MEDICAL_REPORT_NO_AGE_LABEL);
+    assert.equal(formatPatientAgeForPrint(-5), PT_MEDICAL_REPORT_NO_AGE_LABEL);
+    assert.equal(formatPatientAgeForPrint(Number.NaN), PT_MEDICAL_REPORT_NO_AGE_LABEL);
   });
 });

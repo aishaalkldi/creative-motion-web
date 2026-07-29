@@ -50,7 +50,10 @@ export type AssessmentDetailResponse = {
   status: string;
   created_at: string;
   updated_at: string;
-  patient: Pick<PatientRow, "id" | "full_name" | "diagnosis" | "age" | "gender" | "sport" | "status">;
+  patient: Pick<
+    PatientRow,
+    "id" | "full_name" | "diagnosis" | "age" | "gender" | "sport" | "status" | "file_number"
+  >;
 };
 
 async function buildClients() {
@@ -152,6 +155,7 @@ export async function GET(
       gender: patient.gender,
       sport: patient.sport,
       status: patient.status,
+      file_number: patient.file_number,
     },
   };
 
@@ -590,6 +594,7 @@ export async function PATCH(
       gender: ownership.patient.gender,
       sport: ownership.patient.sport,
       status: ownership.patient.status,
+      file_number: ownership.patient.file_number,
     },
   };
 

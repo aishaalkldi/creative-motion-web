@@ -10,7 +10,7 @@ import {
   aiErrorHttpStatus,
   aiErrorMessage,
   fromKeyConfigCode,
-  fromOpenAiClassified,
+  mapPtReportGenerationError,
 } from "@/app/lib/ai/ai-errors";
 import { checkAiRateLimit } from "@/app/lib/ai/rate-limit";
 import {
@@ -146,15 +146,25 @@ export async function POST(
 
   const generation = await generatePtMedicalReportSections(keyConfig.apiKey, approvedFacts);
   if (!generation.ok) {
-    if (generation.code === "no_content" || generation.code === "invalid_output") {
+    if (generation.code === "invalid_output") {
       console.error(
         "[POST /api/assessments/[id]/generate-pt-report] invalid model output:",
         generation.code,
       );
-      return aiErrorJson(AI_ERROR_CODES.AI_PROVIDER_UNAVAILABLE);
+      return aiErrorJson(AI_ERROR_CODES.AI_INVALID_OUTPUT);
     }
-    const code = fromOpenAiClassified(generation.code);
-    console.error("[POST /api/assessments/[id]/generate-pt-report] OpenAI error:", code);
+    if (generation.code === "no_content") {
+      console.error(
+        "[POST /api/assessments/[id]/generate-pt-report] invalid model output:",
+        generation.code,
+      );
+      return aiErrorJson(AI_ERROR_CODES.AI_INVALID_OUTPUT);
+    }
+    const code = mapPtReportGenerationError(generation.code);
+    console.error(
+      "[POST /api/assessments/[id]/generate-pt-report] OpenAI error:",
+      code,
+    );
     return NextResponse.json(
       { error: aiErrorMessage(code), code },
       { status: aiErrorHttpStatus(code) },

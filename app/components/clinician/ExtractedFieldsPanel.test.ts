@@ -35,63 +35,6 @@ const SHOULDER_EXTRACTION: StructuredExtraction = {
   confidence: 0.92,
 };
 
-describe("parseStoredExtraction", () => {
-  it("returns null for missing/undefined extraction (idle)", () => {
-    assert.equal(parseStoredExtraction(undefined), null);
-    assert.equal(parseStoredExtraction(null), null);
-  });
-
-  it("returns a valid stored extraction unaltered", () => {
-    const result = parseStoredExtraction(SHOULDER_EXTRACTION);
-    assert.deepEqual(result, SHOULDER_EXTRACTION);
-  });
-
-  it("discards unknown fields — only the six whitelisted keys ever appear in the result", () => {
-    const result = parseStoredExtraction({
-      ...SHOULDER_EXTRACTION,
-      extra_hint: "something unexpected",
-    });
-    assert.deepEqual(Object.keys(result!).sort(), [
-      "aggravating_factor",
-      "body_region",
-      "confidence",
-      "language",
-      "primary_symptom",
-      "side",
-    ]);
-  });
-
-  it("discards diagnostic/treatment fields even though they never reach the render path", () => {
-    const result = parseStoredExtraction({
-      ...SHOULDER_EXTRACTION,
-      diagnosis: "possible rotator cuff tear",
-      treatment_recommendation: "physiotherapy 3x/week",
-    });
-    assert.ok(result);
-    assert.equal("diagnosis" in result!, false);
-    assert.equal("treatment_recommendation" in result!, false);
-  });
-
-  it("rejects invalid shapes: non-object, array, missing required string fields", () => {
-    assert.equal(parseStoredExtraction("a string"), null);
-    assert.equal(parseStoredExtraction(42), null);
-    assert.equal(parseStoredExtraction([SHOULDER_EXTRACTION]), null);
-    assert.equal(parseStoredExtraction({ side: "right" }), null);
-    assert.equal(parseStoredExtraction({ ...SHOULDER_EXTRACTION, body_region: "" }), null);
-    assert.equal(parseStoredExtraction({ ...SHOULDER_EXTRACTION, confidence: "high" }), null);
-  });
-
-  it("accepts a null aggravating_factor but rejects a non-string, non-null value", () => {
-    assert.ok(parseStoredExtraction({ ...SHOULDER_EXTRACTION, aggravating_factor: null }));
-    assert.equal(parseStoredExtraction({ ...SHOULDER_EXTRACTION, aggravating_factor: 123 }), null);
-  });
-
-  it("clamps out-of-range confidence into [0, 1], consistent with the server's own validateExtraction", () => {
-    assert.equal(parseStoredExtraction({ ...SHOULDER_EXTRACTION, confidence: 5 })!.confidence, 1);
-    assert.equal(parseStoredExtraction({ ...SHOULDER_EXTRACTION, confidence: -3 })!.confidence, 0);
-  });
-});
-
 describe("parseGeneratedAt", () => {
   it("accepts a valid ISO timestamp", () => {
     assert.equal(parseGeneratedAt("2026-01-02T00:00:00.000Z"), "2026-01-02T00:00:00.000Z");

@@ -6,7 +6,7 @@
 import type { PatientAssessmentDraft, PatientSectionId } from "@/app/lib/api/remote-assessments";
 import type { AssessmentLanguage } from "@/app/lib/assessment-payload";
 import { buildClinicianReviewEntries } from "@/app/lib/patient-assessment-questions";
-import { parseStoredExtraction } from "@/app/components/clinician/ExtractedFieldsPanel";
+import { parseStoredExtraction } from "@/app/lib/reports/chief-complaint-extraction";
 import {
   isTranslatablePatientFieldKey,
   isTranslationReviewed,

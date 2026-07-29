@@ -6,6 +6,8 @@ export const AI_ERROR_CODES = {
   AI_RATE_LIMITED: "AI_RATE_LIMITED",
   AI_INVALID_INPUT: "AI_INVALID_INPUT",
   AI_NO_CONTENT: "AI_NO_CONTENT",
+  AI_INVALID_OUTPUT: "AI_INVALID_OUTPUT",
+  AI_CONFIGURATION_ERROR: "AI_CONFIGURATION_ERROR",
   AI_CONTEXT_INVALID: "AI_CONTEXT_INVALID",
 } as const;
 
@@ -17,6 +19,10 @@ const SAFE_MESSAGES: Record<AiErrorCode, string> = {
   [AI_ERROR_CODES.AI_RATE_LIMITED]: "AI service rate limit reached. Try again shortly.",
   [AI_ERROR_CODES.AI_INVALID_INPUT]: "Invalid input for AI processing.",
   [AI_ERROR_CODES.AI_NO_CONTENT]: "AI service returned no content.",
+  [AI_ERROR_CODES.AI_INVALID_OUTPUT]:
+    "The AI draft could not be structured safely. Please try generating the report again.",
+  [AI_ERROR_CODES.AI_CONFIGURATION_ERROR]:
+    "AI report generation is temporarily unavailable. Please try again later.",
   [AI_ERROR_CODES.AI_CONTEXT_INVALID]: "Request context is invalid or not found.",
 };
 
@@ -33,6 +39,8 @@ export function aiErrorHttpStatus(code: AiErrorCode): number {
     case AI_ERROR_CODES.AI_CONTEXT_INVALID:
       return 404;
     case AI_ERROR_CODES.AI_NO_CONTENT:
+    case AI_ERROR_CODES.AI_INVALID_OUTPUT:
+    case AI_ERROR_CODES.AI_CONFIGURATION_ERROR:
       return 502;
     case AI_ERROR_CODES.AI_KEY_MISSING:
     case AI_ERROR_CODES.AI_PROVIDER_UNAVAILABLE:
@@ -57,7 +65,18 @@ export function fromOpenAiClassified(code: TranslationErrorCode): AiErrorCode {
       return AI_ERROR_CODES.AI_PROVIDER_UNAVAILABLE;
     case "rate_limit":
       return AI_ERROR_CODES.AI_RATE_LIMITED;
+    case "invalid_request":
+      return AI_ERROR_CODES.AI_CONFIGURATION_ERROR;
     default:
       return AI_ERROR_CODES.AI_PROVIDER_UNAVAILABLE;
   }
+}
+
+export function mapPtReportGenerationError(
+  code: TranslationErrorCode | "no_content" | "invalid_output",
+): AiErrorCode {
+  if (code === "invalid_output" || code === "no_content") {
+    return AI_ERROR_CODES.AI_INVALID_OUTPUT;
+  }
+  return fromOpenAiClassified(code);
 }

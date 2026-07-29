@@ -1,6 +1,8 @@
 import OpenAI from "openai";
 import {
   classifyOpenAiError,
+  extractSafeOpenAiErrorDiagnostics,
+  formatSafeOpenAiErrorLog,
   type TranslationErrorCode,
 } from "@/app/lib/openai/classify-openai-error";
 import {
@@ -59,7 +61,7 @@ export const PT_MEDICAL_REPORT_SECTION_KEYS: readonly PtMedicalReportSectionKey[
 ] as const;
 
 export const PT_MEDICAL_REPORT_SECTION_LABELS: Record<PtMedicalReportSectionKey, string> = {
-  title: "Physical Therapy Assessment Report",
+  title: "Patient-Reported Subjective Summary",
   chiefComplaint: "Patient-Reported Chief Complaint",
   painAndSymptoms: "Pain and Symptom Information",
   aggravatingAndEasing: "Aggravating and Easing Factors",
@@ -75,6 +77,10 @@ export const PT_MEDICAL_REPORT_DRAFT_LABEL =
 
 export const PT_MEDICAL_REPORT_APPROVED_LABEL =
   "Report approved for print and PDF." as const;
+
+/** Concise clinical-completeness status: this document is Subjective-only until Objective assessment integration ships. */
+export const PT_MEDICAL_REPORT_STATUS_LINE =
+  "Subjective findings approved; Objective assessment pending" as const;
 
 export type PtMedicalReportApproved = {
   version: number;
@@ -109,7 +115,7 @@ export const PT_MEDICAL_REPORT_SYSTEM_PROMPT = `You are a clinical documentation
 
 Your task: write a structured English Physical Therapy medical report draft for therapist review ONLY, using strictly the clinician-approved patient-reported facts provided in JSON.
 
-Return valid JSON with only these optional string section fields (omit any section with no supporting facts):
+Return a JSON object with exactly these nine section fields. Use null for any section with no supporting facts; use non-empty strings for populated sections:
 - title
 - chiefComplaint
 - painAndSymptoms
@@ -127,9 +133,73 @@ Rules:
 - Do NOT provide a diagnosis, prognosis, treatment plan, or examination findings.
 - Do NOT recommend tests, exercises, or interventions.
 - Do NOT claim objective examination or observation findings that were not provided.
-- title should be "Physical Therapy Assessment Report" when included.
+- title should be "Patient-Reported Subjective Summary" when included.
 - clinicalReviewNote must state that the content is patient-reported and requires therapist review.
 - Return JSON only — no markdown fences or preamble.`;
+
+export const PT_MEDICAL_REPORT_MODEL = "gpt-4o" as const;
+
+const PT_REPORT_NULLABLE_STRING_PROPERTY = {
+  type: ["string", "null"],
+} as const;
+
+const PT_REPORT_SCHEMA_PROPERTIES = Object.fromEntries(
+  PT_MEDICAL_REPORT_SECTION_KEYS.map((key) => [key, PT_REPORT_NULLABLE_STRING_PROPERTY]),
+) as Record<
+  PtMedicalReportSectionKey,
+  { readonly type: readonly ["string", "null"] }
+>;
+
+/** Strict structured-output schema — all nine keys required; null means absent section. */
+export const PT_MEDICAL_REPORT_JSON_SCHEMA = {
+  name: "pt_medical_report_sections",
+  strict: true,
+  schema: {
+    type: "object",
+    properties: PT_REPORT_SCHEMA_PROPERTIES,
+    required: [...PT_MEDICAL_REPORT_SECTION_KEYS],
+    additionalProperties: false,
+  },
+} as const;
+
+export function buildPtMedicalReportResponseFormat(): {
+  type: "json_schema";
+  json_schema: {
+    name: string;
+    strict: boolean;
+    schema: Record<string, unknown>;
+  };
+} {
+  return {
+    type: "json_schema",
+    json_schema: {
+      name: PT_MEDICAL_REPORT_JSON_SCHEMA.name,
+      strict: PT_MEDICAL_REPORT_JSON_SCHEMA.strict,
+      schema: PT_MEDICAL_REPORT_JSON_SCHEMA.schema,
+    },
+  };
+}
+
+export function stripMarkdownJsonFences(raw: string): string {
+  const trimmed = raw.trim();
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  return (fenced?.[1] ?? trimmed).trim();
+}
+
+/** Unwrap common nested model shapes without accepting unknown top-level keys into sections. */
+export function coercePtReportModelPayload(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+
+  for (const wrapperKey of ["sections", "report", "ptMedicalReport", "pt_medical_report"] as const) {
+    const nested = record[wrapperKey];
+    if (nested && typeof nested === "object" && !Array.isArray(nested)) {
+      return nested as Record<string, unknown>;
+    }
+  }
+
+  return record;
+}
 
 export function buildPtMedicalReportGeneratorInput(
   facts: ApprovedPatientReportFacts,
@@ -205,15 +275,18 @@ export function invalidatePtMedicalReportForGate1Reapproval(
 
 export function parsePtReportSectionsFromJson(raw: string): PtMedicalReportDraftSections | null {
   try {
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+    const parsed = JSON.parse(stripMarkdownJsonFences(raw)) as unknown;
+    const payload = coercePtReportModelPayload(parsed);
+    if (!payload) return null;
 
     const sections: PtMedicalReportDraftSections = {};
     for (const key of PT_MEDICAL_REPORT_SECTION_KEYS) {
-      const value = parsed[key];
-      if (value === undefined) continue;
+      const value = payload[key];
+      if (value === undefined || value === null) continue;
       if (typeof value !== "string") return null;
-      sections[key] = value;
+      if (value.trim()) {
+        sections[key] = value;
+      }
     }
 
     if (Object.keys(sections).length === 0) return null;
@@ -378,39 +451,71 @@ export function readPtMedicalReportDraft(structuredData: unknown): PtMedicalRepo
   };
 }
 
+export type ChatCompletionMessageResult = {
+  content?: string | null;
+  refusal?: string | null;
+};
+
 export type ChatCompletionCreator = (
   params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
-) => Promise<{ choices: Array<{ message?: { content?: string | null } }> }>;
+) => Promise<{ choices: Array<{ message?: ChatCompletionMessageResult }> }>;
 
-export async function generatePtMedicalReportSections(
+export function extractPtReportModelText(
+  message: ChatCompletionMessageResult | undefined,
+): { kind: "content"; text: string } | { kind: "refusal" } | { kind: "empty" } {
+  if (message?.refusal?.trim()) {
+    return { kind: "refusal" };
+  }
+  const text = message?.content?.trim() ?? "";
+  if (!text) {
+    return { kind: "empty" };
+  }
+  return { kind: "content", text };
+}
+
+export async function requestPtMedicalReportModelOutput(
   apiKey: string,
   facts: ApprovedPatientReportFacts,
-  createChatCompletion: ChatCompletionCreator = (params) =>
-    new OpenAI({ apiKey }).chat.completions.create(params),
-): Promise<PtMedicalReportGenerationResult> {
+  createChatCompletion: ChatCompletionCreator,
+): Promise<
+  | { ok: true; raw: string }
+  | { ok: false; code: TranslationErrorCode | "no_content" | "invalid_output" }
+> {
   const input = buildPtMedicalReportGeneratorInput(facts);
 
-  let raw: string;
   try {
     const response = await createChatCompletion({
-      model: "gpt-4o",
+      model: PT_MEDICAL_REPORT_MODEL,
       max_tokens: 1_800,
-      response_format: { type: "json_object" },
+      response_format: buildPtMedicalReportResponseFormat(),
       messages: [
         { role: "system", content: PT_MEDICAL_REPORT_SYSTEM_PROMPT },
         { role: "user", content: buildPtMedicalReportUserPrompt(input) },
       ],
     });
-    raw = response.choices[0]?.message?.content?.trim() ?? "";
+
+    const extracted = extractPtReportModelText(response.choices[0]?.message);
+    if (extracted.kind === "refusal") {
+      return { ok: false, code: "invalid_output" };
+    }
+    if (extracted.kind === "empty") {
+      return { ok: false, code: "no_content" };
+    }
+    return { ok: true, raw: extracted.text };
   } catch (err) {
+    const diagnostics = extractSafeOpenAiErrorDiagnostics(err);
+    console.error(
+      "[generatePtMedicalReport] provider request failed:",
+      formatSafeOpenAiErrorLog(diagnostics),
+    );
     const classified = classifyOpenAiError(err);
     return { ok: false, code: classified.code };
   }
+}
 
-  if (!raw) {
-    return { ok: false, code: "no_content" };
-  }
-
+export function parseAndValidatePtMedicalReportModelOutput(
+  raw: string,
+): PtMedicalReportGenerationResult {
   const parsed = parsePtReportSectionsFromJson(raw);
   if (!parsed) {
     return { ok: false, code: "invalid_output" };
@@ -422,4 +527,46 @@ export async function generatePtMedicalReportSections(
   }
 
   return { ok: true, sections: validated.sections };
+}
+
+export async function generatePtMedicalReportSections(
+  apiKey: string,
+  facts: ApprovedPatientReportFacts,
+  createChatCompletion: ChatCompletionCreator = (params) =>
+    new OpenAI({ apiKey }).chat.completions.create(params),
+): Promise<PtMedicalReportGenerationResult> {
+  const firstRequest = await requestPtMedicalReportModelOutput(
+    apiKey,
+    facts,
+    createChatCompletion,
+  );
+  if (!firstRequest.ok) {
+    if (firstRequest.code === "invalid_output" || firstRequest.code === "no_content") {
+      const retryRequest = await requestPtMedicalReportModelOutput(
+        apiKey,
+        facts,
+        createChatCompletion,
+      );
+      if (!retryRequest.ok) {
+        return { ok: false, code: retryRequest.code };
+      }
+      return parseAndValidatePtMedicalReportModelOutput(retryRequest.raw);
+    }
+    return { ok: false, code: firstRequest.code };
+  }
+
+  const firstParsed = parseAndValidatePtMedicalReportModelOutput(firstRequest.raw);
+  if (firstParsed.ok) {
+    return firstParsed;
+  }
+
+  const retryRequest = await requestPtMedicalReportModelOutput(
+    apiKey,
+    facts,
+    createChatCompletion,
+  );
+  if (!retryRequest.ok) {
+    return { ok: false, code: retryRequest.code };
+  }
+  return parseAndValidatePtMedicalReportModelOutput(retryRequest.raw);
 }

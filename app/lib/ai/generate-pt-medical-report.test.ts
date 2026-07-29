@@ -8,16 +8,27 @@ import {
   buildPtMedicalReportDraftRecord,
   buildPtMedicalReportGeneratorInput,
   buildPtMedicalReportApprovedSnapshot,
+  buildPtMedicalReportResponseFormat,
   clearPtMedicalReportGate2Approval,
+  coercePtReportModelPayload,
+  extractPtReportModelText,
   generatePtMedicalReportSections,
   invalidatePtMedicalReportForGate1Reapproval,
   omitEmptyPtReportSections,
+  parseAndValidatePtMedicalReportModelOutput,
   parseClientPtReportSections,
   parsePtReportSectionsFromJson,
+  PT_MEDICAL_REPORT_JSON_SCHEMA,
+  PT_MEDICAL_REPORT_SECTION_KEYS,
+  PT_MEDICAL_REPORT_SECTION_LABELS,
+  PT_MEDICAL_REPORT_STATUS_LINE,
   readPtMedicalReportApproved,
   readPtMedicalReportDraft,
+  requestPtMedicalReportModelOutput,
+  stripMarkdownJsonFences,
   validateAndSanitizePtReportSections,
 } from "./generate-pt-medical-report";
+import OpenAI from "openai";
 
 const APPROVED_FACTS: ApprovedPatientReportFacts = {
   version: 1,
@@ -67,6 +78,162 @@ describe("parsePtReportSectionsFromJson", () => {
   it("rejects invalid section value types", () => {
     assert.equal(parsePtReportSectionsFromJson(JSON.stringify({ chiefComplaint: 42 })), null);
   });
+
+  it("unwraps nested sections payloads from real provider shapes", () => {
+    const parsed = parsePtReportSectionsFromJson(
+      JSON.stringify({
+        sections: {
+          chiefComplaint: "The patient reports shoulder pain.",
+          clinicalReviewNote: "Patient-reported draft for therapist review.",
+        },
+      }),
+    );
+    assert.equal(parsed?.chiefComplaint, "The patient reports shoulder pain.");
+  });
+
+  it("strips markdown fences before parsing", () => {
+    const parsed = parsePtReportSectionsFromJson(
+      "```json\n" +
+        JSON.stringify({
+          chiefComplaint: "The patient reports shoulder pain.",
+          clinicalReviewNote: "Patient-reported draft for therapist review.",
+        }) +
+        "\n```",
+    );
+    assert.equal(parsed?.chiefComplaint, "The patient reports shoulder pain.");
+  });
+
+  it("omits empty sections", () => {
+    const parsed = parsePtReportSectionsFromJson(
+      JSON.stringify({
+        chiefComplaint: "The patient reports shoulder pain.",
+        painAndSymptoms: "   ",
+      }),
+    );
+    assert.equal(parsed?.painAndSymptoms, undefined);
+  });
+
+  it("omits null sections from strict provider output", () => {
+    const parsed = parsePtReportSectionsFromJson(
+      JSON.stringify({
+        title: null,
+        chiefComplaint: "The patient reports shoulder pain.",
+        painAndSymptoms: null,
+        aggravatingAndEasing: null,
+        functionalLimitations: null,
+        mobilityBalanceAndFalls: null,
+        patientGoals: null,
+        additionalInformation: null,
+        clinicalReviewNote: "Patient-reported draft for therapist review.",
+      }),
+    );
+    assert.ok(parsed);
+    assert.equal(parsed?.title, undefined);
+    assert.equal(parsed?.painAndSymptoms, undefined);
+    assert.equal(parsed?.chiefComplaint, "The patient reports shoulder pain.");
+  });
+});
+
+describe("stripMarkdownJsonFences", () => {
+  it("removes json code fences", () => {
+    assert.equal(stripMarkdownJsonFences('```json\n{"a":1}\n```'), '{"a":1}');
+  });
+});
+
+describe("coercePtReportModelPayload", () => {
+  it("unwraps a nested report object", () => {
+    const payload = coercePtReportModelPayload({
+      report: { chiefComplaint: "Shoulder pain." },
+    });
+    assert.deepEqual(payload, { chiefComplaint: "Shoulder pain." });
+  });
+});
+
+describe("extractPtReportModelText", () => {
+  it("detects provider refusal safely", () => {
+    assert.deepEqual(extractPtReportModelText({ refusal: "I can't help with that." }), {
+      kind: "refusal",
+    });
+  });
+
+  it("detects empty provider content", () => {
+    assert.deepEqual(extractPtReportModelText({ content: "   " }), { kind: "empty" });
+  });
+});
+
+describe("buildPtMedicalReportResponseFormat", () => {
+  it("requests strict json_schema output for known section keys only", () => {
+    const format = buildPtMedicalReportResponseFormat();
+    assert.equal(format.type, "json_schema");
+    assert.equal(format.json_schema.strict, true);
+    assert.equal(format.json_schema.name, "pt_medical_report_sections");
+    const schema = format.json_schema.schema as {
+      type: string;
+      properties: Record<string, { type: string[] }>;
+      required: string[];
+      additionalProperties: boolean;
+    };
+    assert.equal(schema.type, "object");
+    assert.equal(schema.additionalProperties, false);
+    assert.equal(schema.required.length, PT_MEDICAL_REPORT_SECTION_KEYS.length);
+    for (const key of PT_MEDICAL_REPORT_SECTION_KEYS) {
+      assert.ok(schema.required.includes(key), `missing required key: ${key}`);
+      assert.deepEqual(schema.properties[key]?.type, ["string", "null"]);
+    }
+    assert.equal("diagnosis" in schema.properties, false);
+  });
+
+  it("matches the exported strict schema definition", () => {
+    assert.deepEqual(
+      buildPtMedicalReportResponseFormat().json_schema.schema,
+      PT_MEDICAL_REPORT_JSON_SCHEMA.schema,
+    );
+  });
+});
+
+describe("parseAndValidatePtMedicalReportModelOutput", () => {
+  it("accepts valid structured output", () => {
+    const result = parseAndValidatePtMedicalReportModelOutput(
+      JSON.stringify({
+        chiefComplaint: "The patient reports right shoulder pain with overhead reaching.",
+        clinicalReviewNote:
+          "Compiled from clinician-approved patient-reported information. Therapist review required.",
+      }),
+    );
+    assert.equal(result.ok, true);
+  });
+
+  it("accepts strict provider output with null absent sections", () => {
+    const result = parseAndValidatePtMedicalReportModelOutput(
+      JSON.stringify({
+        title: null,
+        chiefComplaint: "The patient reports right shoulder pain with overhead reaching.",
+        painAndSymptoms: null,
+        aggravatingAndEasing: null,
+        functionalLimitations: null,
+        mobilityBalanceAndFalls: null,
+        patientGoals: null,
+        additionalInformation: null,
+        clinicalReviewNote:
+          "Compiled from clinician-approved patient-reported information. Therapist review required.",
+      }),
+    );
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.sections.painAndSymptoms, undefined);
+      assert.match(result.sections.chiefComplaint ?? "", /patient reports/i);
+    }
+  });
+
+  it("rejects prose-only malformed output", () => {
+    const result = parseAndValidatePtMedicalReportModelOutput(
+      "The patient reports shoulder pain and needs review.",
+    );
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.code, "invalid_output");
+    }
+  });
 });
 
 describe("validateAndSanitizePtReportSections", () => {
@@ -82,6 +249,15 @@ describe("validateAndSanitizePtReportSections", () => {
     assert.match(result.sections.clinicalReviewNote ?? "", /Therapist review is required/i);
   });
 
+  it("defaults the document title to the confirmed Subjective-only name when omitted", () => {
+    const result = validateAndSanitizePtReportSections({
+      chiefComplaint: "The patient reports shoulder pain.",
+    });
+    assert.equal(result.sections.title, "Patient-Reported Subjective Summary");
+    assert.equal(result.sections.title, PT_MEDICAL_REPORT_SECTION_LABELS.title);
+    assert.notEqual(result.sections.title, "Physical Therapy Assessment Report");
+  });
+
   it("rejects diagnosis, prognosis, and treatment recommendation wording", () => {
     for (const unsafe of [
       "The diagnosis is rotator cuff tear.",
@@ -95,6 +271,13 @@ describe("validateAndSanitizePtReportSections", () => {
       assert.equal(result.ok, false);
       assert.ok(result.forbiddenPhrases.length > 0);
     }
+  });
+});
+
+describe("PT_MEDICAL_REPORT_STATUS_LINE", () => {
+  it("states Subjective-only clinical completeness, not a full PT assessment", () => {
+    assert.equal(PT_MEDICAL_REPORT_STATUS_LINE, "Subjective findings approved; Objective assessment pending");
+    assert.doesNotMatch(PT_MEDICAL_REPORT_STATUS_LINE, /objective.*(approved|complete)/i);
   });
 });
 
@@ -257,6 +440,101 @@ describe("generatePtMedicalReportSections", () => {
     }
   });
 
+  it("requests strict json_schema output from the provider", async () => {
+    let capturedFormat: unknown;
+    await generatePtMedicalReportSections(
+      "sk-test",
+      APPROVED_FACTS,
+      async (params) => {
+        capturedFormat = params.response_format;
+        return {
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  chiefComplaint: "The patient reports right shoulder pain with overhead reaching.",
+                  clinicalReviewNote:
+                    "Compiled from clinician-approved patient-reported information. Therapist review required.",
+                }),
+              },
+            },
+          ],
+        };
+      },
+    );
+    assert.deepEqual(capturedFormat, buildPtMedicalReportResponseFormat());
+  });
+
+  it("passes only approved facts in the user prompt", async () => {
+    let userPrompt = "";
+    await generatePtMedicalReportSections(
+      "sk-test",
+      APPROVED_FACTS,
+      async (params) => {
+        const userMessage = params.messages.find((message) => message.role === "user");
+        userPrompt = typeof userMessage?.content === "string" ? userMessage.content : "";
+        return {
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  chiefComplaint: "The patient reports right shoulder pain with overhead reaching.",
+                  clinicalReviewNote:
+                    "Compiled from clinician-approved patient-reported information. Therapist review required.",
+                }),
+              },
+            },
+          ],
+        };
+      },
+    );
+    assert.match(userPrompt, /The patient reports right shoulder pain with overhead reaching\./);
+    assert.doesNotMatch(userPrompt, /ألم/);
+  });
+
+  it("retries once after malformed provider output", async () => {
+    let calls = 0;
+    const result = await generatePtMedicalReportSections(
+      "sk-test",
+      APPROVED_FACTS,
+      async () => {
+        calls += 1;
+        if (calls === 1) {
+          return { choices: [{ message: { content: "not json" } }] };
+        }
+        return {
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  chiefComplaint: "The patient reports right shoulder pain with overhead reaching.",
+                  clinicalReviewNote:
+                    "Compiled from clinician-approved patient-reported information. Therapist review required.",
+                }),
+              },
+            },
+          ],
+        };
+      },
+    );
+    assert.equal(calls, 2);
+    assert.equal(result.ok, true);
+  });
+
+  it("fails safely on provider refusal", async () => {
+    const result = await generatePtMedicalReportSections(
+      "sk-test",
+      APPROVED_FACTS,
+      async () => ({
+        choices: [{ message: { refusal: "Refused to generate clinical content." } }],
+      }),
+    );
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.code, "invalid_output");
+    }
+  });
+
   it("rejects unsafe model output", async () => {
     const result = await generatePtMedicalReportSections(
       "sk-test",
@@ -277,6 +555,63 @@ describe("generatePtMedicalReportSections", () => {
     assert.equal(result.ok, false);
     if (!result.ok) {
       assert.equal(result.code, "invalid_output");
+    }
+  });
+});
+
+describe("requestPtMedicalReportModelOutput", () => {
+  it("returns no_content for empty provider output", async () => {
+    const result = await requestPtMedicalReportModelOutput(
+      "sk-test",
+      APPROVED_FACTS,
+      async () => ({ choices: [{ message: { content: "" } }] }),
+    );
+    assert.equal(result.ok, false);
+    if (!result.ok) {
+      assert.equal(result.code, "no_content");
+    }
+  });
+
+  it("classifies provider 400 invalid schema errors safely without leaking patient text", async () => {
+    const logs: string[] = [];
+    const originalError = console.error;
+    console.error = (...args: unknown[]) => {
+      logs.push(args.map(String).join(" "));
+    };
+    try {
+      const result = await requestPtMedicalReportModelOutput(
+        "sk-test",
+        APPROVED_FACTS,
+        async () => {
+          throw OpenAI.APIError.generate(
+            400,
+            {
+              error: {
+                message:
+                  "Invalid schema: required is empty and includes patient shoulder pain details",
+                type: "invalid_request_error",
+                param: "response_format",
+                code: "invalid_json_schema",
+              },
+            },
+            undefined,
+            new Headers({ "x-request-id": "req_test123" }),
+          );
+        },
+      );
+      assert.equal(result.ok, false);
+      if (!result.ok) {
+        assert.equal(result.code, "invalid_request");
+      }
+      const logText = logs.join("\n");
+      assert.match(logText, /BadRequestError/);
+      assert.match(logText, /400/);
+      assert.match(logText, /invalid_json_schema/);
+      assert.match(logText, /response_format/);
+      assert.match(logText, /req_test123/);
+      assert.doesNotMatch(logText, /shoulder pain|sk-test|patient reports/i);
+    } finally {
+      console.error = originalError;
     }
   });
 });

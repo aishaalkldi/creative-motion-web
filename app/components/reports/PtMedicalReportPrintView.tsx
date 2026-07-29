@@ -2,6 +2,7 @@ import type { ApprovedPatientReportFacts } from "@/app/lib/reports/approved-pati
 import {
   PT_MEDICAL_REPORT_SECTION_KEYS,
   PT_MEDICAL_REPORT_SECTION_LABELS,
+  PT_MEDICAL_REPORT_STATUS_LINE,
   type PtMedicalReportApproved,
   type PtMedicalReportDraft,
   type PtMedicalReportSectionKey,
@@ -19,7 +20,7 @@ export type PtMedicalReportExportBlockReason =
 
 export const PT_MEDICAL_REPORT_EXPORT_MESSAGES: Record<PtMedicalReportExportBlockReason, string> = {
   gate1_required: "Patient-reported information must be approved before report generation.",
-  draft_required: "Generate the English PT Medical Report before export.",
+  draft_required: "Generate the Patient-Reported Subjective Summary before export.",
   approval_required: "Clinician approval is required before print or PDF export.",
   stale_approval: "Clinician approval is required before print or PDF export.",
 };
@@ -108,24 +109,43 @@ export function shouldInvokeApprovedPtMedicalReportPrint(
   return eligibility.exportable && eligibility.approvedSnapshot !== null;
 }
 
+/** Shown when patients.file_number has not been assigned. Never falls back to the patient UUID. */
+export const PT_MEDICAL_REPORT_NO_FILE_NUMBER_LABEL = "Not assigned" as const;
+
+/** Shown when patients.age is not recorded. */
+export const PT_MEDICAL_REPORT_NO_AGE_LABEL = "Not recorded" as const;
+
+/** Patient reference for print/export — always the clinic-visible file number, never patients.id. */
+export function formatPatientReferenceForPrint(fileNumber: string | null | undefined): string {
+  const trimmed = fileNumber?.trim();
+  return trimmed ? trimmed : PT_MEDICAL_REPORT_NO_FILE_NUMBER_LABEL;
+}
+
+export function formatPatientAgeForPrint(age: number | null | undefined): string {
+  return typeof age === "number" && Number.isFinite(age) && age > 0
+    ? String(age)
+    : PT_MEDICAL_REPORT_NO_AGE_LABEL;
+}
+
 export type PtMedicalReportPrintViewProps = {
   approved: PtMedicalReportApproved;
   patientName: string;
-  patientId: string;
+  /** patients.file_number — never patients.id or assessments.id. */
+  patientFileNumber: string | null;
+  patientAge: number | null;
   assessmentDate: string;
   sourceLanguage: "Arabic" | "English";
   gate2ApprovedAt: string;
-  assessmentId?: string;
 };
 
 export function PtMedicalReportPrintView({
   approved,
   patientName,
-  patientId,
+  patientFileNumber,
+  patientAge,
   assessmentDate,
   sourceLanguage,
   gate2ApprovedAt,
-  assessmentId,
 }: PtMedicalReportPrintViewProps) {
   const documentTitle =
     approved.sections.title?.trim() || PT_MEDICAL_REPORT_SECTION_LABELS.title;
@@ -136,6 +156,7 @@ export function PtMedicalReportPrintView({
       <header className="print-report-header border-b border-gray-300 pb-4">
         <p className="text-base font-bold text-black">RASQ by Creative Motion Lab</p>
         <h1 className="mt-3 text-xl font-bold text-black">{documentTitle}</h1>
+        <p className="mt-1 text-xs font-semibold text-gray-600">{PT_MEDICAL_REPORT_STATUS_LINE}</p>
         <dl className="mt-4 grid gap-3 text-sm text-gray-800 sm:grid-cols-2">
           <div>
             <dt className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
@@ -145,9 +166,15 @@ export function PtMedicalReportPrintView({
           </div>
           <div>
             <dt className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
-              Patient ID
+              Patient file number
             </dt>
-            <dd className="mt-0.5 font-mono text-xs text-gray-800">{patientId}</dd>
+            <dd className="mt-0.5 text-gray-800">{formatPatientReferenceForPrint(patientFileNumber)}</dd>
+          </div>
+          <div>
+            <dt className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+              Patient age
+            </dt>
+            <dd className="mt-0.5 text-gray-800">{formatPatientAgeForPrint(patientAge)}</dd>
           </div>
           <div>
             <dt className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
@@ -169,14 +196,6 @@ export function PtMedicalReportPrintView({
               Approved for print and PDF · {formatReportDateTime(gate2ApprovedAt)}
             </dd>
           </div>
-          {assessmentId ? (
-            <div>
-              <dt className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                Reference ID
-              </dt>
-              <dd className="mt-0.5 font-mono text-xs text-gray-800">{assessmentId}</dd>
-            </div>
-          ) : null}
         </dl>
       </header>
 

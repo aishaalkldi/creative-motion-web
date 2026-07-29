@@ -7,6 +7,7 @@ import {
   PT_MEDICAL_REPORT_DRAFT_LABEL,
   PT_MEDICAL_REPORT_SECTION_KEYS,
   PT_MEDICAL_REPORT_SECTION_LABELS,
+  PT_MEDICAL_REPORT_STATUS_LINE,
   readPtMedicalReportApproved,
   readPtMedicalReportDraft,
   type PtMedicalReportApproved,
@@ -84,7 +85,7 @@ export function buildPtMedicalReportPanelViewModel(
     editableSectionKeys,
     draft,
     approved,
-    generateButtonLabel: "Generate English PT Medical Report",
+    generateButtonLabel: "Generate English Patient-Reported Subjective Summary",
     showRegenerate: Boolean(draft),
     showSaveDraft: Boolean(draft),
     showApprove: Boolean(draft) && !exportEligibility.exportable,
@@ -327,7 +328,8 @@ export function PtMedicalReportDraftPanel({
     <div className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-4 py-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-bold text-white">English PT Medical Report</p>
+          <p className="text-sm font-bold text-white">English Patient-Reported Subjective Summary</p>
+          <p className="mt-0.5 text-[11px] font-medium text-[#9CA3AF]">{PT_MEDICAL_REPORT_STATUS_LINE}</p>
           {viewModel.statusLabel ? (
             <p
               className={`mt-1 text-xs font-semibold ${

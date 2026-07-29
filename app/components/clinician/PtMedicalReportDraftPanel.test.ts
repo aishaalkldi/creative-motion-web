@@ -133,6 +133,12 @@ describe("buildPtMedicalReportPanelViewModel", () => {
     }, null);
     assert.deepEqual(vm.editableSectionKeys, ["chiefComplaint"]);
   });
+
+  it("labels the generate action with the confirmed Subjective-only document name", () => {
+    const vm = buildPtMedicalReportPanelViewModel(APPROVED_FACTS, null, null);
+    assert.equal(vm.generateButtonLabel, "Generate English Patient-Reported Subjective Summary");
+    assert.doesNotMatch(vm.generateButtonLabel, /PT Medical Report/i);
+  });
 });
 
 describe("parseGeneratePtReportApiResponse", () => {
@@ -143,6 +149,16 @@ describe("parseGeneratePtReportApiResponse", () => {
     });
     assert.equal(parsed.ok, true);
     assert.deepEqual(parsed.draft?.sections.chiefComplaint, DRAFT.sections.chiefComplaint);
+  });
+
+  it("surfaces invalid structured output separately from provider unavailability", () => {
+    const parsed = parseGeneratePtReportApiResponse({
+      error: "The AI draft could not be structured safely. Please try generating the report again.",
+      code: "AI_INVALID_OUTPUT",
+    });
+    assert.equal(parsed.ok, false);
+    assert.match(parsed.error ?? "", /could not be structured safely/i);
+    assert.doesNotMatch(parsed.error ?? "", /temporarily unavailable/i);
   });
 });
 

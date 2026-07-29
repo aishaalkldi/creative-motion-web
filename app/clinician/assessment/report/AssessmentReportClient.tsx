@@ -1040,6 +1040,7 @@ export function AssessmentReportClient() {
   const [loadError, setLoadError] = useState("");
 
   const [patient, setPatient] = useState<BackendPatient | null>(null);
+  const [patientFileNumber, setPatientFileNumber] = useState<string | null>(null);
   const [existingPlan, setExistingPlan] = useState<TreatmentPlan | null>(null);
   const [loading, setLoading] = useState(true);
   const [soapSaving, setSoapSaving] = useState(false);
@@ -1159,6 +1160,7 @@ export function AssessmentReportClient() {
       setReportKind(null);
       setServerBacked(false);
       setPatientAnsweredInArabic(false);
+      setPatientFileNumber(null);
       setApprovedPatientFacts(null);
       setPtMedicalReportDraft(null);
       setPtMedicalReportApproved(null);
@@ -1178,6 +1180,7 @@ export function AssessmentReportClient() {
           setServerNotes(resolved.serverNotes);
           setReportDate(resolved.reportDate);
           setPatient(resolved.patient);
+          setPatientFileNumber(resolved.patientFileNumber);
           setServerBacked(resolved.serverBacked);
           setPatientAnsweredInArabic(resolved.patientAnsweredInArabic);
           setDraft(resolved.draft);
@@ -1367,11 +1370,11 @@ export function AssessmentReportClient() {
             <PtMedicalReportPrintView
               approved={approvedPrintSnapshot}
               patientName={patient?.full_name ?? "Patient"}
-              patientId={patientId ?? ""}
+              patientFileNumber={patientFileNumber}
+              patientAge={patient?.age ?? null}
               assessmentDate={reportDate || new Date().toISOString()}
               sourceLanguage={patientAnsweredInArabic ? "Arabic" : "English"}
               gate2ApprovedAt={gate2ApprovedAt}
-              assessmentId={assessmentId || undefined}
             />
           </div>
         ) : null}

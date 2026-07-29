@@ -27,6 +27,8 @@ export type ResolvedAssessmentReport = {
   remoteIncludedSections: PatientSectionId[];
   structuredData: AssessmentData | null;
   patient: BackendPatient | null;
+  /** Clinic-visible file reference (patients.file_number) — never the patient UUID. */
+  patientFileNumber: string | null;
   resolvedPatientId: string;
   serverNotes: string | null;
   reportDate: string;
@@ -49,7 +51,9 @@ export function resolveAssessmentReportFromDetail(
     patient: {
       full_name: detail.patient.full_name,
       diagnosis: detail.patient.diagnosis,
+      age: detail.patient.age,
     } as BackendPatient,
+    patientFileNumber: detail.patient.file_number ?? null,
     resolvedPatientId: detail.patient_id,
     serverNotes: detail.notes,
     reportDate: detail.created_at,

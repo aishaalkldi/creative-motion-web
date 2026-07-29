@@ -2,6 +2,9 @@
  * Run: npx tsx --test app/lib/reports/approved-patient-facts.test.ts
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import type { PatientAssessmentDraft } from "@/app/lib/api/remote-assessments";
 import {
@@ -235,9 +238,54 @@ describe("readApprovedPatientReportFacts", () => {
     assert.equal(stored!.facts.chiefComplaint, "Low back pain.");
   });
 
+  it("reads a valid reviewed extraction from a persisted snapshot", () => {
+    const stored = readApprovedPatientReportFacts({
+      approvedPatientReportFacts: {
+        version: 1,
+        approvedAt: "2026-07-24T10:00:00.000Z",
+        facts: { chiefComplaint: "Low back pain." },
+        chiefComplaintExtraction: SHOULDER_EXTRACTION,
+      },
+    });
+
+    assert.deepEqual(stored?.chiefComplaintExtraction, SHOULDER_EXTRACTION);
+  });
+
+  it("excludes invalid extraction payloads safely", () => {
+    const stored = readApprovedPatientReportFacts({
+      approvedPatientReportFacts: {
+        version: 1,
+        approvedAt: "2026-07-24T10:00:00.000Z",
+        facts: { chiefComplaint: "Low back pain." },
+        chiefComplaintExtraction: {
+          body_region: "",
+          side: "right",
+          primary_symptom: "pain",
+          aggravating_factor: null,
+          language: "ar",
+          confidence: 0.5,
+        },
+      },
+    });
+
+    assert.equal(stored?.chiefComplaintExtraction, undefined);
+  });
+
   it("returns null when snapshot is missing or invalid", () => {
     assert.equal(readApprovedPatientReportFacts(null), null);
     assert.equal(readApprovedPatientReportFacts({ approvedPatientReportFacts: { version: 2 } }), null);
+  });
+});
+
+describe("approved-patient-facts import boundary", () => {
+  it("does not import from client components or app/components", () => {
+    const filePath = path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "approved-patient-facts.ts",
+    );
+    const source = readFileSync(filePath, "utf8");
+    assert.doesNotMatch(source, /from ["']@\/app\/components\//);
+    assert.doesNotMatch(source, /["']use client["']/);
   });
 });
 
