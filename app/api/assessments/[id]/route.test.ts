@@ -35,6 +35,7 @@ const SHOULDER_EXTRACTION = {
 
 function defaultStructuredData(): Record<string, unknown> {
   return {
+    assessmentLanguage: "ar",
     pain: {
       chiefComplaint: "عندي ألم في الكتف الأيمن لما أرفع يدي.",
       painLocation: "shoulder",
@@ -112,6 +113,9 @@ function makeFakeClient() {
             eq: () => ({
               eq: async () => {
                 updateCalls.push({ patch });
+                if (patch.structured_data && assessmentRow) {
+                  assessmentRow.structured_data = patch.structured_data as Record<string, unknown>;
+                }
                 return { error: updateError };
               },
             }),
@@ -353,6 +357,147 @@ describe("PATCH /api/assessments/[id] — markChiefComplaintExtractionReviewed",
     const body = (await res.json().catch(() => ({}))) as { reviewed?: boolean };
     assert.notEqual(body.reviewed, true);
     assert.equal(updateCalls.length, 0);
+  });
+
+  after(() => {
+    mock.restoreAll();
+    for (const [key, value] of Object.entries(savedEnv)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  });
+});
+
+describe("PATCH /api/assessments/[id] — approvePatientReportFacts", { concurrency: 1 }, () => {
+  let PATCH: (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => Promise<Response>;
+  const savedEnv: Record<string, string | undefined> = {};
+  let originalFetch: typeof fetch;
+
+  before(async () => {
+    const testEnv: Record<string, string> = {
+      NEXT_PUBLIC_SUPABASE_URL: "https://test-project.supabase.co",
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "test-anon-key",
+    };
+    for (const key of Object.keys(testEnv)) {
+      savedEnv[key] = process.env[key];
+      process.env[key] = testEnv[key];
+    }
+    savedEnv.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    ({ PATCH } = await import("./route"));
+  });
+
+  beforeEach(() => {
+    resetState();
+    originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () => {
+      throw new Error("no real network call is permitted in this test file");
+    }) as typeof fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  function ctx() {
+    return { params: Promise.resolve({ id: "assess-1" }) };
+  }
+
+  it("returns 401 for an unauthenticated approval request", async () => {
+    authUser = null;
+    authError = { message: "Auth session missing" };
+
+    const res = await PATCH(makeRequest({ approvePatientReportFacts: true }), ctx());
+
+    assert.equal(res.status, 401);
+  });
+
+  it("persists an explicit approved fact snapshot without mutating Arabic originals", async () => {
+    const res = await PATCH(makeRequest({ approvePatientReportFacts: true }), ctx());
+
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as {
+      approved: boolean;
+      approvedPatientReportFacts: { facts: Record<string, string> };
+    };
+    assert.equal(body.approved, true);
+    assert.equal(body.approvedPatientReportFacts.facts.painLocation, "Right shoulder pain.");
+    assert.equal(updateCalls.length, 1);
+
+    const patch = updateCalls[0].patch.structured_data as Record<string, unknown>;
+    const pain = patch.pain as Record<string, unknown>;
+    assert.equal(pain.chiefComplaint, "عندي ألم في الكتف الأيمن لما أرفع يدي.");
+    assert.equal(typeof patch.gate1ApprovedAt, "string");
+    assert.equal(
+      (patch.approvedPatientReportFacts as { facts: Record<string, string> }).facts.painLocation,
+      "Right shoulder pain.",
+    );
+    assert.deepEqual(patch.chiefComplaint_extraction, SHOULDER_EXTRACTION);
+    assert.deepEqual(patch.rom, { limitations: "cannot raise arm overhead" });
+  });
+
+  it("does not approve automatically from unrelated PATCH bodies", async () => {
+    const res = await PATCH(makeRequest({ notes: "routine note" }), ctx());
+
+    assert.notEqual(res.status, 200);
+    const body = (await res.json().catch(() => ({}))) as { approved?: boolean };
+    assert.notEqual(body.approved, true);
+    assert.equal(updateCalls.length, 0);
+  });
+
+  it("rejects approval for non-remote questionnaire assessments", async () => {
+    assessmentRow!.type = "general_msk";
+
+    const res = await PATCH(makeRequest({ approvePatientReportFacts: true }), ctx());
+
+    assert.equal(res.status, 400);
+    assert.equal(updateCalls.length, 0);
+  });
+
+  it("replaces the prior snapshot when explicitly re-approved with newly reviewed values", async () => {
+    const firstRes = await PATCH(makeRequest({ approvePatientReportFacts: true }), ctx());
+    assert.equal(firstRes.status, 200);
+    const firstBody = (await firstRes.json()) as {
+      approvedPatientReportFacts: { approvedAt: string; facts: Record<string, string> };
+    };
+    const firstApprovedAt = firstBody.approvedPatientReportFacts.approvedAt;
+    assert.equal(firstBody.approvedPatientReportFacts.facts.painLocation, "Right shoulder pain.");
+    assert.equal(firstBody.approvedPatientReportFacts.facts.chiefComplaint, undefined);
+
+    assessmentRow!.structured_data = {
+      ...(assessmentRow!.structured_data as Record<string, unknown>),
+      chiefComplaint_en: "Pain in the right shoulder when raising the arm.",
+      chiefComplaint_en_generated_at: "2026-01-03T00:00:00.000Z",
+      chiefComplaint_en_reviewed: true,
+      chiefComplaint_extraction_reviewed: true,
+    };
+
+    const secondRes = await PATCH(makeRequest({ approvePatientReportFacts: true }), ctx());
+    assert.equal(secondRes.status, 200);
+    const secondBody = (await secondRes.json()) as {
+      approved: boolean;
+      approvedPatientReportFacts: {
+        approvedAt: string;
+        facts: Record<string, string>;
+        chiefComplaintExtraction?: unknown;
+      };
+    };
+    assert.equal(secondBody.approved, true);
+    assert.equal(
+      secondBody.approvedPatientReportFacts.facts.chiefComplaint,
+      "Pain in the right shoulder when raising the arm.",
+    );
+    assert.equal(secondBody.approvedPatientReportFacts.facts.painLocation, "Right shoulder pain.");
+    assert.notEqual(secondBody.approvedPatientReportFacts.approvedAt, firstApprovedAt);
+    assert.ok(secondBody.approvedPatientReportFacts.chiefComplaintExtraction);
+
+    assert.equal(updateCalls.length, 2);
+    const secondPatch = updateCalls[1].patch.structured_data as Record<string, unknown>;
+    const pain = secondPatch.pain as Record<string, unknown>;
+    assert.equal(pain.chiefComplaint, "عندي ألم في الكتف الأيمن لما أرفع يدي.");
+    assert.equal(secondPatch.gate1ApprovedAt, secondBody.approvedPatientReportFacts.approvedAt);
+    assert.deepEqual(secondPatch.rom, { limitations: "cannot raise arm overhead" });
+    assert.deepEqual(secondPatch.chiefComplaint_extraction, SHOULDER_EXTRACTION);
   });
 
   after(() => {

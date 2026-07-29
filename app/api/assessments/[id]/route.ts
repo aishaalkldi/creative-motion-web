@@ -21,6 +21,13 @@ import {
   checkClinicianWriteLimit,
   rateLimitExceededResponse,
 } from "../../../lib/rate-limit";
+import {
+  buildApprovedPatientReportFactsSnapshot,
+} from "../../../lib/reports/approved-patient-facts";
+import {
+  extractRemoteQuestionnaireDraft,
+  inferIncludedSections,
+} from "../../../lib/remote-questionnaire-summary";
 
 export type AssessmentDetailResponse = {
   id: string;
@@ -172,6 +179,7 @@ export async function PATCH(
     fieldKey?: string;
     markTranslationReviewed?: boolean;
     markChiefComplaintExtractionReviewed?: boolean;
+    approvePatientReportFacts?: boolean;
   };
   try {
     body = (await req.json()) as typeof body;
@@ -267,6 +275,71 @@ export async function PATCH(
     }
 
     return NextResponse.json({ reviewed: true });
+  }
+
+  if (body.approvePatientReportFacts === true) {
+    const { data: row, error: fetchErr } = await adminClient
+      .from("assessments")
+      .select("id, patient_id, provider_id, type, structured_data")
+      .eq("id", assessmentId)
+      .eq("provider_id", user.id)
+      .maybeSingle<AssessmentDbRow>();
+
+    if (fetchErr || !row) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    if (row.type !== "remote_questionnaire") {
+      return NextResponse.json(
+        { error: "Only remote questionnaire assessments support patient fact approval." },
+        { status: 400 },
+      );
+    }
+
+    const ownership = await validatePatientOwnership(adminClient, row.patient_id, user.id);
+    if (!ownership.ok) {
+      return ownershipErrorResponse(ownership);
+    }
+
+    const existing =
+      typeof row.structured_data === "object" && row.structured_data !== null
+        ? (row.structured_data as Record<string, unknown>)
+        : {};
+
+    const draft = extractRemoteQuestionnaireDraft(existing, row.type);
+    if (!draft) {
+      return NextResponse.json({ error: "Invalid assessment payload." }, { status: 400 });
+    }
+
+    const includedSections = inferIncludedSections(draft);
+    const assessmentLanguage = getAssessmentLanguage(existing);
+    const approvedAt = new Date().toISOString();
+    const approvedPatientReportFacts = buildApprovedPatientReportFactsSnapshot(
+      existing,
+      draft,
+      includedSections,
+      assessmentLanguage,
+      approvedAt,
+    );
+
+    const updatedData = {
+      ...existing,
+      approvedPatientReportFacts,
+      gate1ApprovedAt: approvedAt,
+    };
+
+    const { error: updateErr } = await adminClient
+      .from("assessments")
+      .update({ structured_data: updatedData, updated_at: approvedAt })
+      .eq("id", assessmentId)
+      .eq("provider_id", user.id);
+
+    if (updateErr) {
+      console.error("[PATCH /api/assessments/[id]] patient fact approval failed:", updateErr.message);
+      return NextResponse.json({ error: "Failed to update assessment." }, { status: 500 });
+    }
+
+    return NextResponse.json({ approved: true, approvedPatientReportFacts });
   }
 
   const { data: row, error: fetchErr } = await adminClient

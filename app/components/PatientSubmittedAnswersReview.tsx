@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { PatientSectionId } from "@/app/lib/api/remote-assessments";
 import type { PatientAssessmentDraft } from "@/app/lib/api/remote-assessments";
 import type { AssessmentLanguage } from "@/app/lib/assessment-payload";
@@ -20,6 +20,10 @@ import {
   isAiTranslationEnabled,
 } from "@/app/lib/ai/ai-features";
 import { patientReportedLabel } from "@/app/lib/reports/clinical-report-copy";
+import {
+  readApprovedPatientReportFacts,
+  type ApprovedPatientReportFacts,
+} from "@/app/lib/reports/approved-patient-facts";
 import {
   extractTranslationMeta,
   isTranslatablePatientFieldKey,
@@ -43,6 +47,7 @@ type Props = {
     anyLoading: boolean;
     translateAll: () => Promise<void>;
   }) => void;
+  onApprovedFactsChange?: (facts: ApprovedPatientReportFacts) => void;
 };
 
 function isVoiceAnswered(
@@ -82,9 +87,23 @@ export function PatientSubmittedAnswersReview({
   assessmentId,
   compact = false,
   onTranslationProgress,
+  onApprovedFactsChange,
 }: Props) {
   const aiTranslationEnabled = isAiTranslationEnabled();
   const blocks = buildFullClinicianReview(patientDraft, includedSections);
+  const initialApprovedFacts = useMemo(
+    () => readApprovedPatientReportFacts(submissionMeta),
+    [submissionMeta],
+  );
+  const [approvedFacts, setApprovedFacts] = useState<ApprovedPatientReportFacts | null>(
+    initialApprovedFacts,
+  );
+  const [approveSaving, setApproveSaving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setApprovedFacts(initialApprovedFacts);
+  }, [initialApprovedFacts]);
 
   const arabicFields = useMemo(
     () => (assessmentLanguage === "ar" ? collectArabicFields(blocks) : []),
@@ -138,6 +157,32 @@ export function PatientSubmittedAnswersReview({
     anyLoading,
     translateAll,
   ]);
+
+  async function handleApprovePatientReportFacts() {
+    if (!assessmentId || approveSaving) return;
+    setApproveSaving(true);
+    setApproveError(null);
+    try {
+      const res = await fetch(`/api/assessments/${encodeURIComponent(assessmentId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approvePatientReportFacts: true }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as {
+        approved?: boolean;
+        approvedPatientReportFacts?: ApprovedPatientReportFacts;
+        error?: string;
+      };
+      if (!res.ok || !payload.approved || !payload.approvedPatientReportFacts) {
+        setApproveError(payload.error ?? "Could not approve patient-reported information.");
+        return;
+      }
+      setApprovedFacts(payload.approvedPatientReportFacts);
+      onApprovedFactsChange?.(payload.approvedPatientReportFacts);
+    } finally {
+      setApproveSaving(false);
+    }
+  }
 
   if (blocks.length === 0) {
     return (
@@ -280,6 +325,48 @@ export function PatientSubmittedAnswersReview({
           </dl>
         </div>
       ))}
+
+      {assessmentId && !compact ? (
+        <div className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-4 py-3.5">
+          {approvedFacts ? (
+            <>
+              <p className="text-sm text-[#5DCAA5]">
+                Patient-reported information approved for PT report generation.
+              </p>
+              <button
+                type="button"
+                disabled={approveSaving}
+                onClick={() => void handleApprovePatientReportFacts()}
+                className="mt-3 rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-[6px] text-[11px] font-medium text-white transition hover:border-[#1D9E75]/40 hover:text-[#5DCAA5] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {approveSaving
+                  ? "Re-approving updated information…"
+                  : "Re-approve updated information"}
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm leading-relaxed text-[#9CA3AF]">
+                Review all translated and extracted information before approving it for report
+                generation.
+              </p>
+              <button
+                type="button"
+                disabled={approveSaving}
+                onClick={() => void handleApprovePatientReportFacts()}
+                className="mt-3 rounded-[6px] bg-[#1D9E75] px-3.5 py-[6px] text-[11px] font-medium text-white transition hover:bg-[#179165] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {approveSaving
+                  ? "Approving patient-reported information…"
+                  : "Approve patient-reported information for report generation"}
+              </button>
+            </>
+          )}
+          {approveError ? (
+            <p className="mt-2 text-xs text-rose-300/90">{approveError}</p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
