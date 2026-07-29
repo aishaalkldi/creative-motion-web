@@ -6,6 +6,7 @@ import { describe, it } from "node:test";
 import {
   extractTranslationMeta,
   isTranslatablePatientFieldKey,
+  isTranslationReviewed,
   readStoredClinicalTranslation,
 } from "./patient-clinical-translation";
 
@@ -14,6 +15,14 @@ describe("isTranslatablePatientFieldKey", () => {
     assert.equal(isTranslatablePatientFieldKey("painScore"), false);
     assert.equal(isTranslatablePatientFieldKey("painLocation"), true);
     assert.equal(isTranslatablePatientFieldKey(undefined), false);
+  });
+});
+
+describe("isTranslationReviewed", () => {
+  it("requires exact true", () => {
+    assert.equal(isTranslationReviewed({ painLocation_en_reviewed: true }, "painLocation"), true);
+    assert.equal(isTranslationReviewed({ painLocation_en_reviewed: false }, "painLocation"), false);
+    assert.equal(isTranslationReviewed({}, "painLocation"), false);
   });
 });
 

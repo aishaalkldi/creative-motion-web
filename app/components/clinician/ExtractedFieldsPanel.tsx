@@ -1,55 +1,20 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import {
+  parseStoredExtraction,
+  type StructuredExtraction,
+} from "@/app/lib/reports/chief-complaint-extraction";
+
+export { parseStoredExtraction, type StructuredExtraction };
 
 /**
  * Clinician-facing display of the chief-complaint AI extraction
  * (POST /api/assessments/[id]/extract, PATCH /api/assessments/[id]).
- * All parsing/state-derivation logic is factored into exported pure
- * functions below so it is testable without a React render harness —
- * this repository has none, and none may be added.
+ * Pure parsing lives in app/lib/reports/chief-complaint-extraction.ts.
  */
 
 // ── Pure types and helpers (exported for focused unit testing) ─────────────
-
-export type StructuredExtraction = {
-  body_region: string;
-  side: string;
-  primary_symptom: string;
-  aggravating_factor: string | null;
-  language: string;
-  confidence: number;
-};
-
-/**
- * Reads exactly the six whitelisted fields from an untrusted value. Any
- * other key present on the input (diagnosis, treatment_recommendation, or
- * anything unrecognized) is never read and never forwarded to the caller.
- */
-export function parseStoredExtraction(value: unknown): StructuredExtraction | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const record = value as Record<string, unknown>;
-
-  const { body_region, side, primary_symptom, aggravating_factor, language, confidence } = record;
-
-  if (typeof body_region !== "string" || !body_region.trim()) return null;
-  if (typeof side !== "string" || !side.trim()) return null;
-  if (typeof primary_symptom !== "string" || !primary_symptom.trim()) return null;
-  if (aggravating_factor !== null && typeof aggravating_factor !== "string") return null;
-  if (typeof language !== "string" || !language.trim()) return null;
-  if (typeof confidence !== "number" || !Number.isFinite(confidence)) return null;
-
-  return {
-    body_region,
-    side,
-    primary_symptom,
-    aggravating_factor,
-    language,
-    // Clamped, not rejected — consistent with the server's own
-    // validateExtraction(), which clamps confidence into [0, 1].
-    confidence: Math.min(1, Math.max(0, confidence)),
-  };
-}
 
 /** Accepts only a value that parses to a real date; otherwise no timestamp is shown. */
 export function parseGeneratedAt(value: unknown): string | null {
