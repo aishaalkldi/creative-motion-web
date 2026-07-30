@@ -57,6 +57,7 @@ export function buildPtMedicalReportPanelViewModel(
   approved: PtMedicalReportApproved | null,
   editedSections: PtMedicalReportDraftSections | null = null,
   gate2ApprovedAt: string | null = null,
+  draftLabel: string = PT_MEDICAL_REPORT_DRAFT_LABEL,
 ): PtMedicalReportPanelViewModel {
   const state = derivePtMedicalReportPanelState(approvedFacts, draft, approved);
   const sectionSource = editedSections ?? draft?.sections ?? {};
@@ -76,9 +77,9 @@ export function buildPtMedicalReportPanelViewModel(
       exportEligibility.exportable
         ? PT_MEDICAL_REPORT_APPROVED_LABEL
         : state === "draft_ready"
-          ? PT_MEDICAL_REPORT_DRAFT_LABEL
+          ? draftLabel
           : state === "approved" && exportEligibility.blockReason === "stale_approval"
-            ? PT_MEDICAL_REPORT_DRAFT_LABEL
+            ? draftLabel
             : state === "approved"
               ? PT_MEDICAL_REPORT_APPROVED_LABEL
               : null,
@@ -166,6 +167,8 @@ type Props = {
   initialDraft?: PtMedicalReportDraft | null;
   initialApproved?: PtMedicalReportApproved | null;
   gate2ApprovedAt?: string | null;
+  /** Overrides the draft-status label — used by post_stroke_intake to show its own required exact wording. */
+  draftLabel?: string;
   onDraftChange?: (draft: PtMedicalReportDraft | null) => void;
   onApprovedChange?: (approved: PtMedicalReportApproved | null) => void;
   onGate2ApprovedAtChange?: (approvedAt: string | null) => void;
@@ -178,6 +181,7 @@ export function PtMedicalReportDraftPanel({
   initialDraft = null,
   initialApproved = null,
   gate2ApprovedAt = null,
+  draftLabel = PT_MEDICAL_REPORT_DRAFT_LABEL,
   onDraftChange,
   onApprovedChange,
   onGate2ApprovedAtChange,
@@ -208,8 +212,9 @@ export function PtMedicalReportDraftPanel({
         approved,
         editedSections,
         gate2ApprovedAt,
+        draftLabel,
       ),
-    [approvedFacts, draft, approved, editedSections, gate2ApprovedAt],
+    [approvedFacts, draft, approved, editedSections, gate2ApprovedAt, draftLabel],
   );
 
   const exportEligibility = useMemo(

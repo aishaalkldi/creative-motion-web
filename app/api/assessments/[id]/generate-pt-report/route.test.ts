@@ -56,8 +56,12 @@ let patientRow: FakePatient = { id: "patient-1", provider_id: "user-123" };
 let patientQueryError: { code?: string; message?: string } | null = null;
 let generateOutcome: GenerateOutcome = { ok: true, sections: GENERATED_SECTIONS };
 let capturedGenerateFacts: ApprovedPatientReportFacts | null = null;
+let capturedSystemPrompt: string | undefined;
 let updateCalls: Array<{ patch: Record<string, unknown> }> = [];
 let updateError: { code?: string; message?: string } | null = null;
+
+/** Stable marker — the mocked module's real export is replaced with this, never the real prompt string. */
+const POST_STROKE_INTAKE_SUBJECTIVE_SYSTEM_PROMPT_MARKER = "POST_STROKE_INTAKE_PROMPT_MARKER";
 
 function resetState() {
   authUser = { id: "user-123", email: "provider@example.com" };
@@ -79,6 +83,7 @@ function resetState() {
   patientQueryError = null;
   generateOutcome = { ok: true, sections: GENERATED_SECTIONS };
   capturedGenerateFacts = null;
+  capturedSystemPrompt = undefined;
   updateCalls = [];
   updateError = null;
 }
@@ -138,8 +143,15 @@ mock.module("@supabase/ssr", {
 
 mock.module("@/app/lib/ai/generate-pt-medical-report", {
   namedExports: {
-    generatePtMedicalReportSections: async (_apiKey: string, facts: ApprovedPatientReportFacts) => {
+    POST_STROKE_INTAKE_SUBJECTIVE_SYSTEM_PROMPT: POST_STROKE_INTAKE_SUBJECTIVE_SYSTEM_PROMPT_MARKER,
+    generatePtMedicalReportSections: async (
+      _apiKey: string,
+      facts: ApprovedPatientReportFacts,
+      _createChatCompletion?: unknown,
+      systemPrompt?: string,
+    ) => {
       capturedGenerateFacts = facts;
+      capturedSystemPrompt = systemPrompt;
       return generateOutcome;
     },
     buildPtMedicalReportDraftRecord: (
@@ -383,9 +395,36 @@ describe("POST /api/assessments/[id]/generate-pt-report", { concurrency: 1 }, ()
     assert.doesNotMatch(text, /connection terminated|PGRST|500/i);
   });
 
-  it("rejects non-remote_questionnaire assessments", async () => {
+  it("rejects an unsupported assessment type (general_msk)", async () => {
     assessmentRow = { ...assessmentRow!, type: "general_msk" };
     const res = await POST(makeRequest(), ctx());
     assert.equal(res.status, 400);
+  });
+
+  describe("Stage 4 — post_stroke_intake acceptance and prompt branch", () => {
+    it("accepts post_stroke_intake and generates a draft using the extended system prompt", async () => {
+      assessmentRow = { ...assessmentRow!, type: "post_stroke_intake" };
+      const res = await POST(makeRequest(), ctx());
+      const body = (await res.json()) as { generated?: boolean };
+      assert.equal(res.status, 200);
+      assert.equal(body.generated, true);
+      assert.equal(capturedSystemPrompt, POST_STROKE_INTAKE_SUBJECTIVE_SYSTEM_PROMPT_MARKER);
+    });
+
+    it("remote_questionnaire still uses the default system prompt (no override passed)", async () => {
+      const res = await POST(makeRequest(), ctx());
+      assert.equal(res.status, 200);
+      assert.equal(capturedSystemPrompt, undefined);
+    });
+
+    it("still blocks post_stroke_intake generation when Gate 1 approved facts are missing", async () => {
+      assessmentRow = {
+        ...assessmentRow!,
+        type: "post_stroke_intake",
+        structured_data: { postStrokeIntake: {} },
+      };
+      const res = await POST(makeRequest(), ctx());
+      assert.equal(res.status, 400);
+    });
   });
 });

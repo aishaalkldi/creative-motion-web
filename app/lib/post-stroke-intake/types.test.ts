@@ -5,9 +5,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   firstIncompleteFunctionalIntakeScreen,
+  firstIncompleteSubjectiveNarrativeScreen,
   getVisibleAssistanceTypes,
   isAssistanceTypeValidForRespondent,
   isFunctionalIntakeComplete,
+  isSubjectiveNarrativeComplete,
   isValidPostStrokeAssistanceType,
   isValidPostStrokeAssistiveDevice,
   isValidPostStrokeCommunicationSupport,
@@ -15,10 +17,14 @@ import {
   isValidPostStrokeFunctionalAbility,
   isValidPostStrokeMoreAffectedSide,
   isValidPostStrokeRespondentType,
+  isValidPostStrokeSubjectiveInputMode,
+  isValidPostStrokeSubjectiveQuestionId,
   isValidPostStrokeUpperLimbUse,
   isValidPostStrokeWalkingAbility,
+  POST_STROKE_SUBJECTIVE_QUESTION_IDS,
   shouldShowAssistanceTypeSection,
   type PostStrokeFunctionalIntake,
+  type PostStrokeSubjectiveResponse,
 } from "./types";
 
 describe("shouldShowAssistanceTypeSection", () => {
@@ -249,6 +255,98 @@ describe("isFunctionalIntakeComplete", () => {
         assistiveDevice: "other",
         assistiveDeviceOtherText: "Custom rollator",
       }),
+      true,
+    );
+  });
+});
+
+describe("Stage 4 — subjective narrative closed-enum guards", () => {
+  it("validates every question id in the closed 5-question set", () => {
+    for (const id of POST_STROKE_SUBJECTIVE_QUESTION_IDS) {
+      assert.equal(isValidPostStrokeSubjectiveQuestionId(id), true, id);
+    }
+    assert.equal(isValidPostStrokeSubjectiveQuestionId("affectedSide"), false);
+    assert.equal(isValidPostStrokeSubjectiveQuestionId("functionalGoal"), false);
+  });
+
+  it("does not repeat any Stage 2/3 closed-enum field as a subjective question id", () => {
+    const forbidden = [
+      "moreAffectedSide",
+      "sittingAbility",
+      "standingAbility",
+      "walkingAbility",
+      "recentFalls",
+      "communicationSupport",
+      "functionalGoal",
+    ];
+    for (const id of forbidden) {
+      assert.equal(isValidPostStrokeSubjectiveQuestionId(id), false, id);
+    }
+  });
+
+  it("validates input mode as exactly text or voice", () => {
+    assert.equal(isValidPostStrokeSubjectiveInputMode("text"), true);
+    assert.equal(isValidPostStrokeSubjectiveInputMode("voice"), true);
+    assert.equal(isValidPostStrokeSubjectiveInputMode("speech"), false);
+    assert.equal(isValidPostStrokeSubjectiveInputMode(undefined), false);
+  });
+});
+
+function response(questionId: PostStrokeSubjectiveResponse["questionId"], text: string): PostStrokeSubjectiveResponse {
+  return { questionId, inputMode: "text", text };
+}
+
+const COMPLETE_RESPONSES: PostStrokeSubjectiveResponse[] = [
+  response("mainDifficulty", "Trouble gripping objects."),
+  response("onsetOrChange", "Started three weeks ago."),
+  response("dailyImpact", "Makes cooking harder."),
+  response("mostDifficultActivities", "Buttoning shirts."),
+];
+
+describe("firstIncompleteSubjectiveNarrativeScreen", () => {
+  it("returns A when nothing has been answered yet", () => {
+    assert.equal(firstIncompleteSubjectiveNarrativeScreen(undefined), "A");
+    assert.equal(firstIncompleteSubjectiveNarrativeScreen([]), "A");
+  });
+
+  it("returns A when only some of screen A's three questions are answered", () => {
+    assert.equal(
+      firstIncompleteSubjectiveNarrativeScreen([response("mainDifficulty", "Trouble gripping objects.")]),
+      "A",
+    );
+  });
+
+  it("returns B once all three screen-A questions are answered, even if screen B is not", () => {
+    const screenAOnly = COMPLETE_RESPONSES.filter((r) => r.questionId !== "mostDifficultActivities");
+    assert.equal(firstIncompleteSubjectiveNarrativeScreen(screenAOnly), "B");
+  });
+
+  it("returns B once everything, including the optional question, is already complete", () => {
+    assert.equal(
+      firstIncompleteSubjectiveNarrativeScreen([...COMPLETE_RESPONSES, response("additionalInformation", "None.")]),
+      "B",
+    );
+  });
+});
+
+describe("isSubjectiveNarrativeComplete", () => {
+  it("is true once all four required questions are answered", () => {
+    assert.equal(isSubjectiveNarrativeComplete(COMPLETE_RESPONSES), true);
+  });
+
+  it("is false when undefined, empty, or any required question is missing", () => {
+    assert.equal(isSubjectiveNarrativeComplete(undefined), false);
+    assert.equal(isSubjectiveNarrativeComplete([]), false);
+    assert.equal(
+      isSubjectiveNarrativeComplete(COMPLETE_RESPONSES.filter((r) => r.questionId !== "onsetOrChange")),
+      false,
+    );
+  });
+
+  it("never requires additionalInformation — it stays optional", () => {
+    assert.equal(isSubjectiveNarrativeComplete(COMPLETE_RESPONSES), true);
+    assert.equal(
+      isSubjectiveNarrativeComplete(COMPLETE_RESPONSES.filter((r) => r.questionId !== "additionalInformation")),
       true,
     );
   });

@@ -82,6 +82,9 @@ import {
 import type { PatientProgressSummary, PatientTimelineBundle } from "../../../api/clinician/patient-progress/route";
 import { buildPatientTimeline } from "../../../lib/clinician/patient-timeline";
 import {
+  buildPostStrokeIntakeSummary,
+} from "@/app/lib/post-stroke-intake/clinician-summary";
+import {
   buildRemoteQuestionnaireSummary,
 } from "../../../lib/remote-questionnaire-summary";
 import { displayPatientFileHeader } from "../../../lib/patient-file-number";
@@ -366,6 +369,8 @@ export default function PatientProfilePage() {
         typeLabel:
           r.type === "remote_questionnaire"
             ? "Remote Questionnaire Assessment"
+            : r.type === "post_stroke_intake"
+              ? "Post-Stroke Intake Assessment"
             : r.type === "general_msk"
               ? "General MSK Assessment"
               : r.type,
@@ -460,6 +465,12 @@ export default function PatientProfilePage() {
     if (!clinicalSummaryRow) return null;
     if (clinicalSummaryRow.type === "remote_questionnaire") {
       return buildRemoteQuestionnaireSummary(
+        clinicalSummaryRow.structured_data,
+        clinicalSummaryRow.created_at,
+      );
+    }
+    if (clinicalSummaryRow.type === "post_stroke_intake") {
+      return buildPostStrokeIntakeSummary(
         clinicalSummaryRow.structured_data,
         clinicalSummaryRow.created_at,
       );
@@ -1075,7 +1086,8 @@ export default function PatientProfilePage() {
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {clinicalSummaryDetail?.type === "remote_questionnaire" && (
+                        {(clinicalSummaryDetail?.type === "remote_questionnaire" ||
+                          clinicalSummaryDetail?.type === "post_stroke_intake") && (
                           <span className="rounded-[5px] border border-[#1E2D42] bg-[#0F1825] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white/45">
                             Remote
                           </span>

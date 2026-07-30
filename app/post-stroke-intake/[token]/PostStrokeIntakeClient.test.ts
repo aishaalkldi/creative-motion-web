@@ -163,7 +163,7 @@ describe("Stage 3 — three-screen flow exists", () => {
   it("each of screens 1 and 2 saves the draft before continuing", () => {
     assert.match(source, /handleFunctionalScreen1Continue/);
     assert.match(source, /handleFunctionalScreen2Continue/);
-    assert.match(source, /saveFunctionalDraft/);
+    assert.match(source, /saveIntakeDraft/);
   });
 
   it("final submission uses an explicit action and is never inferred from field completeness alone", () => {
@@ -200,5 +200,172 @@ describe("Stage 3 — conditional other-text fields", () => {
   it("renders the other-text input only when the paired value is 'other'", () => {
     assert.match(source, /functionalIntake\.assistiveDevice === "other" \? \(/);
     assert.match(source, /functionalIntake\.communicationSupport === "other" \? \(/);
+  });
+});
+
+describe("Stage 4 — functional goal voice input", () => {
+  it("renders VoiceFieldControls beside the functional goal textarea, wired to the same field", () => {
+    const goalBlock = source.match(/\{patientText\(FUNCTIONAL_GOAL_STEP_TITLE, lang\)\}[\s\S]{0,1400}/);
+    assert.ok(goalBlock, "expected to locate the functional goal block");
+    assert.match(goalBlock![0], /<VoiceFieldControls/);
+    assert.match(goalBlock![0], /updateFunctionalIntake\(\{ functionalGoal: text \}\)/);
+  });
+
+  it("imports VoiceFieldControls from the existing patient-facing component, not a new one", () => {
+    assert.match(source, /import \{ VoiceFieldControls \} from "@\/app\/components\/patient\/VoiceFieldControls"/);
+  });
+});
+
+describe("Stage 4 — open-ended subjective narrative screens", () => {
+  it("defines both narrative screens as stages", () => {
+    assert.match(source, /"subjective_screen_a"/);
+    assert.match(source, /"subjective_screen_b"/);
+  });
+
+  it("screen A covers exactly the three required screen-A questions, each with text and voice input", () => {
+    const block = source.match(/\{stage === "subjective_screen_a" && \(([\s\S]*?)\{stage === "subjective_screen_b"/);
+    assert.ok(block, "expected to locate the subjective_screen_a render block");
+    assert.match(block![1], /SUBJECTIVE_NARRATIVE_SCREEN_A_QUESTION_IDS\.map/);
+    assert.match(block![1], /<TextAreaField/);
+    assert.match(block![1], /<VoiceFieldControls/);
+    assert.match(block![1], /handleSubjectiveTextChange/);
+    assert.match(block![1], /handleSubjectiveTranscript/);
+  });
+
+  it("screen B covers the remaining questions, marks additionalInformation optional, and hosts the final review", () => {
+    const block = source.match(/\{stage === "subjective_screen_b" && \(([\s\S]*?)\{stage === "functional_submitted"/);
+    assert.ok(block, "expected to locate the subjective_screen_b render block");
+    assert.match(block![1], /SUBJECTIVE_NARRATIVE_SCREEN_B_QUESTION_IDS\.map/);
+    assert.match(block![1], /SUBJECTIVE_NARRATIVE_OPTIONAL_HINT/);
+    assert.match(block![1], /REVIEW_STEP_TITLE/);
+  });
+
+  it("voice transcription populates the very same textarea state used for typed input (same response map)", () => {
+    assert.match(
+      source,
+      /function updateSubjectiveResponse\(questionId: PostStrokeSubjectiveQuestionId, inputMode: PostStrokeSubjectiveInputMode, text: string\)/,
+    );
+    assert.match(source, /updateSubjectiveResponse\(questionId, "voice", text\)/);
+    assert.match(source, /handleSubjectiveTextChange\(questionId, text\)/);
+  });
+
+  it("never shows an AI-generated clinical summary to the patient", () => {
+    assert.doesNotMatch(source, /aiDraft|clinicianEdit|ptMedicalReportDraft|approvedPatientReportFacts/);
+  });
+});
+
+describe("Stage 4 — voice provenance preserved after editing", () => {
+  it("editing text preserves the existing inputMode instead of always resetting to text", () => {
+    const handlerMatch = source.match(/function handleSubjectiveTextChange\(([\s\S]*?)\n  \}/);
+    assert.ok(handlerMatch, "expected to locate handleSubjectiveTextChange");
+    assert.match(handlerMatch![1], /prev\[questionId\]\?\.inputMode \?\? "text"/);
+    assert.doesNotMatch(handlerMatch![1], /updateSubjectiveResponse\(questionId, "text", text\)/);
+  });
+
+  it("a fresh transcription always marks inputMode voice, regardless of prior state", () => {
+    const handlerMatch = source.match(/function handleSubjectiveTranscript\(([\s\S]*?)\n  \}/);
+    assert.ok(handlerMatch, "expected to locate handleSubjectiveTranscript");
+    assert.match(handlerMatch![1], /updateSubjectiveResponse\(questionId, "voice", text\)/);
+  });
+});
+
+describe("Stage 4 — single final confirmation gate", () => {
+  it("uses exactly one confirmation checkbox on the final review screen, never a per-question confirm", () => {
+    const checkboxMatches = source.match(/type="checkbox"/g) ?? [];
+    assert.equal(checkboxMatches.length, 1, "expected exactly one checkbox in the whole component");
+    assert.match(source, /checked=\{patientConfirmed\}/);
+    assert.match(source, /PATIENT_CONFIRMATION_STATEMENT/);
+  });
+
+  it("disables final submission until the patient explicitly confirms", () => {
+    assert.match(source, /disabled=\{finalSubmitting \|\| !patientConfirmed\}/);
+  });
+
+  it("requires confirmation before calling submitFunctionalIntake", () => {
+    const handlerMatch = source.match(/async function handleFinalSubmit\(\) \{([\s\S]*?)\n  \}/);
+    assert.ok(handlerMatch, "expected to locate handleFinalSubmit");
+    assert.match(handlerMatch![1], /if \(!patientConfirmed\)/);
+    assert.match(handlerMatch![1], /await submitFunctionalIntake\(\)/);
+  });
+});
+
+describe("Stage 4 — final submission never calls AI/OpenAI and reuses the exact approved wording", () => {
+  it("submitFunctionalIntake only fetches the existing submit route — no OpenAI/AI client import anywhere", () => {
+    const handlerMatch = source.match(/async function submitFunctionalIntake\(\) \{([\s\S]*?)\n  \}/);
+    assert.ok(handlerMatch, "expected to locate submitFunctionalIntake");
+    assert.match(handlerMatch![1], /\/api\/remote-assessments\/\$\{encodeURIComponent\(token\)\}\/submit/);
+    assert.doesNotMatch(source, /^import .*openai/im);
+    assert.doesNotMatch(source, /new OpenAI\(/);
+  });
+
+  it("sends patientConfirmed as a request-only field, never nested inside subjectiveNarrative", () => {
+    const handlerMatch = source.match(/async function submitFunctionalIntake\(\) \{([\s\S]*?)\n  \}/);
+    assert.ok(handlerMatch, "expected to locate submitFunctionalIntake");
+    assert.match(handlerMatch![1], /patientConfirmed,/);
+    assert.doesNotMatch(handlerMatch![1], /patientConfirmedAt/);
+  });
+
+  it("reuses the exact approved final button label and success notice constants", () => {
+    assert.match(source, /SUBMIT_FUNCTIONAL_INTAKE_LABEL/);
+    assert.match(source, /FUNCTIONAL_INTAKE_SUBMITTED_NOTICE/);
+  });
+});
+
+describe("Stage 4 — draft saving includes subjective responses", () => {
+  it("saveIntakeDraft sends both functionalIntake and subjectiveNarrative to the existing save-draft endpoint", () => {
+    const handlerMatch = source.match(/async function saveIntakeDraft\(([\s\S]*?)\n  \}/);
+    assert.ok(handlerMatch, "expected to locate saveIntakeDraft");
+    assert.match(handlerMatch![1], /\/save-draft/);
+    assert.match(handlerMatch![1], /functionalIntake: nextFunctionalIntake/);
+    assert.match(handlerMatch![1], /subjectiveNarrative: \{ responses \}/);
+  });
+
+  it("never includes patientConfirmedAt in a draft save", () => {
+    const handlerMatch = source.match(/async function saveIntakeDraft\(([\s\S]*?)\n  \}/);
+    assert.ok(handlerMatch, "expected to locate saveIntakeDraft");
+    assert.doesNotMatch(handlerMatch![1], /patientConfirmedAt/);
+  });
+});
+
+describe("Stage 4 — resume hydration includes the subjective narrative", () => {
+  it("hydrates subjectiveResponses from the resumed draft and computes the correct next screen", () => {
+    assert.match(source, /setSubjectiveResponses\(resumedResponseMap\)/);
+    assert.match(source, /firstIncompleteSubjectiveNarrativeScreen\(resumedResponses\)/);
+  });
+
+  it("only advances into the narrative screens once functionalIntake is itself fully complete", () => {
+    assert.match(source, /!isFunctionalIntakeComplete\(resumedFunctionalIntake\)/);
+  });
+});
+
+describe("Stage 5 — Arabic voice control labels", () => {
+  const voiceFieldControlsSource = readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "../../components/patient/VoiceFieldControls.tsx"),
+    "utf8",
+  );
+  const voiceInputButtonSource = readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "../../components/patient/VoiceInputButton.tsx"),
+    "utf8",
+  );
+  const voiceLabelsSource = readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "../../components/patient/voice-ui-labels.ts"),
+    "utf8",
+  );
+
+  it("defines Arabic aria-label strings for listen and voice-input controls", () => {
+    assert.match(voiceLabelsSource, /listenToQuestion:[\s\S]*ar: "استمع إلى السؤال"/);
+    assert.match(voiceLabelsSource, /startVoiceInput:[\s\S]*ar: "ابدأ الإدخال الصوتي"/);
+    assert.match(voiceLabelsSource, /stopVoiceInput:[\s\S]*ar: "أوقف الإدخال الصوتي"/);
+  });
+
+  it("VoiceFieldControls uses localized aria-labels instead of hardcoded English", () => {
+    assert.match(voiceFieldControlsSource, /aria-label=\{voiceLabel\("listenToQuestion", lang\)\}/);
+    assert.doesNotMatch(voiceFieldControlsSource, /aria-label="Listen to question"/);
+  });
+
+  it("VoiceInputButton uses localized aria-labels instead of hardcoded English", () => {
+    assert.match(voiceInputButtonSource, /voiceLabel\("startVoiceInput", lang\)/);
+    assert.match(voiceInputButtonSource, /voiceLabel\("stopVoiceInput", lang\)/);
+    assert.doesNotMatch(voiceInputButtonSource, /aria-label="Start voice input"/);
   });
 });

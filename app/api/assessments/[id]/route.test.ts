@@ -791,6 +791,56 @@ describe("PATCH /api/assessments/[id] â€” approvePatientReportFacts", { con
     assert.equal("gate2ApprovedAt" in secondPatch, false);
   });
 
+  describe("Stage 4 — post_stroke_intake Gate 1 approval", () => {
+    it("builds the approved-facts snapshot from confirmed subjectiveNarrative + functionalGoal, in the original patient language", async () => {
+      assessmentRow!.type = "post_stroke_intake";
+      assessmentRow!.structured_data = {
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"], stopped: false },
+          functionalIntake: { functionalGoal: "Walk to the kitchen safely" },
+          subjectiveNarrative: {
+            responses: [
+              { questionId: "mainDifficulty", inputMode: "text", text: "صعوبة في المشي" },
+              { questionId: "dailyImpact", inputMode: "voice", text: "يؤثر على الطبخ" },
+            ],
+            patientConfirmedAt: "2026-07-30T00:00:00.000Z",
+          },
+        },
+        assessmentLanguage: "ar",
+      };
+
+      const res = await PATCH(makeRequest({ approvePatientReportFacts: true }), ctx());
+      assert.equal(res.status, 200);
+      const body = (await res.json()) as {
+        approved: boolean;
+        approvedPatientReportFacts: { facts: Record<string, string> };
+      };
+      assert.equal(body.approved, true);
+      assert.equal(body.approvedPatientReportFacts.facts.chiefComplaint, "صعوبة في المشي");
+      assert.equal(body.approvedPatientReportFacts.facts.dailyImpact, "يؤثر على الطبخ");
+      assert.equal(body.approvedPatientReportFacts.facts.goals, "Walk to the kitchen safely");
+      assert.equal(updateCalls.length, 1);
+    });
+
+    it("never includes an unconfirmed or client-only field — only what is stored in subjectiveNarrative/functionalIntake", async () => {
+      assessmentRow!.type = "post_stroke_intake";
+      assessmentRow!.structured_data = {
+        postStrokeIntake: {
+          functionalIntake: {},
+          subjectiveNarrative: { responses: [{ questionId: "mainDifficulty", inputMode: "text", text: "Trouble walking." }] },
+        },
+      };
+
+      const res = await PATCH(makeRequest({ approvePatientReportFacts: true }), ctx());
+      assert.equal(res.status, 200);
+      const body = (await res.json()) as { approvedPatientReportFacts: { facts: Record<string, string> } };
+      assert.equal(body.approvedPatientReportFacts.facts.goals, undefined);
+      assert.equal(body.approvedPatientReportFacts.facts.onsetOrChange, undefined);
+      assert.equal(body.approvedPatientReportFacts.facts.chiefComplaint, "Trouble walking.");
+    });
+  });
+
   after(() => {
     mock.restoreAll();
     for (const [key, value] of Object.entries(savedEnv)) {

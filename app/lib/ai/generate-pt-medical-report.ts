@@ -75,6 +75,10 @@ export const PT_MEDICAL_REPORT_SECTION_LABELS: Record<PtMedicalReportSectionKey,
 export const PT_MEDICAL_REPORT_DRAFT_LABEL =
   "Draft — clinician review required" as const;
 
+/** Exact required label for post_stroke_intake drafts — the remote_questionnaire label above is never changed. */
+export const POST_STROKE_INTAKE_DRAFT_LABEL =
+  "AI-generated draft — requires therapist review" as const;
+
 export const PT_MEDICAL_REPORT_APPROVED_LABEL =
   "Report approved for print and PDF." as const;
 
@@ -132,6 +136,45 @@ Rules:
 - Prefer cautious patient-reported wording such as "The patient reports…" or "The patient states…".
 - Do NOT provide a diagnosis, prognosis, treatment plan, or examination findings.
 - Do NOT recommend tests, exercises, or interventions.
+- Do NOT claim objective examination or observation findings that were not provided.
+- title should be "Patient-Reported Subjective Summary" when included.
+- clinicalReviewNote must state that the content is patient-reported and requires therapist review.
+- Return JSON only — no markdown fences or preamble.`;
+
+/**
+ * Extended prompt branch for post_stroke_intake — identical constraints to
+ * PT_MEDICAL_REPORT_SYSTEM_PROMPT plus one added capability: translating a
+ * non-English patient-reported fact into clinical English while organizing
+ * it. Kept as a separate constant (not a shared/parameterized string) so the
+ * remote_questionnaire prompt is never touched by this change — general-MSK
+ * facts are already English-only by construction, so this instruction would
+ * be a no-op there, but a separate constant keeps that path's behavior and
+ * tests completely unaffected.
+ */
+export const POST_STROKE_INTAKE_SUBJECTIVE_SYSTEM_PROMPT = `You are a clinical documentation assistant for licensed physiotherapists.
+
+Your task: write a structured English Physical Therapy medical report draft for therapist review ONLY, using strictly the clinician-approved patient-reported facts provided in JSON. Some facts may be written in Arabic — translate them into clear, accurate clinical English as part of organizing this summary.
+
+Return a JSON object with exactly these nine section fields. Use null for any section with no supporting facts; use non-empty strings for populated sections:
+- title
+- chiefComplaint
+- painAndSymptoms
+- aggravatingAndEasing
+- functionalLimitations
+- mobilityBalanceAndFalls
+- patientGoals
+- additionalInformation
+- clinicalReviewNote
+
+Rules:
+- Use ONLY facts present in the approved JSON. Do not invent information.
+- If a fact is in Arabic, translate it into clinical English before including it — never leave Arabic text in the output.
+- Organize approved facts into coherent clinical English narrative paragraphs — not a literal field-by-field list.
+- Prefer cautious patient-reported wording such as "The patient reports…" or "The patient states…".
+- Do NOT provide a diagnosis, prognosis, treatment plan, or examination findings.
+- Do NOT infer stroke severity, assign a fall-risk score, or state whether anything is safe or unsafe.
+- Do NOT grant exercise clearance or select a care-delivery mode (remote_self, remote_supervised, in_clinic).
+- Do NOT recommend tests, exercises, or interventions, and do NOT create Objective findings or a treatment plan.
 - Do NOT claim objective examination or observation findings that were not provided.
 - title should be "Patient-Reported Subjective Summary" when included.
 - clinicalReviewNote must state that the content is patient-reported and requires therapist review.
@@ -477,6 +520,7 @@ export async function requestPtMedicalReportModelOutput(
   apiKey: string,
   facts: ApprovedPatientReportFacts,
   createChatCompletion: ChatCompletionCreator,
+  systemPrompt: string = PT_MEDICAL_REPORT_SYSTEM_PROMPT,
 ): Promise<
   | { ok: true; raw: string }
   | { ok: false; code: TranslationErrorCode | "no_content" | "invalid_output" }
@@ -489,7 +533,7 @@ export async function requestPtMedicalReportModelOutput(
       max_tokens: 1_800,
       response_format: buildPtMedicalReportResponseFormat(),
       messages: [
-        { role: "system", content: PT_MEDICAL_REPORT_SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         { role: "user", content: buildPtMedicalReportUserPrompt(input) },
       ],
     });
@@ -534,11 +578,13 @@ export async function generatePtMedicalReportSections(
   facts: ApprovedPatientReportFacts,
   createChatCompletion: ChatCompletionCreator = (params) =>
     new OpenAI({ apiKey }).chat.completions.create(params),
+  systemPrompt: string = PT_MEDICAL_REPORT_SYSTEM_PROMPT,
 ): Promise<PtMedicalReportGenerationResult> {
   const firstRequest = await requestPtMedicalReportModelOutput(
     apiKey,
     facts,
     createChatCompletion,
+    systemPrompt,
   );
   if (!firstRequest.ok) {
     if (firstRequest.code === "invalid_output" || firstRequest.code === "no_content") {
@@ -546,6 +592,7 @@ export async function generatePtMedicalReportSections(
         apiKey,
         facts,
         createChatCompletion,
+        systemPrompt,
       );
       if (!retryRequest.ok) {
         return { ok: false, code: retryRequest.code };
@@ -564,6 +611,7 @@ export async function generatePtMedicalReportSections(
     apiKey,
     facts,
     createChatCompletion,
+    systemPrompt,
   );
   if (!retryRequest.ok) {
     return { ok: false, code: retryRequest.code };

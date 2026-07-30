@@ -9,6 +9,7 @@ import { describe, it } from "node:test";
 import type { PatientAssessmentDraft } from "@/app/lib/api/remote-assessments";
 import {
   buildApprovedPatientReportFactsSnapshot,
+  buildApprovedPatientReportFactsSnapshotForPostStrokeIntake,
   containsForbiddenClinicalClaim,
   isChiefComplaintExtractionReviewed,
   readApprovedPatientReportFacts,
@@ -293,5 +294,92 @@ describe("isChiefComplaintExtractionReviewed", () => {
   it("requires exact true", () => {
     assert.equal(isChiefComplaintExtractionReviewed({ chiefComplaint_extraction_reviewed: true }), true);
     assert.equal(isChiefComplaintExtractionReviewed({ chiefComplaint_extraction_reviewed: false }), false);
+  });
+});
+
+describe("buildApprovedPatientReportFactsSnapshotForPostStrokeIntake", () => {
+  const COMPLETE_STRUCTURED_DATA = {
+    postStrokeIntake: {
+      respondent: { type: "patient" },
+      urgentGate: { symptoms: ["no_new_urgent_symptoms"], stopped: false },
+      functionalIntake: { functionalGoal: "Walk to the kitchen safely" },
+      subjectiveNarrative: {
+        responses: [
+          { questionId: "mainDifficulty", inputMode: "text", text: "Trouble gripping objects." },
+          { questionId: "onsetOrChange", inputMode: "text", text: "Started three weeks ago." },
+          { questionId: "dailyImpact", inputMode: "text", text: "Makes cooking harder." },
+          { questionId: "mostDifficultActivities", inputMode: "voice", text: "Buttoning shirts." },
+          { questionId: "additionalInformation", inputMode: "text", text: "Lives alone." },
+        ],
+        patientConfirmedAt: "2026-07-30T00:00:00.000Z",
+      },
+    },
+    assessmentLanguage: "en",
+  };
+
+  it("maps each open-ended question and the functional goal onto the shared approved-facts keys", () => {
+    const snapshot = buildApprovedPatientReportFactsSnapshotForPostStrokeIntake(
+      COMPLETE_STRUCTURED_DATA,
+      "2026-07-30T01:00:00.000Z",
+    );
+    assert.equal(snapshot.facts.chiefComplaint, "Trouble gripping objects.");
+    assert.equal(snapshot.facts.onsetOrChange, "Started three weeks ago.");
+    assert.equal(snapshot.facts.dailyImpact, "Makes cooking harder.");
+    assert.equal(snapshot.facts.activitiesAffected, "Buttoning shirts.");
+    assert.equal(snapshot.facts.otherNotes, "Lives alone.");
+    assert.equal(snapshot.facts.goals, "Walk to the kitchen safely");
+    assert.equal(snapshot.approvedAt, "2026-07-30T01:00:00.000Z");
+  });
+
+  it("carries the original assessmentLanguage — post-stroke facts are not required to already be English", () => {
+    const arabicData = {
+      ...COMPLETE_STRUCTURED_DATA,
+      postStrokeIntake: {
+        ...COMPLETE_STRUCTURED_DATA.postStrokeIntake,
+        subjectiveNarrative: {
+          responses: [{ questionId: "mainDifficulty", inputMode: "text", text: "صعوبة في المشي" }],
+        },
+      },
+      assessmentLanguage: "ar",
+    };
+    const snapshot = buildApprovedPatientReportFactsSnapshotForPostStrokeIntake(arabicData, "2026-07-30T01:00:00.000Z");
+    assert.equal(snapshot.assessmentLanguage, "ar");
+    assert.equal(snapshot.facts.chiefComplaint, "صعوبة في المشي");
+  });
+
+  it("omits functional goal and any question with no confirmed answer", () => {
+    const snapshot = buildApprovedPatientReportFactsSnapshotForPostStrokeIntake(
+      {
+        postStrokeIntake: {
+          subjectiveNarrative: {
+            responses: [{ questionId: "mainDifficulty", inputMode: "text", text: "Trouble walking." }],
+          },
+        },
+      },
+      "2026-07-30T01:00:00.000Z",
+    );
+    assert.equal(snapshot.facts.goals, undefined);
+    assert.equal(snapshot.facts.onsetOrChange, undefined);
+    assert.equal(snapshot.facts.chiefComplaint, "Trouble walking.");
+  });
+
+  it("never includes a forbidden clinical claim, even if somehow present in the confirmed text", () => {
+    const snapshot = buildApprovedPatientReportFactsSnapshotForPostStrokeIntake(
+      {
+        postStrokeIntake: {
+          subjectiveNarrative: {
+            responses: [{ questionId: "mainDifficulty", inputMode: "text", text: "Diagnosis: stroke recovery" }],
+          },
+        },
+      },
+      "2026-07-30T01:00:00.000Z",
+    );
+    assert.equal(snapshot.facts.chiefComplaint, undefined);
+  });
+
+  it("returns an empty facts object without throwing when structured_data has no postStrokeIntake at all", () => {
+    const snapshot = buildApprovedPatientReportFactsSnapshotForPostStrokeIntake({}, "2026-07-30T01:00:00.000Z");
+    assert.deepEqual(snapshot.facts, {});
+    assert.equal(snapshot.version, 1);
   });
 });

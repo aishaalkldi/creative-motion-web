@@ -342,9 +342,109 @@ export function isFunctionalIntakeComplete(functionalIntake: Partial<PostStrokeF
   return isScreenOneComplete(fi) && isScreenTwoComplete(fi) && isScreenThreeComplete(fi);
 }
 
-/** Stage 2 + Stage 3 slice of the full post-stroke intake structured_data shape. */
+/**
+ * Open-ended subjective narrative — patient/caregiver-reported free text only,
+ * typed or spoken. Deliberately does not repeat any Stage 2/3 closed-enum
+ * field (affected side, mobility abilities, falls, communication support,
+ * functional goal) — those remain authoritative in their existing locations.
+ * Stores only the final, patient-confirmed editable text: no audio, no
+ * separate raw ASR transcript, no AI draft/clinician workflow state (those
+ * live in the existing top-level approvedPatientReportFacts /
+ * ptMedicalReportDraft / ptMedicalReportApproved structures, not here).
+ */
+export type PostStrokeSubjectiveQuestionId =
+  | "mainDifficulty"
+  | "onsetOrChange"
+  | "dailyImpact"
+  | "mostDifficultActivities"
+  | "additionalInformation";
+
+export const POST_STROKE_SUBJECTIVE_QUESTION_IDS: readonly PostStrokeSubjectiveQuestionId[] = [
+  "mainDifficulty",
+  "onsetOrChange",
+  "dailyImpact",
+  "mostDifficultActivities",
+  "additionalInformation",
+];
+
+/** additionalInformation is the only optional question — every other question is required for final submission. */
+export const SUBJECTIVE_NARRATIVE_REQUIRED_QUESTION_IDS: readonly PostStrokeSubjectiveQuestionId[] = [
+  "mainDifficulty",
+  "onsetOrChange",
+  "dailyImpact",
+  "mostDifficultActivities",
+];
+
+export const SUBJECTIVE_NARRATIVE_SCREEN_A_QUESTION_IDS: readonly PostStrokeSubjectiveQuestionId[] = [
+  "mainDifficulty",
+  "onsetOrChange",
+  "dailyImpact",
+];
+
+export const SUBJECTIVE_NARRATIVE_SCREEN_B_QUESTION_IDS: readonly PostStrokeSubjectiveQuestionId[] = [
+  "mostDifficultActivities",
+  "additionalInformation",
+];
+
+export function isValidPostStrokeSubjectiveQuestionId(value: unknown): value is PostStrokeSubjectiveQuestionId {
+  return (
+    typeof value === "string" &&
+    (POST_STROKE_SUBJECTIVE_QUESTION_IDS as readonly string[]).includes(value)
+  );
+}
+
+export type PostStrokeSubjectiveInputMode = "text" | "voice";
+
+export function isValidPostStrokeSubjectiveInputMode(value: unknown): value is PostStrokeSubjectiveInputMode {
+  return value === "text" || value === "voice";
+}
+
+export type PostStrokeSubjectiveResponse = {
+  questionId: PostStrokeSubjectiveQuestionId;
+  inputMode: PostStrokeSubjectiveInputMode;
+  /** Final editable text only — never the raw pre-edit ASR output. */
+  text: string;
+};
+
+export type PostStrokeSubjectiveNarrative = {
+  responses: PostStrokeSubjectiveResponse[];
+  /** Server-generated only, during final submission. Absent on every partial draft save. */
+  patientConfirmedAt?: string;
+};
+
+function findSubjectiveResponseText(
+  responses: readonly PostStrokeSubjectiveResponse[] | undefined,
+  questionId: PostStrokeSubjectiveQuestionId,
+): string | undefined {
+  return responses?.find((r) => r.questionId === questionId)?.text?.trim() || undefined;
+}
+
+function isSubjectiveNarrativeScreenAComplete(responses: readonly PostStrokeSubjectiveResponse[] | undefined): boolean {
+  return SUBJECTIVE_NARRATIVE_SCREEN_A_QUESTION_IDS.every((id) => Boolean(findSubjectiveResponseText(responses, id)));
+}
+
+/**
+ * Which of the two subjective-narrative screens the resumed patient/caregiver
+ * should land on — mirrors firstIncompleteFunctionalIntakeScreen. Screen B is
+ * also the final-review/confirmation screen, so once Screen A is complete the
+ * patient always lands there next, whether or not the optional question or
+ * confirmation itself is done yet.
+ */
+export function firstIncompleteSubjectiveNarrativeScreen(
+  responses: readonly PostStrokeSubjectiveResponse[] | undefined,
+): "A" | "B" {
+  return isSubjectiveNarrativeScreenAComplete(responses) ? "B" : "A";
+}
+
+/** True only once every required open-ended question has a non-empty answer. additionalInformation never blocks this. */
+export function isSubjectiveNarrativeComplete(responses: readonly PostStrokeSubjectiveResponse[] | undefined): boolean {
+  return SUBJECTIVE_NARRATIVE_REQUIRED_QUESTION_IDS.every((id) => Boolean(findSubjectiveResponseText(responses, id)));
+}
+
+/** Stage 2 + Stage 3 + subjective-narrative slice of the full post-stroke intake structured_data shape. */
 export type PostStrokeIntakeDraft = {
   respondent?: PostStrokeRespondent;
   urgentGate?: PostStrokeUrgentGateResult;
   functionalIntake?: PostStrokeFunctionalIntake;
+  subjectiveNarrative?: PostStrokeSubjectiveNarrative;
 };

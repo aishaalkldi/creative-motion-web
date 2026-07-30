@@ -19,6 +19,7 @@ import type {
   PostStrokeFunctionalAbility,
   PostStrokeMoreAffectedSide,
   PostStrokeRespondentType,
+  PostStrokeSubjectiveQuestionId,
   PostStrokeUpperLimbUse,
   PostStrokeUrgentSymptom,
   PostStrokeWalkingAbility,
@@ -422,4 +423,69 @@ export const SUBMIT_FUNCTIONAL_INTAKE_LABEL: LocalizedText = {
 export const FUNCTIONAL_INTAKE_SUBMITTED_NOTICE: LocalizedText = {
   en: "Your intake was submitted for clinician review. No clinical decision or exercise clearance has been made.",
   ar: "تم إرسال الاستبيان لمراجعة الأخصائي. لم يتم اتخاذ قرار سريري أو إصدار تصريح للتمارين.",
+};
+
+/**
+ * Open-ended subjective narrative — the same input/voice method fills the
+ * same patient-reported field; this is not a separate Speech AI assessment.
+ * Deliberately excludes affected side, mobility abilities, falls,
+ * communication support, and functional goal — all already covered in
+ * Stage 2/3 and never repeated here.
+ */
+export const SUBJECTIVE_NARRATIVE_SCREEN_TITLES = {
+  screenA: { en: "Tell us about your current difficulty", ar: "أخبرنا عن الصعوبة الحالية" } satisfies LocalizedText,
+  screenB: { en: "More details and final review", ar: "مزيد من التفاصيل والمراجعة النهائية" } satisfies LocalizedText,
+} satisfies Record<string, LocalizedText>;
+
+export const SUBJECTIVE_NARRATIVE_QUESTION_LABELS: Record<PostStrokeSubjectiveQuestionId, LocalizedText> = {
+  mainDifficulty: {
+    en: "What is the main difficulty you are experiencing now?",
+    ar: "ما الصعوبة الرئيسية التي تواجهها الآن؟",
+  },
+  onsetOrChange: {
+    en: "When did this difficulty begin, or when did it last change?",
+    ar: "متى بدأت هذه الصعوبة، أو متى حدث آخر تغير فيها؟",
+  },
+  dailyImpact: {
+    en: "How does this difficulty affect your daily activities?",
+    ar: "كيف تؤثر هذه الصعوبة في أنشطتك اليومية؟",
+  },
+  mostDifficultActivities: {
+    en: "Which activities are currently most difficult for you?",
+    ar: "ما الأنشطة الأكثر صعوبة بالنسبة لك حاليًا؟",
+  },
+  additionalInformation: {
+    en: "Is there anything else you would like your therapist to know?",
+    ar: "هل توجد معلومات أخرى تود أن يعرفها الأخصائي؟",
+  },
+};
+
+export const SUBJECTIVE_NARRATIVE_OPTIONAL_HINT: LocalizedText = {
+  en: "Optional",
+  ar: "اختياري",
+};
+
+export const FUNCTIONAL_GOAL_VOICE_LABEL: LocalizedText = {
+  en: "Functional goal",
+  ar: "الهدف الوظيفي",
+};
+
+/** Shown next to each answer on the final review screen — never implies accuracy, only how it was entered. */
+export const INPUT_MODE_LABELS: Record<"text" | "voice", LocalizedText> = {
+  text: { en: "Typed", ar: "مكتوب" },
+  voice: { en: "Recorded by voice", ar: "مُسجَّل بالصوت" },
+};
+
+/**
+ * Exact approved wording for the single final patient confirmation gate — one
+ * confirmation for the whole review screen, never a per-question button.
+ */
+export const PATIENT_CONFIRMATION_STATEMENT: LocalizedText = {
+  en: "I confirm that these answers accurately reflect what I said or intended to report.",
+  ar: "أؤكد أن هذه الإجابات تعبّر بدقة عما قلته أو قصدت الإبلاغ عنه.",
+};
+
+export const PATIENT_CONFIRMATION_REQUIRED_NOTICE: LocalizedText = {
+  en: "Please confirm your answers to continue.",
+  ar: "يرجى تأكيد إجاباتك للمتابعة.",
 };

@@ -196,3 +196,36 @@ describe("parseApprovePtReportApiResponse", () => {
     assert.match(parsed.error ?? "", /Generate and review/i);
   });
 });
+
+describe("Stage 4 — configurable draft label (post_stroke_intake)", () => {
+  const POST_STROKE_INTAKE_DRAFT_LABEL = "AI-generated draft — requires therapist review";
+
+  it("defaults to the existing remote_questionnaire draft label when no override is passed", () => {
+    const viewModel = buildPtMedicalReportPanelViewModel(APPROVED_FACTS, DRAFT, null);
+    assert.equal(viewModel.statusLabel, PT_MEDICAL_REPORT_DRAFT_LABEL);
+  });
+
+  it("uses the exact post_stroke_intake label when explicitly passed", () => {
+    const viewModel = buildPtMedicalReportPanelViewModel(
+      APPROVED_FACTS,
+      DRAFT,
+      null,
+      null,
+      null,
+      POST_STROKE_INTAKE_DRAFT_LABEL,
+    );
+    assert.equal(viewModel.statusLabel, POST_STROKE_INTAKE_DRAFT_LABEL);
+  });
+
+  it("still shows the shared approved label once exportable, regardless of the draft-label override", () => {
+    const viewModel = buildPtMedicalReportPanelViewModel(
+      APPROVED_FACTS,
+      DRAFT,
+      APPROVED,
+      null,
+      APPROVED.approvedAt,
+      POST_STROKE_INTAKE_DRAFT_LABEL,
+    );
+    assert.equal(viewModel.statusLabel, PT_MEDICAL_REPORT_APPROVED_LABEL);
+  });
+});

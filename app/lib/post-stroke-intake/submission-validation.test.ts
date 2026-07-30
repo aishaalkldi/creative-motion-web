@@ -556,6 +556,15 @@ describe("validatePostStrokeIntakeDraftSave — Stage 3 functionalIntake (partia
   });
 });
 
+const COMPLETE_SUBJECTIVE_NARRATIVE_INPUT = {
+  responses: [
+    { questionId: "mainDifficulty", inputMode: "text", text: "Trouble gripping objects with my right hand." },
+    { questionId: "onsetOrChange", inputMode: "text", text: "Started three weeks ago after the stroke." },
+    { questionId: "dailyImpact", inputMode: "text", text: "Makes cooking and dressing harder." },
+    { questionId: "mostDifficultActivities", inputMode: "voice", text: "Buttoning shirts and opening jars." },
+  ],
+};
+
 describe("validatePostStrokeIntakeCompletion — final Stage 3 submission", () => {
   function completionPayload(overrides: Record<string, unknown> = {}) {
     return {
@@ -563,6 +572,7 @@ describe("validatePostStrokeIntakeCompletion — final Stage 3 submission", () =
         respondent: { type: "patient" },
         urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
         functionalIntake: COMPLETE_FUNCTIONAL_INTAKE_INPUT,
+        subjectiveNarrative: COMPLETE_SUBJECTIVE_NARRATIVE_INPUT,
         ...overrides,
       },
       assessmentLanguage: "en",
@@ -570,7 +580,7 @@ describe("validatePostStrokeIntakeCompletion — final Stage 3 submission", () =
   }
 
   it("accepts a fully answered functionalIntake", () => {
-    const result = validatePostStrokeIntakeCompletion(completionPayload());
+    const result = validatePostStrokeIntakeCompletion(completionPayload(), true);
     assert.equal(result.ok, true);
     if (!result.ok) return;
     const fi = functionalIntakeFrom(result);
@@ -585,33 +595,41 @@ describe("validatePostStrokeIntakeCompletion — final Stage 3 submission", () =
       completionPayload({
         functionalIntake: incomplete,
       }),
+      true,
     );
     assert.equal(result.ok, false);
   });
 
   it("rejects when functionalIntake is entirely absent", () => {
-    const result = validatePostStrokeIntakeCompletion({
-      postStrokeIntake: {
-        respondent: { type: "patient" },
-        urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+    const result = validatePostStrokeIntakeCompletion(
+      {
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+        },
       },
-    });
+      true,
+    );
     assert.equal(result.ok, false);
   });
 
   it("rejects when the Stage 2 urgent gate is missing", () => {
-    const result = validatePostStrokeIntakeCompletion({
-      postStrokeIntake: {
-        respondent: { type: "patient" },
-        functionalIntake: COMPLETE_FUNCTIONAL_INTAKE_INPUT,
+    const result = validatePostStrokeIntakeCompletion(
+      {
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          functionalIntake: COMPLETE_FUNCTIONAL_INTAKE_INPUT,
+        },
       },
-    });
+      true,
+    );
     assert.equal(result.ok, false);
   });
 
   it("rejects when the Stage 2 urgent gate is not cleared (a real urgent symptom present)", () => {
     const result = validatePostStrokeIntakeCompletion(
       completionPayload({ urgentGate: { symptoms: ["fall_with_injury"] } }),
+      true,
     );
     assert.equal(result.ok, false);
   });
@@ -621,6 +639,7 @@ describe("validatePostStrokeIntakeCompletion — final Stage 3 submission", () =
       completionPayload({
         functionalIntake: { ...COMPLETE_FUNCTIONAL_INTAKE_INPUT, fallRiskScore: 3 },
       }),
+      true,
     );
     assert.equal(result.ok, false);
   });
@@ -630,12 +649,13 @@ describe("validatePostStrokeIntakeCompletion — final Stage 3 submission", () =
       completionPayload({
         functionalIntake: { ...COMPLETE_FUNCTIONAL_INTAKE_INPUT, assistiveDevice: "other" },
       }),
+      true,
     );
     assert.equal(result.ok, false);
   });
 
   it("never produces a diagnosis, severity, safety-clearance, or delivery-mode field", () => {
-    const result = validatePostStrokeIntakeCompletion(completionPayload());
+    const result = validatePostStrokeIntakeCompletion(completionPayload(), true);
     assert.equal(result.ok, true);
     if (!result.ok) return;
     const serialized = JSON.stringify(result.structuredData);
@@ -643,5 +663,310 @@ describe("validatePostStrokeIntakeCompletion — final Stage 3 submission", () =
       serialized,
       /diagnos|severity|\bsafe\b|unsafe|cleared|remote_self|remote_supervised|in_clinic|risk_score/i,
     );
+  });
+});
+
+function subjectiveNarrativeFrom(result: { ok: true; structuredData: Record<string, unknown> }) {
+  const postStroke = result.structuredData.postStrokeIntake as Record<string, unknown>;
+  return postStroke.subjectiveNarrative as Record<string, unknown> | undefined;
+}
+
+describe("validatePostStrokeIntakeDraftSave — subjective narrative (partial)", () => {
+  it("omits subjectiveNarrative entirely from the output when absent from the input", () => {
+    const result = validatePostStrokeIntakeDraftSave(draftPayload());
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(subjectiveNarrativeFrom(result), undefined);
+  });
+
+  it("accepts a partial subset of open-ended responses (screen A only)", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          subjectiveNarrative: {
+            responses: [
+              { questionId: "mainDifficulty", inputMode: "text", text: "Trouble walking." },
+              { questionId: "onsetOrChange", inputMode: "voice", text: "Two weeks ago." },
+            ],
+          },
+        },
+      }),
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const narrative = subjectiveNarrativeFrom(result);
+    const responses = narrative?.responses as Array<{ questionId: string; inputMode: string; text: string }>;
+    assert.equal(responses.length, 2);
+    assert.equal(responses[0].text, "Trouble walking.");
+    assert.equal(responses[1].inputMode, "voice");
+  });
+
+  it("rejects a client-supplied patientConfirmedAt on a draft save — it is never an accepted field", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          subjectiveNarrative: {
+            responses: [{ questionId: "mainDifficulty", inputMode: "text", text: "Trouble walking." }],
+            patientConfirmedAt: "2020-01-01T00:00:00.000Z",
+          },
+        },
+      }),
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("draft saves never contain patientConfirmedAt when no confirmation field is sent at all", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          subjectiveNarrative: {
+            responses: [{ questionId: "mainDifficulty", inputMode: "text", text: "Trouble walking." }],
+          },
+        },
+      }),
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(subjectiveNarrativeFrom(result)?.patientConfirmedAt, undefined);
+  });
+
+  it("treats additionalInformation as optional — an empty answer is dropped, not rejected", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          subjectiveNarrative: {
+            responses: [{ questionId: "additionalInformation", inputMode: "text", text: "   " }],
+          },
+        },
+      }),
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(subjectiveNarrativeFrom(result), undefined);
+  });
+
+  it("rejects a required answer shorter than 2 characters after trimming", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          subjectiveNarrative: {
+            responses: [{ questionId: "mainDifficulty", inputMode: "text", text: " a " }],
+          },
+        },
+      }),
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects an answer longer than 1000 characters", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          subjectiveNarrative: {
+            responses: [{ questionId: "mainDifficulty", inputMode: "text", text: "a".repeat(1001) }],
+          },
+        },
+      }),
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects an invalid question id or input mode", () => {
+    const invalidQuestion = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          subjectiveNarrative: { responses: [{ questionId: "affectedSide", inputMode: "text", text: "left" }] },
+        },
+      }),
+    );
+    assert.equal(invalidQuestion.ok, false);
+
+    const invalidMode = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          subjectiveNarrative: {
+            responses: [{ questionId: "mainDifficulty", inputMode: "handwriting", text: "left" }],
+          },
+        },
+      }),
+    );
+    assert.equal(invalidMode.ok, false);
+  });
+
+  it("rejects an unexpected field inside a response entry (fails closed)", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          subjectiveNarrative: {
+            responses: [
+              { questionId: "mainDifficulty", inputMode: "text", text: "Trouble walking.", diagnosis: "stroke" },
+            ],
+          },
+        },
+      }),
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects an unexpected top-level field inside subjectiveNarrative", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          subjectiveNarrative: { responses: [], aiDraft: "not allowed here" },
+        },
+      }),
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("never persists a diagnosis, fall-risk score, or delivery-mode field", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          subjectiveNarrative: {
+            responses: [{ questionId: "mainDifficulty", inputMode: "text", text: "Trouble walking daily." }],
+          },
+        },
+      }),
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const serialized = JSON.stringify(result.structuredData);
+    assert.doesNotMatch(serialized, /diagnos|severity|\bsafe\b|unsafe|cleared|remote_self|remote_supervised|in_clinic|risk_score/i);
+  });
+});
+
+describe("validatePostStrokeIntakeCompletion — subjective narrative (complete)", () => {
+  function completionPayload(overrides: Record<string, unknown> = {}) {
+    return {
+      postStrokeIntake: {
+        respondent: { type: "patient" },
+        urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+        functionalIntake: COMPLETE_FUNCTIONAL_INTAKE_INPUT,
+        subjectiveNarrative: COMPLETE_SUBJECTIVE_NARRATIVE_INPUT,
+        ...overrides,
+      },
+      assessmentLanguage: "en",
+    };
+  }
+
+  it("accepts a fully answered narrative when patientConfirmed is exactly true, and generates patientConfirmedAt server-side", () => {
+    const result = validatePostStrokeIntakeCompletion(completionPayload(), true);
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const narrative = subjectiveNarrativeFrom(result);
+    assert.ok(!Number.isNaN(Date.parse(narrative?.patientConfirmedAt as string)));
+  });
+
+  it("rejects a client-supplied patientConfirmedAt inside subjectiveNarrative as an unexpected field — even when patientConfirmed is true", () => {
+    const result = validatePostStrokeIntakeCompletion(
+      completionPayload({
+        subjectiveNarrative: {
+          ...COMPLETE_SUBJECTIVE_NARRATIVE_INPUT,
+          patientConfirmedAt: "1999-01-01T00:00:00.000Z",
+        },
+      }),
+      true,
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects final submission when patientConfirmed is missing", () => {
+    const result = validatePostStrokeIntakeCompletion(completionPayload(), undefined);
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects final submission when patientConfirmed is false", () => {
+    const result = validatePostStrokeIntakeCompletion(completionPayload(), false);
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects final submission when patientConfirmed is a non-boolean truthy value (string/number)", () => {
+    assert.equal(validatePostStrokeIntakeCompletion(completionPayload(), "true").ok, false);
+    assert.equal(validatePostStrokeIntakeCompletion(completionPayload(), 1).ok, false);
+  });
+
+  it("never persists patientConfirmed itself anywhere in the output", () => {
+    const result = validatePostStrokeIntakeCompletion(completionPayload(), true);
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const serialized = JSON.stringify(result.structuredData);
+    assert.doesNotMatch(serialized, /"patientConfirmed"\s*:/);
+  });
+
+  it("rejects final submission when subjectiveNarrative is entirely absent", () => {
+    const result = validatePostStrokeIntakeCompletion(
+      {
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          functionalIntake: COMPLETE_FUNCTIONAL_INTAKE_INPUT,
+        },
+      },
+      true,
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects when a required open-ended question is missing", () => {
+    const incompleteResponses = COMPLETE_SUBJECTIVE_NARRATIVE_INPUT.responses.filter(
+      (r) => r.questionId !== "onsetOrChange",
+    );
+    const result = validatePostStrokeIntakeCompletion(
+      completionPayload({
+        subjectiveNarrative: { responses: incompleteResponses },
+      }),
+      true,
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("accepts a complete narrative without additionalInformation — it remains optional", () => {
+    const result = validatePostStrokeIntakeCompletion(completionPayload(), true);
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const narrative = subjectiveNarrativeFrom(result);
+    const responses = narrative?.responses as Array<{ questionId: string }>;
+    assert.ok(!responses.some((r) => r.questionId === "additionalInformation"));
+  });
+
+  it("preserves respondent, urgentGate, and functionalIntake alongside the confirmed narrative", () => {
+    const result = validatePostStrokeIntakeCompletion(completionPayload(), true);
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const postStroke = result.structuredData.postStrokeIntake as Record<string, unknown>;
+    assert.deepEqual(postStroke.respondent, { type: "patient" });
+    assert.ok(postStroke.functionalIntake);
+    assert.ok(postStroke.urgentGate);
+  });
+
+  it("never produces a diagnosis, fall-risk score, or delivery-mode field", () => {
+    const result = validatePostStrokeIntakeCompletion(completionPayload(), true);
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const serialized = JSON.stringify(result.structuredData);
+    assert.doesNotMatch(serialized, /diagnos|severity|\bsafe\b|unsafe|cleared|remote_self|remote_supervised|in_clinic|risk_score/i);
   });
 });
