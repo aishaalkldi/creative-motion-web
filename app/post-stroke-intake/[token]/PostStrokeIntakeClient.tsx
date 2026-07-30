@@ -7,6 +7,7 @@ import {
   type AssessmentLanguage,
 } from "@/app/lib/api/remote-assessments";
 import { LanguageToggle, type PatientLang } from "@/app/components/patient/LanguageToggle";
+import { VoiceFieldControls } from "@/app/components/patient/VoiceFieldControls";
 import { TrustFooter } from "@/app/components/trust/TrustFooter";
 import { trustFooterUi } from "@/app/lib/patient-portal-ui";
 import {
@@ -27,8 +28,11 @@ import {
   FUNCTIONAL_INTAKE_REVIEW_REQUIRED_NOTICE,
   FUNCTIONAL_INTAKE_SCREEN_TITLES,
   FUNCTIONAL_INTAKE_SUBMITTED_NOTICE,
+  INPUT_MODE_LABELS,
   MORE_AFFECTED_SIDE_LABELS,
   MORE_AFFECTED_SIDE_STEP_TITLE,
+  PATIENT_CONFIRMATION_REQUIRED_NOTICE,
+  PATIENT_CONFIRMATION_STATEMENT,
   POST_STROKE_CONSENT_BODY,
   POST_STROKE_INTAKE_TITLE,
   POST_STROKE_UI,
@@ -42,6 +46,9 @@ import {
   REVIEW_STEP_TITLE,
   SITTING_ABILITY_STEP_TITLE,
   STANDING_ABILITY_STEP_TITLE,
+  SUBJECTIVE_NARRATIVE_OPTIONAL_HINT,
+  SUBJECTIVE_NARRATIVE_QUESTION_LABELS,
+  SUBJECTIVE_NARRATIVE_SCREEN_TITLES,
   SUBMIT_FUNCTIONAL_INTAKE_LABEL,
   UPPER_LIMB_USE_LABELS,
   UPPER_LIMB_USE_STEP_TITLE,
@@ -57,9 +64,11 @@ import {
 import { evaluateUrgentGate, NO_NEW_URGENT_SYMPTOMS, URGENT_SYMPTOM_VALUES } from "@/app/lib/post-stroke-intake/urgent-gate";
 import {
   firstIncompleteFunctionalIntakeScreen,
+  firstIncompleteSubjectiveNarrativeScreen,
   getVisibleAssistanceTypes,
   isAssistanceTypeValidForRespondent,
   isFunctionalIntakeComplete,
+  isSubjectiveNarrativeComplete,
   POST_STROKE_ASSISTIVE_DEVICE_VALUES,
   POST_STROKE_COMMUNICATION_SUPPORT_VALUES,
   POST_STROKE_FALLS_OR_NEAR_FALLS_VALUES,
@@ -68,9 +77,14 @@ import {
   POST_STROKE_UPPER_LIMB_USE_VALUES,
   POST_STROKE_WALKING_ABILITY_VALUES,
   shouldShowAssistanceTypeSection,
+  SUBJECTIVE_NARRATIVE_SCREEN_A_QUESTION_IDS,
+  SUBJECTIVE_NARRATIVE_SCREEN_B_QUESTION_IDS,
   type PostStrokeAssistanceType,
   type PostStrokeFunctionalIntake,
   type PostStrokeRespondentType,
+  type PostStrokeSubjectiveInputMode,
+  type PostStrokeSubjectiveQuestionId,
+  type PostStrokeSubjectiveResponse,
   type PostStrokeUrgentGateResult,
   type PostStrokeUrgentSymptom,
 } from "@/app/lib/post-stroke-intake/types";
@@ -84,7 +98,14 @@ type Stage =
   | "functional_screen_1"
   | "functional_screen_2"
   | "functional_screen_3"
+  | "subjective_screen_a"
+  | "subjective_screen_b"
   | "functional_submitted";
+
+/** One entry per answered open-ended question — keyed by question id for O(1) lookup/update. */
+type SubjectiveResponseMap = Partial<
+  Record<PostStrokeSubjectiveQuestionId, { inputMode: PostStrokeSubjectiveInputMode; text: string }>
+>;
 
 const RESPONDENT_TYPES: PostStrokeRespondentType[] = [
   "patient",
@@ -301,6 +322,13 @@ export function PostStrokeIntakeClient() {
   const [screen2Error, setScreen2Error] = useState<string | null>(null);
   const [screen3Error, setScreen3Error] = useState<string | null>(null);
 
+  // Open-ended subjective narrative — typed or spoken, same fields either way.
+  const [subjectiveResponses, setSubjectiveResponses] = useState<SubjectiveResponseMap>({});
+  const [subjectiveScreenAError, setSubjectiveScreenAError] = useState<string | null>(null);
+  const [subjectiveScreenBError, setSubjectiveScreenBError] = useState<string | null>(null);
+  // Single final confirmation gate — never a per-question confirmation.
+  const [patientConfirmed, setPatientConfirmed] = useState(false);
+
   // Final Stage 3 submission (explicit action, never inferred from completeness).
   const [finalSubmitting, setFinalSubmitting] = useState(false);
   const [finalSubmitError, setFinalSubmitError] = useState<string | null>(null);
@@ -341,6 +369,7 @@ export function PostStrokeIntakeClient() {
         respondent?: { type: PostStrokeRespondentType; assistanceType?: PostStrokeAssistanceType };
         urgentGate?: { symptoms: PostStrokeUrgentSymptom[]; stopped: boolean };
         functionalIntake?: Partial<PostStrokeFunctionalIntake>;
+        subjectiveNarrative?: { responses?: PostStrokeSubjectiveResponse[] };
         assessmentLanguage?: "en" | "ar";
       };
       const data = (await res.json()) as { draft?: ResumableDraft };
@@ -360,10 +389,25 @@ export function PostStrokeIntakeClient() {
 
       const resumedFunctionalIntake = draft.functionalIntake ?? {};
       setFunctionalIntake(resumedFunctionalIntake);
-      const nextScreen = firstIncompleteFunctionalIntakeScreen(resumedFunctionalIntake);
-      setStage(
-        nextScreen === 1 ? "functional_screen_1" : nextScreen === 2 ? "functional_screen_2" : "functional_screen_3",
-      );
+
+      const resumedResponses = draft.subjectiveNarrative?.responses ?? [];
+      const resumedResponseMap: SubjectiveResponseMap = {};
+      for (const response of resumedResponses) {
+        resumedResponseMap[response.questionId] = { inputMode: response.inputMode, text: response.text };
+      }
+      setSubjectiveResponses(resumedResponseMap);
+
+      const nextFunctionalScreen = firstIncompleteFunctionalIntakeScreen(resumedFunctionalIntake);
+      if (nextFunctionalScreen === 1) {
+        setStage("functional_screen_1");
+      } else if (nextFunctionalScreen === 2) {
+        setStage("functional_screen_2");
+      } else if (!isFunctionalIntakeComplete(resumedFunctionalIntake)) {
+        setStage("functional_screen_3");
+      } else {
+        const nextNarrativeScreen = firstIncompleteSubjectiveNarrativeScreen(resumedResponses);
+        setStage(nextNarrativeScreen === "A" ? "subjective_screen_a" : "subjective_screen_b");
+      }
     })();
     return () => {
       cancelled = true;
@@ -481,19 +525,31 @@ export function PostStrokeIntakeClient() {
     }
   }
 
+  /** Converts the keyed response map into the array shape the server accepts, dropping never-answered questions. */
+  function toSubjectiveResponseArray(map: SubjectiveResponseMap): PostStrokeSubjectiveResponse[] {
+    return (Object.entries(map) as [PostStrokeSubjectiveQuestionId, { inputMode: PostStrokeSubjectiveInputMode; text: string }][])
+      .filter(([, response]) => response.text.trim().length > 0)
+      .map(([questionId, response]) => ({ questionId, inputMode: response.inputMode, text: response.text }));
+  }
+
   /**
-   * Saves the full known Stage 3 state so far (respondent + cleared urgent
-   * gate + functionalIntake accumulated across screens) via the same
-   * save-draft endpoint used by the Stage 2 no-urgent draft. Same
-   * rebuild-from-input contract: the client always resends everything it
-   * knows, so an earlier screen's answers are preserved by resending them,
-   * never by a server-side merge.
+   * Saves the full known Stage 3 + subjective-narrative state so far
+   * (respondent + cleared urgent gate + functionalIntake + open-ended
+   * responses accumulated across screens) via the same save-draft endpoint
+   * used by the Stage 2 no-urgent draft. Same rebuild-from-input contract:
+   * the client always resends everything it knows, so an earlier screen's
+   * answers are preserved by resending them, never by a server-side merge.
+   * patientConfirmedAt is never included here — a draft is never "confirmed".
    */
-  async function saveFunctionalDraft(next: Partial<PostStrokeFunctionalIntake>): Promise<boolean> {
+  async function saveIntakeDraft(
+    nextFunctionalIntake: Partial<PostStrokeFunctionalIntake>,
+    nextSubjectiveResponses: SubjectiveResponseMap,
+  ): Promise<boolean> {
     if (!respondentType) return false;
     setDraftSaving(true);
     setDraftSaveError(null);
     try {
+      const responses = toSubjectiveResponseArray(nextSubjectiveResponses);
       const res = await fetch(`/api/remote-assessments/${encodeURIComponent(token)}/save-draft`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -502,7 +558,8 @@ export function PostStrokeIntakeClient() {
             postStrokeIntake: {
               respondent: { type: respondentType, assistanceType },
               urgentGate: { symptoms: [NO_NEW_URGENT_SYMPTOMS] },
-              functionalIntake: next,
+              functionalIntake: nextFunctionalIntake,
+              ...(responses.length > 0 ? { subjectiveNarrative: { responses } } : {}),
             },
             assessmentLanguage: lang,
           },
@@ -519,11 +576,16 @@ export function PostStrokeIntakeClient() {
   }
 
   /**
-   * Final Stage 3 submission — an explicit action, never inferred merely
-   * because every field is present. Guarded the same one-shot-ref way as
-   * submitUrgentStop/saveNoUrgentDraft. The server independently revalidates
-   * completeness and recomputes every timestamp/flag regardless of what is
-   * sent here.
+   * Final Stage 3 + subjective-narrative submission — an explicit action,
+   * never inferred merely because every field is present. Guarded the same
+   * one-shot-ref way as submitUrgentStop/saveNoUrgentDraft. Makes no OpenAI
+   * or AI call of any kind — it only validates, persists, and marks the
+   * request submitted; AI draft generation happens later, clinician-side,
+   * after Gate 1 approval. `patientConfirmed: true` is a request-only signal
+   * (never part of structuredData/subjectiveNarrative) — the server strictly
+   * requires it to be exactly `true` and never reads or trusts any
+   * client-supplied confirmation timestamp; it always generates
+   * `subjectiveNarrative.patientConfirmedAt` itself.
    */
   async function submitFunctionalIntake() {
     if (!respondentType) return;
@@ -538,11 +600,15 @@ export function PostStrokeIntakeClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "complete_post_stroke_intake",
+          patientConfirmed,
           structuredData: {
             postStrokeIntake: {
               respondent: { type: respondentType, assistanceType },
               urgentGate: { symptoms: [NO_NEW_URGENT_SYMPTOMS] },
               functionalIntake,
+              subjectiveNarrative: {
+                responses: toSubjectiveResponseArray(subjectiveResponses),
+              },
             },
             assessmentLanguage: lang,
           },
@@ -563,6 +629,35 @@ export function PostStrokeIntakeClient() {
     setFunctionalIntake((prev) => ({ ...prev, ...patch }));
   }
 
+  /** Shared setter — inputMode is always exactly what the caller decides (see the two callers below for the actual policy). */
+  function updateSubjectiveResponse(questionId: PostStrokeSubjectiveQuestionId, inputMode: PostStrokeSubjectiveInputMode, text: string) {
+    setSubjectiveResponses((prev) => ({ ...prev, [questionId]: { inputMode, text } }));
+  }
+
+  /**
+   * Editing text preserves the existing inputMode — editing a voice
+   * transcript does not change the fact that the answer originated from
+   * voice. Only a brand-new answer (no prior response for this question at
+   * all) is marked "text". For this MVP there is no UI affordance to
+   * explicitly reset a voice answer back to "text"; voice provenance is
+   * preserved indefinitely once set.
+   */
+  function handleSubjectiveTextChange(questionId: PostStrokeSubjectiveQuestionId, text: string) {
+    setSubjectiveScreenAError(null);
+    setSubjectiveScreenBError(null);
+    setSubjectiveResponses((prev) => ({
+      ...prev,
+      [questionId]: { inputMode: prev[questionId]?.inputMode ?? "text", text },
+    }));
+  }
+
+  /** A fresh transcription is inherently a voice event — always marks inputMode "voice", regardless of prior state. */
+  function handleSubjectiveTranscript(questionId: PostStrokeSubjectiveQuestionId, text: string) {
+    setSubjectiveScreenAError(null);
+    setSubjectiveScreenBError(null);
+    updateSubjectiveResponse(questionId, "voice", text);
+  }
+
   async function handleFunctionalScreen1Continue() {
     const fi = functionalIntake;
     const requiredMissing =
@@ -581,7 +676,7 @@ export function PostStrokeIntakeClient() {
       return;
     }
     setScreen1Error(null);
-    if (await saveFunctionalDraft(fi)) setStage("functional_screen_2");
+    if (await saveIntakeDraft(fi, subjectiveResponses)) setStage("functional_screen_2");
   }
 
   async function handleFunctionalScreen2Continue() {
@@ -595,7 +690,7 @@ export function PostStrokeIntakeClient() {
       return;
     }
     setScreen2Error(null);
-    if (await saveFunctionalDraft(fi)) setStage("functional_screen_3");
+    if (await saveIntakeDraft(fi, subjectiveResponses)) setStage("functional_screen_3");
   }
 
   function handleFunctionalGoalChange(value: string) {
@@ -603,7 +698,8 @@ export function PostStrokeIntakeClient() {
     updateFunctionalIntake({ functionalGoal: value });
   }
 
-  async function handleFinalSubmit() {
+  /** Screen 3 now only gates the functional goal itself before moving into the open-ended narrative screens. */
+  async function handleFunctionalScreen3Continue() {
     const goal = functionalIntake.functionalGoal?.trim() ?? "";
     if (goal.length < 2) {
       setScreen3Error(patientText(FUNCTIONAL_GOAL_TOO_SHORT, lang));
@@ -614,6 +710,33 @@ export function PostStrokeIntakeClient() {
       return;
     }
     setScreen3Error(null);
+    if (await saveIntakeDraft(functionalIntake, subjectiveResponses)) setStage("subjective_screen_a");
+  }
+
+  async function handleSubjectiveScreenAContinue() {
+    const missing = SUBJECTIVE_NARRATIVE_SCREEN_A_QUESTION_IDS.some(
+      (questionId) => !subjectiveResponses[questionId]?.text?.trim(),
+    );
+    if (missing) {
+      setSubjectiveScreenAError(patientText(POST_STROKE_UI.completeRequiredFields, lang));
+      return;
+    }
+    setSubjectiveScreenAError(null);
+    if (await saveIntakeDraft(functionalIntake, subjectiveResponses)) setStage("subjective_screen_b");
+  }
+
+  /** Final review + single confirmation gate + final submission (Screen B). */
+  async function handleFinalSubmit() {
+    const responses = toSubjectiveResponseArray(subjectiveResponses);
+    if (!isSubjectiveNarrativeComplete(responses)) {
+      setSubjectiveScreenBError(patientText(POST_STROKE_UI.completeRequiredFields, lang));
+      return;
+    }
+    if (!patientConfirmed) {
+      setSubjectiveScreenBError(patientText(PATIENT_CONFIRMATION_REQUIRED_NOTICE, lang));
+      return;
+    }
+    setSubjectiveScreenBError(null);
     await submitFunctionalIntake();
   }
 
@@ -1120,13 +1243,25 @@ export function PostStrokeIntakeClient() {
             <div>
               <h3 className="text-sm font-semibold text-white/80">{patientText(FUNCTIONAL_GOAL_STEP_TITLE, lang)}</h3>
               <p className={`mt-1 text-sm ${proseLeading} text-white/45`}>{patientText(FUNCTIONAL_GOAL_HINT, lang)}</p>
-              <div className="mt-2">
+              <div className="mt-2 space-y-2">
                 <TextAreaField
                   value={functionalIntake.functionalGoal ?? ""}
                   onChange={handleFunctionalGoalChange}
                   placeholder={patientText(FUNCTIONAL_GOAL_PLACEHOLDER, lang)}
                   maxLength={500}
                   dir={formDir}
+                />
+                <VoiceFieldControls
+                  lang={lang}
+                  assessmentToken={token}
+                  questionText={patientText(FUNCTIONAL_GOAL_STEP_TITLE, lang)}
+                  fieldValue={functionalIntake.functionalGoal}
+                  consentGiven={consentGiven}
+                  onConsentNeeded={() => setConsentGiven(true)}
+                  onTranscript={(text) => {
+                    setScreen3Error(null);
+                    updateFunctionalIntake({ functionalGoal: text });
+                  }}
                 />
               </div>
             </div>
@@ -1195,12 +1330,6 @@ export function PostStrokeIntakeClient() {
               </p>
             ) : null}
 
-            {finalSubmitError ? (
-              <p className="rounded-[10px] border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100">
-                {finalSubmitError}
-              </p>
-            ) : null}
-
             <div className="flex gap-3">
               <button
                 type="button"
@@ -1211,7 +1340,184 @@ export function PostStrokeIntakeClient() {
               </button>
               <button
                 type="button"
-                disabled={finalSubmitting}
+                disabled={draftSaving}
+                onClick={() => void handleFunctionalScreen3Continue()}
+                className={`flex-1 rounded-2xl bg-cyan-400 py-3.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-300 disabled:opacity-50 ${FOCUS_RING}`}
+              >
+                {draftSaving ? patientText(POST_STROKE_UI.submitting, lang) : patientText(POST_STROKE_UI.continueLabel, lang)}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {stage === "subjective_screen_a" && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-white">
+              {patientText(SUBJECTIVE_NARRATIVE_SCREEN_TITLES.screenA, lang)}
+            </h2>
+            <PatientReportedNotice lang={lang} proseLeading={proseLeading} />
+
+            <div className="space-y-5">
+              {SUBJECTIVE_NARRATIVE_SCREEN_A_QUESTION_IDS.map((questionId) => (
+                <div key={questionId}>
+                  <h3 className="text-sm font-semibold text-white/80">
+                    {patientText(SUBJECTIVE_NARRATIVE_QUESTION_LABELS[questionId], lang)}
+                  </h3>
+                  <div className="mt-2 space-y-2">
+                    <TextAreaField
+                      value={subjectiveResponses[questionId]?.text ?? ""}
+                      onChange={(text) => handleSubjectiveTextChange(questionId, text)}
+                      maxLength={1000}
+                      dir={formDir}
+                    />
+                    <VoiceFieldControls
+                      lang={lang}
+                      assessmentToken={token}
+                      questionText={patientText(SUBJECTIVE_NARRATIVE_QUESTION_LABELS[questionId], lang)}
+                      fieldValue={subjectiveResponses[questionId]?.text}
+                      consentGiven={consentGiven}
+                      onConsentNeeded={() => setConsentGiven(true)}
+                      onTranscript={(text) => handleSubjectiveTranscript(questionId, text)}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {subjectiveScreenAError ? (
+              <p className="rounded-[10px] border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100">
+                {subjectiveScreenAError}
+              </p>
+            ) : null}
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setStage("functional_screen_3")}
+                className={`flex-1 rounded-2xl border border-white/12 bg-white/5 py-3.5 text-sm font-semibold text-white transition hover:bg-white/10 ${FOCUS_RING}`}
+              >
+                {patientText(POST_STROKE_UI.back, lang)}
+              </button>
+              <button
+                type="button"
+                disabled={draftSaving}
+                onClick={() => void handleSubjectiveScreenAContinue()}
+                className={`flex-1 rounded-2xl bg-cyan-400 py-3.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-300 disabled:opacity-50 ${FOCUS_RING}`}
+              >
+                {draftSaving ? patientText(POST_STROKE_UI.submitting, lang) : patientText(POST_STROKE_UI.continueLabel, lang)}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {stage === "subjective_screen_b" && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-white">
+              {patientText(SUBJECTIVE_NARRATIVE_SCREEN_TITLES.screenB, lang)}
+            </h2>
+            <PatientReportedNotice lang={lang} proseLeading={proseLeading} />
+
+            <div className="space-y-5">
+              {SUBJECTIVE_NARRATIVE_SCREEN_B_QUESTION_IDS.map((questionId) => (
+                <div key={questionId}>
+                  <h3 className="text-sm font-semibold text-white/80">
+                    {patientText(SUBJECTIVE_NARRATIVE_QUESTION_LABELS[questionId], lang)}
+                    {questionId === "additionalInformation" ? (
+                      <span className="ml-2 text-xs font-normal text-white/40">
+                        ({patientText(SUBJECTIVE_NARRATIVE_OPTIONAL_HINT, lang)})
+                      </span>
+                    ) : null}
+                  </h3>
+                  <div className="mt-2 space-y-2">
+                    <TextAreaField
+                      value={subjectiveResponses[questionId]?.text ?? ""}
+                      onChange={(text) => handleSubjectiveTextChange(questionId, text)}
+                      maxLength={1000}
+                      dir={formDir}
+                    />
+                    <VoiceFieldControls
+                      lang={lang}
+                      assessmentToken={token}
+                      questionText={patientText(SUBJECTIVE_NARRATIVE_QUESTION_LABELS[questionId], lang)}
+                      fieldValue={subjectiveResponses[questionId]?.text}
+                      consentGiven={consentGiven}
+                      onConsentNeeded={() => setConsentGiven(true)}
+                      onTranscript={(text) => handleSubjectiveTranscript(questionId, text)}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <h3 className="text-sm font-semibold text-white/80">{patientText(REVIEW_STEP_TITLE, lang)}</h3>
+              <ReviewRow
+                label={patientText(FUNCTIONAL_GOAL_STEP_TITLE, lang)}
+                value={functionalIntake.functionalGoal ?? ""}
+                onEdit={() => setStage("functional_screen_3")}
+                editLabel={patientText(REVIEW_EDIT_LABEL, lang)}
+              />
+              {[...SUBJECTIVE_NARRATIVE_SCREEN_A_QUESTION_IDS, ...SUBJECTIVE_NARRATIVE_SCREEN_B_QUESTION_IDS].map(
+                (questionId) => {
+                  const response = subjectiveResponses[questionId];
+                  const modeSuffix = response
+                    ? ` (${patientText(INPUT_MODE_LABELS[response.inputMode], lang)})`
+                    : "";
+                  return (
+                    <ReviewRow
+                      key={questionId}
+                      label={`${patientText(SUBJECTIVE_NARRATIVE_QUESTION_LABELS[questionId], lang)}${modeSuffix}`}
+                      value={response?.text ?? ""}
+                      onEdit={() =>
+                        setStage(
+                          (SUBJECTIVE_NARRATIVE_SCREEN_A_QUESTION_IDS as readonly string[]).includes(questionId)
+                            ? "subjective_screen_a"
+                            : "subjective_screen_b",
+                        )
+                      }
+                      editLabel={patientText(REVIEW_EDIT_LABEL, lang)}
+                    />
+                  );
+                },
+              )}
+            </div>
+
+            <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3.5 text-sm text-white/80">
+              <input
+                type="checkbox"
+                checked={patientConfirmed}
+                onChange={(e) => {
+                  setPatientConfirmed(e.target.checked);
+                  setSubjectiveScreenBError(null);
+                }}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/25 bg-white/[0.03] accent-cyan-400"
+              />
+              <span>{patientText(PATIENT_CONFIRMATION_STATEMENT, lang)}</span>
+            </label>
+
+            {subjectiveScreenBError ? (
+              <p className="rounded-[10px] border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100">
+                {subjectiveScreenBError}
+              </p>
+            ) : null}
+
+            {finalSubmitError ? (
+              <p className="rounded-[10px] border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-[11px] text-rose-100">
+                {finalSubmitError}
+              </p>
+            ) : null}
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setStage("subjective_screen_a")}
+                className={`flex-1 rounded-2xl border border-white/12 bg-white/5 py-3.5 text-sm font-semibold text-white transition hover:bg-white/10 ${FOCUS_RING}`}
+              >
+                {patientText(POST_STROKE_UI.back, lang)}
+              </button>
+              <button
+                type="button"
+                disabled={finalSubmitting || !patientConfirmed}
                 onClick={() => void handleFinalSubmit()}
                 className={`flex-1 rounded-2xl bg-cyan-400 py-3.5 text-sm font-bold text-slate-950 transition hover:bg-cyan-300 disabled:opacity-50 ${FOCUS_RING}`}
               >

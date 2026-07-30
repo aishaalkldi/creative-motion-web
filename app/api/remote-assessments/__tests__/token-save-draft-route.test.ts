@@ -491,4 +491,181 @@ describe("POST /api/remote-assessments/[token]/save-draft", { concurrency: 1 }, 
       );
     });
   });
+
+  describe("Stage 4 — subjective narrative partial saves", () => {
+    it("persists text-input responses alongside preserved respondent/urgentGate/functionalIntake", async () => {
+      const res = await POST(
+        makeRequest({
+          body: noUrgentBody({
+            subjectiveNarrative: {
+              responses: [
+                { questionId: "mainDifficulty", inputMode: "text", text: "Trouble walking far." },
+              ],
+            },
+          }),
+        }),
+        paramsFor("tok"),
+      );
+      assert.equal(res.status, 200);
+      const [id] = assessmentsById.keys();
+      const stored = assessmentsById.get(id!)!.structured_data as Record<string, unknown>;
+      const postStroke = stored.postStrokeIntake as Record<string, unknown>;
+      assert.deepEqual(postStroke.respondent, { type: "patient" });
+      const narrative = postStroke.subjectiveNarrative as { responses: Array<{ questionId: string; inputMode: string; text: string }> };
+      assert.equal(narrative.responses.length, 1);
+      assert.equal(narrative.responses[0].text, "Trouble walking far.");
+      assert.equal(narrative.responses[0].inputMode, "text");
+    });
+
+    it("persists voice-input responses with inputMode = 'voice' — same field, different method", async () => {
+      const res = await POST(
+        makeRequest({
+          body: noUrgentBody({
+            subjectiveNarrative: {
+              responses: [
+                { questionId: "onsetOrChange", inputMode: "voice", text: "Started two weeks ago." },
+              ],
+            },
+          }),
+        }),
+        paramsFor("tok"),
+      );
+      assert.equal(res.status, 200);
+      const [id] = assessmentsById.keys();
+      const stored = assessmentsById.get(id!)!.structured_data as Record<string, unknown>;
+      const postStroke = stored.postStrokeIntake as Record<string, unknown>;
+      const narrative = postStroke.subjectiveNarrative as { responses: Array<{ questionId: string; inputMode: string }> };
+      assert.equal(narrative.responses[0].inputMode, "voice");
+    });
+
+    it("keeps the request pending and submitted_at null during an ordinary partial save", async () => {
+      await POST(
+        makeRequest({
+          body: noUrgentBody({
+            subjectiveNarrative: {
+              responses: [{ questionId: "mainDifficulty", inputMode: "text", text: "Trouble walking far." }],
+            },
+          }),
+        }),
+        paramsFor("tok"),
+      );
+      assert.equal(requestRow!.status, "pending");
+      assert.equal(linkUpdateCalls.every((call) => !("submitted_at" in call)), true);
+      const [id] = assessmentsById.keys();
+      const stored = assessmentsById.get(id!)!.structured_data as Record<string, unknown>;
+      const postStroke = stored.postStrokeIntake as Record<string, unknown>;
+      const narrative = postStroke.subjectiveNarrative as Record<string, unknown>;
+      assert.equal(narrative.patientConfirmedAt, undefined);
+    });
+
+    it("rejects a client-supplied patientConfirmedAt on a partial save — request stays pending, nothing written", async () => {
+      const res = await POST(
+        makeRequest({
+          body: noUrgentBody({
+            subjectiveNarrative: {
+              responses: [{ questionId: "mainDifficulty", inputMode: "text", text: "Trouble walking far." }],
+              patientConfirmedAt: "2020-01-01T00:00:00.000Z",
+            },
+          }),
+        }),
+        paramsFor("tok"),
+      );
+      assert.equal(res.status, 400);
+      assert.equal(insertCalls.length, 0);
+      assert.equal(requestRow!.status, "pending");
+    });
+
+    it("reuses the same assessment across narrative screen-by-screen saves — no duplicate row", async () => {
+      const first = await POST(
+        makeRequest({
+          body: noUrgentBody({
+            subjectiveNarrative: {
+              responses: [{ questionId: "mainDifficulty", inputMode: "text", text: "Trouble walking far." }],
+            },
+          }),
+        }),
+        paramsFor("tok"),
+      );
+      const firstBody = (await first.json()) as { assessmentId: string };
+
+      const second = await POST(
+        makeRequest({
+          body: noUrgentBody({
+            subjectiveNarrative: {
+              responses: [
+                { questionId: "mainDifficulty", inputMode: "text", text: "Trouble walking far." },
+                { questionId: "onsetOrChange", inputMode: "voice", text: "Two weeks ago." },
+              ],
+            },
+          }),
+        }),
+        paramsFor("tok"),
+      );
+      const secondBody = (await second.json()) as { assessmentId: string };
+
+      assert.equal(insertCalls.length, 1, "expected no second insert across narrative screens");
+      assert.equal(secondBody.assessmentId, firstBody.assessmentId);
+
+      const stored = assessmentsById.get(firstBody.assessmentId)!.structured_data as Record<string, unknown>;
+      const postStroke = stored.postStrokeIntake as Record<string, unknown>;
+      const narrative = postStroke.subjectiveNarrative as { responses: unknown[] };
+      assert.equal(narrative.responses.length, 2);
+    });
+
+    it("treats additionalInformation as optional — an empty answer is silently dropped, not rejected", async () => {
+      const res = await POST(
+        makeRequest({
+          body: noUrgentBody({
+            subjectiveNarrative: {
+              responses: [{ questionId: "additionalInformation", inputMode: "text", text: "   " }],
+            },
+          }),
+        }),
+        paramsFor("tok"),
+      );
+      assert.equal(res.status, 200);
+      const [id] = assessmentsById.keys();
+      const stored = assessmentsById.get(id!)!.structured_data as Record<string, unknown>;
+      const postStroke = stored.postStrokeIntake as Record<string, unknown>;
+      assert.equal(postStroke.subjectiveNarrative, undefined);
+    });
+
+    it("rejects an unexpected field inside a response entry — no assessment written", async () => {
+      const res = await POST(
+        makeRequest({
+          body: noUrgentBody({
+            subjectiveNarrative: {
+              responses: [
+                { questionId: "mainDifficulty", inputMode: "text", text: "Trouble walking.", diagnosis: "stroke" },
+              ],
+            },
+          }),
+        }),
+        paramsFor("tok"),
+      );
+      assert.equal(res.status, 400);
+      assert.equal(insertCalls.length, 0);
+    });
+
+    it("never persists audio, a raw ASR transcript field, or a fall-risk/diagnosis/delivery-mode field", async () => {
+      await POST(
+        makeRequest({
+          body: noUrgentBody({
+            subjectiveNarrative: {
+              responses: [
+                { questionId: "mainDifficulty", inputMode: "voice", text: "Trouble walking daily." },
+              ],
+            },
+          }),
+        }),
+        paramsFor("tok"),
+      );
+      const [id] = assessmentsById.keys();
+      const serialized = JSON.stringify(assessmentsById.get(id!)!.structured_data);
+      assert.doesNotMatch(
+        serialized,
+        /audio|rawTranscript|diagnos|severity|\bsafe\b|unsafe|cleared|remote_self|remote_supervised|in_clinic|risk_score/i,
+      );
+    });
+  });
 });

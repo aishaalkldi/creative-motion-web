@@ -5,6 +5,9 @@ export const VOICE_SUBMIT_BLOCK_MESSAGE =
 
 export const VOICE_UI_LABELS = {
   listen: { en: "Listen", ar: "استمع" },
+  listenToQuestion: { en: "Listen to question", ar: "استمع إلى السؤال" },
+  startVoiceInput: { en: "Start voice input", ar: "ابدأ الإدخال الصوتي" },
+  stopVoiceInput: { en: "Stop voice input", ar: "أوقف الإدخال الصوتي" },
   recordAnswer: { en: "Record answer", ar: "سجّل الإجابة" },
   listening: { en: "Recording…", ar: "جارٍ التسجيل…" },
   processing: { en: "Converting speech to text…", ar: "جارٍ تحويل الكلام إلى نص…" },

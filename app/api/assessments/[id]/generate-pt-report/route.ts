@@ -17,10 +17,20 @@ import {
   buildPtMedicalReportDraftRecord,
   clearPtMedicalReportGate2Approval,
   generatePtMedicalReportSections,
+  POST_STROKE_INTAKE_SUBJECTIVE_SYSTEM_PROMPT,
   readPtMedicalReportDraft,
 } from "@/app/lib/ai/generate-pt-medical-report";
 import { readApprovedPatientReportFacts } from "@/app/lib/reports/approved-patient-facts";
 import { requireClinicianSession } from "@/app/lib/api/require-clinician-session";
+
+/**
+ * Assessment types this generator supports. remote_questionnaire behavior
+ * (prompt, facts shape, everything downstream) is completely unchanged —
+ * post_stroke_intake only adds a parallel facts path (see
+ * approved-patient-facts.ts) and an extended prompt branch that additionally
+ * permits translating a non-English approved fact into clinical English.
+ */
+const SUPPORTED_ASSESSMENT_TYPES = new Set(["remote_questionnaire", "post_stroke_intake"]);
 
 /**
  * POST /api/assessments/[id]/generate-pt-report
@@ -106,7 +116,7 @@ export async function POST(
     return aiErrorJson(AI_ERROR_CODES.AI_CONTEXT_INVALID);
   }
 
-  if (assessment.type !== "remote_questionnaire") {
+  if (!SUPPORTED_ASSESSMENT_TYPES.has(assessment.type)) {
     return aiErrorJson(AI_ERROR_CODES.AI_INVALID_INPUT);
   }
 
@@ -144,7 +154,12 @@ export async function POST(
     );
   }
 
-  const generation = await generatePtMedicalReportSections(keyConfig.apiKey, approvedFacts);
+  const generation = await generatePtMedicalReportSections(
+    keyConfig.apiKey,
+    approvedFacts,
+    undefined,
+    assessment.type === "post_stroke_intake" ? POST_STROKE_INTAKE_SUBJECTIVE_SYSTEM_PROMPT : undefined,
+  );
   if (!generation.ok) {
     if (generation.code === "invalid_output") {
       console.error(

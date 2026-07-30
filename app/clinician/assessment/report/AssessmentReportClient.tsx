@@ -34,8 +34,13 @@ import {
   type RehabProgram,
 } from "@/app/lib/api/treatment-plans";
 import { PatientSubmittedAnswersReview } from "@/app/components/PatientSubmittedAnswersReview";
+import { PostStrokeSubmittedAnswersReview } from "@/app/components/PostStrokeSubmittedAnswersReview";
 import { PtMedicalReportDraftPanel } from "@/app/components/clinician/PtMedicalReportDraftPanel";
-import { readPtMedicalReportDraft, readPtMedicalReportApproved } from "@/app/lib/ai/generate-pt-medical-report";
+import {
+  POST_STROKE_INTAKE_DRAFT_LABEL,
+  readPtMedicalReportDraft,
+  readPtMedicalReportApproved,
+} from "@/app/lib/ai/generate-pt-medical-report";
 import {
   PtMedicalReportPrintView,
   readGate2ApprovedAt,
@@ -1032,7 +1037,9 @@ export function AssessmentReportClient() {
   const [remoteQuestionnaireDraft, setRemoteQuestionnaireDraft] = useState<PatientAssessmentDraft | null>(null);
   const [remoteSubmissionMeta, setRemoteSubmissionMeta] = useState<Record<string, unknown> | null>(null);
   const [remoteIncludedSections, setRemoteIncludedSections] = useState<PatientSectionId[]>([]);
-  const [reportKind, setReportKind] = useState<"general_msk" | "structured" | "remote_questionnaire" | null>(null);
+  const [reportKind, setReportKind] = useState<
+    "general_msk" | "structured" | "remote_questionnaire" | "post_stroke_intake" | null
+  >(null);
   const [serverBacked, setServerBacked] = useState(false);
   const [resolvedPatientId, setResolvedPatientId] = useState(patientIdParam);
   const [serverNotes, setServerNotes] = useState<string | null>(null);
@@ -1458,6 +1465,99 @@ export function AssessmentReportClient() {
             structuredData={remoteSubmissionMeta}
             patientId={patientId}
           />
+          {!cvMetricsLoading ? (
+            <CvCapturesClinicalSection
+              metrics={cvMetricsForReport}
+              exerciseNameById={cvExerciseNameById}
+            />
+          ) : null}
+          <ReportNextStepsFooter patientId={patientId} existingPlan={existingPlan} />
+          <ClinicalDisclaimerBlock />
+        </div>
+      </main>
+    );
+  }
+
+  if (reportKind === "post_stroke_intake" && remoteSubmissionMeta) {
+    const backHref = patientId ? `/clinician/patients/${patientId}` : "/clinician/patients";
+    const approvedPrintSnapshot = ptExportEligibility.approvedSnapshot;
+
+    return (
+      <main className="assessment-report-root print-report min-h-screen bg-[#0B1220] text-white">
+        {approvedPrintSnapshot && gate2ApprovedAt ? (
+          <div className="print-only">
+            <PtMedicalReportPrintView
+              approved={approvedPrintSnapshot}
+              patientName={patient?.full_name ?? "Patient"}
+              patientFileNumber={patientFileNumber}
+              patientAge={patient?.age ?? null}
+              assessmentDate={reportDate || new Date().toISOString()}
+              sourceLanguage={patientAnsweredInArabic ? "Arabic" : "English"}
+              gate2ApprovedAt={gate2ApprovedAt}
+            />
+          </div>
+        ) : null}
+
+        <ReportExportToolbar backHref={backHref} onExportClick={handleRemoteQuestionnaireExport} />
+        <ReportScreenHeader
+          patientName={patient?.full_name ?? "Patient"}
+          displayDate={reportDate}
+          assessmentTypeLabel="Post-stroke intake"
+          sourceLabel="Patient-reported"
+          languageLabel={patientAnsweredInArabic ? "Arabic" : "English"}
+          hasRiskFlags={false}
+        />
+        <div className="screen-only print-report-body mx-auto max-w-4xl px-6 py-8 space-y-6">
+          <ReportSection id="overview" title={SECTION_OVERVIEW} defaultOpen icon={DOC_ICON}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <InfoTile label="Patient reference" value={patient?.full_name ?? `#${patientId}`} />
+              <InfoTile label="Assessment type" value="Post-stroke intake" />
+              <InfoTile label="Assessment date" value={formatDate(reportDate)} />
+              <InfoTile label="Source" value="Patient-reported" />
+              {patientAnsweredInArabic && <InfoTile label="Language" value="Arabic" />}
+            </div>
+          </ReportSection>
+          <ReportSection
+            id="safety"
+            title={SECTION_SAFETY_INDICATORS}
+            defaultOpen={false}
+            icon={DOC_ICON}
+            accent="border-lime-300/25 bg-lime-400/10 text-lime-300"
+          >
+            <p className="text-sm text-white/70">{SAFETY_NONE_DOCUMENTED}</p>
+          </ReportSection>
+          <section className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+            <div>
+              <PostStrokeSubmittedAnswersReview
+                submissionMeta={remoteSubmissionMeta}
+                assessmentLanguage={patientAnsweredInArabic ? "ar" : "en"}
+                assessmentId={assessmentId || undefined}
+                onApprovedFactsChange={handleApprovedPatientFactsChange}
+              />
+            </div>
+          </section>
+          <section className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+            <PtMedicalReportDraftPanel
+              assessmentId={assessmentId || undefined}
+              approvedFacts={approvedPatientFacts}
+              initialDraft={ptMedicalReportDraft}
+              initialApproved={ptMedicalReportApproved}
+              gate2ApprovedAt={gate2ApprovedAt}
+              draftLabel={POST_STROKE_INTAKE_DRAFT_LABEL}
+              onDraftChange={setPtMedicalReportDraft}
+              onApprovedChange={setPtMedicalReportApproved}
+              onGate2ApprovedAtChange={setGate2ApprovedAt}
+              onPrintApprovedReport={handlePtMedicalReportPrint}
+            />
+          </section>
+          {serverNotes?.trim() ? (
+            <section className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+              <h2 className="text-base font-bold text-white">Therapist-entered clinical note</h2>
+              <p className="mt-3 text-sm leading-relaxed text-white/80 whitespace-pre-wrap">
+                {serverNotes.trim()}
+              </p>
+            </section>
+          ) : null}
           {!cvMetricsLoading ? (
             <CvCapturesClinicalSection
               metrics={cvMetricsForReport}

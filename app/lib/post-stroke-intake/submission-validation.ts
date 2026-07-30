@@ -17,10 +17,14 @@ import {
   isValidPostStrokeFunctionalAbility,
   isValidPostStrokeMoreAffectedSide,
   isValidPostStrokeRespondentType,
+  isValidPostStrokeSubjectiveInputMode,
+  isValidPostStrokeSubjectiveQuestionId,
   isValidPostStrokeUpperLimbUse,
   isValidPostStrokeWalkingAbility,
+  SUBJECTIVE_NARRATIVE_REQUIRED_QUESTION_IDS,
   type PostStrokeFunctionalIntake,
   type PostStrokeRespondent,
+  type PostStrokeSubjectiveResponse,
 } from "./types";
 import {
   evaluateUrgentGate,
@@ -209,6 +213,110 @@ function parseFunctionalIntake(raw: unknown, mode: "partial" | "complete"): Func
   return { ok: true, fields };
 }
 
+const SUBJECTIVE_TEXT_MIN_LENGTH = 2;
+const SUBJECTIVE_TEXT_MAX_LENGTH = 1000;
+/**
+ * "responses" only — `patientConfirmedAt` is never an accepted client field,
+ * on a draft OR a final submission. It is exclusively a server-generated
+ * output value (see validatePostStrokeIntakeCompletion), so a client that
+ * sends it fails closed here rather than being silently dropped or trusted.
+ */
+const SUBJECTIVE_NARRATIVE_ALLOWED_KEYS = new Set(["responses"]);
+const SUBJECTIVE_RESPONSE_ALLOWED_KEYS = new Set(["questionId", "inputMode", "text"]);
+
+type SubjectiveNarrativeValue = {
+  responses: PostStrokeSubjectiveResponse[];
+};
+
+type SubjectiveNarrativeParseResult =
+  | { ok: true; value: SubjectiveNarrativeValue | undefined }
+  | { ok: false; error: string };
+
+/**
+ * Parses and validates the open-ended subjective narrative sub-object.
+ * Never reads or accepts any confirmation state from this object — patient
+ * confirmation is validated separately, as an explicit request-level
+ * `patientConfirmed: true` flag (see validatePostStrokeIntakeCompletion),
+ * never as part of structured_data itself.
+ *
+ * mode "partial" (save-draft): responses may be a partial subset; any
+ * present entry is fully validated.
+ *
+ * mode "complete" (final submit): every required question id
+ * (SUBJECTIVE_NARRATIVE_REQUIRED_QUESTION_IDS — all but additionalInformation)
+ * must be present and valid.
+ */
+function parseSubjectiveNarrative(raw: unknown, mode: "partial" | "complete"): SubjectiveNarrativeParseResult {
+  if (raw === undefined) {
+    if (mode === "complete") {
+      return { ok: false, error: "Subjective narrative is required." };
+    }
+    return { ok: true, value: undefined };
+  }
+  if (!isPlainObject(raw)) {
+    return { ok: false, error: "Invalid subjective narrative data." };
+  }
+
+  for (const key of Object.keys(raw)) {
+    if (!SUBJECTIVE_NARRATIVE_ALLOWED_KEYS.has(key)) {
+      return { ok: false, error: `Unexpected subjective narrative field: ${key}.` };
+    }
+  }
+
+  if (raw.responses !== undefined && !Array.isArray(raw.responses)) {
+    return { ok: false, error: "Invalid subjective narrative responses." };
+  }
+
+  const byId = new Map<string, PostStrokeSubjectiveResponse>();
+  for (const item of (raw.responses as unknown[] | undefined) ?? []) {
+    if (!isPlainObject(item)) {
+      return { ok: false, error: "Invalid subjective response entry." };
+    }
+    for (const key of Object.keys(item)) {
+      if (!SUBJECTIVE_RESPONSE_ALLOWED_KEYS.has(key)) {
+        return { ok: false, error: `Unexpected subjective response field: ${key}.` };
+      }
+    }
+    if (!isValidPostStrokeSubjectiveQuestionId(item.questionId)) {
+      return { ok: false, error: "Invalid subjective question id." };
+    }
+    if (!isValidPostStrokeSubjectiveInputMode(item.inputMode)) {
+      return { ok: false, error: "Invalid subjective input mode." };
+    }
+    if (typeof item.text !== "string") {
+      return { ok: false, error: "Invalid subjective response text." };
+    }
+
+    const trimmed = item.text.trim();
+    const isRequired = (SUBJECTIVE_NARRATIVE_REQUIRED_QUESTION_IDS as readonly string[]).includes(item.questionId);
+
+    if (trimmed.length > SUBJECTIVE_TEXT_MAX_LENGTH) {
+      return { ok: false, error: `${item.questionId} must be at most ${SUBJECTIVE_TEXT_MAX_LENGTH} characters.` };
+    }
+
+    if (isRequired) {
+      if (trimmed.length < SUBJECTIVE_TEXT_MIN_LENGTH) {
+        return { ok: false, error: `${item.questionId} must be at least ${SUBJECTIVE_TEXT_MIN_LENGTH} characters.` };
+      }
+      byId.set(item.questionId, { questionId: item.questionId, inputMode: item.inputMode, text: trimmed });
+    } else if (trimmed.length > 0) {
+      // additionalInformation — optional; an empty/whitespace-only answer is treated as "not answered".
+      byId.set(item.questionId, { questionId: item.questionId, inputMode: item.inputMode, text: trimmed });
+    }
+  }
+
+  if (mode === "complete") {
+    for (const id of SUBJECTIVE_NARRATIVE_REQUIRED_QUESTION_IDS) {
+      if (!byId.has(id)) {
+        return { ok: false, error: `Missing required subjective response: ${id}.` };
+      }
+    }
+  }
+
+  const responses = Array.from(byId.values());
+  return { ok: true, value: responses.length > 0 ? { responses } : undefined };
+}
+
 export type PostStrokeIntakeValidationResult =
   | { ok: true; structuredData: Record<string, unknown>; stopped: boolean }
   | { ok: false; error: string };
@@ -341,6 +449,9 @@ export function validatePostStrokeIntakeDraftSave(
   const functionalIntakeResult = parseFunctionalIntake(postStrokeIntake.functionalIntake, "partial");
   if (!functionalIntakeResult.ok) return functionalIntakeResult;
 
+  const subjectiveNarrativeResult = parseSubjectiveNarrative(postStrokeIntake.subjectiveNarrative, "partial");
+  if (!subjectiveNarrativeResult.ok) return subjectiveNarrativeResult;
+
   // stopped is guaranteed false by construction — the only accepted input is
   // the single exclusive "no new urgent symptoms" value.
   const urgentGate = evaluateUrgentGate(symptomsRaw);
@@ -361,6 +472,7 @@ export function validatePostStrokeIntakeDraftSave(
               },
             }
           : {}),
+        ...(subjectiveNarrativeResult.value ? { subjectiveNarrative: subjectiveNarrativeResult.value } : {}),
       },
       ...(assessmentLanguage ? { assessmentLanguage } : {}),
     },
@@ -379,9 +491,17 @@ export type PostStrokeIntakeCompletionResult =
  * already finalized through the urgent-stop path and can never reach here),
  * plus the complete Stage 3 functionalIntake dataset. Every timestamp/flag is
  * server-recomputed; nothing client-supplied is trusted for those fields.
+ *
+ * `patientConfirmed` is a request-only signal — never part of
+ * structured_data, on input or output. It must be strictly `=== true`
+ * (`false`, missing, `"true"`, `1`, etc. are all rejected); the server never
+ * reads a client-supplied confirmation timestamp at all — it always
+ * generates `subjectiveNarrative.patientConfirmedAt` itself, and
+ * `patientConfirmed` itself is never persisted anywhere.
  */
 export function validatePostStrokeIntakeCompletion(
   rawStructuredData: unknown,
+  patientConfirmed: unknown,
 ): PostStrokeIntakeCompletionResult {
   if (!isPlainObject(rawStructuredData)) {
     return { ok: false, error: "Invalid assessment data." };
@@ -411,6 +531,13 @@ export function validatePostStrokeIntakeCompletion(
   const functionalIntakeResult = parseFunctionalIntake(postStrokeIntake.functionalIntake, "complete");
   if (!functionalIntakeResult.ok) return functionalIntakeResult;
 
+  const subjectiveNarrativeResult = parseSubjectiveNarrative(postStrokeIntake.subjectiveNarrative, "complete");
+  if (!subjectiveNarrativeResult.ok) return subjectiveNarrativeResult;
+
+  if (patientConfirmed !== true) {
+    return { ok: false, error: "Patient confirmation is required." };
+  }
+
   // stopped is guaranteed false by construction, same as validatePostStrokeIntakeDraftSave.
   const urgentGate = evaluateUrgentGate(symptomsRaw);
   const assessmentLanguage = extractAssessmentLanguage(rawStructuredData);
@@ -425,6 +552,10 @@ export function validatePostStrokeIntakeCompletion(
           ...functionalIntakeResult.fields,
           recordedAt: new Date().toISOString(),
           flags: ["clinician_review_required"],
+        },
+        subjectiveNarrative: {
+          ...subjectiveNarrativeResult.value,
+          patientConfirmedAt: new Date().toISOString(),
         },
       },
       ...(assessmentLanguage ? { assessmentLanguage } : {}),

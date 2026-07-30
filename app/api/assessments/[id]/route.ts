@@ -23,6 +23,7 @@ import {
 } from "../../../lib/rate-limit";
 import {
   buildApprovedPatientReportFactsSnapshot,
+  buildApprovedPatientReportFactsSnapshotForPostStrokeIntake,
 } from "../../../lib/reports/approved-patient-facts";
 import { readApprovedPatientReportFacts } from "../../../lib/reports/approved-patient-facts";
 import {
@@ -39,6 +40,14 @@ import {
   extractRemoteQuestionnaireDraft,
   inferIncludedSections,
 } from "../../../lib/remote-questionnaire-summary";
+
+/**
+ * Assessment types the Subjective Summary workflow (Gate 1, PT report
+ * draft/edit, Gate 2) supports. remote_questionnaire behavior is completely
+ * unchanged; post_stroke_intake only adds a parallel Gate 1 facts-building
+ * path (see the approvePatientReportFacts branch below).
+ */
+const SUBJECTIVE_SUMMARY_ASSESSMENT_TYPES = new Set(["remote_questionnaire", "post_stroke_intake"]);
 
 export type AssessmentDetailResponse = {
   id: string;
@@ -306,7 +315,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    if (row.type !== "remote_questionnaire") {
+    if (!SUBJECTIVE_SUMMARY_ASSESSMENT_TYPES.has(row.type)) {
       return NextResponse.json(
         { error: "Only remote questionnaire assessments support PT report editing." },
         { status: 400 },
@@ -393,7 +402,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    if (row.type !== "remote_questionnaire") {
+    if (!SUBJECTIVE_SUMMARY_ASSESSMENT_TYPES.has(row.type)) {
       return NextResponse.json(
         { error: "Only remote questionnaire assessments support PT report approval." },
         { status: 400 },
@@ -465,7 +474,7 @@ export async function PATCH(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    if (row.type !== "remote_questionnaire") {
+    if (!SUBJECTIVE_SUMMARY_ASSESSMENT_TYPES.has(row.type)) {
       return NextResponse.json(
         { error: "Only remote questionnaire assessments support patient fact approval." },
         { status: 400 },
@@ -482,21 +491,27 @@ export async function PATCH(
         ? (row.structured_data as Record<string, unknown>)
         : {};
 
-    const draft = extractRemoteQuestionnaireDraft(existing, row.type);
-    if (!draft) {
-      return NextResponse.json({ error: "Invalid assessment payload." }, { status: 400 });
-    }
-
-    const includedSections = inferIncludedSections(draft);
-    const assessmentLanguage = getAssessmentLanguage(existing);
     const approvedAt = new Date().toISOString();
-    const approvedPatientReportFacts = buildApprovedPatientReportFactsSnapshot(
-      existing,
-      draft,
-      includedSections,
-      assessmentLanguage,
-      approvedAt,
-    );
+    let approvedPatientReportFacts;
+
+    if (row.type === "post_stroke_intake") {
+      approvedPatientReportFacts = buildApprovedPatientReportFactsSnapshotForPostStrokeIntake(existing, approvedAt);
+    } else {
+      const draft = extractRemoteQuestionnaireDraft(existing, row.type);
+      if (!draft) {
+        return NextResponse.json({ error: "Invalid assessment payload." }, { status: 400 });
+      }
+
+      const includedSections = inferIncludedSections(draft);
+      const assessmentLanguage = getAssessmentLanguage(existing);
+      approvedPatientReportFacts = buildApprovedPatientReportFactsSnapshot(
+        existing,
+        draft,
+        includedSections,
+        assessmentLanguage,
+        approvedAt,
+      );
+    }
 
     const updatedData = invalidatePtMedicalReportForGate1Reapproval({
       ...existing,

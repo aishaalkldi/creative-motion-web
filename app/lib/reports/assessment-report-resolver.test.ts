@@ -6,6 +6,18 @@ import { describe, it } from "node:test";
 import type { AssessmentDetailResponse } from "@/app/api/assessments/[id]/route";
 import { resolveAssessmentReportFromDetail } from "./assessment-report-resolver";
 
+const POST_STROKE_STRUCTURED_DATA = {
+  assessmentLanguage: "en",
+  postStrokeIntake: {
+    respondent: { type: "patient" },
+    functionalIntake: { functionalGoal: "Return to walking independently" },
+    subjectiveNarrative: {
+      responses: [{ questionId: "mainDifficulty", inputMode: "text", text: "Weakness on the left side." }],
+      patientConfirmedAt: "2026-07-30T08:00:00.000Z",
+    },
+  },
+};
+
 function baseDetail(overrides: Partial<AssessmentDetailResponse["patient"]> = {}): AssessmentDetailResponse {
   return {
     id: "assessment-1",
@@ -52,5 +64,42 @@ describe("resolveAssessmentReportFromDetail — patient reference", () => {
     const resolved = resolveAssessmentReportFromDetail(baseDetail());
     assert.notEqual(resolved.patientFileNumber, "patient-1");
     assert.notEqual(resolved.patientFileNumber, "assessment-1");
+  });
+});
+
+describe("resolveAssessmentReportFromDetail — post_stroke_intake", () => {
+  it("recognizes submitted post_stroke_intake and does not set unsupported-format loadError", () => {
+    const resolved = resolveAssessmentReportFromDetail({
+      ...baseDetail(),
+      type: "post_stroke_intake",
+      structured_data: POST_STROKE_STRUCTURED_DATA,
+    });
+    assert.equal(resolved.kind, "post_stroke_intake");
+    assert.equal(resolved.loadError, "");
+    assert.ok(resolved.remoteSubmissionMeta);
+    assert.equal(resolved.remoteQuestionnaireDraft, null);
+  });
+
+  it("still rejects unrelated assessment payloads with the unsupported-format message", () => {
+    const resolved = resolveAssessmentReportFromDetail({
+      ...baseDetail(),
+      type: "post_stroke_intake",
+      structured_data: { unrelated: true },
+    });
+    assert.equal(resolved.kind, null);
+    assert.equal(resolved.loadError, "Assessment data format is not supported for this report.");
+  });
+
+  it("preserves remote_questionnaire resolution unchanged", () => {
+    const resolved = resolveAssessmentReportFromDetail({
+      ...baseDetail(),
+      type: "remote_questionnaire",
+      structured_data: {
+        pain: { chiefComplaint: "Shoulder pain" },
+      },
+    });
+    assert.equal(resolved.kind, "remote_questionnaire");
+    assert.equal(resolved.loadError, "");
+    assert.ok(resolved.remoteQuestionnaireDraft);
   });
 });

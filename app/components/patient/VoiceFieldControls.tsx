@@ -37,7 +37,7 @@ export function VoiceFieldControls({
           <button
             type="button"
             onClick={() => speak(questionText, lang)}
-            aria-label="Listen to question"
+            aria-label={voiceLabel("listenToQuestion", lang)}
             title={voiceLabel("listen", lang)}
             className="inline-flex min-h-9 items-center gap-1.5 rounded-[7px] border border-white/20 bg-white/[0.04] px-3 py-2 text-xs font-medium text-white/75 transition hover:border-white/35 hover:text-white"
             style={{ borderWidth: "0.5px" }}

@@ -88,8 +88,9 @@ async function completePostStrokeIntake(
   token: string,
   requestRow: RequestRow,
   rawStructuredData: unknown,
+  patientConfirmed: unknown,
 ) {
-  const completion = validatePostStrokeIntakeCompletion(rawStructuredData);
+  const completion = validatePostStrokeIntakeCompletion(rawStructuredData, patientConfirmed);
   if (!completion.ok) {
     return NextResponse.json({ error: completion.error }, { status: 400 });
   }
@@ -185,7 +186,7 @@ export async function POST(
     return serviceUnavailableResponse();
   }
 
-  let body: { structuredData?: unknown; action?: string };
+  let body: { structuredData?: unknown; action?: string; patientConfirmed?: unknown };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -232,7 +233,7 @@ export async function POST(
         { status: 400 },
       );
     }
-    return completePostStrokeIntake(admin, trimmed, requestRow, validated.data);
+    return completePostStrokeIntake(admin, trimmed, requestRow, validated.data, body.patientConfirmed);
   }
 
   const resolvedType = resolveAssessmentTypeForInsert(requestRow.assessment_type);

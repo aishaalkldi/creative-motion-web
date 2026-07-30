@@ -389,18 +389,39 @@ describe("POST /api/remote-assessments/[token]/submit — complete_post_stroke_i
     functionalGoal: "Walk to the kitchen safely",
   };
 
-  function completeBody(overrides: Record<string, unknown> = {}) {
+  const COMPLETE_SUBJECTIVE_NARRATIVE = {
+    responses: [
+      { questionId: "mainDifficulty", inputMode: "text", text: "Trouble gripping objects." },
+      { questionId: "onsetOrChange", inputMode: "text", text: "Started three weeks ago." },
+      { questionId: "dailyImpact", inputMode: "text", text: "Makes cooking harder." },
+      { questionId: "mostDifficultActivities", inputMode: "voice", text: "Buttoning shirts." },
+    ],
+  };
+
+  /**
+   * `patientConfirmed` defaults to `true` (a valid, complete final submission)
+   * and is only ever a request-level sibling of `structuredData` — never
+   * nested inside it. `topLevelOverrides` lets tests override it directly
+   * (e.g. `{ patientConfirmed: false }` or omit it entirely).
+   */
+  function completeBody(
+    overrides: Record<string, unknown> = {},
+    topLevelOverrides: Record<string, unknown> = {},
+  ) {
     return {
       action: "complete_post_stroke_intake",
+      patientConfirmed: true,
       structuredData: {
         postStrokeIntake: {
           respondent: { type: "patient" },
           urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
           functionalIntake: COMPLETE_FUNCTIONAL_INTAKE,
+          subjectiveNarrative: COMPLETE_SUBJECTIVE_NARRATIVE,
           ...overrides,
         },
         assessmentLanguage: "en",
       },
+      ...topLevelOverrides,
     };
   }
 
@@ -615,5 +636,128 @@ describe("POST /api/remote-assessments/[token]/submit — complete_post_stroke_i
       serialized,
       /diagnos|severity|\bsafe\b|unsafe|cleared|remote_self|remote_supervised|in_clinic|risk_score/i,
     );
+  });
+
+  describe("Stage 4 — subjective narrative + patient confirmation gate", () => {
+    it("persists the complete subjective narrative alongside functionalIntake in the same assessment", async () => {
+      const res = await POST(makeRequest({ body: completeBody() }), paramsFor("tok"));
+      assert.equal(res.status, 200);
+      const stored = assessmentsById.get("assessment-1")!.structured_data as Record<string, unknown>;
+      const postStroke = stored.postStrokeIntake as Record<string, unknown>;
+      const narrative = postStroke.subjectiveNarrative as { responses: unknown[] };
+      assert.equal(narrative.responses.length, 4);
+      assert.ok(postStroke.functionalIntake);
+    });
+
+    it("generates subjectiveNarrative.patientConfirmedAt server-side", async () => {
+      await POST(makeRequest({ body: completeBody() }), paramsFor("tok"));
+      const stored = assessmentsById.get("assessment-1")!.structured_data as Record<string, unknown>;
+      const postStroke = stored.postStrokeIntake as Record<string, unknown>;
+      const narrative = postStroke.subjectiveNarrative as { patientConfirmedAt: string };
+      assert.ok(!Number.isNaN(Date.parse(narrative.patientConfirmedAt)));
+    });
+
+    it("never persists patientConfirmed (the request-only flag) anywhere in structured_data", async () => {
+      await POST(makeRequest({ body: completeBody() }), paramsFor("tok"));
+      const serialized = JSON.stringify(assessmentsById.get("assessment-1")!.structured_data);
+      assert.doesNotMatch(serialized, /"patientConfirmed"\s*:/);
+    });
+
+    it("rejects final submission when patientConfirmed is missing — no assessment update, request stays pending", async () => {
+      const body = completeBody() as Record<string, unknown>;
+      delete body.patientConfirmed;
+      const res = await POST(makeRequest({ body }), paramsFor("tok"));
+      assert.equal(res.status, 400);
+      assert.equal(updateCalls.length, 0);
+      assert.equal(requestRow!.status, "pending");
+    });
+
+    it("rejects final submission when patientConfirmed is false", async () => {
+      const res = await POST(
+        makeRequest({ body: completeBody({}, { patientConfirmed: false }) }),
+        paramsFor("tok"),
+      );
+      assert.equal(res.status, 400);
+      assert.equal(updateCalls.length, 0);
+      assert.equal(requestRow!.status, "pending");
+    });
+
+    it("rejects final submission when patientConfirmed is a non-boolean value", async () => {
+      const stringRes = await POST(
+        makeRequest({ body: completeBody({}, { patientConfirmed: "true" }) }),
+        paramsFor("tok"),
+      );
+      assert.equal(stringRes.status, 400);
+      assert.equal(updateCalls.length, 0);
+    });
+
+    it("rejects a client-supplied patientConfirmedAt inside subjectiveNarrative as an unexpected field", async () => {
+      const res = await POST(
+        makeRequest({
+          body: completeBody({
+            subjectiveNarrative: { ...COMPLETE_SUBJECTIVE_NARRATIVE, patientConfirmedAt: "1999-01-01T00:00:00.000Z" },
+          }),
+        }),
+        paramsFor("tok"),
+      );
+      assert.equal(res.status, 400);
+      assert.equal(updateCalls.length, 0);
+    });
+
+    it("rejects final submission when a required open-ended answer is missing", async () => {
+      const incompleteResponses = COMPLETE_SUBJECTIVE_NARRATIVE.responses.filter(
+        (r) => r.questionId !== "onsetOrChange",
+      );
+      const res = await POST(
+        makeRequest({
+          body: completeBody({
+            subjectiveNarrative: { ...COMPLETE_SUBJECTIVE_NARRATIVE, responses: incompleteResponses },
+          }),
+        }),
+        paramsFor("tok"),
+      );
+      assert.equal(res.status, 400);
+      assert.equal(updateCalls.length, 0);
+    });
+
+    it("accepts final submission without additionalInformation — it remains optional", async () => {
+      const res = await POST(makeRequest({ body: completeBody() }), paramsFor("tok"));
+      assert.equal(res.status, 200);
+    });
+
+    it("rejects an unexpected field inside a subjective response entry on final submission", async () => {
+      const res = await POST(
+        makeRequest({
+          body: completeBody({
+            subjectiveNarrative: {
+              ...COMPLETE_SUBJECTIVE_NARRATIVE,
+              responses: [
+                ...COMPLETE_SUBJECTIVE_NARRATIVE.responses,
+              ].map((r) => (r.questionId === "mainDifficulty" ? { ...r, diagnosis: "stroke" } : r)),
+            },
+          }),
+        }),
+        paramsFor("tok"),
+      );
+      assert.equal(res.status, 400);
+      assert.equal(updateCalls.length, 0);
+    });
+
+    it("never persists audio, a raw ASR transcript field, or an AI draft/clinician-workflow field within subjectiveNarrative", async () => {
+      await POST(makeRequest({ body: completeBody() }), paramsFor("tok"));
+      const stored = assessmentsById.get("assessment-1")!.structured_data as Record<string, unknown>;
+      const postStroke = stored.postStrokeIntake as Record<string, unknown>;
+      const serialized = JSON.stringify(postStroke.subjectiveNarrative);
+      assert.doesNotMatch(serialized, /audio|rawTranscript|aiDraft|clinicianEdit|clinicianApproval/i);
+    });
+
+    it("makes no OpenAI or external AI call — completion is pure validate/persist/mark-submitted", async () => {
+      // The fake client never exposes any OpenAI-shaped surface; a successful
+      // 200 here with only DB calls recorded is itself proof no AI call was made.
+      const res = await POST(makeRequest({ body: completeBody() }), paramsFor("tok"));
+      assert.equal(res.status, 200);
+      assert.equal(updateCalls.length, 1);
+      assert.equal(insertCalls.length, 0);
+    });
   });
 });

@@ -37,7 +37,9 @@ export type ApprovedPatientFactKey =
   | "standingDuration"
   | "walkingDistance"
   | "stairsAbility"
-  | "otherNotes";
+  | "otherNotes"
+  /** post_stroke_intake only — when this difficulty began or last changed. No equivalent general-MSK field exists to reuse. */
+  | "onsetOrChange";
 
 export type ApprovedPatientReportFacts = {
   version: typeof APPROVED_PATIENT_REPORT_FACTS_VERSION;
@@ -52,6 +54,14 @@ export type ApprovedPatientReportFacts = {
     language: string;
     confidence: number;
   };
+  /**
+   * Present only for post_stroke_intake facts. Unlike general-MSK facts
+   * (which are always English by construction — reviewed translation is
+   * required before inclusion), post-stroke facts are approved in the
+   * patient's original language; the generator translates them into
+   * clinical English as part of organizing the summary.
+   */
+  assessmentLanguage?: AssessmentLanguage | null;
 };
 
 const FORBIDDEN_FACT_PATTERNS: RegExp[] = [
@@ -180,5 +190,76 @@ export function readApprovedPatientReportFacts(
     result.chiefComplaintExtraction = extraction;
   }
 
+  if (candidate.assessmentLanguage === "en" || candidate.assessmentLanguage === "ar") {
+    result.assessmentLanguage = candidate.assessmentLanguage;
+  }
+
   return result;
+}
+
+/**
+ * Gate 1 approved-facts mapping for post_stroke_intake — a parallel path to
+ * buildApprovedPatientReportFactsSnapshot (general MSK), reusing the exact
+ * same ApprovedPatientReportFacts shape so the rest of the pipeline
+ * (generation, Gate 2, print gating) needs no changes for this assessment
+ * type. Reuses existing general-purpose fact keys wherever the question is
+ * semantically equivalent (chiefComplaint, dailyImpact, activitiesAffected,
+ * goals, otherNotes) and adds exactly one new key (onsetOrChange) for the
+ * one open-ended question with no existing equivalent.
+ *
+ * Only ever reads confirmed subjectiveNarrative responses and the
+ * functionalIntake.functionalGoal field — never any unconfirmed or
+ * client-only temporary text, and never anything from Stage 2 (respondent/
+ * urgentGate) since those aren't part of the Subjective Summary.
+ */
+export function buildApprovedPatientReportFactsSnapshotForPostStrokeIntake(
+  structuredData: Record<string, unknown>,
+  approvedAt: string,
+): ApprovedPatientReportFacts {
+  const postStrokeIntake = isRecord(structuredData.postStrokeIntake) ? structuredData.postStrokeIntake : {};
+  const facts: Partial<Record<ApprovedPatientFactKey, string>> = {};
+
+  const functionalIntake = isRecord(postStrokeIntake.functionalIntake) ? postStrokeIntake.functionalIntake : {};
+  const functionalGoal = functionalIntake.functionalGoal;
+  if (typeof functionalGoal === "string" && functionalGoal.trim() && !containsForbiddenClinicalClaim(functionalGoal)) {
+    facts.goals = functionalGoal.trim();
+  }
+
+  const subjectiveNarrative = isRecord(postStrokeIntake.subjectiveNarrative) ? postStrokeIntake.subjectiveNarrative : {};
+  const responses = Array.isArray(subjectiveNarrative.responses) ? subjectiveNarrative.responses : [];
+  const questionToFactKey: Record<string, ApprovedPatientFactKey> = {
+    mainDifficulty: "chiefComplaint",
+    onsetOrChange: "onsetOrChange",
+    dailyImpact: "dailyImpact",
+    mostDifficultActivities: "activitiesAffected",
+    additionalInformation: "otherNotes",
+  };
+
+  for (const response of responses) {
+    if (!isRecord(response)) continue;
+    const questionId = response.questionId;
+    const text = response.text;
+    if (typeof questionId !== "string" || typeof text !== "string") continue;
+    const factKey = questionToFactKey[questionId];
+    if (!factKey) continue;
+    const trimmed = text.trim();
+    if (!trimmed || containsForbiddenClinicalClaim(trimmed)) continue;
+    facts[factKey] = trimmed;
+  }
+
+  const assessmentLanguage =
+    structuredData.assessmentLanguage === "en" || structuredData.assessmentLanguage === "ar"
+      ? structuredData.assessmentLanguage
+      : null;
+
+  return {
+    version: APPROVED_PATIENT_REPORT_FACTS_VERSION,
+    approvedAt,
+    facts,
+    assessmentLanguage,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

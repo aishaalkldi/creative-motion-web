@@ -18,10 +18,14 @@ import {
   parseAndValidatePtMedicalReportModelOutput,
   parseClientPtReportSections,
   parsePtReportSectionsFromJson,
+  POST_STROKE_INTAKE_DRAFT_LABEL,
+  POST_STROKE_INTAKE_SUBJECTIVE_SYSTEM_PROMPT,
+  PT_MEDICAL_REPORT_DRAFT_LABEL,
   PT_MEDICAL_REPORT_JSON_SCHEMA,
   PT_MEDICAL_REPORT_SECTION_KEYS,
   PT_MEDICAL_REPORT_SECTION_LABELS,
   PT_MEDICAL_REPORT_STATUS_LINE,
+  PT_MEDICAL_REPORT_SYSTEM_PROMPT,
   readPtMedicalReportApproved,
   readPtMedicalReportDraft,
   requestPtMedicalReportModelOutput,
@@ -613,5 +617,86 @@ describe("requestPtMedicalReportModelOutput", () => {
     } finally {
       console.error = originalError;
     }
+  });
+});
+
+describe("Stage 4 — post_stroke_intake prompt-building branch", () => {
+  it("defaults to the existing remote_questionnaire system prompt when no override is passed — remote_questionnaire behavior is unchanged", async () => {
+    let capturedSystemPrompt = "";
+    await generatePtMedicalReportSections(
+      "sk-test",
+      APPROVED_FACTS,
+      async (params) => {
+        capturedSystemPrompt = params.messages.find((m) => m.role === "system")?.content as string;
+        return {
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  chiefComplaint: "The patient reports right shoulder pain with overhead reaching.",
+                  clinicalReviewNote:
+                    "Compiled from clinician-approved patient-reported information. Therapist review required.",
+                }),
+              },
+            },
+          ],
+        };
+      },
+    );
+    assert.equal(capturedSystemPrompt, PT_MEDICAL_REPORT_SYSTEM_PROMPT);
+  });
+
+  it("uses the extended post-stroke-intake system prompt when explicitly passed", async () => {
+    let capturedSystemPrompt = "";
+    await generatePtMedicalReportSections(
+      "sk-test",
+      APPROVED_FACTS,
+      async (params) => {
+        capturedSystemPrompt = params.messages.find((m) => m.role === "system")?.content as string;
+        return {
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  chiefComplaint: "The patient reports right shoulder pain with overhead reaching.",
+                  clinicalReviewNote:
+                    "Compiled from clinician-approved patient-reported information. Therapist review required.",
+                }),
+              },
+            },
+          ],
+        };
+      },
+      POST_STROKE_INTAKE_SUBJECTIVE_SYSTEM_PROMPT,
+    );
+    assert.equal(capturedSystemPrompt, POST_STROKE_INTAKE_SUBJECTIVE_SYSTEM_PROMPT);
+    assert.notEqual(capturedSystemPrompt, PT_MEDICAL_REPORT_SYSTEM_PROMPT);
+  });
+
+  it("the post-stroke-intake prompt permits translating non-English facts but keeps every other clinical boundary", () => {
+    assert.match(POST_STROKE_INTAKE_SUBJECTIVE_SYSTEM_PROMPT, /translate/i);
+    assert.match(POST_STROKE_INTAKE_SUBJECTIVE_SYSTEM_PROMPT, /do not provide a diagnosis/i);
+    for (const phrase of [
+      "stroke severity",
+      "fall-risk score",
+      "safe or unsafe",
+      "exercise clearance",
+      "remote_self",
+      "remote_supervised",
+      "in_clinic",
+      "Objective findings",
+      "treatment plan",
+    ]) {
+      assert.match(
+        POST_STROKE_INTAKE_SUBJECTIVE_SYSTEM_PROMPT,
+        new RegExp(phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
+        `expected the prompt to explicitly forbid: ${phrase}`,
+      );
+    }
+  });
+
+  it("the required exact post-stroke-intake draft label is distinct from the remote_questionnaire label", () => {
+    assert.equal(POST_STROKE_INTAKE_DRAFT_LABEL, "AI-generated draft — requires therapist review");
+    assert.notEqual(POST_STROKE_INTAKE_DRAFT_LABEL, PT_MEDICAL_REPORT_DRAFT_LABEL);
   });
 });

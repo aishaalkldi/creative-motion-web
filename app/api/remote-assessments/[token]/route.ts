@@ -15,6 +15,8 @@ import {
   isValidPostStrokeFunctionalAbility,
   isValidPostStrokeMoreAffectedSide,
   isValidPostStrokeRespondentType,
+  isValidPostStrokeSubjectiveInputMode,
+  isValidPostStrokeSubjectiveQuestionId,
   isValidPostStrokeUpperLimbUse,
   isValidPostStrokeWalkingAbility,
 } from "@/app/lib/post-stroke-intake/types";
@@ -53,6 +55,7 @@ type ResumableDraft = {
   respondent?: unknown;
   urgentGate?: unknown;
   functionalIntake?: unknown;
+  subjectiveNarrative?: unknown;
   assessmentLanguage?: "en" | "ar";
 };
 
@@ -101,6 +104,33 @@ function sanitizeFunctionalIntake(raw: unknown): unknown {
 }
 
 /**
+ * Drops any malformed response entry rather than erroring — this is a read
+ * path, not a write boundary. Never includes patientConfirmedAt beyond what
+ * validation already wrote server-side; this function only re-derives the
+ * shape, it never trusts or recomputes it.
+ */
+function sanitizeSubjectiveNarrative(raw: unknown): unknown {
+  if (!isPlainObject(raw) || !Array.isArray(raw.responses)) return undefined;
+
+  const responses: Record<string, unknown>[] = [];
+  for (const item of raw.responses) {
+    if (!isPlainObject(item)) continue;
+    if (!isValidPostStrokeSubjectiveQuestionId(item.questionId)) continue;
+    if (!isValidPostStrokeSubjectiveInputMode(item.inputMode)) continue;
+    if (typeof item.text !== "string" || !item.text.trim()) continue;
+    responses.push({ questionId: item.questionId, inputMode: item.inputMode, text: item.text });
+  }
+
+  if (responses.length === 0) return undefined;
+
+  const out: Record<string, unknown> = { responses };
+  if (typeof raw.patientConfirmedAt === "string" && raw.patientConfirmedAt.trim()) {
+    out.patientConfirmedAt = raw.patientConfirmedAt;
+  }
+  return out;
+}
+
+/**
  * Builds the patient-facing resumable draft from a stored assessment's
  * structured_data — only the fields needed to restore the form. Returns
  * undefined if there is nothing resumable (malformed or empty data).
@@ -117,6 +147,8 @@ function buildResumableDraft(structuredData: unknown): ResumableDraft | undefine
   if (urgentGate !== undefined) draft.urgentGate = urgentGate;
   const functionalIntake = sanitizeFunctionalIntake(postStrokeIntake.functionalIntake);
   if (functionalIntake !== undefined) draft.functionalIntake = functionalIntake;
+  const subjectiveNarrative = sanitizeSubjectiveNarrative(postStrokeIntake.subjectiveNarrative);
+  if (subjectiveNarrative !== undefined) draft.subjectiveNarrative = subjectiveNarrative;
   if (structuredData.assessmentLanguage === "en" || structuredData.assessmentLanguage === "ar") {
     draft.assessmentLanguage = structuredData.assessmentLanguage;
   }

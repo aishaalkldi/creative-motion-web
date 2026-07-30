@@ -13,11 +13,16 @@ import {
   FUNCTIONAL_INTAKE_REVIEW_REQUIRED_NOTICE,
   FUNCTIONAL_INTAKE_SCREEN_TITLES,
   FUNCTIONAL_INTAKE_SUBMITTED_NOTICE,
+  INPUT_MODE_LABELS,
   MORE_AFFECTED_SIDE_LABELS,
+  PATIENT_CONFIRMATION_REQUIRED_NOTICE,
+  PATIENT_CONFIRMATION_STATEMENT,
   POST_STROKE_UI,
   RECENT_FALLS_LABELS,
   RESPONDENT_SOURCE_CLARIFICATION,
   RESPONDENT_TYPE_LABELS,
+  SUBJECTIVE_NARRATIVE_QUESTION_LABELS,
+  SUBJECTIVE_NARRATIVE_SCREEN_TITLES,
   SUBMIT_FUNCTIONAL_INTAKE_LABEL,
   UPPER_LIMB_USE_LABELS,
   URGENT_GATE_STEP_TITLE,
@@ -35,6 +40,7 @@ import {
   POST_STROKE_FALLS_OR_NEAR_FALLS_VALUES,
   POST_STROKE_FUNCTIONAL_ABILITY_VALUES,
   POST_STROKE_MORE_AFFECTED_SIDE_VALUES,
+  POST_STROKE_SUBJECTIVE_QUESTION_IDS,
   POST_STROKE_UPPER_LIMB_USE_VALUES,
   POST_STROKE_WALKING_ABILITY_VALUES,
   type PostStrokeAssistanceType,
@@ -340,5 +346,97 @@ describe("patientText / clinicianText re-export", () => {
     assert.equal(patientText(RESPONDENT_TYPE_LABELS.patient, "ar"), RESPONDENT_TYPE_LABELS.patient.ar);
     assert.equal(patientText(RESPONDENT_TYPE_LABELS.patient, "en"), RESPONDENT_TYPE_LABELS.patient.en);
     assert.equal(clinicianText(RESPONDENT_TYPE_LABELS.patient), RESPONDENT_TYPE_LABELS.patient.en);
+  });
+});
+
+describe("Stage 4 — subjective narrative bilingual content", () => {
+  it("has bilingual labels for exactly the five approved open-ended questions", () => {
+    assert.equal(POST_STROKE_SUBJECTIVE_QUESTION_IDS.length, 5);
+    for (const id of POST_STROKE_SUBJECTIVE_QUESTION_IDS) {
+      const label = SUBJECTIVE_NARRATIVE_QUESTION_LABELS[id];
+      assert.ok(hasText(label.en), `missing English label for ${id}`);
+      assert.ok(hasText(label.ar), `missing Arabic label for ${id}`);
+    }
+  });
+
+  it("matches the exact approved wording for each question", () => {
+    assert.equal(
+      SUBJECTIVE_NARRATIVE_QUESTION_LABELS.mainDifficulty.en,
+      "What is the main difficulty you are experiencing now?",
+    );
+    assert.equal(SUBJECTIVE_NARRATIVE_QUESTION_LABELS.mainDifficulty.ar, "ما الصعوبة الرئيسية التي تواجهها الآن؟");
+
+    assert.equal(
+      SUBJECTIVE_NARRATIVE_QUESTION_LABELS.onsetOrChange.en,
+      "When did this difficulty begin, or when did it last change?",
+    );
+    assert.equal(
+      SUBJECTIVE_NARRATIVE_QUESTION_LABELS.onsetOrChange.ar,
+      "متى بدأت هذه الصعوبة، أو متى حدث آخر تغير فيها؟",
+    );
+
+    assert.equal(
+      SUBJECTIVE_NARRATIVE_QUESTION_LABELS.dailyImpact.en,
+      "How does this difficulty affect your daily activities?",
+    );
+    assert.equal(SUBJECTIVE_NARRATIVE_QUESTION_LABELS.dailyImpact.ar, "كيف تؤثر هذه الصعوبة في أنشطتك اليومية؟");
+
+    assert.equal(
+      SUBJECTIVE_NARRATIVE_QUESTION_LABELS.mostDifficultActivities.en,
+      "Which activities are currently most difficult for you?",
+    );
+    assert.equal(
+      SUBJECTIVE_NARRATIVE_QUESTION_LABELS.mostDifficultActivities.ar,
+      "ما الأنشطة الأكثر صعوبة بالنسبة لك حاليًا؟",
+    );
+
+    assert.equal(
+      SUBJECTIVE_NARRATIVE_QUESTION_LABELS.additionalInformation.en,
+      "Is there anything else you would like your therapist to know?",
+    );
+    assert.equal(
+      SUBJECTIVE_NARRATIVE_QUESTION_LABELS.additionalInformation.ar,
+      "هل توجد معلومات أخرى تود أن يعرفها الأخصائي؟",
+    );
+  });
+
+  it("has bilingual titles for both narrative screens", () => {
+    for (const title of Object.values(SUBJECTIVE_NARRATIVE_SCREEN_TITLES)) {
+      assert.ok(hasText(title.en));
+      assert.ok(hasText(title.ar));
+    }
+  });
+
+  it("has bilingual input-mode labels for text and voice", () => {
+    assert.ok(hasText(INPUT_MODE_LABELS.text.en));
+    assert.ok(hasText(INPUT_MODE_LABELS.text.ar));
+    assert.ok(hasText(INPUT_MODE_LABELS.voice.en));
+    assert.ok(hasText(INPUT_MODE_LABELS.voice.ar));
+  });
+
+  it("matches the exact approved patient confirmation statement", () => {
+    assert.equal(
+      PATIENT_CONFIRMATION_STATEMENT.en,
+      "I confirm that these answers accurately reflect what I said or intended to report.",
+    );
+    assert.equal(
+      PATIENT_CONFIRMATION_STATEMENT.ar,
+      "أؤكد أن هذه الإجابات تعبّر بدقة عما قلته أو قصدت الإبلاغ عنه.",
+    );
+  });
+
+  it("has a bilingual confirmation-required notice distinct from the confirmation statement itself", () => {
+    assert.ok(hasText(PATIENT_CONFIRMATION_REQUIRED_NOTICE.en));
+    assert.ok(hasText(PATIENT_CONFIRMATION_REQUIRED_NOTICE.ar));
+    assert.notEqual(PATIENT_CONFIRMATION_REQUIRED_NOTICE.en, PATIENT_CONFIRMATION_STATEMENT.en);
+  });
+
+  it("reuses the existing Stage 3 submit label and success notice verbatim — never duplicates them", () => {
+    assert.equal(SUBMIT_FUNCTIONAL_INTAKE_LABEL.en, "Submit intake for clinician review");
+    assert.equal(SUBMIT_FUNCTIONAL_INTAKE_LABEL.ar, "إرسال الاستبيان لمراجعة الأخصائي");
+    assert.equal(
+      FUNCTIONAL_INTAKE_SUBMITTED_NOTICE.en,
+      "Your intake was submitted for clinician review. No clinical decision or exercise clearance has been made.",
+    );
   });
 });

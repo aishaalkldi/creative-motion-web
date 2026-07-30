@@ -182,4 +182,67 @@ describe("GET /api/remote-assessments/[token] — resumable draft", { concurrenc
     assert.equal(body.draft?.functionalIntake?.moreAffectedSide, "left");
     assert.equal(body.draft?.functionalIntake?.assistiveDevice, undefined);
   });
+
+  describe("Stage 4 — subjective narrative resume payload", () => {
+    it("returns saved text and inputMode for each answered open-ended question", async () => {
+      assessmentStructuredData = {
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"], stopped: false },
+          functionalIntake: { moreAffectedSide: "left" },
+          subjectiveNarrative: {
+            responses: [
+              { questionId: "mainDifficulty", inputMode: "text", text: "Trouble walking far." },
+              { questionId: "onsetOrChange", inputMode: "voice", text: "Two weeks ago." },
+            ],
+          },
+        },
+        assessmentLanguage: "en",
+      };
+      const res = await GET(makeRequest(), paramsFor("tok"));
+      const body = (await res.json()) as {
+        draft?: { subjectiveNarrative?: { responses: Array<{ questionId: string; inputMode: string; text: string }> } };
+      };
+      const responses = body.draft?.subjectiveNarrative?.responses ?? [];
+      assert.equal(responses.length, 2);
+      assert.equal(responses[0].inputMode, "text");
+      assert.equal(responses[1].inputMode, "voice");
+    });
+
+    it("omits subjectiveNarrative from the draft when no responses have been saved yet", async () => {
+      assessmentStructuredData = {
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"], stopped: false },
+          functionalIntake: { moreAffectedSide: "left" },
+        },
+        assessmentLanguage: "en",
+      };
+      const res = await GET(makeRequest(), paramsFor("tok"));
+      const body = (await res.json()) as { draft?: { subjectiveNarrative?: unknown } };
+      assert.equal(body.draft?.subjectiveNarrative, undefined);
+    });
+
+    it("drops a malformed response entry rather than failing the whole resume response", async () => {
+      assessmentStructuredData = {
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"], stopped: false },
+          functionalIntake: { moreAffectedSide: "left" },
+          subjectiveNarrative: {
+            responses: [
+              { questionId: "mainDifficulty", inputMode: "text", text: "Trouble walking far." },
+              { questionId: "not_a_real_question", inputMode: "text", text: "should be dropped" },
+            ],
+          },
+        },
+        assessmentLanguage: "en",
+      };
+      const res = await GET(makeRequest(), paramsFor("tok"));
+      const body = (await res.json()) as {
+        draft?: { subjectiveNarrative?: { responses: Array<{ questionId: string }> } };
+      };
+      assert.equal(body.draft?.subjectiveNarrative?.responses.length, 1);
+    });
+  });
 });
