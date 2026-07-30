@@ -12,7 +12,13 @@ import {
 } from "@/app/lib/remote-assessment-validation";
 import { serviceUnavailableResponse } from "@/app/lib/api/safe-errors";
 import { backfillTranscriptionSessionAssessmentId } from "@/app/lib/speech-ai/transcription-session-persistence";
-import { validatePostStrokeIntakeSubmission } from "@/app/lib/post-stroke-intake/submission-validation";
+import {
+  validatePostStrokeIntakeCompletion,
+  validatePostStrokeIntakeSubmission,
+} from "@/app/lib/post-stroke-intake/submission-validation";
+
+/** Explicit final-submission action for Stage 3 — never inferred from field completeness alone. */
+const COMPLETE_POST_STROKE_INTAKE_ACTION = "complete_post_stroke_intake";
 
 let serviceRoleClientOverride: SupabaseClient | null = null;
 
@@ -64,6 +70,93 @@ export function resolveAssessmentStatusForInsert(resolvedType: string, stopped: 
   return resolvedType === "post_stroke_intake" && stopped ? "draft" : "completed";
 }
 
+type CompletionAssessmentRow = { id: string };
+
+/**
+ * Final Stage 3 submission — reached only via the explicit
+ * `complete_post_stroke_intake` action, never inferred from field
+ * completeness. Updates the same linked draft assessment when one exists
+ * (the expected case: /save-draft already created and linked it before any
+ * Stage 3 screen was reachable); creates and links exactly one otherwise, as
+ * a defensive fallback. assessments.status stays "draft" — submission here
+ * means "awaiting clinician review", never a clinical decision or exercise
+ * clearance. The request is only marked "submitted" after the assessment
+ * write succeeds, so a failed write never falsely consumes the token.
+ */
+async function completePostStrokeIntake(
+  admin: SupabaseClient,
+  token: string,
+  requestRow: RequestRow,
+  rawStructuredData: unknown,
+) {
+  const completion = validatePostStrokeIntakeCompletion(rawStructuredData);
+  if (!completion.ok) {
+    return NextResponse.json({ error: completion.error }, { status: 400 });
+  }
+
+  let assessmentId = requestRow.assessment_id;
+
+  if (assessmentId) {
+    const { error: updateErr } = await admin
+      .from("assessments")
+      .update({
+        structured_data: completion.structuredData,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", assessmentId)
+      .eq("patient_id", requestRow.patient_id)
+      .eq("provider_id", requestRow.provider_id)
+      .select("id")
+      .single();
+
+    if (updateErr) {
+      console.error("[POST /api/remote-assessments/[token]/submit] completion update failed");
+      return NextResponse.json({ error: "Failed to submit assessment." }, { status: 500 });
+    }
+  } else {
+    const { data: inserted, error: insertErr } = await admin
+      .from("assessments")
+      .insert({
+        patient_id: requestRow.patient_id,
+        provider_id: requestRow.provider_id,
+        type: "post_stroke_intake",
+        structured_data: completion.structuredData,
+        status: "draft",
+        mode: "remote",
+        selected_tests: [],
+      })
+      .select("id")
+      .single<CompletionAssessmentRow>();
+
+    if (insertErr || !inserted) {
+      console.error("[POST /api/remote-assessments/[token]/submit] completion insert failed");
+      return NextResponse.json({ error: "Failed to submit assessment." }, { status: 500 });
+    }
+    assessmentId = inserted.id;
+  }
+
+  // Mark submitted only now that the assessment write has succeeded.
+  const submittedAt = new Date().toISOString();
+  const { error: requestUpdateErr } = await admin
+    .from("remote_assessment_requests")
+    .update({
+      status: "submitted",
+      submitted_at: submittedAt,
+      assessment_id: assessmentId,
+    })
+    .eq("token", token);
+
+  if (requestUpdateErr) {
+    console.error("[POST /api/remote-assessments/[token]/submit] completion request update failed");
+    return NextResponse.json({ error: "Failed to finalize submission." }, { status: 500 });
+  }
+
+  return NextResponse.json({
+    assessmentId,
+    submittedAt,
+  });
+}
+
 /**
  * POST /api/remote-assessments/[token]/submit
  * Patient submission — no auth, token only.
@@ -92,7 +185,7 @@ export async function POST(
     return serviceUnavailableResponse();
   }
 
-  let body: { structuredData?: unknown };
+  let body: { structuredData?: unknown; action?: string };
   try {
     body = (await req.json()) as typeof body;
   } catch {
@@ -130,6 +223,16 @@ export async function POST(
 
   if (requestRow.status !== "pending") {
     return NextResponse.json({ error: "Invalid or expired link" }, { status: 404 });
+  }
+
+  if (body.action === COMPLETE_POST_STROKE_INTAKE_ACTION) {
+    if (requestRow.assessment_type !== "post_stroke_intake") {
+      return NextResponse.json(
+        { error: "This action only applies to post-stroke intake requests." },
+        { status: 400 },
+      );
+    }
+    return completePostStrokeIntake(admin, trimmed, requestRow, validated.data);
   }
 
   const resolvedType = resolveAssessmentTypeForInsert(requestRow.assessment_type);

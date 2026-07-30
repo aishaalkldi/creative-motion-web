@@ -100,3 +100,105 @@ describe("stopped state remains terminal", () => {
     assert.match(source, /\{submitError \? \(/);
   });
 });
+
+describe("Stage 3 — resume hydration", () => {
+  it("fetches the token GET route directly and reads draft data, rather than the legacy general-MSK helper", () => {
+    assert.match(source, /fetch\(`\/api\/remote-assessments\/\$\{encodeURIComponent\(token\)\}`\)/);
+    assert.doesNotMatch(source, /getRemoteAssessment\(/);
+  });
+
+  it("only hydrates Stage 3 state when the resumed urgent gate is cleared (stopped === false)", () => {
+    assert.match(source, /draft\.urgentGate\.stopped !== false/);
+  });
+
+  it("computes the resume screen from the shared pure helper, not ad hoc logic", () => {
+    assert.match(source, /firstIncompleteFunctionalIntakeScreen\(resumedFunctionalIntake\)/);
+  });
+
+  it("never reads an assessmentId field off the resume draft or any request/response payload", () => {
+    assert.doesNotMatch(source, /draft\??\.assessmentId/);
+    assert.doesNotMatch(source, /\bassessmentId\s*[,:]/);
+  });
+});
+
+describe("Stage 3 — three-screen flow exists", () => {
+  it("defines all three functional-intake screens plus the post-submit confirmation as stages", () => {
+    assert.match(source, /"functional_screen_1"/);
+    assert.match(source, /"functional_screen_2"/);
+    assert.match(source, /"functional_screen_3"/);
+    assert.match(source, /"functional_submitted"/);
+  });
+
+  it("screen 1 covers mobility and assistance fields", () => {
+    const block = source.match(/\{stage === "functional_screen_1" && \(([\s\S]*?)\{stage === "functional_screen_2"/);
+    assert.ok(block, "expected to locate the functional_screen_1 render block");
+    for (const field of [
+      "moreAffectedSide",
+      "sittingAbility",
+      "standingAbility",
+      "walkingAbility",
+      "assistiveDevice",
+      "recentFalls",
+    ]) {
+      assert.match(block![1], new RegExp(field), `expected screen 1 to reference ${field}`);
+    }
+  });
+
+  it("screen 2 covers upper-limb use and communication support, with a conditional other-text input", () => {
+    const block = source.match(/\{stage === "functional_screen_2" && \(([\s\S]*?)\{stage === "functional_screen_3"/);
+    assert.ok(block, "expected to locate the functional_screen_2 render block");
+    assert.match(block![1], /upperLimbUse/);
+    assert.match(block![1], /communicationSupport/);
+    assert.match(block![1], /communicationSupportOtherText/);
+  });
+
+  it("screen 3 covers the functional goal, a compact review, and the exact final-submit button text", () => {
+    const block = source.match(/\{stage === "functional_screen_3" && \(([\s\S]*?)\{stage === "functional_submitted"/);
+    assert.ok(block, "expected to locate the functional_screen_3 render block");
+    assert.match(block![1], /functionalGoal/);
+    assert.match(block![1], /REVIEW_STEP_TITLE/);
+    assert.match(block![1], /SUBMIT_FUNCTIONAL_INTAKE_LABEL/);
+  });
+
+  it("each of screens 1 and 2 saves the draft before continuing", () => {
+    assert.match(source, /handleFunctionalScreen1Continue/);
+    assert.match(source, /handleFunctionalScreen2Continue/);
+    assert.match(source, /saveFunctionalDraft/);
+  });
+
+  it("final submission uses an explicit action and is never inferred from field completeness alone", () => {
+    assert.match(source, /action:\s*"complete_post_stroke_intake"/);
+    assert.match(source, /isFunctionalIntakeComplete\(functionalIntake\)/);
+  });
+
+  it("uses a one-shot ref guard for the final submission, matching the existing urgent-stop/draft-save pattern", () => {
+    assert.match(source, /finalSubmitSubmittedRef/);
+  });
+});
+
+describe("Stage 3 — non-verdict framing throughout", () => {
+  it("renders the patient/caregiver-reported and clinician-review-required notices", () => {
+    assert.match(source, /FUNCTIONAL_INTAKE_INCOMPLETE_NOTICE/);
+    assert.match(source, /FUNCTIONAL_INTAKE_REVIEW_REQUIRED_NOTICE/);
+  });
+
+  it("renders the exact approved post-submit notice", () => {
+    assert.match(source, /FUNCTIONAL_INTAKE_SUBMITTED_NOTICE/);
+  });
+
+  it("never hardcodes a forbidden clinical-verdict word directly in the component source", () => {
+    assert.doesNotMatch(source, /\bcleared for exercise\b|\bready for exercise\b|clinically completed/i);
+  });
+});
+
+describe("Stage 3 — conditional other-text fields", () => {
+  it("clears the paired other-text when the device/support selection moves away from 'other'", () => {
+    assert.match(source, /assistiveDeviceOtherText: undefined/);
+    assert.match(source, /communicationSupportOtherText: undefined/);
+  });
+
+  it("renders the other-text input only when the paired value is 'other'", () => {
+    assert.match(source, /functionalIntake\.assistiveDevice === "other" \? \(/);
+    assert.match(source, /functionalIntake\.communicationSupport === "other" \? \(/);
+  });
+});

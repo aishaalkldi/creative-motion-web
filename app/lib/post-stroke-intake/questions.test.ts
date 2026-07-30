@@ -5,20 +5,40 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   ASSISTANCE_TYPE_LABELS,
+  ASSISTIVE_DEVICE_LABELS,
+  COMMUNICATION_SUPPORT_LABELS,
+  FUNCTIONAL_ABILITY_LABELS,
+  FUNCTIONAL_GOAL_STEP_TITLE,
+  FUNCTIONAL_INTAKE_INCOMPLETE_NOTICE,
+  FUNCTIONAL_INTAKE_REVIEW_REQUIRED_NOTICE,
+  FUNCTIONAL_INTAKE_SCREEN_TITLES,
+  FUNCTIONAL_INTAKE_SUBMITTED_NOTICE,
+  MORE_AFFECTED_SIDE_LABELS,
   POST_STROKE_UI,
+  RECENT_FALLS_LABELS,
   RESPONDENT_SOURCE_CLARIFICATION,
   RESPONDENT_TYPE_LABELS,
+  SUBMIT_FUNCTIONAL_INTAKE_LABEL,
+  UPPER_LIMB_USE_LABELS,
   URGENT_GATE_STEP_TITLE,
   URGENT_STOP_SCREEN,
   URGENT_STOP_SCREEN_ORDER,
   URGENT_SYMPTOM_LABELS,
+  WALKING_ABILITY_LABELS,
   clinicianText,
   patientText,
 } from "./questions";
 import { URGENT_SYMPTOM_VALUES } from "./urgent-gate";
-import type {
-  PostStrokeAssistanceType,
-  PostStrokeRespondentType,
+import {
+  POST_STROKE_ASSISTIVE_DEVICE_VALUES,
+  POST_STROKE_COMMUNICATION_SUPPORT_VALUES,
+  POST_STROKE_FALLS_OR_NEAR_FALLS_VALUES,
+  POST_STROKE_FUNCTIONAL_ABILITY_VALUES,
+  POST_STROKE_MORE_AFFECTED_SIDE_VALUES,
+  POST_STROKE_UPPER_LIMB_USE_VALUES,
+  POST_STROKE_WALKING_ABILITY_VALUES,
+  type PostStrokeAssistanceType,
+  type PostStrokeRespondentType,
 } from "./types";
 
 const RESPONDENT_TYPES: PostStrokeRespondentType[] = [
@@ -203,6 +223,115 @@ describe("POST_STROKE_UI — no-urgent draft saved notice", () => {
     const text = `${POST_STROKE_UI.noUrgentDraftSavedNotice.en}`;
     assert.doesNotMatch(text, /\bcleared\b|\bapproved\b|\bsafe\b|ready for assessment/i);
     assert.match(text, /incomplete/i);
+  });
+});
+
+describe("Stage 3 — bilingual label coverage", () => {
+  it("has bilingual labels for every moreAffectedSide value", () => {
+    for (const value of POST_STROKE_MORE_AFFECTED_SIDE_VALUES) {
+      assert.ok(hasText(MORE_AFFECTED_SIDE_LABELS[value].en), `missing English label for ${value}`);
+      assert.ok(hasText(MORE_AFFECTED_SIDE_LABELS[value].ar), `missing Arabic label for ${value}`);
+    }
+  });
+
+  it("has bilingual labels for every sitting/standing functional-ability value", () => {
+    for (const value of POST_STROKE_FUNCTIONAL_ABILITY_VALUES) {
+      assert.ok(hasText(FUNCTIONAL_ABILITY_LABELS[value].en), `missing English label for ${value}`);
+      assert.ok(hasText(FUNCTIONAL_ABILITY_LABELS[value].ar), `missing Arabic label for ${value}`);
+    }
+  });
+
+  it("has bilingual labels for every walkingAbility value", () => {
+    for (const value of POST_STROKE_WALKING_ABILITY_VALUES) {
+      assert.ok(hasText(WALKING_ABILITY_LABELS[value].en), `missing English label for ${value}`);
+      assert.ok(hasText(WALKING_ABILITY_LABELS[value].ar), `missing Arabic label for ${value}`);
+    }
+  });
+
+  it("has bilingual labels for every assistiveDevice value", () => {
+    for (const value of POST_STROKE_ASSISTIVE_DEVICE_VALUES) {
+      assert.ok(hasText(ASSISTIVE_DEVICE_LABELS[value].en), `missing English label for ${value}`);
+      assert.ok(hasText(ASSISTIVE_DEVICE_LABELS[value].ar), `missing Arabic label for ${value}`);
+    }
+  });
+
+  it("has bilingual labels for every recentFalls value", () => {
+    for (const value of POST_STROKE_FALLS_OR_NEAR_FALLS_VALUES) {
+      assert.ok(hasText(RECENT_FALLS_LABELS[value].en), `missing English label for ${value}`);
+      assert.ok(hasText(RECENT_FALLS_LABELS[value].ar), `missing Arabic label for ${value}`);
+    }
+  });
+
+  it("has bilingual labels for every upperLimbUse value", () => {
+    for (const value of POST_STROKE_UPPER_LIMB_USE_VALUES) {
+      assert.ok(hasText(UPPER_LIMB_USE_LABELS[value].en), `missing English label for ${value}`);
+      assert.ok(hasText(UPPER_LIMB_USE_LABELS[value].ar), `missing Arabic label for ${value}`);
+    }
+  });
+
+  it("has bilingual labels for every communicationSupport value", () => {
+    for (const value of POST_STROKE_COMMUNICATION_SUPPORT_VALUES) {
+      assert.ok(hasText(COMMUNICATION_SUPPORT_LABELS[value].en), `missing English label for ${value}`);
+      assert.ok(hasText(COMMUNICATION_SUPPORT_LABELS[value].ar), `missing Arabic label for ${value}`);
+    }
+  });
+
+  it("has bilingual titles for all three Stage 3 screens", () => {
+    for (const title of Object.values(FUNCTIONAL_INTAKE_SCREEN_TITLES)) {
+      assert.ok(hasText(title.en));
+      assert.ok(hasText(title.ar));
+    }
+  });
+
+  it("has a bilingual functional goal step title", () => {
+    assert.ok(hasText(FUNCTIONAL_GOAL_STEP_TITLE.en));
+    assert.ok(hasText(FUNCTIONAL_GOAL_STEP_TITLE.ar));
+  });
+});
+
+describe("Stage 3 — non-verdict framing", () => {
+  it("the incomplete/review-required notices never use cleared/safe/approved/diagnosis language", () => {
+    const allText = [
+      FUNCTIONAL_INTAKE_INCOMPLETE_NOTICE.en,
+      FUNCTIONAL_INTAKE_REVIEW_REQUIRED_NOTICE.en,
+      FUNCTIONAL_INTAKE_SUBMITTED_NOTICE.en,
+    ].join(" ");
+    assert.doesNotMatch(allText, /\bcleared\b|\bsafe\b|\bapproved\b|ready for exercise|clinically completed|diagnos/i);
+  });
+
+  it("the incomplete notice states the intake is patient/caregiver reported", () => {
+    assert.match(FUNCTIONAL_INTAKE_INCOMPLETE_NOTICE.en, /patient\/caregiver reported/i);
+    assert.ok(hasText(FUNCTIONAL_INTAKE_INCOMPLETE_NOTICE.ar));
+  });
+
+  it("the review-required notice states clinician review is required and no decision is made", () => {
+    assert.match(FUNCTIONAL_INTAKE_REVIEW_REQUIRED_NOTICE.en, /review/i);
+    assert.match(FUNCTIONAL_INTAKE_REVIEW_REQUIRED_NOTICE.en, /no clinical decision/i);
+    assert.ok(hasText(FUNCTIONAL_INTAKE_REVIEW_REQUIRED_NOTICE.ar));
+  });
+});
+
+describe("SUBMIT_FUNCTIONAL_INTAKE_LABEL — exact approved wording", () => {
+  it("matches the required bilingual final-submit button text exactly", () => {
+    assert.equal(SUBMIT_FUNCTIONAL_INTAKE_LABEL.en, "Submit intake for clinician review");
+    assert.equal(SUBMIT_FUNCTIONAL_INTAKE_LABEL.ar, "إرسال الاستبيان لمراجعة الأخصائي");
+  });
+});
+
+describe("FUNCTIONAL_INTAKE_SUBMITTED_NOTICE — exact approved wording", () => {
+  it("matches the required bilingual post-submit notice exactly", () => {
+    assert.equal(
+      FUNCTIONAL_INTAKE_SUBMITTED_NOTICE.en,
+      "Your intake was submitted for clinician review. No clinical decision or exercise clearance has been made.",
+    );
+    assert.equal(
+      FUNCTIONAL_INTAKE_SUBMITTED_NOTICE.ar,
+      "تم إرسال الاستبيان لمراجعة الأخصائي. لم يتم اتخاذ قرار سريري أو إصدار تصريح للتمارين.",
+    );
+  });
+
+  it("never implies clinical approval or exercise clearance", () => {
+    assert.doesNotMatch(FUNCTIONAL_INTAKE_SUBMITTED_NOTICE.en, /\bcleared\b|\bapproved\b|\bsafe\b/i);
   });
 });
 
