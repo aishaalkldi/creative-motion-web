@@ -13,8 +13,15 @@ import {
 } from "@/app/lib/patient-assessment-questions";
 import type {
   PostStrokeAssistanceType,
+  PostStrokeAssistiveDevice,
+  PostStrokeCommunicationSupport,
+  PostStrokeFallsOrNearFalls,
+  PostStrokeFunctionalAbility,
+  PostStrokeMoreAffectedSide,
   PostStrokeRespondentType,
+  PostStrokeUpperLimbUse,
   PostStrokeUrgentSymptom,
+  PostStrokeWalkingAbility,
 } from "./types";
 
 export { clinicianText, patientText };
@@ -209,6 +216,14 @@ export const POST_STROKE_UI = {
     en: "Please select at least one option to continue.",
     ar: "يرجى اختيار خيار واحد على الأقل للمتابعة.",
   } satisfies LocalizedText,
+  completeRequiredFields: {
+    en: "Please answer all required questions to continue.",
+    ar: "يرجى الإجابة على جميع الأسئلة المطلوبة للمتابعة.",
+  } satisfies LocalizedText,
+  otherTextRequired: {
+    en: "Please provide details for “Other.”",
+    ar: "يرجى تقديم التفاصيل لخيار “أخرى”.",
+  } satisfies LocalizedText,
   // Shown only after the partial no-urgent draft is successfully persisted.
   // Must never imply cleared/approved/safe/ready-for-assessment.
   noUrgentDraftSavedNotice: {
@@ -228,3 +243,183 @@ export const POST_STROKE_UI = {
     ar: "فهمت — سأطلب المساعدة الآن",
   } satisfies LocalizedText,
 } satisfies Record<string, LocalizedText>;
+
+/**
+ * Stage 3 — minimal functional intake (Screens 1-3). Reached only after the
+ * urgent gate clears. Every notice on these screens must read as incomplete/
+ * patient-reported/pending-review — never cleared, safe, approved, or a
+ * clinical decision. See FUNCTIONAL_INTAKE_SUBMITTED_NOTICE for the exact
+ * approved post-submit wording.
+ */
+export const FUNCTIONAL_INTAKE_SCREEN_TITLES = {
+  mobility: { en: "Mobility and assistance", ar: "الحركة والمساعدة" } satisfies LocalizedText,
+  upperLimbAndCommunication: {
+    en: "Upper limb and communication",
+    ar: "الطرف العلوي والتواصل",
+  } satisfies LocalizedText,
+  functionalGoal: { en: "Functional goal and review", ar: "الهدف الوظيفي والمراجعة" } satisfies LocalizedText,
+} satisfies Record<string, LocalizedText>;
+
+export const FUNCTIONAL_INTAKE_INCOMPLETE_NOTICE: LocalizedText = {
+  en: "This intake is patient/caregiver reported and is not yet complete.",
+  ar: "هذا الاستبيان مُبلَّغ عنه من المريض/مقدم الرعاية ولم يكتمل بعد.",
+};
+
+export const FUNCTIONAL_INTAKE_REVIEW_REQUIRED_NOTICE: LocalizedText = {
+  en: "Your clinician will review these answers. No clinical decision is made here.",
+  ar: "سيقوم معالجك بمراجعة هذه الإجابات. لا يتم اتخاذ أي قرار سريري هنا.",
+};
+
+export const MORE_AFFECTED_SIDE_STEP_TITLE: LocalizedText = {
+  en: "Which side is more affected?",
+  ar: "ما هو الجانب الأكثر تأثرًا؟",
+};
+
+export const MORE_AFFECTED_SIDE_LABELS: Record<PostStrokeMoreAffectedSide, LocalizedText> = {
+  left: { en: "Left", ar: "الأيسر" },
+  right: { en: "Right", ar: "الأيمن" },
+  both: { en: "Both sides", ar: "كلا الجانبين" },
+  unsure: { en: "Not sure", ar: "غير متأكد" },
+};
+
+/** Shared by sittingAbility and standingAbility — walkingAbility has its own label set. */
+export const FUNCTIONAL_ABILITY_LABELS: Record<PostStrokeFunctionalAbility, LocalizedText> = {
+  independent: { en: "Independent", ar: "مستقل" },
+  requires_supervision: { en: "Requires supervision", ar: "يحتاج إلى إشراف" },
+  requires_physical_assistance: { en: "Requires physical assistance", ar: "يحتاج إلى مساعدة جسدية" },
+  unable: { en: "Unable", ar: "غير قادر" },
+};
+
+export const SITTING_ABILITY_STEP_TITLE: LocalizedText = {
+  en: "How would you describe sitting ability?",
+  ar: "كيف تصف القدرة على الجلوس؟",
+};
+
+export const STANDING_ABILITY_STEP_TITLE: LocalizedText = {
+  en: "How would you describe standing ability?",
+  ar: "كيف تصف القدرة على الوقوف؟",
+};
+
+export const WALKING_ABILITY_STEP_TITLE: LocalizedText = {
+  en: "How would you describe walking ability?",
+  ar: "كيف تصف القدرة على المشي؟",
+};
+
+export const WALKING_ABILITY_LABELS: Record<PostStrokeWalkingAbility, LocalizedText> = {
+  independent: { en: "Independent", ar: "مستقل" },
+  with_assistive_device: { en: "Independent with an assistive device", ar: "مستقل باستخدام أداة مساعدة" },
+  requires_supervision: { en: "Requires supervision", ar: "يحتاج إلى إشراف" },
+  requires_physical_assistance: { en: "Requires physical assistance", ar: "يحتاج إلى مساعدة جسدية" },
+  unable: { en: "Unable", ar: "غير قادر" },
+};
+
+export const ASSISTIVE_DEVICE_STEP_TITLE: LocalizedText = {
+  en: "Is an assistive device used?",
+  ar: "هل تُستخدم أداة مساعدة؟",
+};
+
+export const ASSISTIVE_DEVICE_LABELS: Record<PostStrokeAssistiveDevice, LocalizedText> = {
+  none: { en: "None", ar: "لا يوجد" },
+  cane: { en: "Cane", ar: "عصا" },
+  walker: { en: "Walker", ar: "مشّاية" },
+  wheelchair: { en: "Wheelchair", ar: "كرسي متحرك" },
+  other: { en: "Other", ar: "أخرى" },
+};
+
+export const ASSISTIVE_DEVICE_OTHER_LABEL: LocalizedText = {
+  en: "Please describe the assistive device",
+  ar: "يرجى وصف الأداة المساعدة",
+};
+
+export const RECENT_FALLS_STEP_TITLE: LocalizedText = {
+  en: "Any recent falls or near-falls?",
+  ar: "هل حدث أي سقوط أو شبه سقوط مؤخرًا؟",
+};
+
+export const RECENT_FALLS_LABELS: Record<PostStrokeFallsOrNearFalls, LocalizedText> = {
+  none: { en: "None", ar: "لا يوجد" },
+  near_fall: { en: "A near-fall (lost balance but did not fall)", ar: "شبه سقوط (فقدان توازن دون سقوط)" },
+  fall_without_injury: { en: "A fall without injury", ar: "سقوط دون إصابة" },
+  fall_with_injury_already_reported: {
+    en: "A fall with injury (already reported)",
+    ar: "سقوط مصحوب بإصابة (تم الإبلاغ عنه مسبقًا)",
+  },
+};
+
+export const UPPER_LIMB_USE_STEP_TITLE: LocalizedText = {
+  en: "How is the more affected arm/hand used in daily activities?",
+  ar: "كيف تُستخدم الذراع/اليد الأكثر تأثرًا في الأنشطة اليومية؟",
+};
+
+export const UPPER_LIMB_USE_LABELS: Record<PostStrokeUpperLimbUse, LocalizedText> = {
+  functional_use: { en: "Functional use", ar: "استخدام وظيفي" },
+  limited_use: { en: "Limited use", ar: "استخدام محدود" },
+  minimal_use: { en: "Minimal use", ar: "استخدام ضئيل" },
+  no_functional_use: { en: "No functional use", ar: "لا يوجد استخدام وظيفي" },
+  unsure: { en: "Not sure", ar: "غير متأكد" },
+};
+
+export const COMMUNICATION_SUPPORT_STEP_TITLE: LocalizedText = {
+  en: "Is any communication or comprehension support needed?",
+  ar: "هل هناك حاجة لدعم في التواصل أو الفهم؟",
+};
+
+export const COMMUNICATION_SUPPORT_LABELS: Record<PostStrokeCommunicationSupport, LocalizedText> = {
+  none: { en: "None", ar: "لا يوجد" },
+  extra_time: { en: "Extra time to respond", ar: "وقت إضافي للاستجابة" },
+  simplified_questions: { en: "Simplified questions", ar: "أسئلة مبسّطة" },
+  caregiver_support: { en: "Caregiver support", ar: "دعم من مقدم الرعاية" },
+  alternative_communication: { en: "Alternative communication method", ar: "وسيلة تواصل بديلة" },
+  other: { en: "Other", ar: "أخرى" },
+};
+
+export const COMMUNICATION_SUPPORT_OTHER_LABEL: LocalizedText = {
+  en: "Please describe the support used",
+  ar: "يرجى وصف الدعم المستخدم",
+};
+
+export const FUNCTIONAL_GOAL_STEP_TITLE: LocalizedText = {
+  en: "What is one functional goal that matters to you right now?",
+  ar: "ما هو الهدف الوظيفي الذي يهمك الآن؟",
+};
+
+export const FUNCTIONAL_GOAL_HINT: LocalizedText = {
+  en: "A short answer is enough — for example, walking to the kitchen safely, or holding a cup.",
+  ar: "تكفي إجابة قصيرة — على سبيل المثال، المشي إلى المطبخ بأمان، أو حمل كوب.",
+};
+
+export const FUNCTIONAL_GOAL_PLACEHOLDER: LocalizedText = {
+  en: "Type a short goal…",
+  ar: "اكتب هدفًا قصيرًا…",
+};
+
+export const FUNCTIONAL_GOAL_TOO_SHORT: LocalizedText = {
+  en: "Please enter at least 2 characters.",
+  ar: "يرجى إدخال حرفين على الأقل.",
+};
+
+export const REVIEW_STEP_TITLE: LocalizedText = {
+  en: "Review your answers",
+  ar: "مراجعة إجاباتك",
+};
+
+export const REVIEW_EDIT_LABEL: LocalizedText = {
+  en: "Edit",
+  ar: "تعديل",
+};
+
+/** Exact approved wording for the final Stage 3 submit action — do not paraphrase. */
+export const SUBMIT_FUNCTIONAL_INTAKE_LABEL: LocalizedText = {
+  en: "Submit intake for clinician review",
+  ar: "إرسال الاستبيان لمراجعة الأخصائي",
+};
+
+/**
+ * Exact approved wording shown after a successful final submission. Must
+ * never imply clinical approval, exercise clearance, or completion of care —
+ * see questions.test.ts for the words this copy is forbidden from using.
+ */
+export const FUNCTIONAL_INTAKE_SUBMITTED_NOTICE: LocalizedText = {
+  en: "Your intake was submitted for clinician review. No clinical decision or exercise clearance has been made.",
+  ar: "تم إرسال الاستبيان لمراجعة الأخصائي. لم يتم اتخاذ قرار سريري أو إصدار تصريح للتمارين.",
+};

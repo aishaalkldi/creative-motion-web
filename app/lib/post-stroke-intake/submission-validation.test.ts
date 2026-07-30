@@ -9,6 +9,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  validatePostStrokeIntakeCompletion,
   validatePostStrokeIntakeDraftSave,
   validatePostStrokeIntakeSubmission,
 } from "./submission-validation";
@@ -315,5 +316,332 @@ describe("validatePostStrokeIntakeDraftSave — partial no-urgent draft", () => 
     if (!result.ok) return;
     const serialized = JSON.stringify(result.structuredData);
     assert.doesNotMatch(serialized, /diagnos|severity|safe|unsafe|cleared|remote_self|remote_supervised|in_clinic/i);
+  });
+});
+
+const COMPLETE_FUNCTIONAL_INTAKE_INPUT = {
+  moreAffectedSide: "left",
+  sittingAbility: "independent",
+  standingAbility: "independent",
+  walkingAbility: "with_assistive_device",
+  assistiveDevice: "cane",
+  recentFalls: "none",
+  upperLimbUse: "limited_use",
+  communicationSupport: "extra_time",
+  functionalGoal: "  Walk to the kitchen safely  ",
+};
+
+function functionalIntakeFrom(result: { ok: true; structuredData: Record<string, unknown> }) {
+  const postStroke = result.structuredData.postStrokeIntake as Record<string, unknown>;
+  return postStroke.functionalIntake as Record<string, unknown> | undefined;
+}
+
+describe("validatePostStrokeIntakeDraftSave — Stage 3 functionalIntake (partial)", () => {
+  it("omits functionalIntake entirely from the output when absent from the input", () => {
+    const result = validatePostStrokeIntakeDraftSave(draftPayload());
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(functionalIntakeFrom(result), undefined);
+  });
+
+  it("accepts a partial subset of Stage 3 fields (screen 1 only)", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          functionalIntake: {
+            moreAffectedSide: "left",
+            sittingAbility: "independent",
+            standingAbility: "independent",
+            walkingAbility: "independent",
+            assistiveDevice: "none",
+            recentFalls: "none",
+          },
+        },
+      }),
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const fi = functionalIntakeFrom(result);
+    assert.equal(fi?.moreAffectedSide, "left");
+    assert.equal(fi?.upperLimbUse, undefined);
+    assert.ok(!Number.isNaN(Date.parse(fi?.recordedAt as string)));
+    assert.deepEqual(fi?.flags, ["clinician_review_required"]);
+  });
+
+  it("trims and accepts a valid partial functionalGoal on its own", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          functionalIntake: { functionalGoal: "  Hold a cup  " },
+        },
+      }),
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(functionalIntakeFrom(result)?.functionalGoal, "Hold a cup");
+  });
+
+  it("rejects a functionalGoal shorter than 2 characters after trimming", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          functionalIntake: { functionalGoal: "  a  " },
+        },
+      }),
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects a functionalGoal longer than 500 characters", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          functionalIntake: { functionalGoal: "a".repeat(501) },
+        },
+      }),
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects an invalid enum value for any Stage 3 field", () => {
+    for (const [field, value] of [
+      ["moreAffectedSide", "diagonal"],
+      ["sittingAbility", "sometimes"],
+      ["standingAbility", "sometimes"],
+      ["walkingAbility", "sometimes"],
+      ["assistiveDevice", "scooter"],
+      ["recentFalls", "many"],
+      ["upperLimbUse", "great"],
+      ["communicationSupport", "telepathy"],
+    ] as const) {
+      const result = validatePostStrokeIntakeDraftSave(
+        draftPayload({
+          postStrokeIntake: {
+            respondent: { type: "patient" },
+            urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+            functionalIntake: { [field]: value },
+          },
+        }),
+      );
+      assert.equal(result.ok, false, `expected ${field}="${value}" to be rejected`);
+    }
+  });
+
+  it("rejects an unexpected/unrecognized field inside functionalIntake (fails closed, never silently dropped)", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          functionalIntake: { moreAffectedSide: "left", diagnosis: "stroke" },
+        },
+      }),
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects a prohibited field disguised as a Stage 3 answer (fall-risk score, safety verdict, delivery mode)", () => {
+    for (const badField of ["fallRiskScore", "safetyClearance", "remoteSelf", "exerciseEligibility"]) {
+      const result = validatePostStrokeIntakeDraftSave(
+        draftPayload({
+          postStrokeIntake: {
+            respondent: { type: "patient" },
+            urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+            functionalIntake: { [badField]: "anything" },
+          },
+        }),
+      );
+      assert.equal(result.ok, false, `expected ${badField} to be rejected`);
+    }
+  });
+
+  it("requires assistiveDeviceOtherText when assistiveDevice is 'other'", () => {
+    const missing = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          functionalIntake: { assistiveDevice: "other" },
+        },
+      }),
+    );
+    assert.equal(missing.ok, false);
+
+    const provided = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          functionalIntake: { assistiveDevice: "other", assistiveDeviceOtherText: "Custom rollator" },
+        },
+      }),
+    );
+    assert.equal(provided.ok, true);
+    if (!provided.ok) return;
+    assert.equal(functionalIntakeFrom(provided)?.assistiveDeviceOtherText, "Custom rollator");
+  });
+
+  it("requires communicationSupportOtherText when communicationSupport is 'other'", () => {
+    const missing = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          functionalIntake: { communicationSupport: "other" },
+        },
+      }),
+    );
+    assert.equal(missing.ok, false);
+
+    const provided = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          functionalIntake: { communicationSupport: "other", communicationSupportOtherText: "Picture board" },
+        },
+      }),
+    );
+    assert.equal(provided.ok, true);
+  });
+
+  it("ignores a client-supplied recordedAt/flags inside functionalIntake — always server-recomputed", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          functionalIntake: {
+            moreAffectedSide: "left",
+            recordedAt: "1999-01-01T00:00:00.000Z",
+            flags: ["safe_for_exercise"],
+          },
+        },
+      }),
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const fi = functionalIntakeFrom(result);
+    assert.notEqual(fi?.recordedAt, "1999-01-01T00:00:00.000Z");
+    assert.deepEqual(fi?.flags, ["clinician_review_required"]);
+  });
+
+  it("preserves respondent and urgentGate unchanged alongside a Stage 3 partial save", () => {
+    const result = validatePostStrokeIntakeDraftSave(
+      draftPayload({
+        postStrokeIntake: {
+          respondent: { type: "patient_with_caregiver_assistance", assistanceType: "technology_support" },
+          urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+          functionalIntake: { moreAffectedSide: "right" },
+        },
+      }),
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const postStroke = result.structuredData.postStrokeIntake as Record<string, unknown>;
+    assert.deepEqual(postStroke.respondent, {
+      type: "patient_with_caregiver_assistance",
+      assistanceType: "technology_support",
+    });
+    const urgentGate = postStroke.urgentGate as { stopped: boolean };
+    assert.equal(urgentGate.stopped, false);
+  });
+});
+
+describe("validatePostStrokeIntakeCompletion — final Stage 3 submission", () => {
+  function completionPayload(overrides: Record<string, unknown> = {}) {
+    return {
+      postStrokeIntake: {
+        respondent: { type: "patient" },
+        urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+        functionalIntake: COMPLETE_FUNCTIONAL_INTAKE_INPUT,
+        ...overrides,
+      },
+      assessmentLanguage: "en",
+    };
+  }
+
+  it("accepts a fully answered functionalIntake", () => {
+    const result = validatePostStrokeIntakeCompletion(completionPayload());
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const fi = functionalIntakeFrom(result);
+    assert.equal(fi?.functionalGoal, "Walk to the kitchen safely");
+    assert.deepEqual(fi?.flags, ["clinician_review_required"]);
+    assert.ok(!Number.isNaN(Date.parse(fi?.recordedAt as string)));
+  });
+
+  it("rejects when any required field is missing", () => {
+    const { moreAffectedSide: _moreAffectedSide, ...incomplete } = COMPLETE_FUNCTIONAL_INTAKE_INPUT;
+    const result = validatePostStrokeIntakeCompletion(
+      completionPayload({
+        functionalIntake: incomplete,
+      }),
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects when functionalIntake is entirely absent", () => {
+    const result = validatePostStrokeIntakeCompletion({
+      postStrokeIntake: {
+        respondent: { type: "patient" },
+        urgentGate: { symptoms: ["no_new_urgent_symptoms"] },
+      },
+    });
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects when the Stage 2 urgent gate is missing", () => {
+    const result = validatePostStrokeIntakeCompletion({
+      postStrokeIntake: {
+        respondent: { type: "patient" },
+        functionalIntake: COMPLETE_FUNCTIONAL_INTAKE_INPUT,
+      },
+    });
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects when the Stage 2 urgent gate is not cleared (a real urgent symptom present)", () => {
+    const result = validatePostStrokeIntakeCompletion(
+      completionPayload({ urgentGate: { symptoms: ["fall_with_injury"] } }),
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects an unexpected field inside functionalIntake even on a complete payload", () => {
+    const result = validatePostStrokeIntakeCompletion(
+      completionPayload({
+        functionalIntake: { ...COMPLETE_FUNCTIONAL_INTAKE_INPUT, fallRiskScore: 3 },
+      }),
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("requires assistiveDeviceOtherText when assistiveDevice is 'other' on final submission", () => {
+    const result = validatePostStrokeIntakeCompletion(
+      completionPayload({
+        functionalIntake: { ...COMPLETE_FUNCTIONAL_INTAKE_INPUT, assistiveDevice: "other" },
+      }),
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("never produces a diagnosis, severity, safety-clearance, or delivery-mode field", () => {
+    const result = validatePostStrokeIntakeCompletion(completionPayload());
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const serialized = JSON.stringify(result.structuredData);
+    assert.doesNotMatch(
+      serialized,
+      /diagnos|severity|\bsafe\b|unsafe|cleared|remote_self|remote_supervised|in_clinic|risk_score/i,
+    );
   });
 });

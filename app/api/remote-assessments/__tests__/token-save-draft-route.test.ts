@@ -379,4 +379,116 @@ describe("POST /api/remote-assessments/[token]/save-draft", { concurrency: 1 }, 
       process.env.SUPABASE_SERVICE_ROLE_KEY = FAKE_SUPABASE_SERVICE_ROLE_KEY;
     }
   });
+
+  describe("Stage 3 — functionalIntake partial saves", () => {
+    it("persists a partial functionalIntake alongside the preserved respondent/urgentGate", async () => {
+      const res = await POST(
+        makeRequest({
+          body: noUrgentBody({
+            functionalIntake: {
+              moreAffectedSide: "left",
+              sittingAbility: "independent",
+              standingAbility: "independent",
+              walkingAbility: "independent",
+              assistiveDevice: "none",
+              recentFalls: "none",
+            },
+          }),
+        }),
+        paramsFor("tok"),
+      );
+      assert.equal(res.status, 200);
+      const [id] = assessmentsById.keys();
+      const stored = assessmentsById.get(id!)!.structured_data as Record<string, unknown>;
+      const postStroke = stored.postStrokeIntake as Record<string, unknown>;
+      assert.deepEqual(postStroke.respondent, { type: "patient" });
+      const functionalIntake = postStroke.functionalIntake as Record<string, unknown>;
+      assert.equal(functionalIntake.moreAffectedSide, "left");
+    });
+
+    it("reuses the same assessment across screen-by-screen partial saves — no second row", async () => {
+      const first = await POST(
+        makeRequest({
+          body: noUrgentBody({ functionalIntake: { moreAffectedSide: "left" } }),
+        }),
+        paramsFor("tok"),
+      );
+      const firstBody = (await first.json()) as { assessmentId: string };
+
+      const second = await POST(
+        makeRequest({
+          body: noUrgentBody({
+            functionalIntake: { moreAffectedSide: "left", upperLimbUse: "limited_use" },
+          }),
+        }),
+        paramsFor("tok"),
+      );
+      const secondBody = (await second.json()) as { assessmentId: string };
+
+      assert.equal(insertCalls.length, 1, "expected no second insert across screens");
+      assert.equal(secondBody.assessmentId, firstBody.assessmentId);
+
+      const stored = assessmentsById.get(firstBody.assessmentId)!.structured_data as Record<string, unknown>;
+      const postStroke = stored.postStrokeIntake as Record<string, unknown>;
+      const functionalIntake = postStroke.functionalIntake as Record<string, unknown>;
+      assert.equal(functionalIntake.upperLimbUse, "limited_use");
+    });
+
+    it("rejects an unexpected field inside functionalIntake — no assessment written", async () => {
+      const res = await POST(
+        makeRequest({
+          body: noUrgentBody({ functionalIntake: { moreAffectedSide: "left", diagnosis: "stroke" } }),
+        }),
+        paramsFor("tok"),
+      );
+      assert.equal(res.status, 400);
+      assert.equal(insertCalls.length, 0);
+    });
+
+    it("requires assistiveDeviceOtherText when assistiveDevice is 'other'", async () => {
+      const res = await POST(
+        makeRequest({
+          body: noUrgentBody({ functionalIntake: { assistiveDevice: "other" } }),
+        }),
+        paramsFor("tok"),
+      );
+      assert.equal(res.status, 400);
+    });
+
+    it("keeps the request pending and submitted_at null during Stage 3 partial saves", async () => {
+      await POST(
+        makeRequest({ body: noUrgentBody({ functionalIntake: { moreAffectedSide: "left" } }) }),
+        paramsFor("tok"),
+      );
+      assert.equal(requestRow!.status, "pending");
+      assert.equal(linkUpdateCalls.every((call) => !("submitted_at" in call)), true);
+    });
+
+    it("never persists a fall-risk score, safety verdict, or delivery-mode field", async () => {
+      await POST(
+        makeRequest({
+          body: noUrgentBody({
+            functionalIntake: {
+              moreAffectedSide: "left",
+              sittingAbility: "independent",
+              standingAbility: "independent",
+              walkingAbility: "independent",
+              assistiveDevice: "none",
+              recentFalls: "none",
+              upperLimbUse: "functional_use",
+              communicationSupport: "none",
+              functionalGoal: "Walk to the kitchen safely",
+            },
+          }),
+        }),
+        paramsFor("tok"),
+      );
+      const [id] = assessmentsById.keys();
+      const serialized = JSON.stringify(assessmentsById.get(id!)!.structured_data);
+      assert.doesNotMatch(
+        serialized,
+        /diagnos|severity|\bsafe\b|unsafe|cleared|remote_self|remote_supervised|in_clinic|risk_score/i,
+      );
+    });
+  });
 });
