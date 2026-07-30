@@ -29,6 +29,7 @@ type Props = {
   draft: PtMedicalReportDraft | null;
   approved: PtMedicalReportApproved | null;
   gate2ApprovedAt: string | null;
+  reportLanguage: "en" | "ar";
   /** Optional clinician display name already available in report context. */
   assignedByDisplayName?: string | null;
 };
@@ -52,6 +53,7 @@ export function PostStrokeObjectiveAssignmentPanel({
   draft,
   approved,
   gate2ApprovedAt,
+  reportLanguage,
   assignedByDisplayName,
 }: Props) {
   const exportEligibility = useMemo(
@@ -84,9 +86,10 @@ export function PostStrokeObjectiveAssignmentPanel({
       assignment
         ? resolveFiveTimesStsAssignedByDisplayLabel({
             clinicianDisplayName: assignedByDisplayName,
+            reportLanguage,
           })
         : null,
-    [assignment, assignedByDisplayName],
+    [assignment, assignedByDisplayName, reportLanguage],
   );
 
   async function handleAssign() {

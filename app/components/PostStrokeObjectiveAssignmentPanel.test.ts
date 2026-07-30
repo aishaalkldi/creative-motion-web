@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { PT_MEDICAL_REPORT_STATUS_LINE } from "@/app/lib/ai/generate-pt-medical-report";
 import {
   FIVE_TIMES_STS_ASSESSMENT_LABEL,
+  FIVE_TIMES_STS_ASSIGNED_BY_CLINICIAN_LABEL_AR,
   FIVE_TIMES_STS_ASSIGNED_BY_CLINICIAN_LABEL_EN,
   FIVE_TIMES_STS_DELIVERY_MODE_LABELS,
   resolveFiveTimesStsAssignedByDisplayLabel,
@@ -70,7 +71,26 @@ describe("PostStrokeObjectiveAssignmentPanel wiring", () => {
     assert.match(PANEL_SOURCE, /assignedByLabel/);
   });
 
-  it("keeps clinician assignment chrome in English regardless of patient language", () => {
+  it("localizes only the assigned-by label based on reportLanguage", () => {
+    assert.match(PANEL_SOURCE, /reportLanguage/);
+    assert.equal(
+      resolveFiveTimesStsAssignedByDisplayLabel({ reportLanguage: "en" }),
+      FIVE_TIMES_STS_ASSIGNED_BY_CLINICIAN_LABEL_EN,
+    );
+    assert.equal(
+      resolveFiveTimesStsAssignedByDisplayLabel({ reportLanguage: "ar" }),
+      FIVE_TIMES_STS_ASSIGNED_BY_CLINICIAN_LABEL_AR,
+    );
+    assert.equal(
+      resolveFiveTimesStsAssignedByDisplayLabel({
+        clinicianDisplayName: "Dr. Smith",
+        reportLanguage: "ar",
+      }),
+      "Dr. Smith",
+    );
+  });
+
+  it("keeps unrelated clinician assignment chrome in English", () => {
     assert.match(PANEL_SOURCE, />Objective Assessment</);
     assert.match(PANEL_SOURCE, />Assessment assigned successfully\.</);
     assert.match(PANEL_SOURCE, />Protocol</);
@@ -80,25 +100,19 @@ describe("PostStrokeObjectiveAssignmentPanel wiring", () => {
     assert.match(PANEL_SOURCE, />Assigned at</);
     assert.match(PANEL_SOURCE, /"Assign assessment"/);
     assert.match(PANEL_SOURCE, /Assigning…/);
-    assert.doesNotMatch(PANEL_SOURCE, /reportLanguage/);
     assert.equal(FIVE_TIMES_STS_DELIVERY_MODE_LABELS.remote_supervised, "Remote supervised");
     assert.equal(FIVE_TIMES_STS_DELIVERY_MODE_LABELS.in_clinic, "In clinic");
-    assert.equal(
-      resolveFiveTimesStsAssignedByDisplayLabel({}),
-      FIVE_TIMES_STS_ASSIGNED_BY_CLINICIAN_LABEL_EN,
-    );
-    assert.equal(
-      resolveFiveTimesStsAssignedByDisplayLabel({ clinicianDisplayName: "Dr. Smith" }),
-      "Dr. Smith",
-    );
   });
 
-  it("does not pass reportLanguage from the post-stroke report branch", () => {
+  it("passes reportLanguage from the post-stroke report branch for Arabic assessments", () => {
     const panelBlock = REPORT_SOURCE.match(
       /<PostStrokeObjectiveAssignmentPanel[\s\S]*?\/>/,
     );
     assert.ok(panelBlock);
-    assert.doesNotMatch(panelBlock![0], /reportLanguage/);
+    assert.match(
+      panelBlock![0],
+      /reportLanguage=\{patientAnsweredInArabic \? "ar" : "en"\}/,
+    );
     assert.match(REPORT_SOURCE, /patientAnsweredInArabic/);
     assert.match(REPORT_SOURCE, /assessmentLanguage=\{patientAnsweredInArabic \? "ar" : "en"\}/);
   });

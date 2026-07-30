@@ -1559,6 +1559,7 @@ export function AssessmentReportClient() {
               draft={ptMedicalReportDraft}
               approved={ptMedicalReportApproved}
               gate2ApprovedAt={gate2ApprovedAt}
+              reportLanguage={patientAnsweredInArabic ? "ar" : "en"}
             />
           </section>
           {serverNotes?.trim() ? (
