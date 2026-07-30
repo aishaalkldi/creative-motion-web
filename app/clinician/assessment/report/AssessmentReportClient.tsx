@@ -35,6 +35,7 @@ import {
 } from "@/app/lib/api/treatment-plans";
 import { PatientSubmittedAnswersReview } from "@/app/components/PatientSubmittedAnswersReview";
 import { PostStrokeSubmittedAnswersReview } from "@/app/components/PostStrokeSubmittedAnswersReview";
+import { PostStrokeObjectiveAssignmentPanel } from "@/app/components/PostStrokeObjectiveAssignmentPanel";
 import { PtMedicalReportDraftPanel } from "@/app/components/clinician/PtMedicalReportDraftPanel";
 import {
   POST_STROKE_INTAKE_DRAFT_LABEL,
@@ -1548,6 +1549,17 @@ export function AssessmentReportClient() {
               onApprovedChange={setPtMedicalReportApproved}
               onGate2ApprovedAtChange={setGate2ApprovedAt}
               onPrintApprovedReport={handlePtMedicalReportPrint}
+            />
+          </section>
+          <section className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+            <PostStrokeObjectiveAssignmentPanel
+              assessmentId={assessmentId || undefined}
+              structuredData={remoteSubmissionMeta ?? {}}
+              approvedFacts={approvedPatientFacts}
+              draft={ptMedicalReportDraft}
+              approved={ptMedicalReportApproved}
+              gate2ApprovedAt={gate2ApprovedAt}
+              reportLanguage={patientAnsweredInArabic ? "ar" : "en"}
             />
           </section>
           {serverNotes?.trim() ? (
