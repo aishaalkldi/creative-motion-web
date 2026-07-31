@@ -1,5 +1,5 @@
 -- ============================================================
--- Migration 019 — Upper-Limb Motor Screen persistence
+-- Migration 020 — Upper-Limb Motor Screen persistence
 --
 -- Assignment, session-result, and clinician-review tables for
 -- the Motor Screen vertical slice. Patient token lookup uses
