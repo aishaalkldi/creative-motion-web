@@ -74,6 +74,17 @@ function driveFrames(
   });
 }
 
+/**
+ * Drives the detector's own session-start boundary. `start()` itself needs a camera and
+ * MediaPipe, so the reset it performs is exercised directly — the same private-access
+ * convention `driveFrames` uses for `processFrame`. A test below asserts `start()` still
+ * calls it, so this cannot drift into a parallel reset path.
+ */
+function startNewDetectorSession(detector: ShoulderAbductionReachPoseDetector): void {
+  const internals = detector as unknown as { resetSessionState: () => void };
+  internals.resetSessionState();
+}
+
 describe("ShoulderAbductionReachPoseDetector", () => {
   it("constructor defaults primarySide to right", () => {
     const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} });
@@ -330,5 +341,123 @@ describe("ShoulderAbductionReachPoseDetector", () => {
     const snapshot = detector.getSnapshot();
 
     assert.deepEqual(snapshot.primaryWristNormalized, { x: 0.62, y: 0.41 });
+  });
+
+  // ── Review fix (PR #200): cached geometry must not cross a session boundary ──
+  // The cache is deliberately held across dropped frames *inside* a session, so the
+  // session start is the only place that can clear it.
+
+  it("populates both cached geometry values during a session", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    const landmarks = restingLandmarks();
+    landmarks[R_SHOULDER] = { x: 0.55, y: 0.3, visibility: 0.95 };
+    landmarks[R_ELBOW] = { x: 0.55, y: 0.5, visibility: 0.95 };
+    landmarks[R_WRIST] = { x: 0.55, y: 0.8, visibility: 0.9 };
+
+    driveFrames(detector, [landmarks]);
+    const snapshot = detector.getSnapshot();
+
+    assert.deepEqual(snapshot.primaryWristNormalized, { x: 0.55, y: 0.8 });
+    assert.deepEqual(snapshot.primaryShoulderNormalized, { x: 0.55, y: 0.3 });
+    assert.deepEqual(snapshot.primaryElbowNormalized, { x: 0.55, y: 0.5 });
+    assert.ok(snapshot.estimatedArmLengthNormalized !== null);
+  });
+
+  it("clears the cached wrist and arm geometry when a new session starts", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    const landmarks = restingLandmarks();
+    landmarks[R_SHOULDER] = { x: 0.55, y: 0.3, visibility: 0.95 };
+    landmarks[R_ELBOW] = { x: 0.55, y: 0.5, visibility: 0.95 };
+    landmarks[R_WRIST] = { x: 0.55, y: 0.8, visibility: 0.9 };
+
+    // A previous session that tracked successfully populates both caches.
+    driveFrames(detector, [landmarks, landmarks]);
+    assert.ok(detector.getSnapshot().primaryWristNormalized);
+    assert.ok(detector.getSnapshot().primaryShoulderNormalized);
+
+    startNewDetectorSession(detector);
+    const fresh = detector.getSnapshot();
+
+    assert.equal(fresh.primaryWristNormalized, null);
+    assert.equal(fresh.primaryShoulderNormalized, null);
+    assert.equal(fresh.primaryElbowNormalized, null);
+    assert.equal(fresh.estimatedArmLengthNormalized, null);
+  });
+
+  it("clears the caches even when the previous session ended mid-tracking-loss", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    const landmarks = restingLandmarks();
+    landmarks[R_SHOULDER] = { x: 0.55, y: 0.3, visibility: 0.95 };
+
+    // Partially tracked session: landmarks, then a loss that deliberately keeps the cache.
+    driveFrames(detector, [landmarks, null, null]);
+    assert.deepEqual(detector.getSnapshot().primaryShoulderNormalized, { x: 0.55, y: 0.3 });
+
+    startNewDetectorSession(detector);
+
+    assert.equal(detector.getSnapshot().primaryShoulderNormalized, null);
+    assert.equal(detector.getSnapshot().primaryWristNormalized, null);
+  });
+
+  it("cannot expose the previous session's geometry before the new session's first valid frame", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    const first = restingLandmarks();
+    first[R_SHOULDER] = { x: 0.55, y: 0.3, visibility: 0.95 };
+    first[R_WRIST] = { x: 0.55, y: 0.8, visibility: 0.9 };
+
+    driveFrames(detector, [first]);
+    startNewDetectorSession(detector);
+
+    // Frames without landmarks must not resurrect the previous session's values.
+    driveFrames(detector, [null, null, null]);
+    assert.equal(detector.getSnapshot().primaryWristNormalized, null);
+    assert.equal(detector.getSnapshot().primaryShoulderNormalized, null);
+
+    // Nor may a frame whose primary joints fail the presence rule.
+    const invisible = blankLandmarks();
+    driveFrames(detector, [invisible]);
+    assert.equal(detector.getSnapshot().primaryWristNormalized, null);
+    assert.equal(detector.getSnapshot().primaryShoulderNormalized, null);
+
+    // Only the new session's own valid landmarks may populate the caches.
+    const second = restingLandmarks();
+    second[R_SHOULDER] = { x: 0.41, y: 0.22, visibility: 0.95 };
+    second[R_WRIST] = { x: 0.44, y: 0.66, visibility: 0.9 };
+    driveFrames(detector, [second]);
+
+    assert.deepEqual(detector.getSnapshot().primaryShoulderNormalized, { x: 0.41, y: 0.22 });
+    assert.deepEqual(detector.getSnapshot().primaryWristNormalized, { x: 0.44, y: 0.66 });
+  });
+
+  it("leaves same-session tracking-loss behaviour unchanged", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    const landmarks = restingLandmarks();
+    landmarks[R_SHOULDER] = { x: 0.55, y: 0.3, visibility: 0.95 };
+
+    driveFrames(detector, [landmarks]);
+    const withPose = detector.getSnapshot();
+
+    // Well beyond TRACKER_LOST_CONSECUTIVE_FRAMES: losing the tracker mid-session still
+    // holds the last known geometry. Only a new session clears it.
+    driveFrames(detector, Array.from({ length: 15 }, () => null));
+    const afterLoss = detector.getSnapshot();
+
+    assert.equal(afterLoss.trackingStatus, "lost");
+    assert.deepEqual(afterLoss.primaryWristNormalized, withPose.primaryWristNormalized);
+    assert.deepEqual(afterLoss.primaryShoulderNormalized, withPose.primaryShoulderNormalized);
+    assert.deepEqual(afterLoss.primaryElbowNormalized, withPose.primaryElbowNormalized);
+    assert.equal(afterLoss.estimatedArmLengthNormalized, withPose.estimatedArmLengthNormalized);
+  });
+
+  it("runs the session reset from the real start() lifecycle entry point", () => {
+    // The reset is exercised privately above because `start()` needs a camera. That is
+    // only valid while `start()` — the detector's single session boundary — still calls
+    // it; otherwise the tests would be guarding a parallel reset path that never runs.
+    const startSource = ShoulderAbductionReachPoseDetector.prototype.start.toString();
+    assert.match(
+      startSource,
+      /this\.resetSessionState\(\)/,
+      "start() must perform the session reset — the detector has no second lifecycle boundary",
+    );
   });
 });
