@@ -272,6 +272,28 @@ export class ShoulderAbductionReachPoseDetector {
   }
 
   /**
+   * Clears every per-session measurement value. Called only from `start()` — this is
+   * that single lifecycle boundary factored out so it can be exercised without a
+   * camera, not a second way to reset the detector.
+   */
+  private resetSessionState(): void {
+    this.detectorState = createShoulderAbductionReachDetectorState();
+    this.compensationState = createShoulderAbductionReachCompensationState();
+    this.frameIndex = 0;
+    this.framesWithPose = 0;
+    this.framesTotal = 0;
+    this.consecutiveNoLandmarkFrames = 0;
+    this.trackerWasLost = false;
+    this.lastFrameResult = null;
+    // Cached geometry is deliberately retained across a dropped frame *within* a
+    // session (see `processFrame`), so the session boundary is the only place that can
+    // clear it. Without this, the previous session's last wrist/shoulder/elbow position
+    // stays readable through `getSnapshot()` until the new session's first valid frame.
+    this.lastPrimaryWristNormalized = null;
+    this.lastPrimaryArmGeometry = EMPTY_SHOULDER_ABDUCTION_REACH_ARM_GEOMETRY;
+  }
+
+  /**
    * Process one already-detected landmark array. Split out from the capture
    * loop so frame-processing logic is exercised the same way whether
    * landmarks arrive from a live camera or (in tests) a synthetic sequence.
@@ -412,14 +434,7 @@ export class ShoulderAbductionReachPoseDetector {
     this.trackingError = null;
     this.initPhase = "import";
     this.previewActive = false;
-    this.detectorState = createShoulderAbductionReachDetectorState();
-    this.compensationState = createShoulderAbductionReachCompensationState();
-    this.frameIndex = 0;
-    this.framesWithPose = 0;
-    this.framesTotal = 0;
-    this.consecutiveNoLandmarkFrames = 0;
-    this.trackerWasLost = false;
-    this.lastFrameResult = null;
+    this.resetSessionState();
     this.emit();
 
     const isCurrent = () => this.sessionEpoch === epoch;
