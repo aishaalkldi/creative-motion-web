@@ -66,6 +66,22 @@ export function validateDifficultyConfig(
     return { valid: false, issues };
   }
 
+  // Streaks and cooldown are counted in whole attempts, so a fractional threshold can
+  // never be met exactly: `successStreak >= 2.5` first fires on the 3rd attempt, and a
+  // cooldown of 1.5 is consumed over 2. The configured number and the number a therapist
+  // actually observes would silently disagree, so these are rejected rather than rounded.
+  const wholeAttemptFields = [
+    ["successStreakToIncrease", config.successStreakToIncrease],
+    ["struggleStreakToDecrease", config.struggleStreakToDecrease],
+    ["cooldownAttempts", config.cooldownAttempts],
+  ] as const;
+
+  for (const [name, value] of wholeAttemptFields) {
+    if (!Number.isInteger(value)) {
+      issues.push(`${name} must be a whole number of attempts.`);
+    }
+  }
+
   if (config.increaseStep <= 0) {
     issues.push("increaseStep must be greater than 0.");
   }
