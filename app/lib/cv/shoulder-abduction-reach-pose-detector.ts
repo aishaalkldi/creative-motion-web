@@ -19,7 +19,10 @@
 import {
   createShoulderAbductionReachDetectorState,
   updateShoulderAbductionReachDetector,
+  extractShoulderAbductionReachArmGeometry,
+  EMPTY_SHOULDER_ABDUCTION_REACH_ARM_GEOMETRY,
   SHOULDER_ABDUCTION_REACH_BONUS_JOINTS,
+  type ShoulderAbductionReachArmGeometry,
   type ShoulderAbductionReachDetectorState,
   type ShoulderAbductionReachFrameResult,
   type ShoulderAbductionReachSide,
@@ -82,6 +85,19 @@ export type ShoulderAbductionReachPoseDetectorSnapshot = {
   trackingError: string | null;
   /** Primary-side wrist in normalized preview coordinates for interactive target UI. */
   primaryWristNormalized: { x: number; y: number } | null;
+  /**
+   * Affected-side shoulder in the same normalized preview space — the anchor for
+   * adaptive target-placement geometry. Optional so existing consumers keep compiling.
+   */
+  primaryShoulderNormalized?: { x: number; y: number } | null;
+  /** Affected-side elbow in the same normalized preview space. */
+  primaryElbowNormalized?: { x: number; y: number } | null;
+  /**
+   * shoulder→elbow plus elbow→wrist normalized distance, or null when any of the
+   * three joints fails the existing presence rule. Never a fabricated default.
+   * An on-screen reach scale, NOT an anthropometric or clinical measurement.
+   */
+  estimatedArmLengthNormalized?: number | null;
 };
 
 /**
@@ -173,6 +189,8 @@ export class ShoulderAbductionReachPoseDetector {
   private lastFrameResult: ShoulderAbductionReachFrameResult | null = null;
   private lastBodyFramingState: BodyFramingState = "checking";
   private lastPrimaryWristNormalized: { x: number; y: number } | null = null;
+  private lastPrimaryArmGeometry: ShoulderAbductionReachArmGeometry =
+    EMPTY_SHOULDER_ABDUCTION_REACH_ARM_GEOMETRY;
 
   constructor(
     callbacks: ShoulderAbductionReachPoseDetectorCallbacks,
@@ -219,6 +237,9 @@ export class ShoulderAbductionReachPoseDetector {
       previewActive: this.previewActive,
       trackingError: this.trackingError,
       primaryWristNormalized: this.lastPrimaryWristNormalized,
+      primaryShoulderNormalized: this.lastPrimaryArmGeometry.shoulder,
+      primaryElbowNormalized: this.lastPrimaryArmGeometry.elbow,
+      estimatedArmLengthNormalized: this.lastPrimaryArmGeometry.estimatedArmLengthNormalized,
     };
   }
 
@@ -312,6 +333,13 @@ export class ShoulderAbductionReachPoseDetector {
           ? { x: wristJoint.landmark.x, y: wristJoint.landmark.y }
           : null;
 
+      // Affected-side shoulder/elbow/arm-length for adaptive target geometry. Uses the
+      // same already-normalized frame and the same presence rule as the wrist above.
+      this.lastPrimaryArmGeometry = extractShoulderAbductionReachArmGeometry(
+        frame,
+        this.primarySide,
+      );
+
       const wasFlagged = this.compensationState.flagged;
       const status = updateShoulderAbductionReachCompensation(
         this.compensationState,
@@ -334,6 +362,7 @@ export class ShoulderAbductionReachPoseDetector {
       }
     } else {
       this.lastPrimaryWristNormalized = null;
+      this.lastPrimaryArmGeometry = EMPTY_SHOULDER_ABDUCTION_REACH_ARM_GEOMETRY;
     }
   }
 

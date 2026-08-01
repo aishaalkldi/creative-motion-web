@@ -239,4 +239,96 @@ describe("ShoulderAbductionReachPoseDetector", () => {
 
     assert.equal(detector.getSnapshot().primaryWristNormalized, null);
   });
+
+  // ── CHANGE-002: adaptive target-placement geometry inputs ───────────────────
+  // These expose affected-side joint positions and an on-screen reach scale.
+  // None of them is a clinical measurement.
+
+  it("exposes the primary-side shoulder and elbow for the right side", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    const landmarks = restingLandmarks();
+    landmarks[R_SHOULDER] = { x: 0.55, y: 0.3, visibility: 0.95 };
+    landmarks[R_ELBOW] = { x: 0.55, y: 0.5, visibility: 0.95 };
+    landmarks[R_WRIST] = { x: 0.55, y: 0.8, visibility: 0.9 };
+
+    driveFrames(detector, [landmarks]);
+    const snapshot = detector.getSnapshot();
+
+    assert.deepEqual(snapshot.primaryShoulderNormalized, { x: 0.55, y: 0.3 });
+    assert.deepEqual(snapshot.primaryElbowNormalized, { x: 0.55, y: 0.5 });
+    // shoulder->elbow 0.2 plus elbow->wrist 0.3.
+    assert.ok(snapshot.estimatedArmLengthNormalized !== null);
+    assert.ok(
+      Math.abs((snapshot.estimatedArmLengthNormalized ?? 0) - 0.5) < 1e-9,
+      `expected ~0.5, received ${snapshot.estimatedArmLengthNormalized}`,
+    );
+  });
+
+  it("exposes the left-side joints, not the right, when the primary side is left", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "left");
+    const landmarks = restingLandmarks();
+    landmarks[L_SHOULDER] = { x: 0.45, y: 0.3, visibility: 0.95 };
+    landmarks[L_ELBOW] = { x: 0.45, y: 0.4, visibility: 0.95 };
+    landmarks[L_WRIST] = { x: 0.45, y: 0.5, visibility: 0.9 };
+    landmarks[R_SHOULDER] = { x: 0.9, y: 0.1, visibility: 0.95 };
+
+    driveFrames(detector, [landmarks]);
+    const snapshot = detector.getSnapshot();
+
+    assert.deepEqual(snapshot.primaryShoulderNormalized, { x: 0.45, y: 0.3 });
+    assert.deepEqual(snapshot.primaryElbowNormalized, { x: 0.45, y: 0.4 });
+    assert.ok(
+      Math.abs((snapshot.estimatedArmLengthNormalized ?? 0) - 0.2) < 1e-9,
+      `expected ~0.2, received ${snapshot.estimatedArmLengthNormalized}`,
+    );
+  });
+
+  it("reports a null arm-length estimate when the primary elbow is below the presence rule", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    const landmarks = restingLandmarks();
+    landmarks[R_ELBOW] = { x: 0.55, y: 0.5, visibility: MIN_PRESENT_VISIBILITY - 0.05 };
+
+    driveFrames(detector, [landmarks]);
+    const snapshot = detector.getSnapshot();
+
+    assert.equal(snapshot.primaryElbowNormalized, null);
+    assert.equal(snapshot.estimatedArmLengthNormalized, null);
+    // The shoulder is still reported — only the estimate is withheld.
+    assert.ok(snapshot.primaryShoulderNormalized);
+  });
+
+  it("retains the last adaptive geometry across a dropped frame, matching wrist behaviour", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    const landmarks = restingLandmarks();
+    landmarks[R_SHOULDER] = { x: 0.55, y: 0.3, visibility: 0.95 };
+
+    driveFrames(detector, [landmarks]);
+    const withPose = detector.getSnapshot();
+
+    driveFrames(detector, [null]);
+    const afterDrop = detector.getSnapshot();
+
+    // A single frame without landmarks must not blank the anchor — this is the
+    // pre-existing contract for primaryWristNormalized, and the new adaptive
+    // fields deliberately follow it rather than introducing a second policy.
+    assert.deepEqual(afterDrop.primaryWristNormalized, withPose.primaryWristNormalized);
+    assert.deepEqual(afterDrop.primaryShoulderNormalized, withPose.primaryShoulderNormalized);
+    assert.deepEqual(afterDrop.primaryElbowNormalized, withPose.primaryElbowNormalized);
+    assert.equal(
+      afterDrop.estimatedArmLengthNormalized,
+      withPose.estimatedArmLengthNormalized,
+    );
+    assert.deepEqual(afterDrop.primaryShoulderNormalized, { x: 0.55, y: 0.3 });
+  });
+
+  it("keeps primaryWristNormalized behaviour unchanged alongside the new fields", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    const landmarks = restingLandmarks();
+    landmarks[R_WRIST] = { x: 0.62, y: 0.41, visibility: 0.95 };
+
+    driveFrames(detector, [landmarks]);
+    const snapshot = detector.getSnapshot();
+
+    assert.deepEqual(snapshot.primaryWristNormalized, { x: 0.62, y: 0.41 });
+  });
 });
