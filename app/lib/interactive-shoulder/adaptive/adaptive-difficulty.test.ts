@@ -214,6 +214,122 @@ describe("adaptive difficulty — state creation and configuration", () => {
     assert.equal(validation.valid, true);
     assert.deepEqual(validation.issues, []);
   });
+
+  // ── Review fix (PR #200): streaks and cooldown are counted in whole attempts ──
+  // A fractional threshold is never met exactly, so the configured value and the value
+  // a therapist observes would disagree. Rejected at validation rather than rounded.
+
+  it("rejects a fractional streak or cooldown configuration", () => {
+    const fractionalConfigs: ReadonlyArray<[string, DifficultyConfig]> = [
+      ["successStreakToIncrease 1.5", { ...TEST_CONFIG, successStreakToIncrease: 1.5 }],
+      ["successStreakToIncrease 2.25", { ...TEST_CONFIG, successStreakToIncrease: 2.25 }],
+      ["successStreakToIncrease 0.5", { ...TEST_CONFIG, successStreakToIncrease: 0.5 }],
+      ["struggleStreakToDecrease 1.5", { ...TEST_CONFIG, struggleStreakToDecrease: 1.5 }],
+      ["struggleStreakToDecrease 2.25", { ...TEST_CONFIG, struggleStreakToDecrease: 2.25 }],
+      ["struggleStreakToDecrease 0.5", { ...TEST_CONFIG, struggleStreakToDecrease: 0.5 }],
+      ["cooldownAttempts 1.5", { ...TEST_CONFIG, cooldownAttempts: 1.5 }],
+      ["cooldownAttempts 2.25", { ...TEST_CONFIG, cooldownAttempts: 2.25 }],
+      ["cooldownAttempts 0.5", { ...TEST_CONFIG, cooldownAttempts: 0.5 }],
+    ];
+
+    for (const [label, config] of fractionalConfigs) {
+      const validation = validateDifficultyConfig(config);
+      assert.equal(validation.valid, false, `${label} should be rejected`);
+      assert.ok(
+        validation.issues.some((issue) => issue.includes("whole number of attempts")),
+        `${label} should report the whole-attempt rule, received: ${validation.issues.join(" ")}`,
+      );
+      assert.throws(
+        () => createAdaptiveDifficultyState(config),
+        /Invalid adaptive difficulty configuration/,
+        `${label} should never reach a live session`,
+      );
+    }
+  });
+
+  it("names the offending field when a streak or cooldown is fractional", () => {
+    const validation = validateDifficultyConfig({
+      ...TEST_CONFIG,
+      successStreakToIncrease: 2.25,
+    });
+
+    assert.equal(validation.valid, false);
+    assert.deepEqual(validation.issues, [
+      "successStreakToIncrease must be a whole number of attempts.",
+    ]);
+  });
+
+  it("reports every fractional field, not only the first", () => {
+    const validation = validateDifficultyConfig({
+      ...TEST_CONFIG,
+      successStreakToIncrease: 1.5,
+      struggleStreakToDecrease: 2.25,
+      cooldownAttempts: 0.5,
+    });
+
+    assert.equal(validation.valid, false);
+    assert.deepEqual(validation.issues, [
+      "successStreakToIncrease must be a whole number of attempts.",
+      "struggleStreakToDecrease must be a whole number of attempts.",
+      "cooldownAttempts must be a whole number of attempts.",
+    ]);
+  });
+
+  it("keeps the existing positivity rules alongside the whole-number rule", () => {
+    // -1.5 breaks both rules; neither may silently replace the other.
+    const validation = validateDifficultyConfig({
+      ...TEST_CONFIG,
+      successStreakToIncrease: -1.5,
+    });
+
+    assert.equal(validation.valid, false);
+    assert.ok(
+      validation.issues.some((issue) => issue.includes("whole number of attempts")),
+      "the whole-number rule must still fire",
+    );
+    assert.ok(
+      validation.issues.some((issue) => issue.includes("greater than 0")),
+      "the existing positivity rule must still fire",
+    );
+  });
+
+  it("still accepts valid whole-number streak and cooldown values", () => {
+    const validation = validateDifficultyConfig(TEST_CONFIG);
+    assert.equal(validation.valid, true);
+    assert.deepEqual(validation.issues, []);
+
+    // Including the boundary values the existing rules already allow.
+    const boundary = validateDifficultyConfig({
+      ...TEST_CONFIG,
+      successStreakToIncrease: 1,
+      struggleStreakToDecrease: 1,
+      cooldownAttempts: 0,
+    });
+    assert.equal(boundary.valid, true);
+    assert.deepEqual(boundary.issues, []);
+
+    const state = createAdaptiveDifficultyState({
+      ...TEST_CONFIG,
+      successStreakToIncrease: 4,
+      struggleStreakToDecrease: 3,
+      cooldownAttempts: 5,
+    });
+    assert.equal(state.currentLevel, 60);
+  });
+
+  it("leaves the non-attempt numeric fields free to be fractional", () => {
+    // Levels, steps and timeouts are not attempt counts — the new rule must not widen.
+    const validation = validateDifficultyConfig({
+      ...TEST_CONFIG,
+      startLevel: 60.5,
+      increaseStep: 2.5,
+      decreaseStep: 7.5,
+      normalAttemptTimeoutMs: 8_000.5,
+    });
+
+    assert.equal(validation.valid, true);
+    assert.deepEqual(validation.issues, []);
+  });
 });
 
 describe("adaptive difficulty — adaptation state accounting", () => {
