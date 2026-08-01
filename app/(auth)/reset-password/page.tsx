@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { buildPasswordRecoveryRedirectTo } from "../../lib/auth/password-recovery-redirect";
 import { createClient as createSupabaseClient } from "../../lib/supabase/browser";
 import {
   AuthBrandMark,
@@ -35,7 +36,9 @@ export default function ResetPasswordPage() {
       const supabase = createSupabaseClient();
       const { error: sbError } = await supabase.auth.resetPasswordForEmail(
         email.trim().toLowerCase(),
-        { redirectTo: `${window.location.origin}/update-password` },
+        {
+          redirectTo: buildPasswordRecoveryRedirectTo(window.location.origin),
+        },
       );
 
       if (sbError) {
