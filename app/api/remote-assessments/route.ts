@@ -113,9 +113,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
   }
 
+  const patientFacingPath =
+    assessmentType === "post_stroke_intake" ? "/post-stroke-intake" : "/assessment";
+
   return NextResponse.json({
     token: row.token,
-    url: `/assessment/${row.token}`,
+    url: `${patientFacingPath}/${row.token}`,
     expiresAt: row.expires_at,
   });
 }

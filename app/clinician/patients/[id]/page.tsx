@@ -63,6 +63,7 @@ import {
   type RemoteAssessmentRequest,
 } from "../../../lib/api/remote-assessments";
 import { SendAssessmentModal } from "./SendAssessmentModal";
+import { AssignMotorScreenModal } from "./AssignMotorScreenModal";
 import { SessionScheduleView } from "../../../components/SessionScheduleView";
 import { ClinicalActionCard } from "../../../components/clinician/ClinicalActionCard";
 import { PatientJourneyTimeline } from "../../../components/clinician/PatientJourneyTimeline";
@@ -81,6 +82,9 @@ import {
 } from "@/app/lib/clinician/adherence-display";
 import type { PatientProgressSummary, PatientTimelineBundle } from "../../../api/clinician/patient-progress/route";
 import { buildPatientTimeline } from "../../../lib/clinician/patient-timeline";
+import {
+  buildPostStrokeIntakeSummary,
+} from "@/app/lib/post-stroke-intake/clinician-summary";
 import {
   buildRemoteQuestionnaireSummary,
 } from "../../../lib/remote-questionnaire-summary";
@@ -134,6 +138,9 @@ export default function PatientProfilePage() {
   // Remote assessment state
   const [sendModalOpen, setSendModalOpen] = useState(false);
   const [remoteAssessments, setRemoteAssessments] = useState<RemoteAssessmentRequest[]>([]);
+
+  // Upper-Limb Motor Screen assignment state
+  const [motorScreenModalOpen, setMotorScreenModalOpen] = useState(false);
 
   // RASQ new-style assessments (from rasq_assessments localStorage)
   const [rasqAssessments, setRasqAssessments] = useState<SavedAssessment[]>([]);
@@ -366,6 +373,8 @@ export default function PatientProfilePage() {
         typeLabel:
           r.type === "remote_questionnaire"
             ? "Remote Questionnaire Assessment"
+            : r.type === "post_stroke_intake"
+              ? "Post-Stroke Intake Assessment"
             : r.type === "general_msk"
               ? "General MSK Assessment"
               : r.type,
@@ -460,6 +469,12 @@ export default function PatientProfilePage() {
     if (!clinicalSummaryRow) return null;
     if (clinicalSummaryRow.type === "remote_questionnaire") {
       return buildRemoteQuestionnaireSummary(
+        clinicalSummaryRow.structured_data,
+        clinicalSummaryRow.created_at,
+      );
+    }
+    if (clinicalSummaryRow.type === "post_stroke_intake") {
+      return buildPostStrokeIntakeSummary(
         clinicalSummaryRow.structured_data,
         clinicalSummaryRow.created_at,
       );
@@ -764,6 +779,16 @@ export default function PatientProfilePage() {
           void listPatientAssessments(patient.id).then(setRemoteAssessments);
           void refreshClinicalAssessments();
         }}
+      />
+    )}
+
+    {/* Assign Motor Screen Modal */}
+    {motorScreenModalOpen && (
+      <AssignMotorScreenModal
+        patientId={patient.id}
+        patientName={patient.full_name}
+        onClose={() => setMotorScreenModalOpen(false)}
+        onCreated={() => {}}
       />
     )}
 
@@ -1075,7 +1100,8 @@ export default function PatientProfilePage() {
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        {clinicalSummaryDetail?.type === "remote_questionnaire" && (
+                        {(clinicalSummaryDetail?.type === "remote_questionnaire" ||
+                          clinicalSummaryDetail?.type === "post_stroke_intake") && (
                           <span className="rounded-[5px] border border-[#1E2D42] bg-[#0F1825] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white/45">
                             Remote
                           </span>
@@ -1598,6 +1624,30 @@ export default function PatientProfilePage() {
                   })}
                 </div>
               )}
+            </section>
+
+            {/* ── Upper-Limb Motor Screen panel ── */}
+            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
+              <div className="mb-4 flex items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-base font-bold text-white">Upper-Limb Motor Screen</h2>
+                  <p className="mt-0.5 text-xs text-white/35">
+                    Forward Reach · clinician assigned, CV supported, clinician reviewed.
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-5 text-center">
+                <p className="text-xs text-[#6B7280]">
+                  Not a diagnosis or standardized impairment score.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setMotorScreenModalOpen(true)}
+                  className="mt-2 text-xs font-semibold text-[#5DCAA5] transition hover:text-[#1D9E75]"
+                >
+                  Assign Forward Reach →
+                </button>
+              </div>
             </section>
 
             {/* Recent Results (local) */}

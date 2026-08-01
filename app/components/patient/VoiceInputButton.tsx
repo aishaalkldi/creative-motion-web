@@ -238,7 +238,9 @@ export function VoiceInputButton({
         type="button"
         onClick={handleRecordClick}
         disabled={isProcessing || isBrowserListening}
-        aria-label={isRecording ? "Stop voice input" : "Start voice input"}
+        aria-label={
+          isRecording ? voiceLabel("stopVoiceInput", lang) : voiceLabel("startVoiceInput", lang)
+        }
         className={`inline-flex min-h-9 items-center gap-1.5 rounded-[7px] border px-3 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
           isRecording || isBrowserListening
             ? "rasq-voice-listening border-[#1D9E75] bg-[#1D9E75]/15 text-[#5DCAA5]"
@@ -259,7 +261,7 @@ export function VoiceInputButton({
         <button
           type="button"
           onClick={stopMediaCapture}
-          aria-label="Stop recording"
+          aria-label={voiceLabel("stopRecording", lang)}
           className="inline-flex min-h-9 items-center rounded-[7px] border border-white/20 bg-white/[0.04] px-3 py-2 text-xs font-medium text-white/70 transition hover:border-white/30 hover:text-white"
           style={{ borderWidth: "0.5px" }}
         >

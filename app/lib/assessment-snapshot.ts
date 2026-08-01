@@ -1,9 +1,11 @@
 import { extractGeneralDraft, extractStructuredData } from "@/app/lib/assessment-payload";
+import { buildPostStrokeIntakeSummary } from "@/app/lib/post-stroke-intake/clinician-summary";
 import { buildRemoteQuestionnaireSummary } from "@/app/lib/remote-questionnaire-summary";
 
-/** Prefer remote questionnaire, then general MSK, then structured wizard. */
+/** Prefer remote questionnaire, then post-stroke intake, then general MSK, then structured wizard. */
 const ASSESSMENT_TYPE_PRIORITY = [
   "remote_questionnaire",
+  "post_stroke_intake",
   "general_msk",
   "structured",
   "questionnaire",
@@ -60,6 +62,14 @@ export function extractAssessmentSnapshot(row: AssessmentPickInput): AssessmentS
         if (metric.label === "Pain on movement") base.painOnMovement = metric.value;
         if (metric.label === "Body region") base.bodyRegion = metric.value;
       }
+    }
+    return base;
+  }
+
+  if (row.type === "post_stroke_intake" && row.structured_data != null) {
+    const summary = buildPostStrokeIntakeSummary(row.structured_data, row.created_at);
+    if (summary?.rows[0]) {
+      base.bodyRegion = summary.rows[0].value;
     }
     return base;
   }

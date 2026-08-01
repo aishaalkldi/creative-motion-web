@@ -8,6 +8,7 @@ import {
 } from "@/app/lib/assessment-payload";
 import type { GeneralAssessmentDraft } from "@/app/lib/general-assessment/types";
 import type { PatientAssessmentDraft, PatientSectionId } from "@/app/lib/api/remote-assessments";
+import { extractPostStrokeIntakeSubmissionMeta } from "@/app/lib/post-stroke-intake/clinician-summary";
 import {
   extractRemoteQuestionnaireDraft,
   inferIncludedSections,
@@ -17,7 +18,11 @@ import {
   type MotionInputAdapterId,
 } from "@/app/lib/assessment-delivery/motion-input-registry";
 
-export type AssessmentReportKind = "general_msk" | "remote_questionnaire" | "structured";
+export type AssessmentReportKind =
+  | "general_msk"
+  | "remote_questionnaire"
+  | "post_stroke_intake"
+  | "structured";
 
 export type ResolvedAssessmentReport = {
   kind: AssessmentReportKind | null;
@@ -27,6 +32,8 @@ export type ResolvedAssessmentReport = {
   remoteIncludedSections: PatientSectionId[];
   structuredData: AssessmentData | null;
   patient: BackendPatient | null;
+  /** Clinic-visible file reference (patients.file_number) — never the patient UUID. */
+  patientFileNumber: string | null;
   resolvedPatientId: string;
   serverNotes: string | null;
   reportDate: string;
@@ -49,7 +56,9 @@ export function resolveAssessmentReportFromDetail(
     patient: {
       full_name: detail.patient.full_name,
       diagnosis: detail.patient.diagnosis,
+      age: detail.patient.age,
     } as BackendPatient,
+    patientFileNumber: detail.patient.file_number ?? null,
     resolvedPatientId: detail.patient_id,
     serverNotes: detail.notes,
     reportDate: detail.created_at,
@@ -62,6 +71,18 @@ export function resolveAssessmentReportFromDetail(
   const general = extractGeneralDraft(detail.structured_data, detail.type);
   if (general) {
     return { ...base, kind: "general_msk", draft: general };
+  }
+
+  const postStrokeMeta = extractPostStrokeIntakeSubmissionMeta(
+    detail.structured_data,
+    detail.type,
+  );
+  if (postStrokeMeta) {
+    return {
+      ...base,
+      kind: "post_stroke_intake",
+      remoteSubmissionMeta: postStrokeMeta,
+    };
   }
 
   const remoteDraft = extractRemoteQuestionnaireDraft(detail.structured_data, detail.type);

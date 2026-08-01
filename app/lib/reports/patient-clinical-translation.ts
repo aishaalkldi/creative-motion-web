@@ -17,6 +17,14 @@ export function readStoredClinicalTranslation(
   return typeof value === "string" ? value.trim() : "";
 }
 
+/** Strict equality only — anything but a literal `true` is treated as unreviewed. */
+export function isTranslationReviewed(
+  submissionMeta: Record<string, unknown> | null | undefined,
+  fieldKey: string,
+): boolean {
+  return submissionMeta?.[`${fieldKey}_en_reviewed`] === true;
+}
+
 export function extractTranslationMeta(meta: Record<string, unknown> | null | undefined): {
   translations: Record<string, string>;
   generatedAt: Record<string, string>;

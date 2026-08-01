@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PatientSectionId } from "@/app/lib/api/remote-assessments";
 import type { PatientAssessmentDraft } from "@/app/lib/api/remote-assessments";
 import type { AssessmentLanguage } from "@/app/lib/assessment-payload";
@@ -14,11 +14,16 @@ import {
   type PatientReviewEntry,
 } from "@/app/lib/patient-assessment-questions";
 import { TranslatableField } from "@/app/components/clinician/TranslatableField";
+import { ExtractedFieldsPanel } from "@/app/components/clinician/ExtractedFieldsPanel";
 import {
   AI_TRANSLATION_SETUP_NOTICE,
   isAiTranslationEnabled,
 } from "@/app/lib/ai/ai-features";
 import { patientReportedLabel } from "@/app/lib/reports/clinical-report-copy";
+import {
+  readApprovedPatientReportFacts,
+  type ApprovedPatientReportFacts,
+} from "@/app/lib/reports/approved-patient-facts";
 import {
   extractTranslationMeta,
   isTranslatablePatientFieldKey,
@@ -42,6 +47,7 @@ type Props = {
     anyLoading: boolean;
     translateAll: () => Promise<void>;
   }) => void;
+  onApprovedFactsChange?: (facts: ApprovedPatientReportFacts) => void;
 };
 
 function isVoiceAnswered(
@@ -69,6 +75,34 @@ function readMetaBoolean(meta: Record<string, unknown> | null | undefined, key: 
   return meta?.[key] === true;
 }
 
+/** Snapshot of the primitive values reported to the parent's onTranslationProgress callback. */
+export type TranslationProgressSnapshot = {
+  doneCount: number;
+  totalCount: number;
+  allTranslated: boolean;
+  anyLoading: boolean;
+};
+
+/**
+ * Compares only the primitive progress values — deliberately ignores the
+ * `translateAll` function identity, which can change reference across
+ * renders (e.g. when an upstream memo recomputes) without any of these
+ * primitives actually changing. Reporting on identity churn alone is what
+ * previously caused an infinite parent-update loop.
+ */
+export function hasTranslationProgressChanged(
+  prev: TranslationProgressSnapshot | null,
+  next: TranslationProgressSnapshot,
+): boolean {
+  if (!prev) return true;
+  return (
+    prev.doneCount !== next.doneCount ||
+    prev.totalCount !== next.totalCount ||
+    prev.allTranslated !== next.allTranslated ||
+    prev.anyLoading !== next.anyLoading
+  );
+}
+
 /**
  * Clinician review of patient-submitted assessment answers.
  * Arabic submissions preserve the original answer with clinical English underneath when available.
@@ -81,9 +115,31 @@ export function PatientSubmittedAnswersReview({
   assessmentId,
   compact = false,
   onTranslationProgress,
+  onApprovedFactsChange,
 }: Props) {
   const aiTranslationEnabled = isAiTranslationEnabled();
-  const blocks = buildFullClinicianReview(patientDraft, includedSections);
+  // Memoized so its identity is stable across renders when patientDraft/
+  // includedSections haven't changed — buildFullClinicianReview is pure but
+  // was previously called unmemoized on every render, which cascaded into a
+  // new arabicFields array and a new translateAll closure identity every
+  // time, defeating the progress-reporting effect's dependency comparison.
+  const blocks = useMemo(
+    () => buildFullClinicianReview(patientDraft, includedSections),
+    [patientDraft, includedSections],
+  );
+  const initialApprovedFacts = useMemo(
+    () => readApprovedPatientReportFacts(submissionMeta),
+    [submissionMeta],
+  );
+  const [approvedFacts, setApprovedFacts] = useState<ApprovedPatientReportFacts | null>(
+    initialApprovedFacts,
+  );
+  const [approveSaving, setApproveSaving] = useState(false);
+  const [approveError, setApproveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setApprovedFacts(initialApprovedFacts);
+  }, [initialApprovedFacts]);
 
   const arabicFields = useMemo(
     () => (assessmentLanguage === "ar" ? collectArabicFields(blocks) : []),
@@ -115,10 +171,30 @@ export function PatientSubmittedAnswersReview({
     anyLoading,
   } = translationProgress;
 
+  const lastReportedProgressRef = useRef<TranslationProgressSnapshot | null>(null);
+  const lastReportedAssessmentIdRef = useRef<string | undefined>(undefined);
+
   useEffect(() => {
     if (!aiTranslationEnabled || !onTranslationProgress || assessmentLanguage !== "ar" || !assessmentId) {
       return;
     }
+    if (lastReportedAssessmentIdRef.current !== assessmentId) {
+      // A different assessment is now being reviewed — always report its
+      // initial progress, even if the primitive values happen to coincide
+      // with the previous assessment's last-reported snapshot.
+      lastReportedAssessmentIdRef.current = assessmentId;
+      lastReportedProgressRef.current = null;
+    }
+    const next: TranslationProgressSnapshot = { doneCount, totalCount, allTranslated, anyLoading };
+    // Guards against calling the parent callback on every render: even if
+    // translateAll's identity changes without a real progress change (e.g.
+    // from upstream identity churn), the parent is only ever notified when
+    // one of these primitive values actually differs from what was last
+    // reported — belt-and-suspenders alongside the blocks memoization above.
+    if (!hasTranslationProgressChanged(lastReportedProgressRef.current, next)) {
+      return;
+    }
+    lastReportedProgressRef.current = next;
     onTranslationProgress({
       doneCount,
       totalCount,
@@ -137,6 +213,32 @@ export function PatientSubmittedAnswersReview({
     anyLoading,
     translateAll,
   ]);
+
+  async function handleApprovePatientReportFacts() {
+    if (!assessmentId || approveSaving) return;
+    setApproveSaving(true);
+    setApproveError(null);
+    try {
+      const res = await fetch(`/api/assessments/${encodeURIComponent(assessmentId)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approvePatientReportFacts: true }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as {
+        approved?: boolean;
+        approvedPatientReportFacts?: ApprovedPatientReportFacts;
+        error?: string;
+      };
+      if (!res.ok || !payload.approved || !payload.approvedPatientReportFacts) {
+        setApproveError(payload.error ?? "Could not approve patient-reported information.");
+        return;
+      }
+      setApprovedFacts(payload.approvedPatientReportFacts);
+      onApprovedFactsChange?.(payload.approvedPatientReportFacts);
+    } finally {
+      setApproveSaving(false);
+    }
+  }
 
   if (blocks.length === 0) {
     return (
@@ -264,12 +366,63 @@ export function PatientSubmittedAnswersReview({
                       </>
                     )}
                   </dd>
+                  {block.section === "pain" && fieldKey === "chiefComplaint" && assessmentId ? (
+                    <ExtractedFieldsPanel
+                      assessmentId={assessmentId}
+                      originalText={entry.value}
+                      initialExtraction={submissionMeta?.chiefComplaint_extraction}
+                      initialGeneratedAt={submissionMeta?.chiefComplaint_extraction_generated_at}
+                      initialReviewed={submissionMeta?.chiefComplaint_extraction_reviewed}
+                    />
+                  ) : null}
                 </div>
               );
             })}
           </dl>
         </div>
       ))}
+
+      {assessmentId && !compact ? (
+        <div className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-4 py-3.5">
+          {approvedFacts ? (
+            <>
+              <p className="text-sm text-[#5DCAA5]">
+                Patient-reported information approved for PT report generation.
+              </p>
+              <button
+                type="button"
+                disabled={approveSaving}
+                onClick={() => void handleApprovePatientReportFacts()}
+                className="mt-3 rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-[6px] text-[11px] font-medium text-white transition hover:border-[#1D9E75]/40 hover:text-[#5DCAA5] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {approveSaving
+                  ? "Re-approving updated information…"
+                  : "Re-approve updated information"}
+              </button>
+            </>
+          ) : (
+            <>
+              <p className="text-sm leading-relaxed text-[#9CA3AF]">
+                Review all translated and extracted information before approving it for report
+                generation.
+              </p>
+              <button
+                type="button"
+                disabled={approveSaving}
+                onClick={() => void handleApprovePatientReportFacts()}
+                className="mt-3 rounded-[6px] bg-[#1D9E75] px-3.5 py-[6px] text-[11px] font-medium text-white transition hover:bg-[#179165] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {approveSaving
+                  ? "Approving patient-reported information…"
+                  : "Approve patient-reported information for report generation"}
+              </button>
+            </>
+          )}
+          {approveError ? (
+            <p className="mt-2 text-xs text-rose-300/90">{approveError}</p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

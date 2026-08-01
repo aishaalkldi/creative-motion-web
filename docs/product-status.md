@@ -1,26 +1,8 @@
-# RASQ Product Status
+# Product Status
 
-## Current Stage
+This page has been superseded by:
 
-- Working MVP
-- Frontend deployed
-- Pilot preparation
-- Not positioned as diagnostic software
+- **[Project Overview](./project-overview.md)** — product purpose, users, main areas, and boundaries
+- **[RASQ Current State](./RASQ_CURRENT_STATE.md)** — verified implementation, production snapshot, development status, pilot readiness, and deferred work
 
-## Current Product Areas
-
-- Clinician portal
-- Patient portal
-- Assessment workflows
-- Computer vision assessments
-- Motion analysis reporting
-- Rehabilitation plans
-- Outcomes and progress
-- XR rehabilitation
-- Speech AI
-- Remote assessment workflows
-
-## Maintenance Rule
-
-Keep this document concise and current.
-Replace outdated information instead of appending a long history.
+Use those documents instead of this page for current product status.
