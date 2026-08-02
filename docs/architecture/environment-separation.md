@@ -69,6 +69,11 @@ The following controls were verified or confirmed as part of this work:
 | Assignment creation in Development | Tested successfully |
 | Backend health check in Development | Tested successfully |
 | Database isolation between environments | Tested successfully |
+| GitHub ruleset **Protect Main** active on default branch (`main`) | Verified |
+| GitHub ruleset **Protect Dev** active on `dev_branch` | Verified |
+| GitHub ruleset **Protect Test** active on `test` | Verified |
+| Each ruleset: pull request required, 1 approval, conversation resolution, force pushes blocked | Verified |
+| Collaborators available to provide required review approval | Verified |
 
 **Not yet verified or enabled:**
 
@@ -119,9 +124,7 @@ The following governance and documentation items should be completed to close ou
 - Verify the Production Supabase project reference through an authorized review without exposing secrets.
 - Narrow Vercel environment variable scopes where appropriate (e.g., ensure Preview-only values are not unnecessarily shared with Production).
 - Document whether a Production FastAPI backend exists, is planned, or is intentionally unused.
-- Add branch protection to `dev_branch` and `main`.
-- Require pull-request review before merges.
-- Prevent force pushes and direct Production deployments.
+- Prevent direct Production deployments on Vercel without an approved merge workflow (not yet verified).
 - Add a repeatable environment smoke-test checklist for Development and Production.
 - Maintain a secure environment matrix (URLs, branches, hosting targets, Supabase projects, backend services) **without** secrets.
 
@@ -175,6 +178,12 @@ Approved release → Pull request → review → merge to main → Production fr
 | Production resources unchanged during work | Confirmed |
 | Destructive DB init removed; readiness checks fail safely | Confirmed |
 | Branch-specific Vercel Preview Supabase config supports Dev auth | Confirmed |
+| GitHub ruleset **Protect Main** active on default branch (`main`) | Confirmed |
+| GitHub ruleset **Protect Dev** active on `dev_branch` | Confirmed |
+| GitHub ruleset **Protect Test** active on `test` | Confirmed |
+| Each ruleset: pull request required, 1 approval, conversation resolution, force pushes blocked | Confirmed |
+| Collaborators available to provide required review approval | Confirmed |
+| Direct Vercel Production deployment prevention | Not verified |
 | Assessment execution / result generation | Not enabled; not verified |
 
 ---
