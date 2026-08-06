@@ -207,24 +207,35 @@ describe("Lateral Reach demo fixtures — safety scenarios", () => {
     assert.equal(result4.snapshot.phase, "awaiting_readiness", "Phase should remain awaiting_readiness after returning to zone");
     state = result4.state;
 
-    // Try target-facing movement without new readiness confirmation - wrist still in zone
+    // Try target-facing movement without new readiness confirmation
     const frame4 = {
       schemaVersion: MOTION_INTELLIGENCE_SCHEMA_VERSION,
       source: { kind: "web_camera_pose" as const, capturedAtMs: 60, frameIndex: 0, coordinateSpace: "normalized_2d" as const },
-      joints: { right_wrist: { landmark: { x: 0.3, y: 0.5 }, confidence: { visibility: 0.9, present: true } } },
+      joints: { right_wrist: { landmark: { x: 0.5, y: 0.5 }, confidence: { visibility: 0.9, present: true } } },
     };
     const result5 = applyLateralReachCommand(state, { type: "frame", nowMs: 60, frame: frame4 });
-    assert.equal(result5.status, "applied", "Frame should be applied");
+    assert.equal(result5.status, "applied", "Target-facing exit should be applied");
     assert.equal(result5.snapshot.phase, "awaiting_readiness", "Phase should remain awaiting_readiness without new confirmation");
+    assert.equal(result5.snapshot.targetReached, false, "Target should not be reached");
     state = result5.state;
 
+    // Return to starting zone before second readiness confirmation
+    const frame5 = {
+      schemaVersion: MOTION_INTELLIGENCE_SCHEMA_VERSION,
+      source: { kind: "web_camera_pose" as const, capturedAtMs: 65, frameIndex: 0, coordinateSpace: "normalized_2d" as const },
+      joints: { right_wrist: { landmark: { x: 0.3, y: 0.5 }, confidence: { visibility: 0.9, present: true } } },
+    };
+    const result6 = applyLateralReachCommand(state, { type: "frame", nowMs: 65, frame: frame5 });
+    assert.equal(result6.status, "applied", "Return to zone should be applied");
+    state = result6.state;
+
     // Second explicit readiness confirmation (wrist is in zone)
-    const result6 = applyLateralReachCommand(state, { type: "readinessConfirmed", nowMs: 70, confirmedBy: "clinician" });
-    assert.equal(result6.status, "applied", "Second readiness confirmation should be applied");
-    assert.equal(result6.snapshot.phase, "ready_confirmed_awaiting_onset", "Phase after second confirmation should be ready_confirmed_awaiting_onset");
+    const result7 = applyLateralReachCommand(state, { type: "readinessConfirmed", nowMs: 70, confirmedBy: "clinician" });
+    assert.equal(result7.status, "applied", "Second readiness confirmation should be applied");
+    assert.equal(result7.snapshot.phase, "ready_confirmed_awaiting_onset", "Phase after second confirmation should be ready_confirmed_awaiting_onset");
 
     // Finalize and verify factual note
-    const finalResult = applyLateralReachCommand(result6.state, { type: "attemptWindowEnded", nowMs: 100 });
+    const finalResult = applyLateralReachCommand(result7.state, { type: "attemptWindowEnded", nowMs: 100 });
     assert.equal(finalResult.status, "applied", "Finalization should be applied");
     assert.ok(finalResult.attemptResult !== null, "Should have an attempt result");
     assert.ok(
@@ -253,35 +264,114 @@ describe("Lateral Reach demo fixtures — safety scenarios", () => {
   it("no automatic resume occurs after protective pause", () => {
     const config = buildLateralReachDemoConfig("right");
     const scenarios = buildAllDemoScenarios("right");
+    const scenario = scenarios.longTrackingGapWithHumanResume;
 
-    // Build scenario without human resume to prove no auto-resume
-    const scenarioWithoutResume = {
-      ...scenarios.longTrackingGapWithHumanResume,
-      commands: scenarios.longTrackingGapWithHumanResume.commands.filter(
-        (cmd) => cmd.type !== "resumeRequested"
-      ),
-    };
+    // Create initial state
+    const createResult = createLateralReachAttemptState(config, 0, 0);
+    assert.ok(createResult.ok);
+    let state = createResult.state;
 
-    const result = executeScenario(scenarioWithoutResume, config);
+    // Apply commands incrementally until pause opens and tracking restores
+    let result: ReturnType<typeof applyLateralReachCommand>;
+    let pauseOpened = false;
+    let trackingRestored = false;
 
-    // Protective pause should have opened
-    assert.ok(result.finalSnapshot.protectivePauseCount > 0, "Protective pause should have been opened");
-    // Without explicit resume, attempt cannot complete successfully
-    assert.ok(result.attemptResult !== null, "Should have an attempt result");
-    assert.notEqual(result.attemptResult!.completionState, "completed", "Should not complete without resume");
+    for (let i = 0; i < scenario.commands.length; i++) {
+      const cmd = scenario.commands[i];
+
+      // Stop before resumeRequested
+      if (cmd.type === "resumeRequested") break;
+
+      result = applyLateralReachCommand(state, cmd);
+      assert.equal(result.status, "applied", `Command ${i} (${cmd.type}) should be applied`);
+
+      // Check if pause opened on this command
+      if (!pauseOpened && result.snapshot.hasActivePause) {
+        pauseOpened = true;
+      }
+
+      // Check if tracking restored after pause opened
+      if (pauseOpened && !trackingRestored && cmd.type === "frame") {
+        const frameCmd = cmd as { type: "frame"; frame: NormalizedMotionFrame };
+        const jointId: "left_wrist" | "right_wrist" = config.testedSide === "left" ? "left_wrist" : "right_wrist";
+        const joint = frameCmd.frame.joints[jointId];
+        const hasWrist = joint !== undefined && joint.landmark !== undefined;
+        if (hasWrist) {
+          trackingRestored = true;
+
+          // Key assertions immediately after tracking restoration
+          assert.equal(result.snapshot.hasActivePause, true, "Pause should remain active after tracking restoration");
+          assert.equal(result.attemptResult, null, "No terminal result should be produced yet");
+        }
+      }
+
+      state = result.state;
+    }
+
+    // Verify we reached the expected intermediate state
+    assert.equal(pauseOpened, true, "Protective pause should have opened");
+    assert.equal(trackingRestored, true, "Tracking should have been restored");
+    assert.equal(result!.snapshot.hasActivePause, true, "Pause should remain active");
+    assert.equal(result!.attemptResult, null, "No terminal result yet");
+
+    // Finalization without resume
+    const finalResult = applyLateralReachCommand(state, { type: "attemptWindowEnded", nowMs: 800 });
+    assert.equal(finalResult.status, "applied", "Finalization should be applied");
+    assert.ok(finalResult.attemptResult !== null, "Should have terminal result after finalization");
+    assert.ok(finalResult.attemptResult!.protectivePauseCount > 0, "Finalized result should have pause count > 0");
+    assert.notEqual(finalResult.attemptResult!.completionState, "completed", "Should not complete without resume");
   });
 
   it("explicit valid human resume resolves protective pause and allows continuation", () => {
     const config = buildLateralReachDemoConfig("right");
     const scenarios = buildAllDemoScenarios("right");
+    const scenario = scenarios.longTrackingGapWithHumanResume;
 
-    // Full scenario includes resumeRequested command
-    const result = executeScenario(scenarios.longTrackingGapWithHumanResume, config);
+    // Create initial state
+    const createResult = createLateralReachAttemptState(config, 0, 0);
+    assert.ok(createResult.ok);
+    let state = createResult.state;
 
-    // Protective pause was opened
-    assert.ok(result.finalSnapshot.protectivePauseCount > 0, "Protective pause should have been opened");
-    // With explicit resume, pause is no longer active
-    assert.equal(result.finalSnapshot.hasActivePause, false, "Pause should be resolved after resume");
+    // Apply commands incrementally until just before resumeRequested
+    let result: ReturnType<typeof applyLateralReachCommand>;
+    let resumeCommandIndex = -1;
+
+    for (let i = 0; i < scenario.commands.length; i++) {
+      const cmd = scenario.commands[i];
+
+      if (cmd.type === "resumeRequested") {
+        resumeCommandIndex = i;
+        break;
+      }
+
+      result = applyLateralReachCommand(state, cmd);
+      assert.equal(result.status, "applied", `Command ${i} (${cmd.type}) should be applied`);
+      state = result.state;
+    }
+
+    // Immediately before resumeRequested
+    assert.equal(result!.snapshot.hasActivePause, true, "Pause should be active before resume");
+    const lastAcceptedBeforeResume = state.lastAcceptedNowMs;
+
+    // Apply explicit human resume
+    const resumeCmd = scenario.commands[resumeCommandIndex] as { type: "resumeRequested"; nowMs: number; readinessConfirmedAt: string; resumedBy: string };
+    const resumeResult = applyLateralReachCommand(state, resumeCmd);
+
+    // Resume command assertions
+    assert.equal(resumeResult.status, "applied", "Resume command should be applied");
+    assert.equal(resumeResult.snapshot.hasActivePause, false, "Pause should be resolved after resume");
+    assert.equal(resumeResult.state.lastAcceptedNowMs, resumeCmd.nowMs, "lastAcceptedNowMs should advance to resume timestamp");
+    assert.ok(resumeResult.state.lastAcceptedNowMs > lastAcceptedBeforeResume, "Clock should advance");
+    state = resumeResult.state;
+
+    // Apply next valid frame directly
+    const nextCmd = scenario.commands[resumeCommandIndex + 1] as { type: "frame"; nowMs: number; frame: NormalizedMotionFrame };
+    const frameResult = applyLateralReachCommand(state, nextCmd);
+
+    // Post-resume frame assertions
+    assert.equal(frameResult.status, "applied", "Frame after resume should be applied");
+    assert.equal(frameResult.state.lastAcceptedNowMs, nextCmd.nowMs, "Clock should advance to frame timestamp");
+    assert.equal(frameResult.snapshot.hasActivePause, false, "Pause should remain resolved");
   });
 
   it("stop-before-completion produces the correct terminal state", () => {
@@ -319,8 +409,9 @@ describe("Lateral Reach demo fixtures — safety scenarios", () => {
     assert.equal(result2.status, "applied", "Second command should be applied");
     state = result2.state;
 
-    // Capture state before rejected command
+    // Store state before rejected command
     const stateBeforeRejection = state;
+    const lastAcceptedNowMsBefore = state.lastAcceptedNowMs;
     const snapshotBeforeRejection = result2.snapshot;
     const phaseBeforeRejection = snapshotBeforeRejection.phase;
 
@@ -336,11 +427,13 @@ describe("Lateral Reach demo fixtures — safety scenarios", () => {
     assert.equal(result3.status, "rejected", "Out-of-order timestamp should be rejected");
     assert.equal(result3.reason, "now_ms_not_monotonic", "Rejection reason should be now_ms_not_monotonic");
 
-    // State should be unchanged
-    assert.equal(result3.state, stateBeforeRejection, "Rejected command should not mutate state");
-    assert.equal(result3.snapshot.phase, phaseBeforeRejection, "Phase should remain unchanged after rejection");
+    // State immutability assertions
+    assert.equal(result3.state, stateBeforeRejection, "Rejected command should not mutate state reference");
+    assert.equal(result3.state.lastAcceptedNowMs, lastAcceptedNowMsBefore, "lastAcceptedNowMs should remain unchanged");
+    assert.equal(result3.state.lastAcceptedNowMs, 10, "lastAcceptedNowMs should still be 10");
 
-    // Verify no task progression occurred
+    // Snapshot immutability assertions
+    assert.equal(result3.snapshot.phase, phaseBeforeRejection, "Phase should remain unchanged after rejection");
     assert.equal(result3.snapshot.targetReached, false, "Target should not be reached");
     assert.equal(result3.snapshot.dwellConfirmed, false, "Dwell should not be confirmed");
     assert.equal(result3.snapshot.returnToStartCompleted, false, "Return should not be completed");
