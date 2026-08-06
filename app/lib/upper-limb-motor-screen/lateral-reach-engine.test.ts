@@ -477,8 +477,8 @@ describe("direction gate — coarse, technical, screen-space horizontal check", 
       startingZone: { point: START_POINT, radius: 0.05 },
       fixedTarget: { point: TARGET_POINT, radius: 0.05 },
     });
-    let state = readyState(config);
-    let r = sendFrame(state, config, { x: 0.15, y: 0.5 }, 20);
+    const state = readyState(config);
+    const r = sendFrame(state, config, { x: 0.15, y: 0.5 }, 20);
     assert.equal(r.status, "applied");
     if (r.status === "applied") assert.equal(r.snapshot.phase, "awaiting_readiness");
   });
@@ -614,7 +614,7 @@ describe("movement onset", () => {
 
   it("does not confirm onset before the configured duration elapses", () => {
     const config = buildValidConfig();
-    let state = readyState(config);
+    const state = readyState(config);
     const r = sendFrame(state, config, { x: 0.5, y: 0.5 }, 20);
     assert.equal(r.status, "applied");
     if (r.status === "applied") assert.equal(r.snapshot.phase, "ready_confirmed_awaiting_onset");
@@ -692,7 +692,7 @@ describe("wrong-direction exit and re-arming", () => {
   it("records a factual non_target_facing_exit_observed_before_valid_onset note without clinical judgment", () => {
     const config = buildValidConfig();
     let state = readyState(config);
-    let r = sendFrame(state, config, { x: 0.15, y: 0.5 }, 20);
+    const r = sendFrame(state, config, { x: 0.15, y: 0.5 }, 20);
     assert.equal(r.status, "applied");
     state = r.state;
     const finalRes = applyLateralReachCommand(state, { type: "attemptWindowEnded", nowMs: 100 });
@@ -739,7 +739,7 @@ describe("fast first observed frame inside target", () => {
     const config = buildValidConfig({
       timing: { onsetConfirmationMs: 0, dwellDurationMs: 0, returnConfirmationMs: 150 },
     });
-    let state = readyState(config);
+    const state = readyState(config);
     const r = sendFrame(state, config, TARGET_POINT, 20);
     assert.equal(r.status, "applied");
     if (r.status === "applied") {
@@ -841,7 +841,7 @@ describe("dwell", () => {
 
   it("confirms dwell on the first valid target-entry frame when dwellDurationMs is 0", () => {
     const config = buildValidConfig({ timing: { onsetConfirmationMs: 100, dwellDurationMs: 0, returnConfirmationMs: 150 } });
-    let state = outboundState(config);
+    const state = outboundState(config);
     const r = sendFrame(state, config, TARGET_POINT, 250);
     assert.equal(r.status, "applied");
     if (r.status === "applied") {
@@ -1017,7 +1017,7 @@ describe("return to starting zone", () => {
 
   it("ignores the starting zone before reach is confirmed", () => {
     const config = buildValidConfig();
-    let state = outboundState(config);
+    const state = outboundState(config);
     const r = sendFrame(state, config, START_POINT, 210);
     assert.equal(r.status, "applied");
     if (r.status === "applied") {
@@ -1315,7 +1315,7 @@ describe("timestamp validation and monotonic engine time", () => {
   it("accepts equal timestamps on non-frame commands while frame timestamps remain strict", () => {
     const config = buildValidConfig();
     let state = mustCreateState(config, 0, 0);
-    let r = sendFrame(state, config, START_POINT, 100);
+    const r = sendFrame(state, config, START_POINT, 100);
     assert.equal(r.status, "applied");
     state = r.state;
     const readiness = applyLateralReachCommand(state, {
@@ -1330,7 +1330,7 @@ describe("timestamp validation and monotonic engine time", () => {
   it("rejects stale timestamps on readinessConfirmed without mutating state", () => {
     const config = buildValidConfig();
     let state = mustCreateState(config, 0, 0);
-    let r = sendFrame(state, config, START_POINT, 100);
+    const r = sendFrame(state, config, START_POINT, 100);
     assert.equal(r.status, "applied");
     state = r.state;
     const before = JSON.parse(JSON.stringify(state));

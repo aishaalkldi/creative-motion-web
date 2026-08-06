@@ -550,8 +550,8 @@ describe("target-facing onset — direction variants", () => {
 
   it("re-arms readiness on opposite-direction exit before valid onset", () => {
     const config = buildValidConfig();
-    let state = readyState(config);
-    let r = sendFrame(state, config, wristOnly(wrongDirectionPoint(config)), 20);
+    const state = readyState(config);
+    const r = sendFrame(state, config, wristOnly(wrongDirectionPoint(config)), 20);
     assert.equal(r.status, "applied");
     if (r.status === "applied") assert.equal(r.snapshot.phase, "awaiting_readiness");
   });
@@ -667,7 +667,7 @@ describe("target-facing onset — direction variants", () => {
   it("records non_target_facing_exit_observed_before_valid_onset in factualNotes", () => {
     const config = buildValidConfig();
     let state = readyState(config);
-    let r = sendFrame(state, config, wristOnly(wrongDirectionPoint(config)), 20);
+    const r = sendFrame(state, config, wristOnly(wrongDirectionPoint(config)), 20);
     assert.equal(r.status, "applied");
     state = r.state;
     const finalRes = applyElbowExtensionCommand(state, { type: "attemptWindowEnded", nowMs: 100 });
@@ -684,7 +684,7 @@ describe("target-facing onset — direction variants", () => {
 describe("dwell", () => {
   it("does not confirm dwell from a single frame when dwellDurationMs is nonzero", () => {
     const config = buildValidConfig();
-    let state = outboundState(config);
+    const state = outboundState(config);
     const r = sendFrame(state, config, wristOnly(config.fixedTarget.point), 250);
     assert.equal(r.status, "applied");
     if (r.status === "applied") {
@@ -742,7 +742,7 @@ describe("dwell", () => {
     const config = buildValidConfig({
       timing: { onsetConfirmationMs: 100, dwellDurationMs: 0, returnConfirmationMs: 150 },
     });
-    let state = outboundState(config);
+    const state = outboundState(config);
     const r = sendFrame(state, config, wristOnly(config.fixedTarget.point), 250);
     assert.equal(r.status, "applied");
     if (r.status === "applied") {
@@ -985,8 +985,8 @@ describe("optional 2D elbow angle observation", () => {
 
   it("never opens a protective pause when shoulder or elbow are missing but wrist remains valid", () => {
     const config = buildValidConfig();
-    let state = outboundState(config);
-    let r = sendFrame(state, config, wristOnly({ x: 0.6, y: 0.5 }), 150);
+    const state = outboundState(config);
+    const r = sendFrame(state, config, wristOnly({ x: 0.6, y: 0.5 }), 150);
     assert.equal(r.status, "applied");
     if (r.status === "applied") assert.equal(r.snapshot.hasActivePause, false);
   });
@@ -995,7 +995,7 @@ describe("optional 2D elbow angle observation", () => {
 describe("protective pauses and tracking continuity", () => {
   it("does not open a pause for a short wrist gap below maxAllowedGapMs", () => {
     const config = buildValidConfig();
-    let state = outboundState(config);
+    const state = outboundState(config);
     let r = sendFrame(state, config, null, 150);
     assert.equal(r.status, "applied");
     if (r.status === "applied") assert.equal(r.snapshot.hasActivePause, false);
@@ -1006,7 +1006,7 @@ describe("protective pauses and tracking continuity", () => {
 
   it("opens a pause exactly when the gap reaches maxAllowedGapMs", () => {
     const config = buildValidConfig();
-    let state = outboundState(config);
+    const state = outboundState(config);
     let r = sendFrame(state, config, null, 150);
     assert.equal(r.status, "applied");
     r = sendFrame(r.state, config, null, 150 + config.tracking.maxAllowedGapMs);
@@ -1048,7 +1048,7 @@ describe("protective pauses and tracking continuity", () => {
 
   it("never auto-resumes when tracking is restored without an explicit resume command", () => {
     const config = buildValidConfig();
-    let state = openPause(outboundState(config), config, 150);
+    const state = openPause(outboundState(config), config, 150);
     const r = sendFrame(state, config, wristOnly(config.fixedTarget.point), 500);
     assert.equal(r.status, "applied");
     if (r.status === "applied") assert.equal(r.snapshot.hasActivePause, true);
@@ -1094,7 +1094,7 @@ describe("protective pauses and tracking continuity", () => {
 
   it("finalizes exactly one pause event on successful human resume", () => {
     const config = buildValidConfig();
-    let state = openPause(outboundState(config), config, 150);
+    const state = openPause(outboundState(config), config, 150);
     const r = applyElbowExtensionCommand(state, {
       type: "resumeRequested",
       nowMs: 500,
@@ -1323,7 +1323,7 @@ describe("clock validation and command ordering", () => {
   it("rejects stale non-frame commands without mutating state", () => {
     const config = buildValidConfig();
     let state = mustCreateState(config, 0, 0);
-    let r = sendFrame(state, config, wristOnly(START_POINT), 100);
+    const r = sendFrame(state, config, wristOnly(START_POINT), 100);
     assert.equal(r.status, "applied");
     state = r.state;
     const before = JSON.parse(JSON.stringify(state));
@@ -1340,7 +1340,7 @@ describe("clock validation and command ordering", () => {
   it("accepts equal timestamps on non-frame commands while frame timestamps remain strict", () => {
     const config = buildValidConfig();
     let state = mustCreateState(config, 0, 0);
-    let r = sendFrame(state, config, wristOnly(START_POINT), 100);
+    const r = sendFrame(state, config, wristOnly(START_POINT), 100);
     assert.equal(r.status, "applied");
     state = r.state;
     const readiness = applyElbowExtensionCommand(state, {
@@ -1366,7 +1366,7 @@ describe("clock validation and command ordering", () => {
 
   it("rejects duplicate frame timestamps without changing path samples", () => {
     const config = buildValidConfig();
-    let state = outboundState(config);
+    const state = outboundState(config);
     const lastFrameMs = 20 + config.timing.onsetConfirmationMs;
     const samplesBefore = state.outboundSamples.length;
     const r = sendFrame(state, config, wristOnly({ x: 0.65, y: 0.6 }), lastFrameMs);
@@ -1423,7 +1423,7 @@ describe("path metrics and result shape", () => {
     const config = buildValidConfig({
       timing: { onsetConfirmationMs: 0, dwellDurationMs: 0, returnConfirmationMs: 150 },
     });
-    let state = readyState(config);
+    const state = readyState(config);
     const r = sendFrame(state, config, wristOnly(config.fixedTarget.point), 20);
     assert.equal(r.status, "applied");
     if (r.status === "applied") {

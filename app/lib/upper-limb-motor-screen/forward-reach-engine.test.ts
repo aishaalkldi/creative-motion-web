@@ -400,7 +400,7 @@ describe("movement onset", () => {
 
   it("does not confirm onset before the configured duration elapses", () => {
     const config = buildValidConfig();
-    let state = readyState(config);
+    const state = readyState(config);
     const r = sendFrame(state, config, { x: 0.5, y: 0.5 }, 20);
     assert.equal(r.status, "applied");
     if (r.status === "applied") assert.equal(r.snapshot.phase, "ready_confirmed_awaiting_onset");
@@ -526,7 +526,7 @@ describe("dwell", () => {
 
   it("confirms dwell on the first valid target-entry frame when dwellDurationMs is 0 (Fix 4)", () => {
     const config = buildValidConfig({ timing: { onsetConfirmationMs: 100, dwellDurationMs: 0, returnConfirmationMs: 150 } });
-    let state = outboundState(config);
+    const state = outboundState(config);
     const r = sendFrame(state, config, TARGET_POINT, 250);
     assert.equal(r.status, "applied");
     if (r.status === "applied") {
@@ -698,7 +698,7 @@ describe("return to starting zone", () => {
 
   it("ignores the starting zone before reach is confirmed", () => {
     const config = buildValidConfig();
-    let state = outboundState(config);
+    const state = outboundState(config);
     const r = sendFrame(state, config, START_POINT, 210);
     assert.equal(r.status, "applied");
     if (r.status === "applied") {

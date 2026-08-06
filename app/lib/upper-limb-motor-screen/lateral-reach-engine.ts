@@ -914,7 +914,7 @@ function confirmMovementOnset(
   });
   const targetEntryAtMs = pendingTargetEntryAtMs ?? (insideTarget ? nowMs : null);
 
-  let next: LateralReachAttemptStateInternal = {
+  const next: LateralReachAttemptStateInternal = {
     ...state,
     phase: "outbound",
     onsetCandidate: null,

@@ -1053,7 +1053,7 @@ function handleOutboundOrDwelling(
   frame: NormalizedMotionFrame,
   nowMs: number,
 ): ElbowExtensionCommandResult {
-  let next = observePeakElbowAngleIfApplicable(state, frame);
+  const next = observePeakElbowAngleIfApplicable(state, frame);
 
   const outboundSamples = [...next.outboundSamples, sample];
   const insideTarget = isWristInsideTarget(sample, next.config.fixedTarget.point, {
