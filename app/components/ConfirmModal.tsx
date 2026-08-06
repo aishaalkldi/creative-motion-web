@@ -70,8 +70,10 @@ export default function ConfirmModal({
       const dialog = dialogRef.current;
       if (!dialog) return;
 
-      const focusableElements = dialog.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]):not([disabled])'
+      const focusableElements = Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]):not([disabled])'
+        )
       );
 
       // No enabled focusable elements: keep focus on dialog container
@@ -81,34 +83,39 @@ export default function ConfirmModal({
         return;
       }
 
-      const firstFocusable = focusableElements[0];
-      const lastFocusable = focusableElements[focusableElements.length - 1];
       const activeElement = document.activeElement;
 
       // Focus is outside the dialog: recover by moving to first or last
       if (!dialog.contains(activeElement)) {
         e.preventDefault();
         if (e.shiftKey) {
-          lastFocusable.focus();
+          focusableElements[focusableElements.length - 1].focus();
         } else {
-          firstFocusable.focus();
+          focusableElements[0].focus();
         }
         return;
       }
 
+      // Find current index
+      const currentIndex = focusableElements.indexOf(activeElement as HTMLElement);
+
+      // Always prevent default and explicitly cycle
+      e.preventDefault();
+
+      let targetIndex: number;
       if (e.shiftKey) {
-        // Shift+Tab: if on first element, wrap to last
-        if (activeElement === firstFocusable) {
-          e.preventDefault();
-          lastFocusable.focus();
-        }
+        // Shift+Tab: move backward with wrap
+        targetIndex = currentIndex <= 0
+          ? focusableElements.length - 1
+          : currentIndex - 1;
       } else {
-        // Tab: if on last element, wrap to first
-        if (activeElement === lastFocusable) {
-          e.preventDefault();
-          firstFocusable.focus();
-        }
+        // Tab: move forward with wrap
+        targetIndex = currentIndex >= focusableElements.length - 1
+          ? 0
+          : currentIndex + 1;
       }
+
+      focusableElements[targetIndex].focus();
     }
 
     window.addEventListener("keydown", handleKeyDown);
