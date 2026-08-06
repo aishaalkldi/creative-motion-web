@@ -168,6 +168,9 @@ export default function LateralReachLabPage() {
     { key: "stopBeforeCompletion", label: "Stop before completion" },
   ];
 
+  const getScenarioLabel = (key: ScenarioKey): string =>
+    scenarioOptions.find((option) => option.key === key)?.label ?? "—";
+
   const isAttemptActive = attemptState !== null;
   const hasMoreCommands = currentScenario && commandIndex < currentScenario.commands.length;
 
@@ -326,7 +329,7 @@ export default function LateralReachLabPage() {
 
                 <div className="space-y-3 text-sm">
                   <StateRow label="Tested side" value={testedSide} />
-                  <StateRow label="Scenario" value={currentScenario?.name ?? "—"} />
+                  <StateRow label="Scenario" value={getScenarioLabel(scenarioKey)} />
                   <StateRow label="Command index" value={`${commandIndex} / ${currentScenario?.commands.length ?? 0}`} />
                   <StateRow label="Engine phase" value={snapshot.phase ?? "—"} />
                   <StateRow label="Protective pause" value={snapshot.hasActivePause ? "Active" : "Inactive"} />
@@ -361,7 +364,7 @@ export default function LateralReachLabPage() {
                       <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
                         <p className="mb-2 text-xs font-semibold text-blue-200">Engine outcome context</p>
                         <div className="space-y-1 text-xs text-blue-200/80">
-                          <p>Selected scenario: {scenarioKey === "wrongDirectionExitRearmsReadiness" ? "Non-Target-Facing Exit (Readiness Reset)" : scenarioOptions.find(s => s.key === scenarioKey)?.label}</p>
+                          <p>Selected scenario: {getScenarioLabel(scenarioKey)}</p>
                           <p>Last engine phase: {snapshot?.phase ?? "—"}</p>
                           {attemptResult.factualNotes && attemptResult.factualNotes.length > 0 && (
                             <p className="mt-1">
