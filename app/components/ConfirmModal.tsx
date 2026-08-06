@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef } from "react";
+import { useEffect, useId, useLayoutEffect, useRef } from "react";
 
 interface Props {
   open: boolean;
@@ -29,7 +29,7 @@ export default function ConfirmModal({
   const messageId = useId();
 
   // Initial focus and focus restoration
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
 
     // Store previously focused element
@@ -59,6 +59,12 @@ export default function ConfirmModal({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onCancel]);
+
+  // Reclaim focus when entering loading state
+  useLayoutEffect(() => {
+    if (!open || !loading) return;
+    dialogRef.current?.focus();
+  }, [open, loading]);
 
   // Focus trap
   useEffect(() => {
