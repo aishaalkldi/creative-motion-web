@@ -12,11 +12,11 @@ import {
   type ForwardReachAttemptState,
   type ForwardReachRuntimeSnapshot,
 } from "@/app/lib/upper-limb-motor-screen/forward-reach-engine";
-import type { UpperLimbSide } from "@/app/lib/upper-limb-motor-screen/types";
+import type { UpperLimbMovementAttemptResult, UpperLimbSide } from "@/app/lib/upper-limb-motor-screen/types";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-type ScenarioKey = "happyPath" | "lowVisibility" | "wrongDirection" | "shortTrackingGap" | "longTrackingGapWithHumanResume" | "stopBeforeCompletion";
+type ScenarioKey = "happyPath" | "lowVisibility" | "onsetCandidateAbandonedOnReturn" | "shortTrackingGap" | "longTrackingGapWithHumanResume" | "stopBeforeCompletion";
 
 // ── Page ───────────────────────────────────────────────────────────────────
 
@@ -34,7 +34,8 @@ export default function MotorScreenLabPage() {
   const [attemptState, setAttemptState] = useState<ForwardReachAttemptState | null>(null);
   const [commandIndex, setCommandIndex] = useState(0);
   const [snapshot, setSnapshot] = useState<ForwardReachRuntimeSnapshot | null>(null);
-  const [terminalResult, setTerminalResult] = useState<ForwardReachRuntimeSnapshot | null>(null);
+  const [attemptResult, setAttemptResult] = useState<UpperLimbMovementAttemptResult | null>(null);
+  const [rejectionMessage, setRejectionMessage] = useState<string | null>(null);
 
   // Playback state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -46,7 +47,8 @@ export default function MotorScreenLabPage() {
     setAttemptState(null);
     setCommandIndex(0);
     setSnapshot(null);
-    setTerminalResult(null);
+    setAttemptResult(null);
+    setRejectionMessage(null);
     setIsPlaying(false);
   }, [testedSide, scenarioKey]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -65,7 +67,8 @@ export default function MotorScreenLabPage() {
     setAttemptState(createResult.state);
     setCommandIndex(0);
     setSnapshot(getForwardReachRuntimeSnapshot(createResult.state));
-    setTerminalResult(null);
+    setAttemptResult(null);
+    setRejectionMessage(null);
     setIsPlaying(false);
   }
 
@@ -82,17 +85,21 @@ export default function MotorScreenLabPage() {
       setAttemptState(newState);
       setSnapshot(newSnapshot);
       setCommandIndex(commandIndex + 1);
+      setRejectionMessage(null);
 
-      // Check if terminal
-      if (
-        newSnapshot.terminal
-      ) {
-        setTerminalResult(newSnapshot);
+      // Store the attempt result when the engine produces one
+      if (result.attemptResult) {
+        setAttemptResult(result.attemptResult);
+      }
+
+      // Stop playback when terminal
+      if (newSnapshot.terminal) {
         setIsPlaying(false);
       }
     } else {
-      // Command rejected — advance index anyway
-      setCommandIndex(commandIndex + 1);
+      // Command rejected — do not advance, stop playback, show warning
+      setIsPlaying(false);
+      setRejectionMessage(`Command rejected by engine: ${result.reason}`);
     }
   }, [attemptState, currentScenario, commandIndex]);
 
@@ -113,7 +120,8 @@ export default function MotorScreenLabPage() {
     setAttemptState(null);
     setCommandIndex(0);
     setSnapshot(null);
-    setTerminalResult(null);
+    setAttemptResult(null);
+    setRejectionMessage(null);
     setIsPlaying(false);
 
     if (playbackTimerRef.current !== null) {
@@ -150,7 +158,7 @@ export default function MotorScreenLabPage() {
   const scenarioOptions: { key: ScenarioKey; label: string }[] = [
     { key: "happyPath", label: "Happy path" },
     { key: "lowVisibility", label: "Low visibility" },
-    { key: "wrongDirection", label: "Wrong direction" },
+    { key: "onsetCandidateAbandonedOnReturn", label: "Onset candidate abandoned on return" },
     { key: "shortTrackingGap", label: "Short tracking gap" },
     { key: "longTrackingGapWithHumanResume", label: "Long tracking gap with human resume" },
     { key: "stopBeforeCompletion", label: "Stop before completion" },
@@ -286,6 +294,15 @@ export default function MotorScreenLabPage() {
                   Reset
                 </button>
               </div>
+
+              {/* Rejection warning */}
+              {rejectionMessage && (
+                <div className="mt-4 rounded-lg border border-rose-500/20 bg-rose-500/10 p-3">
+                  <p className="text-xs font-semibold text-rose-300">
+                    {rejectionMessage}
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Current state */}
@@ -311,32 +328,66 @@ export default function MotorScreenLabPage() {
 
           {/* Right column: Terminal result */}
           <div>
-            {terminalResult ? (
+            {attemptResult ? (
               <div className="rounded-xl border border-[#1E2D42] bg-[#0F1825] p-6">
                 <h2 className="mb-4 text-lg font-semibold text-white">Terminal Result</h2>
 
                 <div className="space-y-4">
                   {/* Metadata */}
                   <div className="space-y-2 text-sm">
-                    <ResultRow label="Tested side" value={testedSide} />
-                    <ResultRow label="Terminal" value={terminalResult.terminal ? "Yes" : "No"} />
+                    <ResultRow label="Task ID" value={attemptResult.taskId} />
+                    <ResultRow label="Tested side" value={attemptResult.testedSide} />
+                    <ResultRow label="Completion state" value={attemptResult.completionState} />
                   </div>
 
                   <div className="border-t border-[#1E2D42]" />
 
                   {/* Flags */}
                   <div className="space-y-2 text-sm">
-                    <ResultRow label="Target reached" value={terminalResult.targetReached ? "Yes" : "No"} />
-                    <ResultRow label="Dwell confirmed" value={terminalResult.dwellConfirmed ? "Yes" : "No"} />
-                    <ResultRow label="Return completed" value={terminalResult.returnToStartCompleted ? "Yes" : "No"} />
+                    <ResultRow label="Target reached" value={attemptResult.targetReached !== null ? (attemptResult.targetReached ? "Yes" : "No") : "—"} />
+                    <ResultRow label="Dwell confirmed" value={attemptResult.dwellConfirmed !== null ? (attemptResult.dwellConfirmed ? "Yes" : "No") : "—"} />
+                    <ResultRow label="Return completed" value={attemptResult.returnToStartCompleted !== null ? (attemptResult.returnToStartCompleted ? "Yes" : "No") : "—"} />
+                  </div>
+
+                  <div className="border-t border-[#1E2D42]" />
+
+                  {/* Timing */}
+                  <div className="space-y-2 text-sm">
+                    <ResultRow label="Reach time" value={attemptResult.reachTimeMs !== null ? `${attemptResult.reachTimeMs} ms` : "—"} />
+                    <ResultRow label="Return time" value={attemptResult.returnTimeMs !== null ? `${attemptResult.returnTimeMs} ms` : "—"} />
+                    <ResultRow label="Total movement time" value={attemptResult.totalMovementTimeMs !== null ? `${attemptResult.totalMovementTimeMs} ms` : "—"} />
+                  </div>
+
+                  <div className="border-t border-[#1E2D42]" />
+
+                  {/* Path */}
+                  <div className="space-y-2 text-sm">
+                    <ResultRow label="Path length" value={attemptResult.normalizedPathLength !== null ? attemptResult.normalizedPathLength.toFixed(4) : "—"} />
+                    <ResultRow label="Path efficiency" value={attemptResult.pathEfficiency !== null ? attemptResult.pathEfficiency.toFixed(4) : "—"} />
                   </div>
 
                   <div className="border-t border-[#1E2D42]" />
 
                   {/* Tracking quality */}
                   <div className="space-y-2 text-sm">
-                    <ResultRow label="Protective pause count" value={terminalResult.protectivePauseCount} />
+                    <ResultRow label="Tracking quality" value={attemptResult.trackingQualitySummary} />
+                    <ResultRow label="Protective pause count" value={attemptResult.protectivePauseCount} />
+                    <ResultRow label="Protective pause duration" value={attemptResult.protectivePauseDurationMs > 0 ? `${attemptResult.protectivePauseDurationMs} ms` : "—"} />
                   </div>
+
+                  {attemptResult.factualNotes && attemptResult.factualNotes.length > 0 && (
+                    <>
+                      <div className="border-t border-[#1E2D42]" />
+                      <div>
+                        <p className="mb-2 text-sm font-medium text-white/70">Factual notes</p>
+                        <ul className="space-y-1 text-sm text-white/50">
+                          {attemptResult.factualNotes.map((note, idx) => (
+                            <li key={idx}>• {note}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    </>
+                  )}
 
                   <div className="border-t border-[#1E2D42]" />
 

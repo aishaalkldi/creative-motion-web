@@ -1,8 +1,8 @@
 /**
  * Deterministic Forward Reach demonstration fixtures.
- * 
+ *
  * Pure TypeScript — no React, no DOM, no browser APIs, no network, no persistence.
- * 
+ *
  * Each scenario is a sequence of commands with explicit monotonic timestamps
  * that drive the real Forward Reach engine to produce factual terminal results.
  */
@@ -110,7 +110,7 @@ export function buildHappyPathScenario(config: ForwardReachConfig): DemoScenario
       // Stay in starting zone (must stay >= returnConfirmationMs = 150ms)
       { type: "frame", nowMs: 650, frame: buildFrame(config.testedSide, START_POINT, 650) },
       { type: "frame", nowMs: 700, frame: buildFrame(config.testedSide, START_POINT, 700) },
-      { type: "frame", nowMs: 760, frame: buildFrame(config.testedSide, START_POINT, 760) },
+      // Return confirmation completes at ~750ms (600 + 150)
       // Attempt window ends
       { type: "attemptWindowEnded", nowMs: 800 },
     ],
@@ -134,17 +134,17 @@ export function buildLowVisibilityScenario(config: ForwardReachConfig): DemoScen
   };
 }
 
-export function buildWrongDirectionScenario(config: ForwardReachConfig): DemoScenario {
+export function buildOnsetCandidateAbandonedOnReturnScenario(config: ForwardReachConfig): DemoScenario {
   return {
-    name: "wrongDirection",
-    description: "Movement in opposite direction before valid onset — re-arms readiness",
+    name: "onsetCandidateAbandonedOnReturn",
+    description: "The wrist exits the starting zone in any direction, then returns before the onset-confirmation window completes. The current onset candidate is discarded, while readiness remains confirmed.",
     commands: [
       { type: "frame", nowMs: 0, frame: buildFrame(config.testedSide, START_POINT, 0) },
       { type: "readinessConfirmed", nowMs: 10, confirmedBy: "clinician" },
-      // Move in wrong direction
+      // Exit starting zone in any direction
       { type: "frame", nowMs: 20, frame: buildFrame(config.testedSide, OPPOSITE_DIRECTION_POINT, 20) },
       { type: "frame", nowMs: 50, frame: buildFrame(config.testedSide, OPPOSITE_DIRECTION_POINT, 50) },
-      // Return to starting zone
+      // Return to starting zone before onset confirmation completes
       { type: "frame", nowMs: 80, frame: buildFrame(config.testedSide, START_POINT, 80) },
       { type: "attemptWindowEnded", nowMs: 150 },
     ],
@@ -223,7 +223,7 @@ export function buildStopBeforeCompletionScenario(config: ForwardReachConfig): D
 export interface DemoScenarioMap {
   happyPath: DemoScenario;
   lowVisibility: DemoScenario;
-  wrongDirection: DemoScenario;
+  onsetCandidateAbandonedOnReturn: DemoScenario;
   shortTrackingGap: DemoScenario;
   longTrackingGapWithHumanResume: DemoScenario;
   stopBeforeCompletion: DemoScenario;
@@ -237,7 +237,7 @@ export function buildAllDemoScenarios(testedSide: UpperLimbSide): DemoScenarioMa
   return {
     happyPath: buildHappyPathScenario(config),
     lowVisibility: buildLowVisibilityScenario(config),
-    wrongDirection: buildWrongDirectionScenario(config),
+    onsetCandidateAbandonedOnReturn: buildOnsetCandidateAbandonedOnReturnScenario(config),
     shortTrackingGap: buildShortTrackingGapScenario(config),
     longTrackingGapWithHumanResume: buildLongTrackingGapWithHumanResumeScenario(config),
     stopBeforeCompletion: buildStopBeforeCompletionScenario(config),
@@ -248,6 +248,8 @@ export function buildAllDemoScenarios(testedSide: UpperLimbSide): DemoScenarioMa
  * Executes a complete scenario through the real engine and returns the final command result.
  * The attempt result (when terminal) contains the terminal state and metrics.
  * Does not expose raw trajectory data.
+ *
+ * Throws if any command in the scenario is rejected by the engine.
  */
 export function executeScenario(
   scenario: DemoScenario,
@@ -265,7 +267,8 @@ export function executeScenario(
   let state = createResult.state;
   let attemptResult: UpperLimbMovementAttemptResult | null = null;
 
-  for (const command of scenario.commands) {
+  for (let i = 0; i < scenario.commands.length; i++) {
+    const command = scenario.commands[i];
     const result = applyForwardReachCommand(state, command);
     if (result.status === "applied") {
       state = result.state;
@@ -274,8 +277,10 @@ export function executeScenario(
         attemptResult = result.attemptResult;
       }
     } else {
-      // Command rejected — keep previous state
-      // This is normal engine behavior (e.g., out-of-order timestamps)
+      // Built-in demo scenarios are expected to contain only valid commands
+      throw new Error(
+        `Scenario "${scenario.name}" command ${i} (type: ${command.type}) was rejected by engine: ${result.reason}`
+      );
     }
   }
 

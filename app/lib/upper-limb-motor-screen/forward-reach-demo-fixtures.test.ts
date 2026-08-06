@@ -11,6 +11,11 @@ import {
   buildForwardReachDemoConfig,
   executeScenario,
 } from "@/app/lib/upper-limb-motor-screen/forward-reach-demo-fixtures";
+import {
+  applyForwardReachCommand,
+  createForwardReachAttemptState,
+} from "@/app/lib/upper-limb-motor-screen/forward-reach-engine";
+import { MOTION_INTELLIGENCE_SCHEMA_VERSION } from "@/app/lib/motion-intelligence";
 
 // ── Successful flows ───────────────────────────────────────────────────────
 
@@ -118,9 +123,11 @@ describe("Forward Reach demo fixtures — determinism", () => {
 
     // Run low visibility scenario — should not inherit completed state
     const secondResult = executeScenario(scenarios.lowVisibility, config);
-    if (secondResult.attemptResult) {
-      assert.notEqual(secondResult.attemptResult.completionState, "completed", "Second attempt should not inherit completion");
-    }
+    assert.ok(secondResult.attemptResult !== null, "Second attempt should have a result");
+    assert.equal(secondResult.attemptResult!.completionState, "not_started", "Second attempt should be not_started");
+    assert.equal(secondResult.attemptResult!.targetReached, false, "Target should not be reached");
+    assert.equal(secondResult.attemptResult!.dwellConfirmed, false, "Dwell should not be confirmed");
+    assert.equal(secondResult.attemptResult!.returnToStartCompleted, false, "Return should not be completed");
   });
 });
 
@@ -132,21 +139,33 @@ describe("Forward Reach demo fixtures — safety scenarios", () => {
     const scenarios = buildAllDemoScenarios("right");
     const result = executeScenario(scenarios.lowVisibility, config);
 
-    // Low visibility should not complete successfully
-    if (result.attemptResult) {
-      assert.notEqual(result.attemptResult.completionState, "completed", "Low visibility should not complete");
-      assert.equal(result.attemptResult.targetReached, false, "Target should not be reached");
-    }
+    // Low visibility should produce a terminal result after attemptWindowEnded
+    assert.ok(result.attemptResult !== null, "Should have an attempt result");
+    assert.equal(result.attemptResult!.completionState, "not_started", "Completion state should be not_started");
+    assert.equal(result.attemptResult!.targetReached, false, "Target should not be reached");
+    assert.equal(result.attemptResult!.dwellConfirmed, false, "Dwell should not be confirmed");
+    assert.equal(result.attemptResult!.returnToStartCompleted, false, "Return should not be completed");
   });
 
-  it("wrong-direction movement follows existing engine behavior", () => {
+  it("onset candidate abandoned on return preserves readiness without completion", () => {
     const config = buildForwardReachDemoConfig("right");
     const scenarios = buildAllDemoScenarios("right");
-    const result = executeScenario(scenarios.wrongDirection, config);
+    const result = executeScenario(scenarios.onsetCandidateAbandonedOnReturn, config);
 
-    // Engine should handle wrong direction — does not crash
-    assert.ok(result.finalSnapshot !== null, "Should produce a valid snapshot");
-    assert.equal(result.finalSnapshot.targetReached, false, "Target should not be reached");
+    // The wrist exits in any direction, then returns before onset confirmation
+    // No terminal success should occur
+    assert.ok(result.attemptResult !== null, "Should have an attempt result");
+    assert.notEqual(result.attemptResult!.completionState, "completed", "Should not complete");
+    assert.equal(result.attemptResult!.targetReached, false, "Target should not be reached");
+    assert.equal(result.attemptResult!.dwellConfirmed, false, "Dwell should not be confirmed");
+    assert.equal(result.attemptResult!.returnToStartCompleted, false, "Return should not be completed");
+    // The attempt ends in ready_confirmed_awaiting_onset or terminal not_started
+    // Readiness is not revoked
+    assert.ok(
+      result.finalSnapshot.phase === "ready_confirmed_awaiting_onset" ||
+      result.attemptResult!.completionState === "not_started",
+      "Phase should be ready_confirmed_awaiting_onset or terminal not_started"
+    );
   });
 
   it("short tracking gap remains within current engine tolerance", () => {
@@ -169,7 +188,7 @@ describe("Forward Reach demo fixtures — safety scenarios", () => {
   it("no automatic resume occurs after protective pause", () => {
     const config = buildForwardReachDemoConfig("right");
     const scenarios = buildAllDemoScenarios("right");
-    
+
     // Build scenario without human resume
     const scenarioWithoutResume = {
       ...scenarios.longTrackingGapWithHumanResume,
@@ -180,23 +199,25 @@ describe("Forward Reach demo fixtures — safety scenarios", () => {
 
     const result = executeScenario(scenarioWithoutResume, config);
 
-    // Protective pause should remain active without explicit resume
+    // Protective pause should have been opened
     assert.ok(result.finalSnapshot.protectivePauseCount > 0, "Protective pause should have been opened");
-    if (result.attemptResult) {
-      assert.notEqual(result.attemptResult.completionState, "completed", "Should not complete without resume");
-    }
+    // Without explicit resume, the attempt should not complete successfully
+    assert.ok(result.attemptResult !== null, "Should have an attempt result");
+    assert.notEqual(result.attemptResult!.completionState, "completed", "Should not complete without resume");
   });
 
   it("explicit valid human resume is required after protective pause", () => {
     const config = buildForwardReachDemoConfig("right");
     const scenarios = buildAllDemoScenarios("right");
-    
+
     // Full scenario includes resumeRequested command
     const result = executeScenario(scenarios.longTrackingGapWithHumanResume, config);
 
-    // With explicit resume, the attempt continues
+    // With explicit resume, the protective pause is resolved
     assert.ok(result.finalSnapshot.protectivePauseCount > 0, "Protective pause should have been opened");
-    // The attempt should not be stopped (may or may not complete depending on remaining commands)
+    // resumeRequested is accepted, pause no longer active
+    assert.ok(result.finalSnapshot.hasActivePause === false, "Pause should be resolved after resume");
+    // Execution continues according to engine state contract
     assert.ok(result.finalSnapshot !== null, "Attempt should continue after resume");
   });
 
@@ -212,26 +233,40 @@ describe("Forward Reach demo fixtures — safety scenarios", () => {
     assert.equal(result.attemptResult!.returnToStartCompleted, false, "Return should not be completed");
   });
 
-  it("out-of-order timestamp behavior remains consistent with existing engine", () => {
+  it("out-of-order timestamp is rejected by engine", () => {
     const config = buildForwardReachDemoConfig("right");
-    const scenarios = buildAllDemoScenarios("right");
 
-    // Build scenario with an out-of-order timestamp
-    const outOfOrderScenario = {
-      name: "outOfOrder",
-      description: "Out-of-order timestamp test",
-      commands: [
-        scenarios.happyPath.commands[0], // t=0
-        scenarios.happyPath.commands[1], // t=10
-        scenarios.happyPath.commands[2], // t=20
-        { ...scenarios.happyPath.commands[3], nowMs: 10 }, // t=10 (out of order)
-        scenarios.happyPath.commands[4], // t=80
-      ],
+    // Create valid initial state
+    const createResult = createForwardReachAttemptState(config, 0, 0);
+    assert.ok(createResult.ok, "Should create valid initial state");
+    let state = createResult.state;
+
+    // Apply accepted commands with increasing timestamps
+    const frame1 = {
+      schemaVersion: MOTION_INTELLIGENCE_SCHEMA_VERSION,
+      source: { kind: "web_camera_pose" as const, capturedAtMs: 0, frameIndex: 0, coordinateSpace: "normalized_2d" as const },
+      joints: { right_wrist: { landmark: { x: 0.3, y: 0.5 }, confidence: { visibility: 0.9, present: true } } },
     };
+    const result1 = applyForwardReachCommand(state, { type: "frame", nowMs: 0, frame: frame1 });
+    assert.equal(result1.status, "applied", "First command should be applied");
+    state = result1.state;
 
-    // Should not crash — engine handles this gracefully
-    const result = executeScenario(outOfOrderScenario, config);
-    assert.ok(result.finalSnapshot !== null, "Should produce a valid state despite out-of-order timestamp");
+    // Apply command with newer timestamp
+    const result2 = applyForwardReachCommand(state, { type: "readinessConfirmed", nowMs: 10, confirmedBy: "clinician" });
+    assert.equal(result2.status, "applied", "Second command should be applied");
+    state = result2.state;
+
+    // Apply command with an older timestamp (out-of-order)
+    const frame2 = {
+      schemaVersion: MOTION_INTELLIGENCE_SCHEMA_VERSION,
+      source: { kind: "web_camera_pose" as const, capturedAtMs: 5, frameIndex: 0, coordinateSpace: "normalized_2d" as const },
+      joints: { right_wrist: { landmark: { x: 0.3, y: 0.5 }, confidence: { visibility: 0.9, present: true } } },
+    };
+    const result3 = applyForwardReachCommand(state, { type: "frame", nowMs: 5, frame: frame2 });
+
+    // Engine should reject the out-of-order command
+    assert.equal(result3.status, "rejected", "Out-of-order timestamp should be rejected");
+    assert.ok(result3.reason, "Rejection should have a reason");
   });
 });
 
@@ -252,7 +287,7 @@ describe("Forward Reach demo fixtures — config validation", () => {
     const scenarios = buildAllDemoScenarios("right");
     assert.ok(scenarios.happyPath, "Should include happyPath");
     assert.ok(scenarios.lowVisibility, "Should include lowVisibility");
-    assert.ok(scenarios.wrongDirection, "Should include wrongDirection");
+    assert.ok(scenarios.onsetCandidateAbandonedOnReturn, "Should include onsetCandidateAbandonedOnReturn");
     assert.ok(scenarios.shortTrackingGap, "Should include shortTrackingGap");
     assert.ok(scenarios.longTrackingGapWithHumanResume, "Should include longTrackingGapWithHumanResume");
     assert.ok(scenarios.stopBeforeCompletion, "Should include stopBeforeCompletion");
