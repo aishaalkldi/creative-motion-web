@@ -155,10 +155,14 @@ export default function LateralReachLabPage() {
 
   // ── Render ───────────────────────────────────────────────────────────────
 
-  const scenarioOptions: { key: ScenarioKey; label: string }[] = [
+  const scenarioOptions: { key: ScenarioKey; label: string; description?: string }[] = [
     { key: "happyPath", label: "Happy path" },
     { key: "lowVisibility", label: "Low visibility" },
-    { key: "wrongDirectionExitRearmsReadiness", label: "Wrong-direction exit re-arms readiness" },
+    {
+      key: "wrongDirectionExitRearmsReadiness",
+      label: "Non-Target-Facing Exit (Readiness Reset)",
+      description: "The scripted wrist point crossed outside the configured target-facing boundary before movement onset was confirmed. This is a screen-space geometric event, not a judgment about motor control, impairment, compensation, cognition, or spatial neglect. Clinician readiness must be confirmed again."
+    },
     { key: "shortTrackingGap", label: "Short tracking gap" },
     { key: "longTrackingGapWithHumanResume", label: "Long tracking gap with human resume" },
     { key: "stopBeforeCompletion", label: "Stop before completion" },
@@ -184,9 +188,9 @@ export default function LateralReachLabPage() {
       {/* Header */}
       <div className="border-b border-[#1E2D42] px-6 py-6">
         <div className="mx-auto max-w-7xl">
-          <h1 className="text-2xl font-bold text-white">Lateral Reach Lab</h1>
+          <h1 className="text-2xl font-bold text-white">Lateral Reach — Motor Screen Engine Demo</h1>
           <p className="mt-1 text-sm text-white/50">
-            Lateral Reach deterministic demo — no camera, no persistence
+            Deterministic single-wrist screen-space target-acquisition demo — no camera, no persistence, and not a validated clinical Lateral Reach, balance, or postural-control test.
           </p>
         </div>
       </div>
@@ -231,6 +235,16 @@ export default function LateralReachLabPage() {
                     Right
                   </button>
                 </div>
+                <p className="mt-2 text-xs text-white/40">
+                  Tested side selects which wrist landmark the engine reads. Both sides currently use the same scripted target scene; this does not represent mirrored anatomical reach directions.
+                </p>
+              </div>
+
+              {/* Demo nature disclaimer */}
+              <div className="mb-4 rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
+                <p className="text-xs text-blue-200/90">
+                  This is a deterministic software demonstration only. Movement coordinates and timestamps are scripted, not captured from a real person. The engine does not measure balance, trunk compensation, shoulder movement, elbow movement, or real-world reach distance.
+                </p>
               </div>
 
               {/* Scenario */}
@@ -337,34 +351,61 @@ export default function LateralReachLabPage() {
                   <div className="space-y-2 text-sm">
                     <ResultRow label="Task ID" value={attemptResult.taskId} />
                     <ResultRow label="Tested side" value={attemptResult.testedSide} />
-                    <ResultRow label="Completion state" value={attemptResult.completionState} />
+                    <ResultRow label="Task completion state (engine)" value={attemptResult.completionState} />
                   </div>
+
+                  {/* Not-started context */}
+                  {attemptResult.completionState === "not_started" && (
+                    <>
+                      <div className="border-t border-[#1E2D42]" />
+                      <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">
+                        <p className="mb-2 text-xs font-semibold text-blue-200">Engine outcome context</p>
+                        <div className="space-y-1 text-xs text-blue-200/80">
+                          <p>Selected scenario: {scenarioKey === "wrongDirectionExitRearmsReadiness" ? "Non-Target-Facing Exit (Readiness Reset)" : scenarioOptions.find(s => s.key === scenarioKey)?.label}</p>
+                          <p>Last engine phase: {snapshot?.phase ?? "—"}</p>
+                          {attemptResult.factualNotes && attemptResult.factualNotes.length > 0 && (
+                            <p className="mt-1">
+                              {attemptResult.factualNotes.includes("non_target_facing_exit_observed_before_valid_onset")
+                                ? "The scripted wrist point crossed outside the configured target-facing boundary before movement onset was confirmed."
+                                : scenarioKey === "lowVisibility"
+                                ? "The scripted wrist observation remained below the configured visibility threshold."
+                                : "The scripted sequence ended before completion criteria were met."}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
 
                   <div className="border-t border-[#1E2D42]" />
 
                   {/* Flags */}
                   <div className="space-y-2 text-sm">
-                    <ResultRow label="Target reached" value={attemptResult.targetReached !== null ? (attemptResult.targetReached ? "Yes" : "No") : "—"} />
+                    <ResultRow label="Target zone entered" value={attemptResult.targetReached !== null ? (attemptResult.targetReached ? "Yes" : "No") : "—"} />
                     <ResultRow label="Dwell confirmed" value={attemptResult.dwellConfirmed !== null ? (attemptResult.dwellConfirmed ? "Yes" : "No") : "—"} />
-                    <ResultRow label="Return completed" value={attemptResult.returnToStartCompleted !== null ? (attemptResult.returnToStartCompleted ? "Yes" : "No") : "—"} />
+                    <ResultRow label="Returned within configured zone/time" value={attemptResult.returnToStartCompleted !== null ? (attemptResult.returnToStartCompleted ? "Yes" : "No") : "—"} />
                   </div>
 
                   <div className="border-t border-[#1E2D42]" />
 
                   {/* Timing */}
                   <div className="space-y-2 text-sm">
-                    <ResultRow label="Reach time" value={attemptResult.reachTimeMs !== null ? `${attemptResult.reachTimeMs} ms` : "—"} />
-                    <ResultRow label="Return time" value={attemptResult.returnTimeMs !== null ? `${attemptResult.returnTimeMs} ms` : "—"} />
-                    <ResultRow label="Total movement time" value={attemptResult.totalMovementTimeMs !== null ? `${attemptResult.totalMovementTimeMs} ms` : "—"} />
+                    <ResultRow label="Simulated reach timing" value={attemptResult.reachTimeMs !== null ? `${attemptResult.reachTimeMs} ms` : "—"} />
+                    <ResultRow label="Simulated return timing" value={attemptResult.returnTimeMs !== null ? `${attemptResult.returnTimeMs} ms` : "—"} />
+                    <ResultRow label="Simulated total timing" value={attemptResult.totalMovementTimeMs !== null ? `${attemptResult.totalMovementTimeMs} ms` : "—"} />
                   </div>
+                  {(attemptResult.reachTimeMs !== null || attemptResult.returnTimeMs !== null || attemptResult.totalMovementTimeMs !== null) && (
+                    <p className="text-xs text-white/40">Script-authored timing; not measured from human movement.</p>
+                  )}
 
                   <div className="border-t border-[#1E2D42]" />
 
                   {/* Path */}
                   <div className="space-y-2 text-sm">
-                    <ResultRow label="Path length" value={attemptResult.normalizedPathLength !== null ? attemptResult.normalizedPathLength.toFixed(4) : "—"} />
-                    <ResultRow label="Path efficiency" value={attemptResult.pathEfficiency !== null ? attemptResult.pathEfficiency.toFixed(4) : "—"} />
+                    <ResultRow label="Screen-space path length" value={attemptResult.normalizedPathLength !== null ? attemptResult.normalizedPathLength.toFixed(4) : "—"} />
+                    <ResultRow label="Straight-line-to-path ratio" value={attemptResult.pathEfficiency !== null ? attemptResult.pathEfficiency.toFixed(4) : "—"} />
                   </div>
+                  <p className="text-xs text-white/40">Normalized units; not physical distance. Geometric value from scripted waypoints; not a measure of patient movement quality.</p>
 
                   <div className="border-t border-[#1E2D42]" />
 
@@ -375,7 +416,7 @@ export default function LateralReachLabPage() {
                     <ResultRow label="Protective pause duration" value={attemptResult.protectivePauseDurationMs > 0 ? `${attemptResult.protectivePauseDurationMs} ms` : "—"} />
                   </div>
 
-                  {attemptResult.factualNotes && attemptResult.factualNotes.length > 0 && (
+                  {attemptResult.factualNotes && attemptResult.factualNotes.length > 0 && attemptResult.completionState !== "not_started" && (
                     <>
                       <div className="border-t border-[#1E2D42]" />
                       <div>

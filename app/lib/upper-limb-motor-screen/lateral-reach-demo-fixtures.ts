@@ -104,13 +104,15 @@ export function buildHappyPathScenario(config: LateralReachConfig): DemoScenario
       { type: "frame", nowMs: 470, frame: buildFrame(config.testedSide, { x: 0.5, y: 0.5 }, 470) },
       // Return journey
       { type: "frame", nowMs: 500, frame: buildFrame(config.testedSide, { x: 0.4, y: 0.5 }, 500) },
+      // x: 0.35 is exactly on the starting-zone boundary (0.3 ± 0.05). Engine uses inclusive comparison.
+      // Return candidate begins at 550ms
       { type: "frame", nowMs: 550, frame: buildFrame(config.testedSide, { x: 0.35, y: 0.5 }, 550) },
-      // Re-enter starting zone
+      // Re-enter starting zone center
       { type: "frame", nowMs: 600, frame: buildFrame(config.testedSide, START_POINT, 600) },
       // Stay in starting zone (must stay >= returnConfirmationMs = 150ms)
       { type: "frame", nowMs: 650, frame: buildFrame(config.testedSide, START_POINT, 650) },
+      // Return confirmation occurs at 700ms (550 + 150)
       { type: "frame", nowMs: 700, frame: buildFrame(config.testedSide, START_POINT, 700) },
-      // Return confirmation completes at ~750ms (600 + 150)
       // Attempt window ends
       { type: "attemptWindowEnded", nowMs: 800 },
     ],

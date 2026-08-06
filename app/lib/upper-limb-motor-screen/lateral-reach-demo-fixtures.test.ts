@@ -156,23 +156,80 @@ describe("Lateral Reach demo fixtures — safety scenarios", () => {
     assert.equal(result.attemptResult!.returnToStartCompleted, false, "Return should not be completed");
   });
 
-  it("wrong-direction exit re-arms readiness and requires new confirmation", () => {
+  it("non-target-facing exit re-arms readiness incrementally", () => {
     const config = buildLateralReachDemoConfig("right");
-    const scenarios = buildAllDemoScenarios("right");
-    const result = executeScenario(scenarios.wrongDirectionExitRearmsReadiness, config);
 
-    // Wrong-direction exit behavior: phase goes to awaiting_readiness
-    // After new readiness confirmation, movement can proceed
-    // This scenario ends before completion, so should be not_started
-    assert.ok(result.attemptResult !== null, "Should have an attempt result");
-    assert.equal(result.attemptResult!.completionState, "not_started", "Should be not_started");
-    assert.equal(result.attemptResult!.targetReached, false, "Target should not be reached");
-    assert.equal(result.attemptResult!.dwellConfirmed, false, "Dwell should not be confirmed");
-    assert.equal(result.attemptResult!.returnToStartCompleted, false, "Return should not be completed");
-    // Verify the factual note is present
+    // Create initial state and confirm readiness
+    const createResult = createLateralReachAttemptState(config, 0, 0);
+    assert.ok(createResult.ok, "Should create valid initial state");
+    let state = createResult.state;
+
+    // Frame in starting zone
+    const frame1 = {
+      schemaVersion: MOTION_INTELLIGENCE_SCHEMA_VERSION,
+      source: { kind: "web_camera_pose" as const, capturedAtMs: 0, frameIndex: 0, coordinateSpace: "normalized_2d" as const },
+      joints: { right_wrist: { landmark: { x: 0.3, y: 0.5 }, confidence: { visibility: 0.9, present: true } } },
+    };
+    const result1 = applyLateralReachCommand(state, { type: "frame", nowMs: 0, frame: frame1 });
+    assert.equal(result1.status, "applied", "First frame should be applied");
+    state = result1.state;
+
+    // Readiness confirmation
+    const result2 = applyLateralReachCommand(state, { type: "readinessConfirmed", nowMs: 10, confirmedBy: "clinician" });
+    assert.equal(result2.status, "applied", "Readiness confirmation should be applied");
+    state = result2.state;
+    assert.equal(result2.snapshot.phase, "ready_confirmed_awaiting_onset", "Phase before exit should be ready_confirmed_awaiting_onset");
+
+    // Non-target-facing exit (x: 0.15 is away from target at x: 0.7)
+    const frame2 = {
+      schemaVersion: MOTION_INTELLIGENCE_SCHEMA_VERSION,
+      source: { kind: "web_camera_pose" as const, capturedAtMs: 20, frameIndex: 0, coordinateSpace: "normalized_2d" as const },
+      joints: { right_wrist: { landmark: { x: 0.15, y: 0.5 }, confidence: { visibility: 0.9, present: true } } },
+    };
+    const result3 = applyLateralReachCommand(state, { type: "frame", nowMs: 20, frame: frame2 });
+
+    // Immediately after non-target-facing exit
+    assert.equal(result3.status, "applied", "Non-target-facing exit frame should be applied");
+    assert.equal(result3.snapshot.phase, "awaiting_readiness", "Phase immediately after exit should be awaiting_readiness");
+    assert.equal(result3.snapshot.targetReached, false, "Target should not be reached after exit");
+    assert.equal(result3.snapshot.dwellConfirmed, false, "Dwell should not be confirmed after exit");
+    assert.equal(result3.snapshot.returnToStartCompleted, false, "Return should not be completed after exit");
+    state = result3.state;
+
+    // Return to starting zone
+    const frame3 = {
+      schemaVersion: MOTION_INTELLIGENCE_SCHEMA_VERSION,
+      source: { kind: "web_camera_pose" as const, capturedAtMs: 50, frameIndex: 0, coordinateSpace: "normalized_2d" as const },
+      joints: { right_wrist: { landmark: { x: 0.3, y: 0.5 }, confidence: { visibility: 0.9, present: true } } },
+    };
+    const result4 = applyLateralReachCommand(state, { type: "frame", nowMs: 50, frame: frame3 });
+    assert.equal(result4.status, "applied", "Return to starting zone should be applied");
+    assert.equal(result4.snapshot.phase, "awaiting_readiness", "Phase should remain awaiting_readiness after returning to zone");
+    state = result4.state;
+
+    // Try target-facing movement without new readiness confirmation - wrist still in zone
+    const frame4 = {
+      schemaVersion: MOTION_INTELLIGENCE_SCHEMA_VERSION,
+      source: { kind: "web_camera_pose" as const, capturedAtMs: 60, frameIndex: 0, coordinateSpace: "normalized_2d" as const },
+      joints: { right_wrist: { landmark: { x: 0.3, y: 0.5 }, confidence: { visibility: 0.9, present: true } } },
+    };
+    const result5 = applyLateralReachCommand(state, { type: "frame", nowMs: 60, frame: frame4 });
+    assert.equal(result5.status, "applied", "Frame should be applied");
+    assert.equal(result5.snapshot.phase, "awaiting_readiness", "Phase should remain awaiting_readiness without new confirmation");
+    state = result5.state;
+
+    // Second explicit readiness confirmation (wrist is in zone)
+    const result6 = applyLateralReachCommand(state, { type: "readinessConfirmed", nowMs: 70, confirmedBy: "clinician" });
+    assert.equal(result6.status, "applied", "Second readiness confirmation should be applied");
+    assert.equal(result6.snapshot.phase, "ready_confirmed_awaiting_onset", "Phase after second confirmation should be ready_confirmed_awaiting_onset");
+
+    // Finalize and verify factual note
+    const finalResult = applyLateralReachCommand(result6.state, { type: "attemptWindowEnded", nowMs: 100 });
+    assert.equal(finalResult.status, "applied", "Finalization should be applied");
+    assert.ok(finalResult.attemptResult !== null, "Should have an attempt result");
     assert.ok(
-      result.attemptResult!.factualNotes.includes("non_target_facing_exit_observed_before_valid_onset"),
-      "Should record non-target-facing exit note"
+      finalResult.attemptResult!.factualNotes.includes("non_target_facing_exit_observed_before_valid_onset"),
+      "Should record non-target-facing exit factual note"
     );
   });
 
@@ -197,7 +254,7 @@ describe("Lateral Reach demo fixtures — safety scenarios", () => {
     const config = buildLateralReachDemoConfig("right");
     const scenarios = buildAllDemoScenarios("right");
 
-    // Build scenario without human resume
+    // Build scenario without human resume to prove no auto-resume
     const scenarioWithoutResume = {
       ...scenarios.longTrackingGapWithHumanResume,
       commands: scenarios.longTrackingGapWithHumanResume.commands.filter(
@@ -207,26 +264,24 @@ describe("Lateral Reach demo fixtures — safety scenarios", () => {
 
     const result = executeScenario(scenarioWithoutResume, config);
 
-    // Protective pause should have been opened
+    // Protective pause should have opened
     assert.ok(result.finalSnapshot.protectivePauseCount > 0, "Protective pause should have been opened");
-    // Without explicit resume, the attempt should not complete successfully
+    // Without explicit resume, attempt cannot complete successfully
     assert.ok(result.attemptResult !== null, "Should have an attempt result");
     assert.notEqual(result.attemptResult!.completionState, "completed", "Should not complete without resume");
   });
 
-  it("explicit valid human resume is required after protective pause", () => {
+  it("explicit valid human resume resolves protective pause and allows continuation", () => {
     const config = buildLateralReachDemoConfig("right");
     const scenarios = buildAllDemoScenarios("right");
 
     // Full scenario includes resumeRequested command
     const result = executeScenario(scenarios.longTrackingGapWithHumanResume, config);
 
-    // With explicit resume, the protective pause is resolved
+    // Protective pause was opened
     assert.ok(result.finalSnapshot.protectivePauseCount > 0, "Protective pause should have been opened");
-    // resumeRequested is accepted, pause no longer active
-    assert.ok(result.finalSnapshot.hasActivePause === false, "Pause should be resolved after resume");
-    // Execution continues according to engine state contract
-    assert.ok(result.finalSnapshot !== null, "Attempt should continue after resume");
+    // With explicit resume, pause is no longer active
+    assert.equal(result.finalSnapshot.hasActivePause, false, "Pause should be resolved after resume");
   });
 
   it("stop-before-completion produces the correct terminal state", () => {
@@ -241,7 +296,7 @@ describe("Lateral Reach demo fixtures — safety scenarios", () => {
     assert.equal(result.attemptResult!.returnToStartCompleted, false, "Return should not be completed");
   });
 
-  it("out-of-order timestamp is rejected by engine", () => {
+  it("out-of-order timestamp is rejected and state remains unchanged", () => {
     const config = buildLateralReachDemoConfig("right");
 
     // Create valid initial state
@@ -264,6 +319,11 @@ describe("Lateral Reach demo fixtures — safety scenarios", () => {
     assert.equal(result2.status, "applied", "Second command should be applied");
     state = result2.state;
 
+    // Capture state before rejected command
+    const stateBeforeRejection = state;
+    const snapshotBeforeRejection = result2.snapshot;
+    const phaseBeforeRejection = snapshotBeforeRejection.phase;
+
     // Apply command with an older timestamp (out-of-order)
     const frame2 = {
       schemaVersion: MOTION_INTELLIGENCE_SCHEMA_VERSION,
@@ -274,7 +334,16 @@ describe("Lateral Reach demo fixtures — safety scenarios", () => {
 
     // Engine should reject the out-of-order command
     assert.equal(result3.status, "rejected", "Out-of-order timestamp should be rejected");
-    assert.ok(result3.reason, "Rejection should have a reason");
+    assert.equal(result3.reason, "now_ms_not_monotonic", "Rejection reason should be now_ms_not_monotonic");
+
+    // State should be unchanged
+    assert.equal(result3.state, stateBeforeRejection, "Rejected command should not mutate state");
+    assert.equal(result3.snapshot.phase, phaseBeforeRejection, "Phase should remain unchanged after rejection");
+
+    // Verify no task progression occurred
+    assert.equal(result3.snapshot.targetReached, false, "Target should not be reached");
+    assert.equal(result3.snapshot.dwellConfirmed, false, "Dwell should not be confirmed");
+    assert.equal(result3.snapshot.returnToStartCompleted, false, "Return should not be completed");
   });
 
   it("executeScenario throws when a built-in scenario command is unexpectedly rejected", () => {
