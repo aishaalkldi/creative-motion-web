@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useId, useRef } from "react";
 
 interface Props {
   open: boolean;
@@ -21,6 +21,35 @@ export default function ConfirmModal({
   onCancel,
   loading = false,
 }: Props) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  const titleId = useId();
+  const messageId = useId();
+
+  // Initial focus and focus restoration
+  useEffect(() => {
+    if (!open) return;
+
+    // Store previously focused element
+    previouslyFocusedRef.current = document.activeElement as HTMLElement;
+
+    // Move focus to Cancel button (least destructive action)
+    if (cancelButtonRef.current) {
+      cancelButtonRef.current.focus();
+    }
+
+    return () => {
+      // Restore focus when dialog closes
+      const previous = previouslyFocusedRef.current;
+      if (previous?.isConnected) {
+        previous.focus();
+      }
+      previouslyFocusedRef.current = null;
+    };
+  }, [open]);
+
   // Close on Escape
   useEffect(() => {
     if (!open) return;
@@ -31,6 +60,61 @@ export default function ConfirmModal({
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onCancel]);
 
+  // Focus trap
+  useEffect(() => {
+    if (!open) return;
+
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Tab") return;
+
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+
+      const focusableElements = dialog.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"]):not([disabled])'
+      );
+
+      // No enabled focusable elements: keep focus on dialog container
+      if (focusableElements.length === 0) {
+        e.preventDefault();
+        dialog.focus();
+        return;
+      }
+
+      const firstFocusable = focusableElements[0];
+      const lastFocusable = focusableElements[focusableElements.length - 1];
+      const activeElement = document.activeElement;
+
+      // Focus is outside the dialog: recover by moving to first or last
+      if (!dialog.contains(activeElement)) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          lastFocusable.focus();
+        } else {
+          firstFocusable.focus();
+        }
+        return;
+      }
+
+      if (e.shiftKey) {
+        // Shift+Tab: if on first element, wrap to last
+        if (activeElement === firstFocusable) {
+          e.preventDefault();
+          lastFocusable.focus();
+        }
+      } else {
+        // Tab: if on last element, wrap to first
+        if (activeElement === lastFocusable) {
+          e.preventDefault();
+          firstFocusable.focus();
+        }
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [open]);
+
   if (!open) return null;
 
   return (
@@ -38,15 +122,23 @@ export default function ConfirmModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
       onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
     >
-      <div className="w-full max-w-sm rounded-[28px] border border-rose-400/20 bg-[#0d1f3c] p-7 shadow-[0_20px_60px_rgba(0,0,0,0.5)]">
+      <div
+        ref={dialogRef}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={messageId}
+        tabIndex={-1}
+        className="w-full max-w-sm rounded-[28px] border border-rose-400/20 bg-[#0d1f3c] p-7 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
+      >
         <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-rose-400/25 bg-rose-400/10">
           <svg className="h-6 w-6 text-rose-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
         </div>
 
-        <h2 className="text-xl font-bold text-white">{title}</h2>
-        <p className="mt-2 text-sm leading-6 text-white/65">{message}</p>
+        <h2 id={titleId} className="text-xl font-bold text-white">{title}</h2>
+        <p id={messageId} className="mt-2 text-sm leading-6 text-white/65">{message}</p>
 
         <div className="mt-6 flex gap-3">
           <button
@@ -58,6 +150,7 @@ export default function ConfirmModal({
             {loading ? "Deleting…" : confirmLabel}
           </button>
           <button
+            ref={cancelButtonRef}
             type="button"
             disabled={loading}
             onClick={onCancel}
