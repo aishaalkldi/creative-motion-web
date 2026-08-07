@@ -636,6 +636,89 @@ describe("adaptive difficulty — compensated success policy", () => {
     assert.equal(state.struggleStreak, 1);
     assert.deepEqual(state.changes, []);
   });
+
+  // ── Review fix (PR #204): approved `excludedFromIncrease` streak policy ──────
+  // A compensated success PAUSES clean progression: it preserves the clean-success
+  // streak already built, without advancing it and without resetting it. The existing
+  // tests above all start from a zero streak, where preserve and reset are
+  // indistinguishable; this one starts from a non-zero streak, where they are not.
+
+  it("preserves a non-zero clean-success streak across an excluded compensated success", () => {
+    // The whole point of the sequence is that the compensated success lands while the
+    // streak is one short of the threshold, so a reset would be visible.
+    assert.equal(TEST_CONFIG.successStreakToIncrease, 3);
+    assert.equal(TEST_CONFIG.compensatedSuccessPolicy, "excludedFromIncrease");
+
+    const start = deepFreeze(createAdaptiveDifficultyState(TEST_CONFIG));
+
+    // 1 — first clean success builds the streak to 1.
+    const afterFirst = applyAttemptOutcome(start, success());
+    assert.equal(afterFirst.change, null);
+    assert.equal(afterFirst.state.successStreak, 1);
+    assert.equal(afterFirst.state.currentLevel, 60);
+
+    // 2 — second clean success builds the streak to 2, one short of the threshold.
+    const beforeSecond = structuredClone(afterFirst.state);
+    const afterSecond = applyAttemptOutcome(afterFirst.state, success());
+    assert.equal(afterSecond.change, null);
+    assert.equal(afterSecond.state.successStreak, 2);
+    assert.equal(afterSecond.state.currentLevel, 60);
+    assert.deepEqual(afterFirst.state, beforeSecond, "the prior state was not mutated");
+
+    // 3 — compensated success: the streak is held at 2. Neither advanced nor reset.
+    const beforeCompensated = structuredClone(afterSecond.state);
+    const compensatedOutcome = compensatedSuccess(1_600);
+    const outcomeSnapshot = structuredClone(compensatedOutcome);
+    const afterCompensated = applyAttemptOutcome(afterSecond.state, compensatedOutcome);
+
+    assert.equal(afterCompensated.state.successStreak, 2, "the clean streak is preserved");
+    assert.notEqual(afterCompensated.state.successStreak, 3, "it is not incremented");
+    assert.notEqual(afterCompensated.state.successStreak, 0, "it is not reset");
+    // No level movement, and no decision emitted on the strength of a compensated success.
+    assert.equal(afterCompensated.change, null);
+    assert.equal(afterCompensated.state.currentLevel, 60);
+    assert.deepEqual(afterCompensated.state.changes, []);
+    // Every other successful-outcome rule keeps the behaviour it already had.
+    assert.equal(afterCompensated.state.struggleStreak, 0, "successful outcome clears struggle");
+    assert.equal(afterCompensated.state.attemptsAtCurrentLevel, 3, "it is a counted attempt");
+    assert.equal(afterCompensated.state.highestSuccessfulLevel, 60, "it is still a success");
+    assert.equal(afterCompensated.state.cooldownRemaining, 0);
+    assert.equal(afterCompensated.state.attemptTimeoutMs, TEST_CONFIG.normalAttemptTimeoutMs);
+    assertNoSessionTotals(afterCompensated.state, "after an excluded compensated success");
+    assert.deepEqual(afterSecond.state, beforeCompensated, "the prior state was not mutated");
+    assert.deepEqual(compensatedOutcome, outcomeSnapshot, "the outcome was not mutated");
+
+    // 4 — the next clean success reaches the threshold, exactly as if the compensated
+    // attempt had never interrupted the run.
+    const beforeFourth = structuredClone(afterCompensated.state);
+    const afterFourth = applyAttemptOutcome(afterCompensated.state, success());
+
+    assert.ok(afterFourth.change);
+    assert.equal(afterFourth.change.direction, "increase");
+    assert.equal(afterFourth.change.reason, "consecutiveSuccess");
+    assert.equal(afterFourth.change.fromLevel, 60);
+    assert.equal(afterFourth.change.toLevel, 65);
+    assert.equal(afterFourth.state.currentLevel, 65);
+    // Unchanged post-increase reset and cooldown policy.
+    assert.equal(afterFourth.state.successStreak, 0);
+    assert.equal(afterFourth.state.struggleStreak, 0);
+    assert.equal(afterFourth.state.attemptsAtCurrentLevel, 0);
+    assert.equal(afterFourth.state.cooldownRemaining, TEST_CONFIG.cooldownAttempts);
+    assert.equal(afterFourth.state.attemptTimeoutMs, TEST_CONFIG.normalAttemptTimeoutMs);
+    assert.deepEqual(afterFourth.state.changes, [afterFourth.change]);
+    assert.deepEqual(afterCompensated.state, beforeFourth, "the prior state was not mutated");
+  });
+
+  it("a preserved streak needs one fewer clean success than a reset streak would", () => {
+    // Same sequence, stated as the difference the policy actually makes: under a reset
+    // policy the fourth attempt below would leave the level at 60.
+    const start = createAdaptiveDifficultyState(TEST_CONFIG);
+    const preserved = applyAll(start, [success(), success(), compensatedSuccess(), success()]);
+
+    assert.equal(preserved.currentLevel, 65);
+    assert.equal(preserved.changes.length, 1);
+    assert.equal(preserved.changes[0].direction, "increase");
+  });
 });
 
 describe("adaptive difficulty — cooldown", () => {
