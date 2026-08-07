@@ -1508,3 +1508,335 @@ describe("path metrics and result shape", () => {
     assert.deepEqual(JSON.parse(JSON.stringify(state)), before);
   });
 });
+
+describe("observationUnavailable command", () => {
+  it("accepts valid monotonic nowMs", () => {
+    const config = buildValidConfig();
+    const state = mustCreateState(config, 0, 0);
+    const result = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 100 });
+    assert.equal(result.status, "applied");
+  });
+
+  it("rejects decreasing nowMs", () => {
+    const config = buildValidConfig();
+    let state = mustCreateState(config, 0, 0);
+    const r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 100 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    const result = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 99 });
+    assert.equal(result.status, "rejected");
+    if (result.status === "rejected") {
+      assert.match(result.reason, /monotonic/i);
+    }
+  });
+
+  it("first unavailable observation establishes invalidTrackingSinceMs", () => {
+    const config = buildValidConfig();
+    const state = mustCreateState(config, 0, 0);
+    const result = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 100 });
+    assert.equal(result.status, "applied");
+    if (result.status === "applied") {
+      assert.equal(result.state.invalidTrackingSinceMs, 100);
+    }
+  });
+
+  it("short unavailable gap does not open protective pause", () => {
+    const config = buildValidConfig({ tracking: { maxAllowedGapMs: 1000, minWristVisibility: 0.5, minShoulderVisibility: 0.3, minElbowVisibility: 0.3 } });
+    let state = mustCreateState(config, 0, 0);
+    let r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 100 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 200 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 300 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    assert.equal(state.activePause, null);
+  });
+
+  it("threshold-reaching unavailable gap opens exactly one protective pause", () => {
+    const config = buildValidConfig({ tracking: { maxAllowedGapMs: 200, minWristVisibility: 0.5, minShoulderVisibility: 0.3, minElbowVisibility: 0.3 } });
+    let state = mustCreateState(config, 0, 0);
+    let r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 100 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    assert.equal(state.activePause, null);
+    r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 300 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    assert.notEqual(state.activePause, null);
+    if (state.activePause) {
+      assert.equal(state.activePause.reason.category, "tracking_or_environment");
+      assert.equal(state.activePause.startedAtMs, 100);
+    }
+  });
+
+  it("continued unavailable observations while paused do not create duplicate pause", () => {
+    const config = buildValidConfig({ tracking: { maxAllowedGapMs: 200, minWristVisibility: 0.5, minShoulderVisibility: 0.3, minElbowVisibility: 0.3 } });
+    let state = mustCreateState(config, 0, 0);
+    let r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 100 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 300 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    const pauseStartedAt = state.activePause?.startedAtMs;
+    assert.notEqual(pauseStartedAt, undefined);
+    r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 400 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 500 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    assert.equal(state.activePause?.startedAtMs, pauseStartedAt);
+  });
+
+  it("observationUnavailable creates no movement progress", () => {
+    const config = buildValidConfig();
+    let state = readyState(config);
+    assert.equal(state.phase, "ready_confirmed_awaiting_onset");
+    let r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 200 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 250 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 300 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    assert.equal(state.phase, "ready_confirmed_awaiting_onset");
+    assert.equal(state.movementOnsetAtMs, null);
+  });
+
+  it("valid frame returning does NOT auto-resume active pause", () => {
+    const config = buildValidConfig({ tracking: { maxAllowedGapMs: 200, minWristVisibility: 0.5, minShoulderVisibility: 0.3, minElbowVisibility: 0.3 } });
+    let state = readyState(config);
+    let r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 150 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 350 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    assert.notEqual(state.activePause, null);
+    r = sendFrame(state, config, wristOnly(START_POINT), 400);
+    assert.equal(r.status, "applied");
+    state = r.state;
+    assert.notEqual(state.activePause, null);
+  });
+
+  it("explicit resumeRequested is still required after pause opens", () => {
+    const config = buildValidConfig({ tracking: { maxAllowedGapMs: 200, minWristVisibility: 0.5, minShoulderVisibility: 0.3, minElbowVisibility: 0.3 } });
+    let state = readyState(config);
+    let r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 150 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 350 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    assert.notEqual(state.activePause, null);
+    r = sendFrame(state, config, wristOnly(START_POINT), 400);
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = applyElbowExtensionCommand(state, {
+      type: "resumeRequested",
+      nowMs: 450,
+      readinessConfirmedAt: "clinician",
+      resumedBy: "clinician",
+    });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    assert.equal(state.activePause, null);
+  });
+
+  it("behavior before readiness matches invalid-frame semantics (can open pause during awaiting_readiness)", () => {
+    const config = buildValidConfig({ tracking: { maxAllowedGapMs: 200, minWristVisibility: 0.5, minShoulderVisibility: 0.3, minElbowVisibility: 0.3 } });
+    let state = mustCreateState(config, 0, 0);
+    assert.equal(state.phase, "idle");
+    let r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 100 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    assert.equal(state.phase, "awaiting_readiness");
+    r = applyElbowExtensionCommand(state, { type: "observationUnavailable", nowMs: 300 });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    assert.equal(state.phase, "awaiting_readiness");
+    assert.notEqual(state.activePause, null);
+  });
+
+  it("observationUnavailable and invalid-wrist frame produce equivalent tracking-gap behavior", () => {
+    const config = buildValidConfig({ tracking: { maxAllowedGapMs: 200, minWristVisibility: 0.5, minShoulderVisibility: 0.3, minElbowVisibility: 0.3 } });
+    let stateA = mustCreateState(config, 0, 0);
+    let rA = applyElbowExtensionCommand(stateA, { type: "observationUnavailable", nowMs: 100 });
+    assert.equal(rA.status, "applied");
+    stateA = rA.state;
+    rA = applyElbowExtensionCommand(stateA, { type: "observationUnavailable", nowMs: 300 });
+    assert.equal(rA.status, "applied");
+    stateA = rA.state;
+    let stateB = mustCreateState(config, 0, 0);
+    let rB = sendFrame(stateB, config, null, 100);
+    assert.equal(rB.status, "applied");
+    stateB = rB.state;
+    rB = sendFrame(stateB, config, null, 300);
+    assert.equal(rB.status, "applied");
+    stateB = rB.state;
+    assert.equal(stateA.phase, stateB.phase);
+    assert.equal(stateA.activePause !== null, stateB.activePause !== null);
+    assert.equal(stateA.invalidTrackingSinceMs, stateB.invalidTrackingSinceMs);
+  });
+
+  it("terminal behavior remains consistent with current command rules", () => {
+    const config = buildValidConfig();
+    const completed = completedSequence(config);
+    assert.equal(completed.status, "applied");
+    if (completed.status === "applied") {
+      const result = applyElbowExtensionCommand(completed.state, { type: "observationUnavailable", nowMs: 1000 });
+      assert.equal(result.status, "rejected");
+      if (result.status === "rejected") {
+        assert.equal(result.reason, "attempt_already_terminal");
+      }
+    }
+  });
+
+  it("frame and observationUnavailable both rejected in completed_pending_finalization with state preserved", () => {
+    const config = buildValidConfig();
+    // Drive to completed_pending_finalization without finalizing
+    let state = outboundState(config);
+    let r = sendFrame(state, config, wristOnly({ x: 0.63, y: 0.5 }), 200);
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = sendFrame(state, config, wristOnly(TARGET_POINT), 250);
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = sendFrame(state, config, wristOnly(TARGET_POINT), 460);
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = sendFrame(state, config, wristOnly({ x: 0.5, y: 0.5 }), 470);
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = sendFrame(state, config, wristOnly(START_POINT), 600);
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = sendFrame(state, config, wristOnly(START_POINT), 760); // return confirmed
+    assert.equal(r.status, "applied");
+    state = r.state;
+
+    const completedState = state;
+    assert.equal(completedState.phase, "completed_pending_finalization");
+    assert.equal(completedState.terminal, false);
+
+    // Capture state snapshot before sending commands
+    const beforeSnapshot = {
+      phase: completedState.phase,
+      lastAcceptedNowMs: completedState.lastAcceptedNowMs,
+      invalidTrackingSinceMs: completedState.invalidTrackingSinceMs,
+      activePause: completedState.activePause,
+      movementOnsetAtMs: completedState.movementOnsetAtMs,
+      peakElbowExtensionDeg: completedState.peakElbowExtensionDeg,
+    };
+
+    // Send invalid frame - should be rejected without state mutation
+    const invalidFrame = frame(config.testedSide, null, 1000);
+    const frameResult = applyElbowExtensionCommand(completedState, { type: "frame", nowMs: 1000, frame: invalidFrame });
+    assert.equal(frameResult.status, "rejected");
+    if (frameResult.status === "rejected") {
+      assert.equal(frameResult.reason, "awaiting_explicit_finalization");
+      // Verify state immutability (including elbow-specific state)
+      assert.equal(frameResult.state.phase, beforeSnapshot.phase);
+      assert.equal(frameResult.state.lastAcceptedNowMs, beforeSnapshot.lastAcceptedNowMs);
+      assert.equal(frameResult.state.invalidTrackingSinceMs, beforeSnapshot.invalidTrackingSinceMs);
+      assert.equal(frameResult.state.activePause, beforeSnapshot.activePause);
+      assert.equal(frameResult.state.movementOnsetAtMs, beforeSnapshot.movementOnsetAtMs);
+      assert.equal(frameResult.state.peakElbowExtensionDeg, beforeSnapshot.peakElbowExtensionDeg);
+    }
+
+    // Send observationUnavailable - should be rejected with identical behavior
+    const obsResult = applyElbowExtensionCommand(completedState, { type: "observationUnavailable", nowMs: 1000 });
+    assert.equal(obsResult.status, "rejected");
+    if (obsResult.status === "rejected") {
+      assert.equal(obsResult.reason, "awaiting_explicit_finalization");
+      // Verify state immutability (including elbow-specific state)
+      assert.equal(obsResult.state.phase, beforeSnapshot.phase);
+      assert.equal(obsResult.state.lastAcceptedNowMs, beforeSnapshot.lastAcceptedNowMs);
+      assert.equal(obsResult.state.invalidTrackingSinceMs, beforeSnapshot.invalidTrackingSinceMs);
+      assert.equal(obsResult.state.activePause, beforeSnapshot.activePause);
+      assert.equal(obsResult.state.movementOnsetAtMs, beforeSnapshot.movementOnsetAtMs);
+      assert.equal(obsResult.state.peakElbowExtensionDeg, beforeSnapshot.peakElbowExtensionDeg);
+    }
+
+    // Verify semantic equivalence
+    assert.equal(frameResult.status, obsResult.status);
+    if (frameResult.status === "rejected" && obsResult.status === "rejected") {
+      assert.equal(frameResult.reason, obsResult.reason);
+    }
+  });
+
+  it("observationUnavailable rejection precedence matches frame in completed_pending_finalization", () => {
+    const config = buildValidConfig();
+    // Drive to completed_pending_finalization without finalizing
+    let state = outboundState(config);
+    let r = sendFrame(state, config, wristOnly({ x: 0.63, y: 0.5 }), 200);
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = sendFrame(state, config, wristOnly(TARGET_POINT), 250);
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = sendFrame(state, config, wristOnly(TARGET_POINT), 460);
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = sendFrame(state, config, wristOnly({ x: 0.5, y: 0.5 }), 470);
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = sendFrame(state, config, wristOnly(START_POINT), 600);
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = sendFrame(state, config, wristOnly(START_POINT), 760); // return confirmed
+    assert.equal(r.status, "applied");
+    state = r.state;
+
+    const completedState = state;
+    assert.equal(completedState.phase, "completed_pending_finalization");
+
+    // Test with decreasing nowMs - monotonic validation should take precedence
+    const invalidFrame = frame(config.testedSide, null, completedState.lastAcceptedNowMs - 10);
+    const frameResultDecreasing = applyElbowExtensionCommand(completedState, {
+      type: "frame",
+      nowMs: completedState.lastAcceptedNowMs - 10,
+      frame: invalidFrame
+    });
+    assert.equal(frameResultDecreasing.status, "rejected");
+    if (frameResultDecreasing.status === "rejected") {
+      assert.match(frameResultDecreasing.reason, /monotonic/i);
+    }
+
+    const obsResultDecreasing = applyElbowExtensionCommand(completedState, {
+      type: "observationUnavailable",
+      nowMs: completedState.lastAcceptedNowMs - 10
+    });
+    assert.equal(obsResultDecreasing.status, "rejected");
+    if (obsResultDecreasing.status === "rejected") {
+      assert.match(obsResultDecreasing.reason, /monotonic/i);
+    }
+
+    // Test with valid increasing nowMs - finalization guard should reject
+    const validFrame = frame(config.testedSide, null, completedState.lastAcceptedNowMs + 100);
+    const frameResultIncreasing = applyElbowExtensionCommand(completedState, {
+      type: "frame",
+      nowMs: completedState.lastAcceptedNowMs + 100,
+      frame: validFrame
+    });
+    assert.equal(frameResultIncreasing.status, "rejected");
+    if (frameResultIncreasing.status === "rejected") {
+      assert.equal(frameResultIncreasing.reason, "awaiting_explicit_finalization");
+    }
+
+    const obsResultIncreasing = applyElbowExtensionCommand(completedState, {
+      type: "observationUnavailable",
+      nowMs: completedState.lastAcceptedNowMs + 100
+    });
+    assert.equal(obsResultIncreasing.status, "rejected");
+    if (obsResultIncreasing.status === "rejected") {
+      assert.equal(obsResultIncreasing.reason, "awaiting_explicit_finalization");
+    }
+  });
+});

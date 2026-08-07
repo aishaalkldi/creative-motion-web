@@ -413,6 +413,7 @@ export function getForwardReachRuntimeSnapshot(state: ForwardReachAttemptState):
 
 export type ForwardReachCommand =
   | { type: "frame"; nowMs: number; frame: NormalizedMotionFrame }
+  | { type: "observationUnavailable"; nowMs: number }
   | { type: "readinessConfirmed"; nowMs: number; confirmedBy: unknown }
   | { type: "resumeRequested"; nowMs: number; readinessConfirmedAt: unknown; resumedBy: unknown }
   | { type: "clinicalStopReceived"; nowMs: number; event: ClinicalStopEvent }
@@ -788,6 +789,41 @@ function handleOutboundOrDwelling(
 }
 
 // ---------------------------------------------------------------------------
+// Tracking-loss handling — shared by frame with invalid wrist and observationUnavailable
+// ---------------------------------------------------------------------------
+
+/**
+ * Applies tracking-loss semantics when no usable wrist observation is available.
+ * Used by both frame commands with invalid/missing wrist and observationUnavailable commands.
+ */
+function handleInvalidTracking(
+  state: ForwardReachAttemptStateInternal,
+  nowMs: number,
+): ForwardReachCommandResult {
+  const invalidSince = state.invalidTrackingSinceMs ?? nowMs;
+  let next = resetContinuityCandidates({ ...state, invalidTrackingSinceMs: invalidSince });
+
+  const gapDurationMs = nowMs - invalidSince;
+  // >= once the gap has begun, matching the onset/dwell/return confirmation
+  // convention (Fix 4) — a maxAllowedGapMs of 0 opens a pause on the very
+  // first invalid frame, since gapDurationMs is 0 on that frame too.
+  if (
+    gapDurationMs >= next.config.tracking.maxAllowedGapMs &&
+    next.activePause === null &&
+    next.phase !== "completed_pending_finalization"
+  ) {
+    next = {
+      ...next,
+      activePause: {
+        reason: { category: "tracking_or_environment", detail: "insufficient_tracking_quality" },
+        startedAtMs: invalidSince,
+      },
+    };
+  }
+  return applied(next);
+}
+
+// ---------------------------------------------------------------------------
 // Frame command handling
 // ---------------------------------------------------------------------------
 
@@ -797,27 +833,7 @@ function handleFrame(state: ForwardReachAttemptStateInternal, nowMs: number, fra
   const sample = extractTestedSideWristSample(frame, next.config);
 
   if (sample === null) {
-    const invalidSince = next.invalidTrackingSinceMs ?? nowMs;
-    next = resetContinuityCandidates({ ...next, invalidTrackingSinceMs: invalidSince });
-
-    const gapDurationMs = nowMs - invalidSince;
-    // >= once the gap has begun, matching the onset/dwell/return confirmation
-    // convention (Fix 4) — a maxAllowedGapMs of 0 opens a pause on the very
-    // first invalid frame, since gapDurationMs is 0 on that frame too.
-    if (
-      gapDurationMs >= next.config.tracking.maxAllowedGapMs &&
-      next.activePause === null &&
-      next.phase !== "completed_pending_finalization"
-    ) {
-      next = {
-        ...next,
-        activePause: {
-          reason: { category: "tracking_or_environment", detail: "insufficient_tracking_quality" },
-          startedAtMs: invalidSince,
-        },
-      };
-    }
-    return applied(next);
+    return handleInvalidTracking(next, nowMs);
   }
 
   // Valid sample.
@@ -920,11 +936,14 @@ export function applyForwardReachCommand(
   }
 
   // The movement measurement is complete once return is confirmed (Fix 10).
-  // Later camera frames must not silently continue accumulating metrics or
-  // opening new tracking-triggered pauses — reject with a documented
-  // reason. Every other command type (including clinicalStopReceived) is
-  // still processed normally in this phase.
-  if (command.type === "frame" && state.phase === "completed_pending_finalization") {
+  // Later movement-observation commands (frame, observationUnavailable) must
+  // not silently continue accumulating metrics or opening new tracking-triggered
+  // pauses — reject with a documented reason. Every other command type
+  // (including clinicalStopReceived) is still processed normally in this phase.
+  if (
+    (command.type === "frame" || command.type === "observationUnavailable") &&
+    state.phase === "completed_pending_finalization"
+  ) {
     return rejected(state, "awaiting_explicit_finalization");
   }
 
@@ -933,6 +952,11 @@ export function applyForwardReachCommand(
   switch (command.type) {
     case "frame":
       return handleFrame(stateWithClock, command.nowMs, command.frame);
+
+    case "observationUnavailable": {
+      const next = stateWithClock.phase === "idle" ? { ...stateWithClock, phase: "awaiting_readiness" as ForwardReachPhase } : { ...stateWithClock };
+      return handleInvalidTracking(next, command.nowMs);
+    }
 
     case "readinessConfirmed": {
       if (stateWithClock.phase !== "idle" && stateWithClock.phase !== "awaiting_readiness") {
