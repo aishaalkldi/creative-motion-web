@@ -117,10 +117,10 @@ export default function MotorScreenHubPage() {
         <div className="mt-8 rounded-[8px] border border-[#1E2D42] bg-[#0F1825] p-4">
           <p className="text-[11px] leading-relaxed text-[#6B7280]">
             <strong className="text-[#9CA3AF]">Clinical safety boundary:</strong> These
-            deterministic demos produce factual timing and path metrics only. They do not measure
-            range of motion, assess movement quality, grade impairment, or provide diagnostic
-            information. Live-camera integration and clinical validation workflows remain in
-            development.
+            deterministic demos produce factual timing and path metrics, and — for Elbow Extension
+            only — an optional 2D angle observation. None of these measure range of motion, assess
+            movement quality, grade impairment, or provide diagnostic information. Live-camera
+            integration and clinical validation workflows remain in development.
           </p>
         </div>
 
