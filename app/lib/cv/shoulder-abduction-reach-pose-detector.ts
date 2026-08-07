@@ -291,6 +291,12 @@ export class ShoulderAbductionReachPoseDetector {
     // stays readable through `getSnapshot()` until the new session's first valid frame.
     this.lastPrimaryWristNormalized = null;
     this.lastPrimaryArmGeometry = EMPTY_SHOULDER_ABDUCTION_REACH_ARM_GEOMETRY;
+    // Framing is written only by the live capture loop, and only for a frame that
+    // actually produced landmarks — so it is cached across dropped frames exactly like
+    // the geometry above. Back to the same "not yet evaluated" value the field is
+    // constructed with, so the previous session's guidance ("move_closer", …) is not
+    // shown against the new session before its own framing evaluation has run.
+    this.lastBodyFramingState = "checking";
   }
 
   /**

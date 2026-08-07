@@ -13,6 +13,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { PoseLandmark } from "@/app/lib/cv/pose-landmark-overlay";
 import { MIN_PRESENT_VISIBILITY } from "@/app/lib/cv/motion-quality-confidence";
+import type { BodyFramingState } from "@/app/lib/cv/body-framing-evaluator";
 import {
   ShoulderAbductionReachPoseDetector,
   type ShoulderAbductionReachMeasuredEvent,
@@ -83,6 +84,21 @@ function driveFrames(
 function startNewDetectorSession(detector: ShoulderAbductionReachPoseDetector): void {
   const internals = detector as unknown as { resetSessionState: () => void };
   internals.resetSessionState();
+}
+
+/**
+ * Mirrors the one assignment the live capture loop makes after evaluating body framing.
+ * That loop lives inside `start()` and needs a camera plus MediaPipe, so the value it
+ * caches is set directly here — the same private-access convention `driveFrames` and
+ * `startNewDetectorSession` already use. A test below pins the real assignment in
+ * `start()`, so this cannot drift into a state production never reaches.
+ */
+function applyBodyFramingState(
+  detector: ShoulderAbductionReachPoseDetector,
+  framing: BodyFramingState,
+): void {
+  const internals = detector as unknown as { lastBodyFramingState: BodyFramingState };
+  internals.lastBodyFramingState = framing;
 }
 
 describe("ShoulderAbductionReachPoseDetector", () => {
@@ -447,6 +463,102 @@ describe("ShoulderAbductionReachPoseDetector", () => {
     assert.deepEqual(afterLoss.primaryShoulderNormalized, withPose.primaryShoulderNormalized);
     assert.deepEqual(afterLoss.primaryElbowNormalized, withPose.primaryElbowNormalized);
     assert.equal(afterLoss.estimatedArmLengthNormalized, withPose.estimatedArmLengthNormalized);
+  });
+
+  // ── Review fix (PR #204): body framing must not cross a session boundary ────
+  // `lastBodyFramingState` is written only on a frame that produced landmarks, so — like
+  // the cached geometry above — it survives dropped frames inside a session. The session
+  // start is therefore the only place that can return it to "checking".
+
+  it("a session can move the body framing state away from checking", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    assert.equal(detector.getSnapshot().bodyFramingState, "checking");
+
+    applyBodyFramingState(detector, "move_closer");
+
+    assert.equal(detector.getSnapshot().bodyFramingState, "move_closer");
+  });
+
+  it("resets the body framing state to checking when a new session starts", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    applyBodyFramingState(detector, "move_back");
+    assert.equal(detector.getSnapshot().bodyFramingState, "move_back");
+
+    startNewDetectorSession(detector);
+
+    assert.equal(detector.getSnapshot().bodyFramingState, "checking");
+  });
+
+  it("clears the framing state alongside the cached geometry at the session boundary", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    const landmarks = restingLandmarks();
+    landmarks[R_SHOULDER] = { x: 0.55, y: 0.3, visibility: 0.95 };
+    landmarks[R_ELBOW] = { x: 0.55, y: 0.5, visibility: 0.95 };
+    landmarks[R_WRIST] = { x: 0.55, y: 0.8, visibility: 0.9 };
+
+    // A previous session that both tracked and evaluated framing.
+    driveFrames(detector, [landmarks, landmarks]);
+    applyBodyFramingState(detector, "good_distance");
+    const previous = detector.getSnapshot();
+    assert.equal(previous.bodyFramingState, "good_distance");
+    assert.ok(previous.primaryWristNormalized);
+    assert.ok(previous.primaryShoulderNormalized);
+
+    startNewDetectorSession(detector);
+    const fresh = detector.getSnapshot();
+
+    // One boundary clears all of it — the framing reset does not replace or weaken the
+    // geometry reset that was already there.
+    assert.equal(fresh.bodyFramingState, "checking");
+    assert.equal(fresh.primaryWristNormalized, null);
+    assert.equal(fresh.primaryShoulderNormalized, null);
+    assert.equal(fresh.primaryElbowNormalized, null);
+    assert.equal(fresh.estimatedArmLengthNormalized, null);
+  });
+
+  it("cannot expose the previous session's framing state before new framing input arrives", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    applyBodyFramingState(detector, "low_visibility");
+
+    startNewDetectorSession(detector);
+
+    // Frame processing does not evaluate framing, so neither dropped frames nor tracked
+    // ones may resurrect the previous session's guidance.
+    driveFrames(detector, [null, null]);
+    assert.equal(detector.getSnapshot().bodyFramingState, "checking");
+
+    driveFrames(detector, [restingLandmarks()]);
+    assert.equal(detector.getSnapshot().bodyFramingState, "checking");
+
+    // Only the new session's own framing evaluation may move it.
+    applyBodyFramingState(detector, "good_distance");
+    assert.equal(detector.getSnapshot().bodyFramingState, "good_distance");
+  });
+
+  it("leaves same-session framing behaviour unchanged", () => {
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    driveFrames(detector, [restingLandmarks()]);
+    applyBodyFramingState(detector, "move_closer");
+
+    // Well beyond TRACKER_LOST_CONSECUTIVE_FRAMES: losing the tracker mid-session still
+    // holds the last evaluated framing, exactly as it holds the last geometry.
+    driveFrames(detector, Array.from({ length: 15 }, () => null));
+    const afterLoss = detector.getSnapshot();
+
+    assert.equal(afterLoss.trackingStatus, "lost");
+    assert.equal(afterLoss.bodyFramingState, "move_closer");
+  });
+
+  it("writes the framing state from the real start() capture loop", () => {
+    // The framing value is set privately in the tests above because the live loop needs a
+    // camera. That is only valid while `start()` still caches the evaluated framing into
+    // the same field the reset clears and the snapshot reads.
+    const startSource = ShoulderAbductionReachPoseDetector.prototype.start.toString();
+    assert.match(
+      startSource,
+      /this\.lastBodyFramingState\s*=\s*framing/,
+      "start() must cache the evaluated body framing — the tests set the same field directly",
+    );
   });
 
   it("runs the session reset from the real start() lifecycle entry point", () => {
