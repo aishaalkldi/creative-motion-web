@@ -158,7 +158,7 @@ export default function MotorScreenLabPage() {
   const scenarioOptions: { key: ScenarioKey; label: string }[] = [
     { key: "happyPath", label: "Happy path" },
     { key: "lowVisibility", label: "Low visibility" },
-    { key: "onsetCandidateAbandonedOnReturn", label: "Starting Zone Re-Entry (Onset Candidate Reset)" },
+    { key: "onsetCandidateAbandonedOnReturn", label: "Starting Zone Re-Entry Before Onset Confirmation" },
     { key: "shortTrackingGap", label: "Short tracking gap" },
     { key: "longTrackingGapWithHumanResume", label: "Long tracking gap with human resume" },
     { key: "stopBeforeCompletion", label: "Stop before completion" },
