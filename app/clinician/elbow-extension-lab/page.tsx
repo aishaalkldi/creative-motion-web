@@ -428,9 +428,9 @@ export default function ElbowExtensionLabPage() {
 
                   {/* Peak elbow extension angle */}
                   <div className="space-y-2 text-sm">
-                    <ResultRow 
-                      label="Peak observed 2D elbow angle" 
-                      value={attemptResult.peakElbowExtensionDeg !== null ? `${attemptResult.peakElbowExtensionDeg.toFixed(1)}°` : "Not observed"} 
+                    <ResultRow
+                      label="Peak observed 2D elbow angle"
+                      value={attemptResult.peakElbowExtensionDeg !== null ? `${attemptResult.peakElbowExtensionDeg.toFixed(1)}°` : "Not observed"}
                     />
                   </div>
                   <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 p-3">

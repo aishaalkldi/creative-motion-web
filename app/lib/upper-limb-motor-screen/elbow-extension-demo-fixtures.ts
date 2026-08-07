@@ -307,7 +307,7 @@ export function buildLongTrackingGapWithHumanResumeScenario(config: ElbowExtensi
  * Stop before completion — clinician stops the attempt before wrist task completes.
  */
 export function buildStopBeforeCompletionScenario(config: ElbowExtensionConfig): DemoScenario {
-  const stopEval = evaluateClinicalStop({ reason: "patient_requested_stop", recordedBy: "clinician" });
+  const stopEval = evaluateClinicalStop({ reason: "clinician_or_caregiver_safety_concern", recordedBy: "clinician" });
   if (!stopEval.ok) {
     throw new Error("Failed to create clinical stop event");
   }
