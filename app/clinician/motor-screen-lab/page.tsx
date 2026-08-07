@@ -158,11 +158,14 @@ export default function MotorScreenLabPage() {
   const scenarioOptions: { key: ScenarioKey; label: string }[] = [
     { key: "happyPath", label: "Happy path" },
     { key: "lowVisibility", label: "Low visibility" },
-    { key: "onsetCandidateAbandonedOnReturn", label: "Onset candidate abandoned on return" },
+    { key: "onsetCandidateAbandonedOnReturn", label: "Starting Zone Re-Entry (Onset Candidate Reset)" },
     { key: "shortTrackingGap", label: "Short tracking gap" },
     { key: "longTrackingGapWithHumanResume", label: "Long tracking gap with human resume" },
     { key: "stopBeforeCompletion", label: "Stop before completion" },
   ];
+
+  const getScenarioLabel = (key: ScenarioKey): string =>
+    scenarioOptions.find((option) => option.key === key)?.label ?? "—";
 
   const isAttemptActive = attemptState !== null;
   const hasMoreCommands = currentScenario && commandIndex < currentScenario.commands.length;
@@ -312,7 +315,7 @@ export default function MotorScreenLabPage() {
 
                 <div className="space-y-3 text-sm">
                   <StateRow label="Tested side" value={testedSide} />
-                  <StateRow label="Scenario" value={currentScenario?.name ?? "—"} />
+                  <StateRow label="Scenario" value={getScenarioLabel(scenarioKey)} />
                   <StateRow label="Command index" value={`${commandIndex} / ${currentScenario?.commands.length ?? 0}`} />
                   <StateRow label="Engine phase" value={snapshot.phase ?? "—"} />
                   <StateRow label="Protective pause" value={snapshot.hasActivePause ? "Active" : "Inactive"} />
