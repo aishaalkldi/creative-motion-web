@@ -1,0 +1,825 @@
+/**
+ * CHANGE-003 — target attempt lifecycle.
+ *
+ * Run: npx tsx --test app/lib/interactive-shoulder/target-attempt-lifecycle.test.ts
+ *
+ * Scope of this suite: the interaction-domain attempt contract only — when an attempt
+ * starts, how its pause-aware active time is measured, when it expires, and the
+ * exactly-once guarantee on its terminal result. No clinical meaning is asserted here:
+ * an expired attempt is not a diagnosis, and every timeout value below is a test fixture
+ * with no clinical validation.
+ *
+ * The two clocks are exercised separately on purpose: `nowMs` (presentation/event) and
+ * `blockElapsedSeconds` (pause-aware attempt time). Several tests advance one while
+ * freezing the other, which is exactly what the orchestrator does during a pause.
+ */
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { DEFAULT_SAFE_TARGET_BOUNDS } from "./target-generator";
+import {
+  createInitialTargetLifecycle,
+  tickTargetLifecycle,
+  type TargetLifecycleState,
+  type TargetLifecycleTickInput,
+} from "./target-lifecycle";
+
+const T0 = 5_000_000;
+const deterministicRandom = () => 0.42;
+
+/** Fixture only — carries no clinical validation. */
+const TIMEOUT_MS = 4_000;
+
+function baseInput(
+  overrides: Partial<TargetLifecycleTickInput> = {},
+): TargetLifecycleTickInput {
+  return {
+    wrist: null,
+    nowMs: T0,
+    side: "right",
+    bounds: DEFAULT_SAFE_TARGET_BOUNDS,
+    random: deterministicRandom,
+    ...overrides,
+  };
+}
+
+/** Spawns the first target with attempt timing configured. */
+function spawnedWithTiming(blockElapsedSeconds = 0) {
+  return tickTargetLifecycle(
+    createInitialTargetLifecycle(),
+    baseInput({ blockElapsedSeconds, attemptTimeoutMs: TIMEOUT_MS }),
+  );
+}
+
+function wristAt(state: TargetLifecycleState) {
+  const target = state.currentTarget;
+  assert.ok(target, "expected an active target");
+  return { x: target.x, y: target.y };
+}
+
+describe("target attempt lifecycle — attempt start", () => {
+  it("1. spawning a target starts exactly one attempt", () => {
+    const spawned = spawnedWithTiming(12);
+    assert.equal(spawned.attemptStartedEvents.length, 1);
+    assert.ok(spawned.state.currentTarget);
+
+    // A tick that spawns nothing starts no attempt.
+    const idle = tickTargetLifecycle(
+      spawned.state,
+      baseInput({ nowMs: T0 + 100, blockElapsedSeconds: 12.1, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.equal(idle.attemptStartedEvents.length, 0);
+  });
+
+  it("2. attempt identity is the target identity and sequence — no second counter", () => {
+    const spawned = spawnedWithTiming(12);
+    const attempt = spawned.attemptStartedEvents[0];
+    assert.equal(attempt.targetId, spawned.state.currentTarget!.id);
+    assert.equal(attempt.sequence, spawned.state.sequence);
+    assert.equal(attempt.sequence, 1);
+    assert.equal(attempt.startedAtMs, spawned.state.currentTarget!.spawnedAtMs);
+    assert.equal(attempt.startedAtBlockElapsedS, 12);
+    assert.equal(attempt.side, "right");
+
+    const hit = tickTargetLifecycle(
+      spawned.state,
+      baseInput({
+        wrist: wristAt(spawned.state),
+        nowMs: T0 + 500,
+        blockElapsedSeconds: 12.5,
+        attemptTimeoutMs: TIMEOUT_MS,
+      }),
+    );
+    // The successor attempt keeps identity aligned with the successor target.
+    assert.equal(hit.attemptStartedEvents.length, 1);
+    assert.equal(hit.attemptStartedEvents[0].sequence, 2);
+    assert.equal(hit.attemptStartedEvents[0].targetId, hit.state.currentTarget!.id);
+  });
+
+  it("carries the reach side supplied to the tick, without claiming an affected side", () => {
+    const left = tickTargetLifecycle(
+      createInitialTargetLifecycle(),
+      baseInput({ side: "left", blockElapsedSeconds: 0, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.equal(left.attemptStartedEvents[0].side, "left");
+  });
+});
+
+describe("target attempt lifecycle — legacy compatibility", () => {
+  it("3. an undefined timeout preserves legacy lifecycle behavior exactly", () => {
+    // Legacy call shape: no blockElapsedSeconds, no attemptTimeoutMs.
+    let state = tickTargetLifecycle(createInitialTargetLifecycle(), baseInput()).state;
+    const firstId = state.currentTarget?.id;
+    assert.ok(firstId);
+    assert.equal(state.currentTarget!.spawnedAtBlockElapsedS, undefined);
+    assert.equal(state.interaction.targetsShown, 1);
+
+    // Wall-clock time far beyond any plausible timeout must change nothing.
+    for (const nowMs of [T0 + 60_000, T0 + 600_000, T0 + 6_000_000]) {
+      const idle = tickTargetLifecycle(state, baseInput({ nowMs }));
+      assert.equal(idle.attemptTimeoutEvent, null);
+      assert.equal(idle.hitEvent, null);
+      assert.equal(idle.state.currentTarget!.id, firstId);
+      state = idle.state;
+    }
+
+    const hit = tickTargetLifecycle(
+      state,
+      baseInput({ wrist: wristAt(state), nowMs: T0 + 6_001_000 }),
+    );
+    assert.ok(hit.hitEvent);
+    assert.equal(hit.attemptTimeoutEvent, null);
+    assert.notEqual(hit.state.currentTarget?.id, firstId);
+    assert.equal(hit.state.interaction.targetsShown, 2);
+    assert.equal(hit.state.interaction.targetsReached, 1);
+  });
+
+  it("a configured timeout without block elapsed time cannot expire an attempt", () => {
+    // No pause-aware clock is available, so there is no baseline to measure against and
+    // the lifecycle must not fall back to wall-clock time.
+    const spawned = tickTargetLifecycle(
+      createInitialTargetLifecycle(),
+      baseInput({ attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.equal(spawned.state.currentTarget!.spawnedAtBlockElapsedS, undefined);
+    assert.equal(spawned.attemptStartedEvents[0].startedAtBlockElapsedS, null);
+
+    const later = tickTargetLifecycle(
+      spawned.state,
+      baseInput({ nowMs: T0 + 10 * TIMEOUT_MS, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.equal(later.attemptTimeoutEvent, null);
+    assert.equal(later.state.currentTarget!.id, spawned.state.currentTarget!.id);
+  });
+});
+
+describe("target attempt lifecycle — expiration", () => {
+  it("4. an active target does not expire before the threshold", () => {
+    const spawned = spawnedWithTiming(10);
+    for (const blockElapsedSeconds of [10, 11, 13, 13.999]) {
+      const tick = tickTargetLifecycle(
+        spawned.state,
+        baseInput({
+          nowMs: T0 + 1_000,
+          blockElapsedSeconds,
+          attemptTimeoutMs: TIMEOUT_MS,
+        }),
+      );
+      assert.equal(tick.attemptTimeoutEvent, null, `unexpected expiry at ${blockElapsedSeconds}s`);
+      assert.equal(tick.state.currentTarget!.id, spawned.state.currentTarget!.id);
+    }
+  });
+
+  it("5. emits exactly one timeout event at the threshold, and reports active time", () => {
+    const spawned = spawnedWithTiming(10);
+    const expired = tickTargetLifecycle(
+      spawned.state,
+      baseInput({ nowMs: T0 + 4_200, blockElapsedSeconds: 14, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    const event = expired.attemptTimeoutEvent;
+    assert.ok(event);
+    assert.equal(event.targetId, spawned.state.currentTarget!.id);
+    assert.equal(event.sequence, 1);
+    assert.equal(event.activeElapsedMs, TIMEOUT_MS);
+    assert.equal(event.attemptTimeoutMs, TIMEOUT_MS);
+    assert.equal(event.expiredAtBlockElapsedS, 14);
+    assert.equal(event.expiredAtMs, T0 + 4_200);
+  });
+
+  it("exact threshold equality expires the attempt (>=, not >)", () => {
+    const spawned = spawnedWithTiming(10);
+    const atThreshold = tickTargetLifecycle(
+      spawned.state,
+      baseInput({ nowMs: T0 + 1, blockElapsedSeconds: 14, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.ok(atThreshold.attemptTimeoutEvent);
+    assert.equal(atThreshold.attemptTimeoutEvent.activeElapsedMs, TIMEOUT_MS);
+
+    const justBelow = tickTargetLifecycle(
+      spawned.state,
+      baseInput({ nowMs: T0 + 1, blockElapsedSeconds: 13.9999, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.equal(justBelow.attemptTimeoutEvent, null);
+  });
+
+  it("6. an expired attempt emits no hit event", () => {
+    const spawned = spawnedWithTiming(10);
+    const expired = tickTargetLifecycle(
+      spawned.state,
+      baseInput({ nowMs: T0 + 5_000, blockElapsedSeconds: 15, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.ok(expired.attemptTimeoutEvent);
+    assert.equal(expired.hitEvent, null);
+  });
+
+  it("7. an expired attempt does not increment targetsReached", () => {
+    const spawned = spawnedWithTiming(10);
+    const before = spawned.state.interaction.targetsReached;
+    const expired = tickTargetLifecycle(
+      spawned.state,
+      baseInput({ nowMs: T0 + 5_000, blockElapsedSeconds: 15, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.ok(expired.attemptTimeoutEvent);
+    assert.equal(expired.state.interaction.targetsReached, before);
+    assert.equal(expired.state.interaction.targetsReached, 0);
+    assert.deepEqual(expired.state.interaction.targetHitTimestampsMs, []);
+  });
+
+  it("8. an expired attempt appends no reaction time", () => {
+    const spawned = spawnedWithTiming(10);
+    const expired = tickTargetLifecycle(
+      spawned.state,
+      baseInput({ nowMs: T0 + 5_000, blockElapsedSeconds: 15, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.ok(expired.attemptTimeoutEvent);
+    assert.deepEqual(expired.state.interaction.reactionTimesMs, []);
+  });
+
+  it("9. the same target can never expire twice", () => {
+    const spawned = spawnedWithTiming(10);
+    const expiredId = spawned.state.currentTarget!.id;
+    const expired = tickTargetLifecycle(
+      spawned.state,
+      baseInput({ nowMs: T0 + 5_000, blockElapsedSeconds: 15, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.ok(expired.attemptTimeoutEvent);
+
+    let state = expired.state;
+    const seenTimeoutIds = [expired.attemptTimeoutEvent.targetId];
+    // Keep ticking well past the original threshold with no contact at all.
+    for (let i = 1; i <= 12; i++) {
+      const tick = tickTargetLifecycle(
+        state,
+        baseInput({
+          nowMs: T0 + 5_000 + i * 500,
+          blockElapsedSeconds: 15 + i * 0.5,
+          attemptTimeoutMs: TIMEOUT_MS,
+        }),
+      );
+      if (tick.attemptTimeoutEvent) seenTimeoutIds.push(tick.attemptTimeoutEvent.targetId);
+      state = tick.state;
+    }
+    assert.equal(seenTimeoutIds.filter((id) => id === expiredId).length, 1);
+    assert.equal(new Set(seenTimeoutIds).size, seenTimeoutIds.length);
+  });
+
+  it("10. the lifecycle proceeds to a fresh target after an expiry", () => {
+    const spawned = spawnedWithTiming(10);
+    const expiredId = spawned.state.currentTarget!.id;
+    const expired = tickTargetLifecycle(
+      spawned.state,
+      baseInput({ nowMs: T0 + 5_000, blockElapsedSeconds: 15, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.ok(expired.state.currentTarget);
+    assert.notEqual(expired.state.currentTarget.id, expiredId);
+    assert.equal(expired.state.sequence, 2);
+    assert.equal(expired.state.interaction.targetsShown, 2);
+    assert.equal(expired.state.targetHit, false);
+    // The successor attempt is announced like any other.
+    assert.equal(expired.attemptStartedEvents.length, 1);
+    assert.equal(expired.attemptStartedEvents[0].targetId, expired.state.currentTarget.id);
+    // An expiry produces no hit presentation effects.
+    assert.equal(expired.state.exitingTarget, null);
+    assert.equal(expired.state.spawnLockedUntilMs, null);
+
+    // The successor is contactable normally.
+    const hit = tickTargetLifecycle(
+      expired.state,
+      baseInput({
+        wrist: wristAt(expired.state),
+        nowMs: T0 + 5_500,
+        blockElapsedSeconds: 15.5,
+        attemptTimeoutMs: TIMEOUT_MS,
+      }),
+    );
+    assert.ok(hit.hitEvent);
+    assert.equal(hit.state.interaction.targetsReached, 1);
+  });
+
+  it("13. a new target receives a fresh expiry baseline", () => {
+    const spawned = spawnedWithTiming(10);
+    const expired = tickTargetLifecycle(
+      spawned.state,
+      baseInput({ nowMs: T0 + 5_000, blockElapsedSeconds: 15, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.equal(expired.state.currentTarget!.spawnedAtBlockElapsedS, 15);
+    assert.equal(expired.attemptStartedEvents[0].startedAtBlockElapsedS, 15);
+
+    // Just under a full fresh window measured from 15s — must not expire.
+    const early = tickTargetLifecycle(
+      expired.state,
+      baseInput({ nowMs: T0 + 8_900, blockElapsedSeconds: 18.9, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.equal(early.attemptTimeoutEvent, null);
+
+    // A full fresh window later — expires on its own baseline, not the first target's.
+    const second = tickTargetLifecycle(
+      expired.state,
+      baseInput({ nowMs: T0 + 9_000, blockElapsedSeconds: 19, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.ok(second.attemptTimeoutEvent);
+    assert.equal(second.attemptTimeoutEvent.activeElapsedMs, TIMEOUT_MS);
+    assert.equal(second.attemptTimeoutEvent.sequence, 2);
+  });
+
+  it("14. frozen block elapsed time does not burn attempt time", () => {
+    const spawned = spawnedWithTiming(10);
+    let state = spawned.state;
+
+    // Pause: wall clock races ahead by minutes while block elapsed time is frozen at 12s.
+    for (let i = 1; i <= 10; i++) {
+      const tick = tickTargetLifecycle(
+        state,
+        baseInput({
+          nowMs: T0 + i * 30_000,
+          blockElapsedSeconds: 12,
+          attemptTimeoutMs: TIMEOUT_MS,
+        }),
+      );
+      assert.equal(tick.attemptTimeoutEvent, null, `wall clock leaked into attempt time at tick ${i}`);
+      state = tick.state;
+    }
+    assert.equal(state.currentTarget!.id, spawned.state.currentTarget!.id);
+
+    // Resume: attempt time continues from the same 2s of active time already spent.
+    const stillActive = tickTargetLifecycle(
+      state,
+      baseInput({ nowMs: T0 + 400_000, blockElapsedSeconds: 13.9, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.equal(stillActive.attemptTimeoutEvent, null);
+
+    const expired = tickTargetLifecycle(
+      state,
+      baseInput({ nowMs: T0 + 400_100, blockElapsedSeconds: 14, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.ok(expired.attemptTimeoutEvent);
+    assert.equal(expired.attemptTimeoutEvent.activeElapsedMs, TIMEOUT_MS);
+  });
+
+  it("block elapsed time restarting backwards never expires an attempt", () => {
+    const spawned = spawnedWithTiming(30);
+    const rewound = tickTargetLifecycle(
+      spawned.state,
+      baseInput({ nowMs: T0 + 1_000, blockElapsedSeconds: 0, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.equal(rewound.attemptTimeoutEvent, null);
+  });
+});
+
+describe("target attempt lifecycle — success and boundary precedence", () => {
+  it("11. contact before the threshold prevents any expiry for that target", () => {
+    const spawned = spawnedWithTiming(10);
+    const contactedId = spawned.state.currentTarget!.id;
+    const hit = tickTargetLifecycle(
+      spawned.state,
+      baseInput({
+        wrist: wristAt(spawned.state),
+        nowMs: T0 + 2_000,
+        blockElapsedSeconds: 12,
+        attemptTimeoutMs: TIMEOUT_MS,
+      }),
+    );
+    assert.ok(hit.hitEvent);
+    assert.equal(hit.hitEvent.targetId, contactedId);
+    assert.equal(hit.attemptTimeoutEvent, null);
+
+    // Push past the moment the contacted target would have expired: it is gone, and only
+    // the successor's own baseline can ever expire.
+    const later = tickTargetLifecycle(
+      hit.state,
+      baseInput({ nowMs: T0 + 4_100, blockElapsedSeconds: 14.1, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.equal(later.attemptTimeoutEvent, null);
+  });
+
+  /**
+   * BOUNDARY PRECEDENCE RULE: contact wins at the exact threshold. The wrist is inside the
+   * target on this tick, so reporting an incomplete attempt would be a false negative.
+   */
+  it("contact wins at the exact expiry threshold — success only, never both", () => {
+    const spawned = spawnedWithTiming(10);
+    const boundary = tickTargetLifecycle(
+      spawned.state,
+      baseInput({
+        wrist: wristAt(spawned.state),
+        nowMs: T0 + 4_000,
+        blockElapsedSeconds: 14, // exactly TIMEOUT_MS of active attempt time
+        attemptTimeoutMs: TIMEOUT_MS,
+      }),
+    );
+    assert.ok(boundary.hitEvent);
+    assert.equal(boundary.hitEvent.targetId, spawned.state.currentTarget!.id);
+    assert.equal(boundary.attemptTimeoutEvent, null);
+    assert.equal(boundary.state.interaction.targetsReached, 1);
+  });
+
+  it("no contact at the exact threshold expires the attempt", () => {
+    const spawned = spawnedWithTiming(10);
+    const away = tickTargetLifecycle(
+      spawned.state,
+      baseInput({
+        wrist: { x: 0.02, y: 0.98 },
+        nowMs: T0 + 4_000,
+        blockElapsedSeconds: 14,
+        attemptTimeoutMs: TIMEOUT_MS,
+      }),
+    );
+    assert.ok(away.attemptTimeoutEvent);
+    assert.equal(away.hitEvent, null);
+  });
+
+  it("12. contact stays exactly-once per target while the wrist remains inside", () => {
+    const spawned = spawnedWithTiming(10);
+    const wrist = wristAt(spawned.state);
+    const contactedId = spawned.state.currentTarget!.id;
+
+    // The wrist is parked on the first target and never moves. Whatever the generator
+    // does with successors, no single target may ever be contacted twice.
+    let state = spawned.state;
+    const contactedIds: string[] = [];
+    for (let i = 0; i <= 6; i++) {
+      const tick = tickTargetLifecycle(
+        state,
+        baseInput({
+          wrist,
+          nowMs: T0 + 1_000 + i * 100,
+          blockElapsedSeconds: 11 + i * 0.1,
+          attemptTimeoutMs: TIMEOUT_MS,
+        }),
+      );
+      if (tick.hitEvent) contactedIds.push(tick.hitEvent.targetId);
+      state = tick.state;
+    }
+    assert.ok(contactedIds.includes(contactedId));
+    assert.equal(contactedIds.filter((id) => id === contactedId).length, 1);
+    assert.equal(new Set(contactedIds).size, contactedIds.length);
+    assert.equal(state.interaction.targetsReached, contactedIds.length);
+    assert.equal(state.interaction.reactionTimesMs.length, contactedIds.length);
+  });
+
+  it("a hit exit transition holds the attempt clock and expires nothing mid-transition", () => {
+    const spawned = spawnedWithTiming(10);
+    const hit = tickTargetLifecycle(
+      spawned.state,
+      baseInput({
+        wrist: wristAt(spawned.state),
+        nowMs: T0 + 1_000,
+        blockElapsedSeconds: 11,
+        attemptTimeoutMs: TIMEOUT_MS,
+        hitExitTransitionMs: 400,
+      }),
+    );
+    assert.ok(hit.hitEvent);
+    assert.equal(hit.state.currentTarget, null);
+    assert.ok(hit.state.exitingTarget);
+    assert.equal(hit.state.spawnLockedUntilMs, T0 + 1_400);
+    // No successor attempt starts until the transition completes.
+    assert.equal(hit.attemptStartedEvents.length, 0);
+
+    // Mid-transition, with block time already far past the original threshold.
+    const during = tickTargetLifecycle(
+      hit.state,
+      baseInput({
+        nowMs: T0 + 1_200,
+        blockElapsedSeconds: 30,
+        attemptTimeoutMs: TIMEOUT_MS,
+        hitExitTransitionMs: 400,
+      }),
+    );
+    assert.equal(during.attemptTimeoutEvent, null);
+    assert.equal(during.attemptStartedEvents.length, 0);
+
+    // After the transition the successor spawns with a baseline taken at that moment.
+    const after = tickTargetLifecycle(
+      during.state,
+      baseInput({
+        nowMs: T0 + 1_500,
+        blockElapsedSeconds: 31,
+        attemptTimeoutMs: TIMEOUT_MS,
+        hitExitTransitionMs: 400,
+      }),
+    );
+    assert.equal(after.attemptTimeoutEvent, null);
+    assert.equal(after.attemptStartedEvents.length, 1);
+    assert.equal(after.state.currentTarget!.spawnedAtBlockElapsedS, 31);
+  });
+});
+
+describe("target attempt lifecycle — tracking-loss safety", () => {
+  /**
+   * Tracking loss is NOT patient failure. An absent wrist is never itself a reason to
+   * end an attempt; only elapsed active attempt time is. In a real session the
+   * orchestrator freezes block elapsed time during safety hold and the gating layer stops
+   * ticking, so a lost tracker cannot burn attempt time at all.
+   */
+  it("an absent wrist never expires an attempt on its own", () => {
+    const spawned = spawnedWithTiming(10);
+    let state = spawned.state;
+    // Block time frozen (safety hold) while the wrist is unavailable for a long while.
+    for (let i = 1; i <= 20; i++) {
+      const tick = tickTargetLifecycle(
+        state,
+        baseInput({
+          wrist: null,
+          nowMs: T0 + i * 10_000,
+          blockElapsedSeconds: 10,
+          attemptTimeoutMs: TIMEOUT_MS,
+        }),
+      );
+      assert.equal(tick.attemptTimeoutEvent, null, `absent wrist ended the attempt at tick ${i}`);
+      state = tick.state;
+    }
+    assert.equal(state.currentTarget!.id, spawned.state.currentTarget!.id);
+    assert.equal(state.interaction.targetsShown, 1);
+  });
+
+  it("the timeout event carries no reason field that could absorb tracking loss", () => {
+    const spawned = spawnedWithTiming(10);
+    const expired = tickTargetLifecycle(
+      spawned.state,
+      baseInput({ nowMs: T0 + 5_000, blockElapsedSeconds: 15, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.ok(expired.attemptTimeoutEvent);
+    assert.equal("reason" in expired.attemptTimeoutEvent, false);
+    assert.equal("trackingLost" in expired.attemptTimeoutEvent, false);
+  });
+});
+
+describe("target attempt lifecycle — timeout value boundaries", () => {
+  it("a zero or negative timeout is treated as unconfigured, never as instant expiry", () => {
+    for (const attemptTimeoutMs of [0, -1, -TIMEOUT_MS]) {
+      const spawned = tickTargetLifecycle(
+        createInitialTargetLifecycle(),
+        baseInput({ blockElapsedSeconds: 10, attemptTimeoutMs }),
+      );
+      assert.equal(spawned.attemptTimeoutEvent, null, `spawn expired instantly at ${attemptTimeoutMs}`);
+      assert.equal(spawned.state.interaction.targetsShown, 1);
+
+      const later = tickTargetLifecycle(
+        spawned.state,
+        baseInput({ nowMs: T0 + 60_000, blockElapsedSeconds: 70, attemptTimeoutMs }),
+      );
+      assert.equal(later.attemptTimeoutEvent, null, `late expiry at ${attemptTimeoutMs}`);
+      assert.equal(later.state.currentTarget!.id, spawned.state.currentTarget!.id);
+    }
+  });
+
+  it("a non-finite timeout is treated as unconfigured", () => {
+    for (const attemptTimeoutMs of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const spawned = tickTargetLifecycle(
+        createInitialTargetLifecycle(),
+        baseInput({ blockElapsedSeconds: 10, attemptTimeoutMs }),
+      );
+      const later = tickTargetLifecycle(
+        spawned.state,
+        baseInput({ nowMs: T0 + 60_000, blockElapsedSeconds: 70, attemptTimeoutMs }),
+      );
+      assert.equal(later.attemptTimeoutEvent, null, `expired with timeout ${attemptTimeoutMs}`);
+      assert.equal(later.state.currentTarget!.id, spawned.state.currentTarget!.id);
+    }
+  });
+
+  it("a non-finite block elapsed value cannot expire an attempt", () => {
+    const spawned = spawnedWithTiming(10);
+    for (const blockElapsedSeconds of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      const tick = tickTargetLifecycle(
+        spawned.state,
+        baseInput({ nowMs: T0 + 60_000, blockElapsedSeconds, attemptTimeoutMs: TIMEOUT_MS }),
+      );
+      assert.equal(tick.attemptTimeoutEvent, null, `expired with block elapsed ${blockElapsedSeconds}`);
+    }
+  });
+
+  it("an absent current target produces no attempt result during a spawn lock", () => {
+    const spawned = spawnedWithTiming(10);
+    const hit = tickTargetLifecycle(
+      spawned.state,
+      baseInput({
+        wrist: wristAt(spawned.state),
+        nowMs: T0 + 1_000,
+        blockElapsedSeconds: 11,
+        attemptTimeoutMs: TIMEOUT_MS,
+        hitExitTransitionMs: 5_000,
+      }),
+    );
+    assert.equal(hit.state.currentTarget, null);
+    const locked = tickTargetLifecycle(
+      hit.state,
+      baseInput({
+        nowMs: T0 + 2_000,
+        blockElapsedSeconds: 100,
+        attemptTimeoutMs: TIMEOUT_MS,
+        hitExitTransitionMs: 5_000,
+      }),
+    );
+    assert.equal(locked.attemptTimeoutEvent, null);
+    assert.equal(locked.hitEvent, null);
+    assert.equal(locked.attemptStartedEvents.length, 0);
+  });
+});
+
+describe("target attempt lifecycle — optional metadata", () => {
+  it("15. an optional placement level survives spawn → hit", () => {
+    const spawned = tickTargetLifecycle(
+      createInitialTargetLifecycle(),
+      baseInput({ blockElapsedSeconds: 10, attemptTimeoutMs: TIMEOUT_MS, levelDegrees: 65 }),
+    );
+    assert.equal(spawned.state.currentTarget!.levelDegrees, 65);
+    assert.equal(spawned.attemptStartedEvents[0].levelDegrees, 65);
+
+    const hit = tickTargetLifecycle(
+      spawned.state,
+      baseInput({
+        wrist: wristAt(spawned.state),
+        nowMs: T0 + 1_000,
+        blockElapsedSeconds: 11,
+        attemptTimeoutMs: TIMEOUT_MS,
+        levelDegrees: 80, // the level for the NEXT target, not the one being contacted
+      }),
+    );
+    assert.ok(hit.hitEvent);
+    assert.equal(hit.hitEvent.levelDegrees, 65);
+    assert.equal(hit.state.currentTarget!.levelDegrees, 80);
+  });
+
+  it("16. an optional placement level survives spawn → timeout", () => {
+    const spawned = tickTargetLifecycle(
+      createInitialTargetLifecycle(),
+      baseInput({ blockElapsedSeconds: 10, attemptTimeoutMs: TIMEOUT_MS, levelDegrees: 65 }),
+    );
+    const expired = tickTargetLifecycle(
+      spawned.state,
+      baseInput({
+        nowMs: T0 + 5_000,
+        blockElapsedSeconds: 15,
+        attemptTimeoutMs: TIMEOUT_MS,
+        levelDegrees: 45,
+      }),
+    );
+    assert.ok(expired.attemptTimeoutEvent);
+    assert.equal(expired.attemptTimeoutEvent.levelDegrees, 65);
+    assert.equal(expired.state.currentTarget!.levelDegrees, 45);
+  });
+
+  it("17. no placement level is invented when the caller supplies none", () => {
+    const spawned = spawnedWithTiming(10);
+    assert.equal("levelDegrees" in spawned.state.currentTarget!, false);
+    assert.equal("levelDegrees" in spawned.attemptStartedEvents[0], false);
+
+    const expired = tickTargetLifecycle(
+      spawned.state,
+      baseInput({ nowMs: T0 + 5_000, blockElapsedSeconds: 15, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.ok(expired.attemptTimeoutEvent);
+    assert.equal("levelDegrees" in expired.attemptTimeoutEvent, false);
+
+    const hit = tickTargetLifecycle(
+      expired.state,
+      baseInput({
+        wrist: wristAt(expired.state),
+        nowMs: T0 + 5_500,
+        blockElapsedSeconds: 15.5,
+        attemptTimeoutMs: TIMEOUT_MS,
+      }),
+    );
+    assert.ok(hit.hitEvent);
+    assert.equal("levelDegrees" in hit.hitEvent, false);
+  });
+
+  it("a non-finite placement level is ignored rather than stamped on the target", () => {
+    const spawned = tickTargetLifecycle(
+      createInitialTargetLifecycle(),
+      baseInput({ blockElapsedSeconds: 10, levelDegrees: Number.NaN }),
+    );
+    assert.equal("levelDegrees" in spawned.state.currentTarget!, false);
+  });
+
+  it("18. attempt-scoped compensation metadata accumulates and resets between targets", () => {
+    // No compensation input at all → the field stays absent ("unknown", not "clean").
+    const untouched = spawnedWithTiming(10);
+    assert.equal(untouched.state.attemptCompensationObserved, null);
+    const cleanHit = tickTargetLifecycle(
+      untouched.state,
+      baseInput({
+        wrist: wristAt(untouched.state),
+        nowMs: T0 + 500,
+        blockElapsedSeconds: 10.5,
+        attemptTimeoutMs: TIMEOUT_MS,
+      }),
+    );
+    assert.ok(cleanHit.hitEvent);
+    assert.equal("compensatedDuringAttempt" in cleanHit.hitEvent, false);
+
+    // Reported once mid-attempt → sticky for the rest of that attempt.
+    const spawned = spawnedWithTiming(10);
+    const reported = tickTargetLifecycle(
+      spawned.state,
+      baseInput({
+        nowMs: T0 + 500,
+        blockElapsedSeconds: 10.5,
+        attemptTimeoutMs: TIMEOUT_MS,
+        compensationObservedDuringAttempt: true,
+      }),
+    );
+    assert.equal(reported.state.attemptCompensationObserved, true);
+    const clearedLater = tickTargetLifecycle(
+      reported.state,
+      baseInput({
+        nowMs: T0 + 700,
+        blockElapsedSeconds: 10.7,
+        attemptTimeoutMs: TIMEOUT_MS,
+        compensationObservedDuringAttempt: false,
+      }),
+    );
+    assert.equal(clearedLater.state.attemptCompensationObserved, true);
+
+    const hit = tickTargetLifecycle(
+      clearedLater.state,
+      baseInput({
+        wrist: wristAt(clearedLater.state),
+        nowMs: T0 + 900,
+        blockElapsedSeconds: 10.9,
+        attemptTimeoutMs: TIMEOUT_MS,
+      }),
+    );
+    assert.ok(hit.hitEvent);
+    assert.equal(hit.hitEvent.compensatedDuringAttempt, true);
+    // Reset for the successor attempt — nothing leaks forward.
+    assert.equal(hit.state.attemptCompensationObserved, null);
+
+    // ...and it does not change difficulty or any interaction count.
+    assert.equal(hit.state.interaction.targetsReached, 1);
+
+    // Compensation also rides along an expired attempt, then resets.
+    const compensatedExpiry = tickTargetLifecycle(
+      hit.state,
+      baseInput({
+        nowMs: T0 + 5_000,
+        blockElapsedSeconds: 15,
+        attemptTimeoutMs: TIMEOUT_MS,
+        compensationObservedDuringAttempt: true,
+      }),
+    );
+    assert.ok(compensatedExpiry.attemptTimeoutEvent);
+    assert.equal(compensatedExpiry.attemptTimeoutEvent.compensatedDuringAttempt, true);
+    assert.equal(compensatedExpiry.state.attemptCompensationObserved, null);
+  });
+});
+
+describe("target attempt lifecycle — purity", () => {
+  it("19. never mutates the state or input objects it is given", () => {
+    const spawned = spawnedWithTiming(10);
+    const priorState = spawned.state;
+    const snapshot = structuredClone(priorState);
+    const input = baseInput({
+      wrist: { x: 0.5, y: 0.5 },
+      nowMs: T0 + 5_000,
+      blockElapsedSeconds: 15,
+      attemptTimeoutMs: TIMEOUT_MS,
+      levelDegrees: 70,
+      compensationObservedDuringAttempt: true,
+    });
+    const inputSnapshot = structuredClone({ ...input, random: undefined });
+
+    const result = tickTargetLifecycle(priorState, input);
+    assert.ok(result.attemptTimeoutEvent);
+
+    assert.deepEqual(priorState, snapshot);
+    assert.deepEqual({ ...input, random: undefined }, inputSnapshot);
+    assert.notEqual(result.state, priorState);
+    assert.notEqual(result.state.interaction, priorState.interaction);
+  });
+
+  it("appends metrics by replacing arrays rather than mutating the prior ones", () => {
+    const spawned = spawnedWithTiming(10);
+    const priorReactionTimes = spawned.state.interaction.reactionTimesMs;
+    const priorTimestamps = spawned.state.interaction.targetHitTimestampsMs;
+
+    const hit = tickTargetLifecycle(
+      spawned.state,
+      baseInput({
+        wrist: wristAt(spawned.state),
+        nowMs: T0 + 1_000,
+        blockElapsedSeconds: 11,
+        attemptTimeoutMs: TIMEOUT_MS,
+      }),
+    );
+    assert.ok(hit.hitEvent);
+    assert.notEqual(hit.state.interaction.reactionTimesMs, priorReactionTimes);
+    assert.notEqual(hit.state.interaction.targetHitTimestampsMs, priorTimestamps);
+    assert.deepEqual(priorReactionTimes, []);
+    assert.deepEqual(priorTimestamps, []);
+  });
+
+  it("re-ticking the same prior state is deterministic and repeatable", () => {
+    const spawned = spawnedWithTiming(10);
+    const input = baseInput({
+      nowMs: T0 + 5_000,
+      blockElapsedSeconds: 15,
+      attemptTimeoutMs: TIMEOUT_MS,
+    });
+    const first = tickTargetLifecycle(spawned.state, input);
+    const second = tickTargetLifecycle(spawned.state, input);
+    assert.deepEqual(first.attemptTimeoutEvent, second.attemptTimeoutEvent);
+    assert.deepEqual(first.state.interaction, second.state.interaction);
+  });
+});
