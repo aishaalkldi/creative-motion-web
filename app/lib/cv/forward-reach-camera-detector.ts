@@ -233,6 +233,9 @@ export class ForwardReachCameraDetector {
     this.lastLeftWristVisibility = null;
     this.lastRightWristCoords = null;
     this.lastLeftWristCoords = null;
+    this.lastCommandType = null;
+    this.lastCommandStatus = null;
+    this.lastCommandRejectionReason = null;
     this.emit();
 
     try {
