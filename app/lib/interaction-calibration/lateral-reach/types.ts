@@ -8,13 +8,19 @@
  * This module does NOT:
  * - provide runtime JSON/object validators for speculative parsing
  * - capture start/endpoint samples
- * - build startingZone / fixedTarget
+ * - build startingZone / fixedTarget / LateralReachConfig
+ * - encode interactionFraction or geometry-construction algorithms
  * - call or alter lateral-reach-engine
  * - access camera / MediaPipe / React UI
- * - invent clinical ROM, impairment, or ability labels
+ * - invent clinical ROM, impairment, ability tiers, or comfort-as-fact labels
  *
  * Coordinates remain raw camera-space normalized points (same convention as
  * NormalizedMotionFrame). No mirroring transforms here.
+ *
+ * MVP capture preference (one held calibration reach + one technical retry) is a
+ * product policy for later slices. This contract records an accepted held
+ * endpoint for a calibration result and does not permanently forbid future
+ * multi-reach aggregation upstream of that accepted value.
  */
 
 import type { NormalizedPoint } from "@/app/lib/interactive-shoulder/types";
@@ -51,25 +57,18 @@ export type LateralReachCaptureFailureReason =
   (typeof LATERAL_REACH_CAPTURE_FAILURE_REASONS)[number];
 
 // ---------------------------------------------------------------------------
-// Geometry blockers (valid capture, current constraints cannot build config)
+// Geometry blockers (valid capture; geometry could not be constructed)
+//
+// Intentionally minimal and algorithm-agnostic. Slice 1 must not encode a
+// not-yet-built geometry builder (circle radii, fraction reduction, etc.).
 // ---------------------------------------------------------------------------
 
 export const LATERAL_REACH_GEOMETRY_BLOCKERS = [
-  "insufficient_separation_for_current_geometry",
-  "target_outside_camera_margin",
-  "interaction_fraction_reduction_exhausted",
+  "geometry_constraints_unsatisfied",
   "engine_config_invalid",
 ] as const;
 
 export type LateralReachGeometryBlocker = (typeof LATERAL_REACH_GEOMETRY_BLOCKERS)[number];
-
-// ---------------------------------------------------------------------------
-// Interaction geometry labels (provisional; not clinical ability / ROM %)
-// ---------------------------------------------------------------------------
-
-export const LATERAL_REACH_INTERACTION_GEOMETRY_LABELS = ["short", "standard", "long"] as const;
-export type LateralReachInteractionGeometryLabel =
-  (typeof LATERAL_REACH_INTERACTION_GEOMETRY_LABELS)[number];
 
 // ---------------------------------------------------------------------------
 // Noise floor config (device-QA parameter shape; no validated numeric default)
@@ -88,43 +87,27 @@ export type LateralReachNoiseFloorConfig = {
 };
 
 // ---------------------------------------------------------------------------
-// Technical geometry provenance (single canonical representation)
-// ---------------------------------------------------------------------------
-
-export const LATERAL_REACH_TECHNICAL_GEOMETRY_ADJUSTMENT_KINDS = [
-  "interaction_fraction_reduced_for_camera_margin",
-] as const;
-
-export type LateralReachTechnicalGeometryAdjustmentKind =
-  (typeof LATERAL_REACH_TECHNICAL_GEOMETRY_ADJUSTMENT_KINDS)[number];
-
-/**
- * Factual technical provenance when an interaction-fraction value is reduced
- * under camera-margin constraints during geometry construction attempts.
- * Not clinical adjustment, ROM interpretation, exercise prescription, or
- * patient-ability classification.
- */
-export type LateralReachTechnicalGeometryAdjustment = {
-  kind: "interaction_fraction_reduced_for_camera_margin";
-  from: number;
-  to: number;
-};
-
-// ---------------------------------------------------------------------------
 // Observations vs derived measurements
 // ---------------------------------------------------------------------------
 
-/** Factual captured points only. No interactionFraction, zones, or geometry labels. */
+/**
+ * Factual captured points only.
+ *
+ * `heldEndpoint` is the accepted held/stable calibration endpoint for this
+ * result. The system may establish that it was tracked, direction-valid,
+ * held/stable, and above configured noise uncertainty. It does not establish
+ * comfort, safety, maximal reach, or clinical ROM validity.
+ */
 export type LateralReachCalibrationObservations = {
   startWrist: NormalizedPoint;
-  comfortableEndpoint: NormalizedPoint;
+  heldEndpoint: NormalizedPoint;
 };
 
 /**
  * Derived measurement math from observations + expected horizontal direction.
  * Not clinical ROM. Field names intentionally avoid ambiguous "signed displacement".
  *
- * rawDeltaX = endpoint.x - start.x
+ * rawDeltaX = heldEndpoint.x - startWrist.x
  * directionAlignedMagnitude = expectedHorizontalDirectionSign * rawDeltaX
  * (valid capture paths require directionAlignedMagnitude > 0)
  */
@@ -143,7 +126,8 @@ export type LateralReachDerivedMeasurements = {
 //   C) capture valid   + geometry ready
 //
 // No stored top-level convenience "status". No "degraded" calibration state.
-// startingZone / fixedTarget / LateralReachConfig arrive in Slice 4 — not here.
+// No interactionFraction / technical geometry-adjustment algorithm fields.
+// startingZone / fixedTarget / LateralReachConfig arrive in a later slice.
 // ---------------------------------------------------------------------------
 
 type LateralReachCalibrationResultBase = {
@@ -160,9 +144,8 @@ export type LateralReachCalibrationCaptureFailedResult = LateralReachCalibration
 };
 
 /**
- * Capture succeeded, but current interaction-geometry constraints could not
- * produce a validated engine config. Fraction fields describe the construction
- * attempt only — not a value used by an engine attempt.
+ * Capture succeeded, but interaction geometry could not be constructed under
+ * current constraints. No engine attempt config is implied.
  */
 export type LateralReachCalibrationGeometryNotConstructibleResult =
   LateralReachCalibrationResultBase & {
@@ -171,26 +154,17 @@ export type LateralReachCalibrationGeometryNotConstructibleResult =
     observations: LateralReachCalibrationObservations;
     derivedMeasurements: LateralReachDerivedMeasurements;
     geometryBlockers: LateralReachGeometryBlocker[];
-    requestedInteractionFraction: number;
-    attemptedInteractionFraction: number;
-    technicalAdjustments: LateralReachTechnicalGeometryAdjustment[];
-    interactionGeometryLabel?: LateralReachInteractionGeometryLabel;
   };
 
 /**
- * Capture succeeded and interaction geometry is ready for a frozen engine config
- * in a later slice. effectiveInteractionFraction is the fraction associated with
- * that successfully constructed geometry.
+ * Capture succeeded and interaction geometry is ready for a frozen engine
+ * config in a later slice. Slice 1 does not yet carry zone/config payloads.
  */
 export type LateralReachCalibrationGeometryReadyResult = LateralReachCalibrationResultBase & {
   captureOutcome: "valid";
   geometryOutcome: "ready";
   observations: LateralReachCalibrationObservations;
   derivedMeasurements: LateralReachDerivedMeasurements;
-  requestedInteractionFraction: number;
-  effectiveInteractionFraction: number;
-  technicalAdjustments: LateralReachTechnicalGeometryAdjustment[];
-  interactionGeometryLabel?: LateralReachInteractionGeometryLabel;
 };
 
 export type LateralReachCalibrationResult =
