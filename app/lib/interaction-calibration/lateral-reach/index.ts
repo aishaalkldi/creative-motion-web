@@ -2,6 +2,7 @@
  * Public exports for Lateral Reach interaction-calibration domain.
  * Slice 1: vocabulary / outcome contracts.
  * Slice 2: stable start capture reducer.
+ * Slice 3: held-endpoint capture reducer.
  */
 
 export {
@@ -32,3 +33,13 @@ export {
   type LateralReachStartCaptureState,
   type LateralReachStartCaptureUpdateResult,
 } from "./start-capture";
+
+export {
+  createLateralReachEndpointCaptureState,
+  updateLateralReachEndpointCapture,
+  validateLateralReachEndpointCaptureConfig,
+  type LateralReachEndpointCaptureConfig,
+  type LateralReachEndpointCaptureSample,
+  type LateralReachEndpointCaptureState,
+  type LateralReachEndpointCaptureUpdateResult,
+} from "./endpoint-capture";
