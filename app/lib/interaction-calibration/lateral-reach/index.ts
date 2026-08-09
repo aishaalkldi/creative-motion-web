@@ -1,6 +1,7 @@
 /**
- * Public exports for Lateral Reach interaction-calibration domain (Slice 1).
- * Capture/geometry runtime and engine bridging are intentionally not exported yet.
+ * Public exports for Lateral Reach interaction-calibration domain.
+ * Slice 1: vocabulary / outcome contracts.
+ * Slice 2: stable start capture reducer.
  */
 
 export {
@@ -21,3 +22,13 @@ export {
   type NormalizedPoint,
   type UpperLimbSide,
 } from "./types";
+
+export {
+  createLateralReachStartCaptureState,
+  updateLateralReachStartCapture,
+  validateLateralReachStartCaptureConfig,
+  type LateralReachStartCaptureConfig,
+  type LateralReachStartCaptureSample,
+  type LateralReachStartCaptureState,
+  type LateralReachStartCaptureUpdateResult,
+} from "./start-capture";
