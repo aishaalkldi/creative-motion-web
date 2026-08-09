@@ -1002,6 +1002,7 @@ export function applyForwardReachCommand(
         {
           ...stateWithClock,
           activePause: null,
+          invalidTrackingSinceMs: null,
           protectivePauseEvents: [...stateWithClock.protectivePauseEvents, evaluation.event],
         },
         evaluation.event,
