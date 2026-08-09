@@ -26,10 +26,18 @@ import {
   type ActiveBlockTickInput,
   type ActiveBlockTickResult,
   type PatternBlockRunnerStates,
+  type TargetAttemptTickConfig,
 } from "./block-engine/tick-active-block-runner";
 import { DEFAULT_SAFE_TARGET_BOUNDS } from "./target-generator";
 import { createInitialTargetLifecycle } from "./target-lifecycle";
-import type { NormalizedPoint, TargetHitEvent } from "./types";
+import type {
+  NormalizedPoint,
+  TargetAttemptStartEvent,
+  TargetAttemptTimeoutEvent,
+  TargetHitEvent,
+} from "./types";
+
+export type { TargetAttemptTickConfig } from "./block-engine/tick-active-block-runner";
 
 export type OrchestratorCvRuntimeFault =
   | {
@@ -58,6 +66,17 @@ export type OrchestratorCvBlockDispatchInput = {
   hitExitTransitionMs: number;
   states: ActiveBlockRunnerStates;
   activeMotionPattern: ResolvedMotionPattern | null;
+  /**
+   * Target-attempt configuration seam. STRICTLY OPTIONAL and entirely caller-owned:
+   * dispatch reads it, forwards it, and originates none of it. Omitting it — which every
+   * production caller does today — leaves target dispatch behaving exactly as it did
+   * before attempt plumbing existed, including the unconditional no-wrist skip below.
+   *
+   * There is no default here and there must never be one. A reach window, a placement
+   * level and a compensation observation are all decisions this transport layer is not
+   * entitled to make.
+   */
+  targetAttempt?: TargetAttemptTickConfig;
   /** Optional resolver overrides for deterministic tests — production callers omit. */
   resolvers?: ActiveBlockRunnerResolvers;
 };
@@ -69,6 +88,10 @@ export type OrchestratorCvBlockDispatchResult =
       status: "dispatched";
       states: ActiveBlockRunnerStates;
       targetContact: TargetHitEvent | null;
+      /** Attempt starts from this tick, forwarded unchanged. `[]` for non-target blocks. */
+      targetAttemptStarted: TargetAttemptStartEvent[];
+      /** Attempt expiration from this tick, forwarded unchanged. `null` for non-target blocks. */
+      targetAttemptTimeout: TargetAttemptTimeoutEvent | null;
       patternCompleted: PatternCompletionEvent | null;
       presentationProgress: number | null;
     }
@@ -148,9 +171,40 @@ function mapTickResult(
     status: "dispatched",
     states: tickResult.states,
     targetContact: tickResult.targetContact,
+    targetAttemptStarted: tickResult.targetAttemptStarted,
+    targetAttemptTimeout: tickResult.targetAttemptTimeout,
     patternCompleted: tickResult.patternCompleted,
     presentationProgress: tickResult.presentationProgress,
   };
+}
+
+/**
+ * Whether a movement-target tick may proceed with no wrist sample.
+ *
+ * The historical rule was blunt: no wrist, no target dispatch at all. That rule is
+ * deliberately kept for everything it used to cover, and narrowed in exactly one place —
+ * an attempt that has ALREADY started needs its pause-aware clock to keep advancing, or
+ * it would silently freeze whenever the tracker dropped a frame and then expire against
+ * a stale elapsed time once the wrist reappeared.
+ *
+ * Both conditions are required:
+ *
+ * 1. `targetAttempt` supplied. Without it no attempt can expire, so a no-wrist tick would
+ *    accomplish nothing and would only diverge from legacy behaviour. This is what makes
+ *    "config omitted ⇒ legacy behaviour" a structural property rather than a promise.
+ * 2. A target is currently active. This preserves target AVAILABILITY semantics exactly:
+ *    with `currentTarget === null` the lifecycle's next tick would SPAWN — the first
+ *    target of a block, or the successor waiting behind a hit's exit transition/spawn
+ *    lock. Presenting a patient with a fresh target while their arm is not being tracked
+ *    is a behaviour change this stage does not make, so those cases still skip.
+ *
+ * Note what this is NOT: a missing wrist is never treated as failure and never produces a
+ * timeout by itself. Expiration remains caused by elapsed active block time alone, and
+ * genuine tracker loss is handled upstream by the orchestrator freezing that time.
+ */
+function allowsNoWristTargetMaintenance(input: OrchestratorCvBlockDispatchInput): boolean {
+  if (input.targetAttempt === undefined) return false;
+  return input.states.target.currentTarget !== null;
 }
 
 export function dispatchOrchestratorCvBlock(
@@ -167,7 +221,7 @@ export function dispatchOrchestratorCvBlock(
     return { status: "not_active" };
   }
 
-  if (blockType === "movement-target" && !input.wrist) {
+  if (blockType === "movement-target" && !input.wrist && !allowsNoWristTargetMaintenance(input)) {
     return { status: "skipped", reason: "target_wrist_required" };
   }
 
@@ -195,6 +249,11 @@ export function dispatchOrchestratorCvBlock(
         side: input.side,
         bounds: DEFAULT_SAFE_TARGET_BOUNDS,
         hitExitTransitionMs: input.hitExitTransitionMs,
+        // `base` already carries snap.blockElapsedSeconds — the orchestrator's pause-aware
+        // active block time, and the only clock the attempt path is allowed to read. The
+        // caller's optional attempt fields are spread on top; when none were supplied,
+        // nothing is added and no key is invented.
+        ...(input.targetAttempt ?? {}),
       };
       break;
     case "movement-pattern": {
