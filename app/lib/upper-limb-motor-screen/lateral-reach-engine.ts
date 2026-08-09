@@ -527,6 +527,7 @@ export type LateralReachCommandRejectionReason =
   | "readiness_not_applicable_in_current_phase"
   | "readiness_requires_wrist_in_starting_zone"
   | "readiness_requires_valid_confirmed_by"
+  | "readiness_blocked_by_active_pause"
   | "no_active_pause_to_resume"
   | "resume_requires_readiness_confirmation"
   | "resume_requires_valid_human_actor";
@@ -984,6 +985,9 @@ function handleReadyConfirmedAwaitingOnset(
   );
 
   if (wrongSideExit) {
+    // Unreachable while activePause is set: handleFrame freezes phase progression
+    // until an explicit resumeRequested clears the pause. Wrong-direction reset
+    // therefore never inherits a stale protective pause.
     return applied({
       ...state,
       phase: "awaiting_readiness",
@@ -1207,6 +1211,13 @@ export function applyLateralReachCommand(
       });
       if (!inZone) {
         return rejected(stateWithClock, "readiness_requires_wrist_in_starting_zone");
+      }
+      // Protective pause is orthogonal to phase and must be cleared only by
+      // resumeRequested (or terminal finalization). Accepting readinessConfirmed
+      // while a pause is active would create ready_confirmed_awaiting_onset with
+      // a stale activePause and freeze all subsequent movement progression.
+      if (stateWithClock.activePause !== null) {
+        return rejected(stateWithClock, "readiness_blocked_by_active_pause");
       }
       return applied({ ...stateWithClock, phase: "ready_confirmed_awaiting_onset" });
     }

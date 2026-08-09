@@ -141,7 +141,9 @@ function mapStartError(err: unknown): string {
       return "No camera was found on this device.";
     }
     if (err.name === "NotReadableError" || err.name === "TrackStartError") {
-      return "The camera is in use by another application. Close other apps and try again.";
+      // NotReadableError: device busy, hardware issue, or browser-level lock
+      // DO NOT assume another application owns it
+      return "Camera could not be started by the browser. The device may be busy, in use by another tab or application, or unavailable. Check that no other tabs or apps are using the camera, then retry.";
     }
   }
   if (err instanceof Error) {
@@ -395,6 +397,35 @@ export class LateralReachCameraDetector {
 
       this.startFrameLoop(video);
     } catch (err) {
+      // Log comprehensive diagnostics for camera acquisition failures
+      if (err instanceof DOMException) {
+        console.error("[LateralReachCameraDetector] Camera acquisition DOMException:", {
+          name: err.name,
+          message: err.message,
+          code: err.code,
+          constructor: err.constructor.name,
+          detectorStream: this.stream ? "exists" : "null",
+          detectorStreamTracks: this.stream?.getTracks().map(t => ({
+            kind: t.kind,
+            readyState: t.readyState,
+            enabled: t.enabled,
+            label: t.label,
+          })) ?? [],
+          videoSrcObject: this.videoEl?.srcObject ? "exists" : "null",
+          videoSrcObjectTracks: this.videoEl?.srcObject instanceof MediaStream
+            ? (this.videoEl.srcObject as MediaStream).getTracks().map(t => ({
+                kind: t.kind,
+                readyState: t.readyState,
+                enabled: t.enabled,
+                label: t.label,
+              }))
+            : [],
+          mediaDevicesAvailable: Boolean(navigator.mediaDevices),
+        });
+      } else {
+        console.error("[LateralReachCameraDetector] Camera acquisition error:", err);
+      }
+
       // Always clean up resources created during this session
       if (this.poseLandmarker && this.currentEpoch === epoch) {
         this.poseLandmarker.close?.();
@@ -877,6 +908,12 @@ export class LateralReachCameraDetector {
     const phase = this.engineState.phase;
     if (phase !== "idle" && phase !== "awaiting_readiness") {
       this.disarmReadiness();
+      return;
+    }
+
+    // Protective pause must be explicitly resumed before readiness can be confirmed.
+    if (this.engineState.activePause !== null) {
+      this.readinessStableSinceMs = null;
       return;
     }
 

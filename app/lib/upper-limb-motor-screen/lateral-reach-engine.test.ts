@@ -2433,4 +2433,136 @@ describe("observationUnavailable command", () => {
     assert.equal(validFrameResult.status, "applied");
     assert.equal(getLateralReachRuntimeSnapshot(validFrameResult.state).hasActivePause, false, "Valid frame after resume works normally");
   });
+
+  it("QA sequence: pause during awaiting_readiness with recovered wrist cannot be cleared by readinessConfirmed", () => {
+    // Exact runtime state observed in PR #217 manual QA:
+    //   Phase: awaiting_readiness
+    //   Active Pause: Yes
+    //   Right Wrist Visibility: ~0.86 (valid sample present)
+    //   Last Command: readinessConfirmed APPLIED (sticky UI; frames do not overwrite it)
+    //
+    // Proven sequence:
+    // 1. readinessConfirmed APPLIED → ready_confirmed_awaiting_onset
+    // 2. wrong-direction exit → awaiting_readiness
+    // 3. tracking gap opens protective pause while awaiting_readiness (intentional contract)
+    // 4. valid high-visibility wrist returns → pause remains (no auto-resume)
+    // 5. readinessConfirmed must be REJECTED while pause is active
+    // 6. explicit resumeRequested clears the pause and preserves awaiting_readiness
+    // 7. subsequent readinessConfirmed can then arm a new readiness cycle
+
+    const config = buildValidConfig();
+    let state = mustCreateState(config, 0, 0);
+
+    let r = sendFrame(state, config, START_POINT, 100);
+    assert.equal(r.status, "applied");
+    state = r.state;
+
+    r = applyLateralReachCommand(state, {
+      type: "readinessConfirmed",
+      nowMs: 150,
+      confirmedBy: "clinician",
+    });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    assert.equal(getLateralReachRuntimeSnapshot(state).phase, "ready_confirmed_awaiting_onset");
+
+    // Wrong-direction exit resets readiness (requires valid sample, so pause is null here).
+    r = sendFrame(state, config, { x: 0.23, y: 0.5 }, 200);
+    assert.equal(r.status, "applied");
+    state = r.state;
+    assert.equal(getLateralReachRuntimeSnapshot(state).phase, "awaiting_readiness");
+    assert.equal(getLateralReachRuntimeSnapshot(state).hasActivePause, false);
+
+    // Tracking loss opens pause while awaiting_readiness — legal by contract.
+    state = openPause(state, config, 250);
+    assert.equal(getLateralReachRuntimeSnapshot(state).phase, "awaiting_readiness");
+    assert.equal(getLateralReachRuntimeSnapshot(state).hasActivePause, true);
+
+    // High-visibility wrist returns; pause must remain until explicit resume.
+    r = sendFrame(state, config, START_POINT, 650);
+    assert.equal(r.status, "applied");
+    state = r.state;
+    assert.equal(getLateralReachRuntimeSnapshot(state).phase, "awaiting_readiness");
+    assert.equal(getLateralReachRuntimeSnapshot(state).hasActivePause, true);
+    assert.equal(state.lastValidWristSample?.point.x, START_POINT.x);
+    assert.equal(state.invalidTrackingSinceMs, null);
+
+    // Pre-fix defect: readinessConfirmed was APPLIED and left ready_confirmed + stale pause.
+    const blocked = applyLateralReachCommand(state, {
+      type: "readinessConfirmed",
+      nowMs: 700,
+      confirmedBy: "clinician",
+    });
+    assert.equal(blocked.status, "rejected");
+    if (blocked.status === "rejected") {
+      assert.equal(blocked.reason, "readiness_blocked_by_active_pause");
+      assert.equal(blocked.state.phase, "awaiting_readiness");
+      assert.equal(blocked.state.activePause !== null, true);
+      assert.equal(blocked.state.protectivePauseEvents.length, 0);
+    }
+    state = blocked.state;
+
+    // Explicit resume is required and clears the pause without advancing readiness.
+    const resume = applyLateralReachCommand(state, {
+      type: "resumeRequested",
+      nowMs: 750,
+      readinessConfirmedAt: new Date().toISOString(),
+      resumedBy: "clinician",
+    });
+    assert.equal(resume.status, "applied");
+    state = resume.state;
+    assert.equal(getLateralReachRuntimeSnapshot(state).phase, "awaiting_readiness");
+    assert.equal(getLateralReachRuntimeSnapshot(state).hasActivePause, false);
+    assert.equal(state.protectivePauseEvents.length, 1);
+    assert.equal(state.protectivePauseEvents[0]?.outcome, "resumed");
+
+    // New readiness cycle can now be confirmed.
+    r = sendFrame(state, config, START_POINT, 800);
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = applyLateralReachCommand(state, {
+      type: "readinessConfirmed",
+      nowMs: 850,
+      confirmedBy: "clinician",
+    });
+    assert.equal(r.status, "applied");
+    state = r.state;
+    assert.equal(getLateralReachRuntimeSnapshot(state).phase, "ready_confirmed_awaiting_onset");
+    assert.equal(getLateralReachRuntimeSnapshot(state).hasActivePause, false);
+
+    // Genuine tracking loss during active movement still opens a NEW pause.
+    r = sendFrame(state, config, { x: 0.36, y: 0.5 }, 900);
+    assert.equal(r.status, "applied");
+    state = r.state;
+    r = sendFrame(state, config, { x: 0.4, y: 0.5 }, 1000); // onset confirmation
+    assert.equal(r.status, "applied");
+    state = r.state;
+    assert.equal(getLateralReachRuntimeSnapshot(state).phase, "outbound");
+    state = openPause(state, config, 1050);
+    assert.equal(getLateralReachRuntimeSnapshot(state).hasActivePause, true);
+    assert.equal(state.protectivePauseEvents.length, 1, "active pause is not yet finalized");
+
+    // Valid frame during pause does not auto-resume.
+    r = sendFrame(state, config, { x: 0.45, y: 0.5 }, 1400);
+    assert.equal(r.status, "applied");
+    state = r.state;
+    assert.equal(getLateralReachRuntimeSnapshot(state).hasActivePause, true);
+    assert.equal(getLateralReachRuntimeSnapshot(state).phase, "outbound");
+  });
+
+  it("wrong-direction reset cannot run while a protective pause is active", () => {
+    const config = buildValidConfig();
+    let state = readyState(config);
+    assert.equal(getLateralReachRuntimeSnapshot(state).phase, "ready_confirmed_awaiting_onset");
+
+    state = openPause(state, config, 150);
+    assert.equal(getLateralReachRuntimeSnapshot(state).hasActivePause, true);
+
+    // Wrong-direction sample would reset readiness if unpaused, but freeze wins.
+    const r = sendFrame(state, config, { x: 0.23, y: 0.5 }, 500);
+    assert.equal(r.status, "applied");
+    assert.equal(getLateralReachRuntimeSnapshot(r.state).phase, "ready_confirmed_awaiting_onset");
+    assert.equal(getLateralReachRuntimeSnapshot(r.state).hasActivePause, true);
+    assert.equal(r.state.nonTargetFacingExitObservedBeforeValidOnset, false);
+  });
 });

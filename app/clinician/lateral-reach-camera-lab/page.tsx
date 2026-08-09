@@ -89,13 +89,16 @@ export default function LateralReachCameraLabPage() {
     snapshot?.status === "running" &&
     snapshot?.engineSnapshot &&
     (snapshot.engineSnapshot.phase === "idle" || snapshot.engineSnapshot.phase === "awaiting_readiness") &&
+    !snapshot.engineSnapshot.hasActivePause &&
     !snapshot.engineSnapshot.terminal &&
     !snapshot.readinessArmed;
+  // Resume must remain available whenever a protective pause is active, including
+  // awaiting_readiness. The engine intentionally allows tracking-gap pauses in
+  // that phase; hiding Resume there leaves clinicians stuck with Active Pause Yes
+  // and high wrist visibility (no auto-resume).
   const canResume =
     snapshot?.status === "running" &&
     snapshot?.engineSnapshot?.hasActivePause &&
-    snapshot?.engineSnapshot?.phase !== "idle" &&
-    snapshot?.engineSnapshot?.phase !== "awaiting_readiness" &&
     !snapshot?.engineSnapshot?.terminal;
 
   return (
@@ -443,11 +446,13 @@ export default function LateralReachCameraLabPage() {
                           "Confirm readiness first before resuming."}
                         {snapshot.lastCommandRejectionReason === "readiness_not_applicable_in_current_phase" &&
                           "Readiness can only be confirmed during idle or awaiting_readiness phase."}
+                        {snapshot.lastCommandRejectionReason === "readiness_blocked_by_active_pause" &&
+                          "Resume the active protective pause before confirming readiness."}
                         {snapshot.lastCommandRejectionReason === "no_active_pause_to_resume" &&
                           "No active pause to resume."}
                         {snapshot.lastCommandRejectionReason === "frame_timestamp_not_strictly_increasing" &&
                           "Frame timestamp was not strictly increasing (engine clock issue)."}
-                        {!["readiness_requires_wrist_in_starting_zone", "resume_requires_readiness_confirmation", "readiness_not_applicable_in_current_phase", "no_active_pause_to_resume", "frame_timestamp_not_strictly_increasing"].includes(
+                        {!["readiness_requires_wrist_in_starting_zone", "resume_requires_readiness_confirmation", "readiness_not_applicable_in_current_phase", "readiness_blocked_by_active_pause", "no_active_pause_to_resume", "frame_timestamp_not_strictly_increasing"].includes(
                           snapshot.lastCommandRejectionReason,
                         ) &&
                           "Command could not be executed at this time."}
