@@ -1271,6 +1271,7 @@ export function applyElbowExtensionCommand(
         {
           ...stateWithClock,
           activePause: null,
+          invalidTrackingSinceMs: null,
           protectivePauseEvents: [...stateWithClock.protectivePauseEvents, evaluation.event],
         },
         evaluation.event,

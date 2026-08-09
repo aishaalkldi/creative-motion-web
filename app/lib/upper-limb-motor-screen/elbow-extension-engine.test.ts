@@ -1839,4 +1839,68 @@ describe("observationUnavailable command", () => {
       assert.equal(obsResultIncreasing.reason, "awaiting_explicit_finalization");
     }
   });
+
+  it("resume clears invalidTrackingSinceMs to prevent immediate re-pause on post-resume invalid frame", () => {
+    const config = buildValidConfig();
+    let state = outboundState(config);
+
+    // Open protective pause via tracking gap
+    state = openPause(state, config, 200);
+    assert.equal(getElbowExtensionRuntimeSnapshot(state).hasActivePause, true);
+
+    // Resume successfully
+    const resumeResult = applyElbowExtensionCommand(state, {
+      type: "resumeRequested",
+      nowMs: 600,
+      readinessConfirmedAt: new Date().toISOString(),
+      resumedBy: "clinician",
+    });
+    assert.equal(resumeResult.status, "applied");
+    state = resumeResult.state;
+    assert.equal(getElbowExtensionRuntimeSnapshot(state).hasActivePause, false);
+    assert.equal(resumeResult.protectivePauseEvent?.outcome, "resumed");
+
+    // Immediately send observationUnavailable (within maxAllowedGapMs of resume)
+    const postResumeInvalid1 = applyElbowExtensionCommand(state, {
+      type: "observationUnavailable",
+      nowMs: 650, // 50ms after resume, well within 300ms maxAllowedGapMs
+    });
+    assert.equal(postResumeInvalid1.status, "applied");
+    state = postResumeInvalid1.state;
+    assert.equal(getElbowExtensionRuntimeSnapshot(state).hasActivePause, false, "No immediate re-pause on first post-resume invalid frame");
+
+    // Continue invalid observations (still within maxAllowedGapMs from resume)
+    const postResumeInvalid2 = applyElbowExtensionCommand(state, {
+      type: "observationUnavailable",
+      nowMs: 750, // 150ms after resume, still within 300ms
+    });
+    assert.equal(postResumeInvalid2.status, "applied");
+    state = postResumeInvalid2.state;
+    assert.equal(getElbowExtensionRuntimeSnapshot(state).hasActivePause, false, "No re-pause while new gap under threshold");
+
+    // Continue until NEW gap from post-resume tracking loss exceeds maxAllowedGapMs
+    const postResumeInvalid3 = applyElbowExtensionCommand(state, {
+      type: "observationUnavailable",
+      nowMs: 650 + config.tracking.maxAllowedGapMs + 10, // 310ms after first post-resume invalid (650)
+    });
+    assert.equal(postResumeInvalid3.status, "applied");
+    state = postResumeInvalid3.state;
+    assert.equal(getElbowExtensionRuntimeSnapshot(state).hasActivePause, true, "New pause opens when NEW gap exceeds threshold");
+
+    // Verify valid frame after resume still works normally
+    state = outboundState(config);
+    state = openPause(state, config, 200);
+    const resumeResult2 = applyElbowExtensionCommand(state, {
+      type: "resumeRequested",
+      nowMs: 600,
+      readinessConfirmedAt: new Date().toISOString(),
+      resumedBy: "clinician",
+    });
+    assert.equal(resumeResult2.status, "applied");
+    state = resumeResult2.state;
+
+    const validFrameResult = sendFrame(state, config, wristOnly(targetFacingExitPoint(config)), 610);
+    assert.equal(validFrameResult.status, "applied");
+    assert.equal(getElbowExtensionRuntimeSnapshot(validFrameResult.state).hasActivePause, false, "Valid frame after resume works normally");
+  });
 });
