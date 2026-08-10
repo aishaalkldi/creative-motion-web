@@ -6,6 +6,7 @@
  * Slice 4: derived measurements + direction/magnitude validation.
  * Slice 5: frozen interaction geometry construction.
  * Slice 6: calibration result assembly.
+ * Slice 7: engine config adapter.
  */
 
 export {
@@ -56,3 +57,5 @@ export {
 export { constructLateralReachFrozenGeometry } from "./frozen-geometry";
 
 export { assembleLateralReachCalibrationResult } from "./result-assembly";
+
+export { buildLateralReachEngineConfig } from "./engine-config-adapter";
