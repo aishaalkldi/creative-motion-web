@@ -165,40 +165,38 @@ function collectFromLandmarkSequences(
   return { frameResults, bridgeOutcomes };
 }
 
-export function runPostureDemoScenario(
+/**
+ * Landmark frame sequences for a scenario (scripted lab / tests).
+ * Each inner array is one MediaPipe-shaped PoseLandmark[33] sample.
+ */
+export function getPostureDemoScenarioLandmarkSequences(
   scenarioId: PostureDemoScenarioId
-): PostureDemoScenarioResult {
-  let sequences: PoseLandmark[][];
-
+): PoseLandmark[][] {
   switch (scenarioId) {
     case "aligned":
-      sequences = [buildAlignedPoseLandmarks()];
-      break;
+      return [buildAlignedPoseLandmarks()];
     case "mildShoulderTilt":
-      sequences = [buildShoulderTiltPoseLandmarks(5)];
-      break;
+      return [buildShoulderTiltPoseLandmarks(5)];
     case "markedShoulderTilt":
-      sequences = [buildShoulderTiltPoseLandmarks(10)];
-      break;
+      return [buildShoulderTiltPoseLandmarks(10)];
     case "lowVisibility":
-      sequences = [buildLowVisibilityPoseLandmarks()];
-      break;
+      return [buildLowVisibilityPoseLandmarks()];
     case "missingRequiredJoint":
-      sequences = [buildMissingRequiredJointPoseLandmarks()];
-      break;
+      return [buildMissingRequiredJointPoseLandmarks()];
     case "mixedSequence":
       // 100 + 88 → average 94
-      sequences = [
-        buildAlignedPoseLandmarks(),
-        buildShoulderTiltPoseLandmarks(5),
-      ];
-      break;
+      return [buildAlignedPoseLandmarks(), buildShoulderTiltPoseLandmarks(5)];
     default: {
       const _exhaustive: never = scenarioId;
       throw new Error(`Unknown posture demo scenario: ${_exhaustive}`);
     }
   }
+}
 
+export function runPostureDemoScenario(
+  scenarioId: PostureDemoScenarioId
+): PostureDemoScenarioResult {
+  const sequences = getPostureDemoScenarioLandmarkSequences(scenarioId);
   const { frameResults, bridgeOutcomes } = collectFromLandmarkSequences(sequences);
   return {
     scenarioId,
