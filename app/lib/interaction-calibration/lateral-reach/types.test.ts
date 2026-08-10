@@ -14,6 +14,7 @@ import {
   type LateralReachCalibrationObservations,
   type LateralReachCalibrationResult,
   type LateralReachDerivedMeasurements,
+  type LateralReachFrozenZone,
 } from "@/app/lib/interaction-calibration/lateral-reach/types";
 
 function assertUniqueStrings(values: readonly string[], label: string): void {
@@ -29,6 +30,20 @@ const derivedMeasurements: LateralReachDerivedMeasurements = {
   rawDeltaX: 0.16,
   expectedHorizontalDirectionSign: 1,
   directionAlignedMagnitude: 0.16,
+};
+
+const frozenGeometry: {
+  startingZone: LateralReachFrozenZone;
+  fixedTarget: LateralReachFrozenZone;
+} = {
+  startingZone: {
+    point: { x: observations.startWrist.x, y: observations.startWrist.y },
+    radius: 0.05,
+  },
+  fixedTarget: {
+    point: { x: observations.heldEndpoint.x, y: observations.heldEndpoint.y },
+    radius: 0.06,
+  },
 };
 
 describe("schema version", () => {
@@ -141,6 +156,7 @@ describe("outcome and observation contracts", () => {
       geometryOutcome: "ready",
       observations,
       derivedMeasurements,
+      frozenGeometry,
     };
 
     assert.equal(failed.captureOutcome, "failed");
@@ -149,6 +165,7 @@ describe("outcome and observation contracts", () => {
     assert.equal(notConstructible.geometryOutcome, "not_constructible");
     assert.equal(ready.captureOutcome, "valid");
     assert.equal(ready.geometryOutcome, "ready");
+    assert.equal("frozenGeometry" in ready, true);
   });
 
   it("uses factual heldEndpoint naming and omits foundational interactionFraction fields", () => {
@@ -163,6 +180,7 @@ describe("outcome and observation contracts", () => {
       geometryOutcome: "ready",
       observations,
       derivedMeasurements,
+      frozenGeometry,
     };
     assert.equal("requestedInteractionFraction" in ready, false);
     assert.equal("attemptedInteractionFraction" in ready, false);
@@ -171,5 +189,6 @@ describe("outcome and observation contracts", () => {
     assert.equal("interactionGeometryLabel" in ready, false);
     assert.equal("startingZone" in ready, false);
     assert.equal("fixedTarget" in ready, false);
+    assert.equal("frozenGeometry" in ready, true);
   });
 });

@@ -157,14 +157,29 @@ export type LateralReachCalibrationGeometryNotConstructibleResult =
   };
 
 /**
- * Capture succeeded and interaction geometry is ready for a frozen engine
- * config in a later slice. Slice 1 does not yet carry zone/config payloads.
+ * Frozen interaction geometry zones produced by calibration Slice 5/6.
+ * Technical personalization only — not clinical ROM or ability claims.
+ * Distinct from engine LateralReachZone; no engine import.
+ */
+export type LateralReachFrozenZone = {
+  readonly point: Readonly<NormalizedPoint>;
+  readonly radius: number;
+};
+
+/**
+ * Capture succeeded and interaction geometry is ready for a later engine
+ * config adapter. Carries attempt-frozen startingZone / fixedTarget only —
+ * not full engine attempt configuration.
  */
 export type LateralReachCalibrationGeometryReadyResult = LateralReachCalibrationResultBase & {
   captureOutcome: "valid";
   geometryOutcome: "ready";
   observations: LateralReachCalibrationObservations;
   derivedMeasurements: LateralReachDerivedMeasurements;
+  readonly frozenGeometry: {
+    readonly startingZone: LateralReachFrozenZone;
+    readonly fixedTarget: LateralReachFrozenZone;
+  };
 };
 
 export type LateralReachCalibrationResult =

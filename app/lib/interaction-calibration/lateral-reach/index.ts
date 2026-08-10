@@ -5,6 +5,7 @@
  * Slice 3: held-endpoint capture reducer.
  * Slice 4: derived measurements + direction/magnitude validation.
  * Slice 5: frozen interaction geometry construction.
+ * Slice 6: calibration result assembly.
  */
 
 export {
@@ -20,6 +21,7 @@ export {
   type LateralReachCalibrationSchemaVersion,
   type LateralReachCaptureFailureReason,
   type LateralReachDerivedMeasurements,
+  type LateralReachFrozenZone,
   type LateralReachGeometryBlocker,
   type LateralReachNoiseFloorConfig,
   type NormalizedPoint,
@@ -52,3 +54,5 @@ export {
 } from "./derived-measurements";
 
 export { constructLateralReachFrozenGeometry } from "./frozen-geometry";
+
+export { assembleLateralReachCalibrationResult } from "./result-assembly";
