@@ -4,6 +4,7 @@
  * Slice 2: stable start capture reducer.
  * Slice 3: held-endpoint capture reducer.
  * Slice 4: derived measurements + direction/magnitude validation.
+ * Slice 5: frozen interaction geometry construction.
  */
 
 export {
@@ -49,3 +50,5 @@ export {
   deriveLateralReachMeasurements,
   validateLateralReachDirectionAndMagnitude,
 } from "./derived-measurements";
+
+export { constructLateralReachFrozenGeometry } from "./frozen-geometry";
