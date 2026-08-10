@@ -18,6 +18,10 @@ import {
   isValidUpperLimbSide,
   type UpperLimbSide,
 } from "@/app/lib/upper-limb-motor-screen/types";
+import {
+  createLateralReachCalibrationAttemptIntention,
+  type LateralReachCalibrationAttemptIntention,
+} from "./attempt-intention";
 import { deriveLateralReachMeasurements } from "./derived-measurements";
 import { constructLateralReachFrozenGeometry } from "./frozen-geometry";
 import {
@@ -44,7 +48,7 @@ export type LateralReachResultAssemblyInput =
       stage: "captured";
       startWrist: NormalizedPoint;
       heldEndpoint: NormalizedPoint;
-      expectedHorizontalDirectionSign: 1 | -1;
+      intention: LateralReachCalibrationAttemptIntention;
       noiseFloor: LateralReachNoiseFloorConfig;
       zoneRadii: {
         startingZoneRadius: number;
@@ -63,11 +67,28 @@ function assertTestedSide(testedSide: unknown): asserts testedSide is UpperLimbS
 }
 
 /**
+ * Runtime-canonicalize captured-stage intention through the Slice 8 gate.
+ * Avoids property-access TypeError on null/non-objects before RangeError.
+ */
+function resolveCapturedIntention(
+  intention: unknown,
+): LateralReachCalibrationAttemptIntention {
+  const rawSign =
+    intention !== null && typeof intention === "object"
+      ? (intention as { expectedHorizontalDirectionSign?: unknown })
+          .expectedHorizontalDirectionSign
+      : undefined;
+
+  return createLateralReachCalibrationAttemptIntention(rawSign);
+}
+
+/**
  * Assemble a LateralReachCalibrationResult from stage-level calibration inputs.
  *
- * Captured path call order is locked: constructLateralReachFrozenGeometry first
- * (preserves Slice 5 validation precedence), then deriveLateralReachMeasurements
- * only when geometry is not_constructible or ready.
+ * Captured path call order is locked: resolve intention, then
+ * constructLateralReachFrozenGeometry first (preserves Slice 5 validation
+ * precedence), then deriveLateralReachMeasurements only when geometry is
+ * not_constructible or ready.
  */
 export function assembleLateralReachCalibrationResult(
   input: LateralReachResultAssemblyInput,
@@ -99,11 +120,15 @@ export function assembleLateralReachCalibrationResult(
     };
   }
 
-  // stage === "captured" — Slice 5 first (locked precedence).
+  // stage === "captured" — Slice 8 intention gate, then Slice 5 first.
+  const intention = resolveCapturedIntention(input.intention);
+  const expectedHorizontalDirectionSign =
+    intention.expectedHorizontalDirectionSign;
+
   const geometryResult = constructLateralReachFrozenGeometry(
     input.startWrist,
     input.heldEndpoint,
-    input.expectedHorizontalDirectionSign,
+    expectedHorizontalDirectionSign,
     input.noiseFloor,
     input.zoneRadii,
   );
@@ -125,7 +150,7 @@ export function assembleLateralReachCalibrationResult(
   const derivedMeasurements = deriveLateralReachMeasurements(
     input.startWrist,
     input.heldEndpoint,
-    input.expectedHorizontalDirectionSign,
+    expectedHorizontalDirectionSign,
   );
 
   const observations = {
