@@ -3,6 +3,7 @@
  * Slice 1: vocabulary / outcome contracts.
  * Slice 2: stable start capture reducer.
  * Slice 3: held-endpoint capture reducer.
+ * Slice 4: derived measurements + direction/magnitude validation.
  */
 
 export {
@@ -43,3 +44,8 @@ export {
   type LateralReachEndpointCaptureState,
   type LateralReachEndpointCaptureUpdateResult,
 } from "./endpoint-capture";
+
+export {
+  deriveLateralReachMeasurements,
+  validateLateralReachDirectionAndMagnitude,
+} from "./derived-measurements";
