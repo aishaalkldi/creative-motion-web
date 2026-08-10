@@ -9,7 +9,6 @@ import {
   LATERAL_REACH_CALIBRATION_SCHEMA_VERSION,
   LATERAL_REACH_NOISE_FLOOR_KIND,
   type LateralReachCaptureFailureReason,
-  type LateralReachNoiseFloorConfig,
 } from "@/app/lib/interaction-calibration/lateral-reach/types";
 import { createLateralReachCalibrationAttemptIntention } from "@/app/lib/interaction-calibration/lateral-reach/attempt-intention";
 import { deriveLateralReachMeasurements } from "@/app/lib/interaction-calibration/lateral-reach/derived-measurements";
@@ -18,20 +17,19 @@ import {
   assembleLateralReachCalibrationResult,
   type LateralReachResultAssemblyInput,
 } from "@/app/lib/interaction-calibration/lateral-reach/result-assembly";
+import {
+  createLateralReachCalibrationNoiseFloor,
+  createLateralReachCalibrationZoneRadii,
+} from "@/app/lib/interaction-calibration/lateral-reach/technical-parameters";
 
-function noiseFloor(
-  minDirectionAlignedMagnitude = 0.05,
-): LateralReachNoiseFloorConfig {
-  return {
-    kind: LATERAL_REACH_NOISE_FLOOR_KIND,
-    minDirectionAlignedMagnitude,
-  };
+function noiseFloor(minDirectionAlignedMagnitude = 0.05) {
+  return createLateralReachCalibrationNoiseFloor(minDirectionAlignedMagnitude);
 }
 
-const READY_RADII = {
+const READY_RADII = createLateralReachCalibrationZoneRadii({
   startingZoneRadius: 0.05,
   fixedTargetRadius: 0.05,
-};
+});
 
 function capturedInput(
   overrides: Partial<Extract<LateralReachResultAssemblyInput, { stage: "captured" }>> = {},
@@ -43,7 +41,7 @@ function capturedInput(
     heldEndpoint: { x: 0.75, y: 0.5 },
     intention: createLateralReachCalibrationAttemptIntention(1),
     noiseFloor: noiseFloor(),
-    zoneRadii: { ...READY_RADII },
+    zoneRadii: READY_RADII,
     ...overrides,
   };
 }
@@ -181,7 +179,10 @@ describe("assembleLateralReachCalibrationResult — geometry_not_constructible",
         heldEndpoint: end,
         intention: createLateralReachCalibrationAttemptIntention(sign),
         noiseFloor: noiseFloor(0.05),
-        zoneRadii: { startingZoneRadius: 0.125, fixedTargetRadius: 0.125 },
+        zoneRadii: createLateralReachCalibrationZoneRadii({
+          startingZoneRadius: 0.125,
+          fixedTargetRadius: 0.125,
+        }),
       }),
     );
 
@@ -208,7 +209,10 @@ describe("assembleLateralReachCalibrationResult — ready", () => {
     const start = { x: 0.25, y: 0.5 };
     const end = { x: 0.75, y: 0.5 };
     const sign = 1 as const;
-    const radii = { startingZoneRadius: 0.04, fixedTargetRadius: 0.06 };
+    const radii = createLateralReachCalibrationZoneRadii({
+      startingZoneRadius: 0.04,
+      fixedTargetRadius: 0.06,
+    });
     const result = assembleLateralReachCalibrationResult(
       capturedInput({
         startWrist: start,
@@ -255,7 +259,10 @@ describe("assembleLateralReachCalibrationResult — ready", () => {
   it("isolates caller mutation of points and zoneRadii after assembly", () => {
     const start = { x: 0.25, y: 0.5 };
     const end = { x: 0.75, y: 0.5 };
-    const zoneRadii = { startingZoneRadius: 0.05, fixedTargetRadius: 0.05 };
+    const zoneRadii = createLateralReachCalibrationZoneRadii({
+      startingZoneRadius: 0.05,
+      fixedTargetRadius: 0.05,
+    });
     const result = assembleLateralReachCalibrationResult(
       capturedInput({ startWrist: start, heldEndpoint: end, zoneRadii }),
     );
@@ -264,8 +271,6 @@ describe("assembleLateralReachCalibrationResult — ready", () => {
 
     start.x = 0.99;
     end.x = 0.01;
-    zoneRadii.startingZoneRadius = 0.9;
-    zoneRadii.fixedTargetRadius = 0.9;
 
     assert.equal(result.observations.startWrist.x, 0.25);
     assert.equal(result.observations.heldEndpoint.x, 0.75);
@@ -381,6 +386,169 @@ describe("assembleLateralReachCalibrationResult — intention boundary", () => {
           },
         }),
       ),
+    );
+  });
+});
+
+describe("assembleLateralReachCalibrationResult — technical-parameter ownership", () => {
+  it("fails closed for malformed noiseFloor without TypeError", () => {
+    for (const noiseFloorValue of [undefined, null, {}, { minDirectionAlignedMagnitude: 0 }] as unknown[]) {
+      assert.throws(
+        () =>
+          assembleLateralReachCalibrationResult({
+            ...capturedInput(),
+            noiseFloor: noiseFloorValue,
+          } as unknown as LateralReachResultAssemblyInput),
+        (err: unknown) =>
+          err instanceof RangeError &&
+          err.message ===
+            "minDirectionAlignedMagnitude must be a finite number greater than 0",
+      );
+    }
+  });
+
+  it("fails closed for malformed zoneRadii without TypeError", () => {
+    for (const zoneRadiiValue of [undefined, null, {}] as unknown[]) {
+      assert.throws(
+        () =>
+          assembleLateralReachCalibrationResult({
+            ...capturedInput(),
+            zoneRadii: zoneRadiiValue,
+          } as unknown as LateralReachResultAssemblyInput),
+        (err: unknown) =>
+          err instanceof RangeError &&
+          err.message ===
+            "startingZoneRadius must be a finite number greater than 0",
+      );
+    }
+
+    assert.throws(
+      () =>
+        assembleLateralReachCalibrationResult({
+          ...capturedInput(),
+          zoneRadii: {
+            startingZoneRadius: 0,
+            fixedTargetRadius: 0.1,
+          },
+        } as unknown as LateralReachResultAssemblyInput),
+      (err: unknown) =>
+        err instanceof RangeError &&
+        err.message ===
+          "startingZoneRadius must be a finite number greater than 0",
+    );
+  });
+
+  it("does not tighten noiseFloor.kind; unexpected kind is canonicalized", () => {
+    const result = assembleLateralReachCalibrationResult({
+      ...capturedInput(),
+      noiseFloor: {
+        kind: "unexpected-runtime-kind",
+        minDirectionAlignedMagnitude: 0.05,
+      },
+    } as unknown as LateralReachResultAssemblyInput);
+
+    assert.equal(result.geometryOutcome, "ready");
+    if (result.geometryOutcome === "ready") {
+      assert.equal(
+        result.derivedMeasurements.directionAlignedMagnitude > 0,
+        true,
+      );
+    }
+  });
+
+  it("preserves ownership-gate error precedence", () => {
+    assert.throws(
+      () =>
+        assembleLateralReachCalibrationResult(
+          capturedInput({ testedSide: "bilateral" as "left" }),
+        ),
+      (err: unknown) =>
+        err instanceof RangeError &&
+        err.message === 'testedSide must be exactly "left" or "right"',
+    );
+
+    assertIntentionRangeError(() =>
+      assembleLateralReachCalibrationResult({
+        ...capturedInput({
+          zoneRadii: {
+            startingZoneRadius: 0,
+            fixedTargetRadius: 0,
+          } as ReturnType<typeof createLateralReachCalibrationZoneRadii>,
+        }),
+        intention: undefined,
+      } as unknown as LateralReachResultAssemblyInput),
+    );
+
+    const invalidNoiseFloor = {
+      kind: LATERAL_REACH_NOISE_FLOOR_KIND,
+      minDirectionAlignedMagnitude: 0,
+    };
+
+    assert.throws(
+      () =>
+        assembleLateralReachCalibrationResult({
+          ...capturedInput({
+            zoneRadii: {
+              startingZoneRadius: 0,
+              fixedTargetRadius: 0,
+            } as ReturnType<typeof createLateralReachCalibrationZoneRadii>,
+          }),
+          noiseFloor: invalidNoiseFloor,
+        } as unknown as LateralReachResultAssemblyInput),
+      (err: unknown) =>
+        err instanceof RangeError &&
+        err.message ===
+          "startingZoneRadius must be a finite number greater than 0",
+    );
+
+    assert.throws(
+      () =>
+        assembleLateralReachCalibrationResult({
+          ...capturedInput({
+            zoneRadii: {
+              startingZoneRadius: 0.05,
+              fixedTargetRadius: 0,
+            } as ReturnType<typeof createLateralReachCalibrationZoneRadii>,
+          }),
+          noiseFloor: invalidNoiseFloor,
+        } as unknown as LateralReachResultAssemblyInput),
+      (err: unknown) =>
+        err instanceof RangeError &&
+        err.message ===
+          "fixedTargetRadius must be a finite number greater than 0",
+    );
+
+    assert.throws(
+      () =>
+        assembleLateralReachCalibrationResult({
+          ...capturedInput({
+            startWrist: { x: 0.25, y: 0.5 },
+            heldEndpoint: { x: 0.1, y: 0.5 },
+          }),
+          noiseFloor: invalidNoiseFloor,
+        } as unknown as LateralReachResultAssemblyInput),
+      (err: unknown) =>
+        err instanceof RangeError &&
+        err.message ===
+          "minDirectionAlignedMagnitude must be a finite number greater than 0",
+    );
+
+    assert.throws(
+      () =>
+        assembleLateralReachCalibrationResult(
+          capturedInput({
+            zoneRadii: {
+              startingZoneRadius: 0,
+              fixedTargetRadius: 0.05,
+            } as ReturnType<typeof createLateralReachCalibrationZoneRadii>,
+            startWrist: { x: 0.25, y: 0.5 },
+            heldEndpoint: { x: 0.1, y: 0.5 },
+          }),
+        ),
+      (err: unknown) =>
+        err instanceof RangeError &&
+        err.message ===
+          "startingZoneRadius must be a finite number greater than 0",
     );
   });
 });
@@ -519,7 +687,10 @@ describe("assembleLateralReachCalibrationResult — isolation", () => {
       assembleLateralReachCalibrationResult(
         capturedInput({
           heldEndpoint: { x: 0.5, y: 0.5 },
-          zoneRadii: { startingZoneRadius: 0.125, fixedTargetRadius: 0.125 },
+          zoneRadii: createLateralReachCalibrationZoneRadii({
+            startingZoneRadius: 0.125,
+            fixedTargetRadius: 0.125,
+          }),
         }),
       ),
     ];
