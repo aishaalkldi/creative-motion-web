@@ -8,6 +8,7 @@
  * Slice 6: calibration result assembly.
  * Slice 7: engine config adapter.
  * Slice 8: calibration attempt intention.
+ * Slice 9: technical-parameter ownership.
  */
 
 export {
@@ -65,3 +66,9 @@ export {
   createLateralReachCalibrationAttemptIntention,
   type LateralReachCalibrationAttemptIntention,
 } from "./attempt-intention";
+
+export {
+  createLateralReachCalibrationNoiseFloor,
+  createLateralReachCalibrationZoneRadii,
+  type LateralReachCalibrationZoneRadii,
+} from "./technical-parameters";

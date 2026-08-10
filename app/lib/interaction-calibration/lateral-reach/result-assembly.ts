@@ -25,6 +25,11 @@ import {
 import { deriveLateralReachMeasurements } from "./derived-measurements";
 import { constructLateralReachFrozenGeometry } from "./frozen-geometry";
 import {
+  createLateralReachCalibrationNoiseFloor,
+  createLateralReachCalibrationZoneRadii,
+  type LateralReachCalibrationZoneRadii,
+} from "./technical-parameters";
+import {
   LATERAL_REACH_CALIBRATION_SCHEMA_VERSION,
   type LateralReachCalibrationResult,
   type LateralReachCaptureFailureReason,
@@ -50,10 +55,7 @@ export type LateralReachResultAssemblyInput =
       heldEndpoint: NormalizedPoint;
       intention: LateralReachCalibrationAttemptIntention;
       noiseFloor: LateralReachNoiseFloorConfig;
-      zoneRadii: {
-        startingZoneRadius: number;
-        fixedTargetRadius: number;
-      };
+      zoneRadii: LateralReachCalibrationZoneRadii;
     };
 
 function clonePoint(point: NormalizedPoint): NormalizedPoint {
@@ -83,12 +85,26 @@ function resolveCapturedIntention(
 }
 
 /**
+ * Runtime-canonicalize captured-stage noise floor through the Slice 9 gate.
+ * Extracts magnitude only; does not introduce kind rejection.
+ */
+function resolveCapturedNoiseFloor(
+  noiseFloor: unknown,
+): LateralReachNoiseFloorConfig {
+  const rawMagnitude =
+    noiseFloor !== null && typeof noiseFloor === "object"
+      ? (noiseFloor as { minDirectionAlignedMagnitude?: unknown })
+          .minDirectionAlignedMagnitude
+      : undefined;
+
+  return createLateralReachCalibrationNoiseFloor(rawMagnitude);
+}
+
+/**
  * Assemble a LateralReachCalibrationResult from stage-level calibration inputs.
  *
- * Captured path call order is locked: resolve intention, then
- * constructLateralReachFrozenGeometry first (preserves Slice 5 validation
- * precedence), then deriveLateralReachMeasurements only when geometry is
- * not_constructible or ready.
+ * Captured path call order is locked:
+ * testedSide → intention → zone radii → noise floor → Slice 5 → derive.
  */
 export function assembleLateralReachCalibrationResult(
   input: LateralReachResultAssemblyInput,
@@ -120,17 +136,20 @@ export function assembleLateralReachCalibrationResult(
     };
   }
 
-  // stage === "captured" — Slice 8 intention gate, then Slice 5 first.
+  // stage === "captured"
   const intention = resolveCapturedIntention(input.intention);
   const expectedHorizontalDirectionSign =
     intention.expectedHorizontalDirectionSign;
+
+  const zoneRadii = createLateralReachCalibrationZoneRadii(input.zoneRadii);
+  const noiseFloor = resolveCapturedNoiseFloor(input.noiseFloor);
 
   const geometryResult = constructLateralReachFrozenGeometry(
     input.startWrist,
     input.heldEndpoint,
     expectedHorizontalDirectionSign,
-    input.noiseFloor,
-    input.zoneRadii,
+    noiseFloor,
+    zoneRadii,
   );
 
   if (!geometryResult.ok && geometryResult.kind === "calibration_invalid") {
