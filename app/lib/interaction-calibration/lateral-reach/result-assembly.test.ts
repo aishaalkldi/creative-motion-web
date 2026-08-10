@@ -11,6 +11,7 @@ import {
   type LateralReachCaptureFailureReason,
   type LateralReachNoiseFloorConfig,
 } from "@/app/lib/interaction-calibration/lateral-reach/types";
+import { createLateralReachCalibrationAttemptIntention } from "@/app/lib/interaction-calibration/lateral-reach/attempt-intention";
 import { deriveLateralReachMeasurements } from "@/app/lib/interaction-calibration/lateral-reach/derived-measurements";
 import { constructLateralReachFrozenGeometry } from "@/app/lib/interaction-calibration/lateral-reach/frozen-geometry";
 import {
@@ -40,11 +41,21 @@ function capturedInput(
     stage: "captured",
     startWrist: { x: 0.25, y: 0.5 },
     heldEndpoint: { x: 0.75, y: 0.5 },
-    expectedHorizontalDirectionSign: 1,
+    intention: createLateralReachCalibrationAttemptIntention(1),
     noiseFloor: noiseFloor(),
     zoneRadii: { ...READY_RADII },
     ...overrides,
   };
+}
+
+function assertIntentionRangeError(run: () => unknown): void {
+  assert.throws(
+    run,
+    (err: unknown) =>
+      err instanceof RangeError &&
+      err.message ===
+        "expectedHorizontalDirectionSign must be exactly 1 or -1",
+  );
 }
 
 describe("assembleLateralReachCalibrationResult — start_failed", () => {
@@ -106,7 +117,11 @@ describe("assembleLateralReachCalibrationResult — calibration_invalid", () => 
     const start = { x: 0.25, y: 0.5 };
     const end = { x: 0.1, y: 0.5 };
     const result = assembleLateralReachCalibrationResult(
-      capturedInput({ startWrist: start, heldEndpoint: end, expectedHorizontalDirectionSign: 1 }),
+      capturedInput({
+        startWrist: start,
+        heldEndpoint: end,
+        intention: createLateralReachCalibrationAttemptIntention(1),
+      }),
     );
     assert.equal(result.captureOutcome, "failed");
     assert.equal(result.geometryOutcome, "not_applicable");
@@ -164,7 +179,7 @@ describe("assembleLateralReachCalibrationResult — geometry_not_constructible",
       capturedInput({
         startWrist: start,
         heldEndpoint: end,
-        expectedHorizontalDirectionSign: sign,
+        intention: createLateralReachCalibrationAttemptIntention(sign),
         noiseFloor: noiseFloor(0.05),
         zoneRadii: { startingZoneRadius: 0.125, fixedTargetRadius: 0.125 },
       }),
@@ -198,7 +213,7 @@ describe("assembleLateralReachCalibrationResult — ready", () => {
       capturedInput({
         startWrist: start,
         heldEndpoint: end,
-        expectedHorizontalDirectionSign: sign,
+        intention: createLateralReachCalibrationAttemptIntention(sign),
         zoneRadii: radii,
       }),
     );
@@ -256,6 +271,117 @@ describe("assembleLateralReachCalibrationResult — ready", () => {
     assert.equal(result.observations.heldEndpoint.x, 0.75);
     assert.equal(result.frozenGeometry.startingZone.radius, 0.05);
     assert.equal(result.frozenGeometry.fixedTarget.radius, 0.05);
+  });
+});
+
+describe("assembleLateralReachCalibrationResult — intention boundary", () => {
+  it("accepts valid +1 intention", () => {
+    const result = assembleLateralReachCalibrationResult(
+      capturedInput({
+        intention: createLateralReachCalibrationAttemptIntention(1),
+        startWrist: { x: 0.25, y: 0.5 },
+        heldEndpoint: { x: 0.75, y: 0.5 },
+      }),
+    );
+    assert.equal(result.geometryOutcome, "ready");
+    if (result.geometryOutcome === "ready") {
+      assert.equal(result.derivedMeasurements.expectedHorizontalDirectionSign, 1);
+    }
+  });
+
+  it("accepts valid -1 intention", () => {
+    const result = assembleLateralReachCalibrationResult(
+      capturedInput({
+        intention: createLateralReachCalibrationAttemptIntention(-1),
+        startWrist: { x: 0.75, y: 0.5 },
+        heldEndpoint: { x: 0.25, y: 0.5 },
+      }),
+    );
+    assert.equal(result.geometryOutcome, "ready");
+    if (result.geometryOutcome === "ready") {
+      assert.equal(result.derivedMeasurements.expectedHorizontalDirectionSign, -1);
+    }
+  });
+
+  it("keeps testedSide orthogonal to intention for all four combinations", () => {
+    const cases = [
+      {
+        testedSide: "left" as const,
+        sign: 1 as const,
+        startWrist: { x: 0.25, y: 0.5 },
+        heldEndpoint: { x: 0.75, y: 0.5 },
+      },
+      {
+        testedSide: "left" as const,
+        sign: -1 as const,
+        startWrist: { x: 0.75, y: 0.5 },
+        heldEndpoint: { x: 0.25, y: 0.5 },
+      },
+      {
+        testedSide: "right" as const,
+        sign: 1 as const,
+        startWrist: { x: 0.25, y: 0.5 },
+        heldEndpoint: { x: 0.75, y: 0.5 },
+      },
+      {
+        testedSide: "right" as const,
+        sign: -1 as const,
+        startWrist: { x: 0.75, y: 0.5 },
+        heldEndpoint: { x: 0.25, y: 0.5 },
+      },
+    ];
+
+    for (const c of cases) {
+      const result = assembleLateralReachCalibrationResult(
+        capturedInput({
+          testedSide: c.testedSide,
+          intention: createLateralReachCalibrationAttemptIntention(c.sign),
+          startWrist: c.startWrist,
+          heldEndpoint: c.heldEndpoint,
+        }),
+      );
+      assert.equal(result.testedSide, c.testedSide);
+      assert.equal(result.geometryOutcome, "ready");
+      if (result.geometryOutcome === "ready") {
+        assert.equal(
+          result.derivedMeasurements.expectedHorizontalDirectionSign,
+          c.sign,
+        );
+      }
+    }
+  });
+
+  it("fails closed with RangeError for missing/null/malformed/invalid intention", () => {
+    assertIntentionRangeError(() =>
+      assembleLateralReachCalibrationResult({
+        ...capturedInput(),
+        intention: undefined,
+      } as unknown as LateralReachResultAssemblyInput),
+    );
+
+    assertIntentionRangeError(() =>
+      assembleLateralReachCalibrationResult({
+        ...capturedInput(),
+        intention: null,
+      } as unknown as LateralReachResultAssemblyInput),
+    );
+
+    assertIntentionRangeError(() =>
+      assembleLateralReachCalibrationResult({
+        ...capturedInput(),
+        intention: {},
+      } as unknown as LateralReachResultAssemblyInput),
+    );
+
+    assertIntentionRangeError(() =>
+      assembleLateralReachCalibrationResult(
+        capturedInput({
+          intention: {
+            expectedHorizontalDirectionSign: 0 as 1,
+          },
+        }),
+      ),
+    );
   });
 });
 
@@ -329,15 +455,14 @@ describe("assembleLateralReachCalibrationResult — testedSide and inherited err
         err.message === "heldEndpoint must have finite x and y",
     );
 
-    assert.throws(
-      () =>
-        assembleLateralReachCalibrationResult(
-          capturedInput({ expectedHorizontalDirectionSign: 0 as 1 }),
-        ),
-      (err: unknown) =>
-        err instanceof RangeError &&
-        err.message ===
-          "expectedHorizontalDirectionSign must be exactly 1 or -1",
+    assertIntentionRangeError(() =>
+      assembleLateralReachCalibrationResult(
+        capturedInput({
+          intention: {
+            expectedHorizontalDirectionSign: 0 as 1,
+          },
+        }),
+      ),
     );
 
     assert.throws(

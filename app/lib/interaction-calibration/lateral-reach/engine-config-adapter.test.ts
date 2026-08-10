@@ -13,6 +13,7 @@ import {
   type LateralReachCalibrationGeometryReadyResult,
   type LateralReachNoiseFloorConfig,
 } from "@/app/lib/interaction-calibration/lateral-reach/types";
+import { createLateralReachCalibrationAttemptIntention } from "@/app/lib/interaction-calibration/lateral-reach/attempt-intention";
 import { assembleLateralReachCalibrationResult } from "@/app/lib/interaction-calibration/lateral-reach/result-assembly";
 import {
   type LateralReachTimingConfig,
@@ -56,7 +57,9 @@ function buildReadyCalibration(input: {
     stage: "captured",
     startWrist: input.startWrist,
     heldEndpoint: input.heldEndpoint,
-    expectedHorizontalDirectionSign: input.expectedHorizontalDirectionSign,
+    intention: createLateralReachCalibrationAttemptIntention(
+      input.expectedHorizontalDirectionSign,
+    ),
     noiseFloor: noiseFloor(),
     zoneRadii: { ...READY_RADII },
   });
