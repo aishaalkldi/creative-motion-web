@@ -81,7 +81,12 @@ export function notifyLateralReachCameraFrameObserver(
   }
 }
 
-export type LateralReachCameraStatus = "idle" | "initializing" | "running" | "error";
+export type LateralReachCameraStatus =
+  | "idle"
+  | "initializing"
+  | "acquiring"
+  | "running"
+  | "error";
 export type LateralReachCameraInitPhase = null | "import" | "model" | "camera";
 
 export type LateralReachCameraSnapshot = {
@@ -283,30 +288,21 @@ export class LateralReachCameraDetector {
   }
 
   /**
-   * Start camera session with Lateral Reach engine configuration.
-   * Async operations protected by epoch cancellation.
+   * Begin a new detector session epoch synchronously.
+   * Leaves status at initializing/import before any await.
    */
-  async start(
+  private beginSession(
     video: HTMLVideoElement,
     canvas: HTMLCanvasElement,
-    engineConfig: LateralReachConfig,
-  ): Promise<void> {
-    // Validate config
-    const configResult = validateLateralReachConfig(engineConfig);
-    if (!configResult.ok) {
-      throw new Error(`Invalid Lateral Reach config: ${configResult.reason}`);
-    }
-
-    // Start new session epoch
+  ): number {
     const epoch = this.sessionEpoch + 1;
     this.sessionEpoch = epoch;
     this.currentEpoch = epoch;
 
-    const isCurrent = () => this.sessionEpoch === epoch;
-
     this.videoEl = video;
     this.canvasEl = canvas;
-    this.engineConfig = configResult.config;
+    this.engineConfig = null;
+    this.engineState = null;
     this.status = "initializing";
     this.initPhase = "import";
     this.error = null;
@@ -321,85 +317,178 @@ export class LateralReachCameraDetector {
     this.lastCommandType = null;
     this.lastCommandStatus = null;
     this.lastCommandRejectionReason = null;
+    this.readinessArmed = false;
+    this.readinessArmedUntilMs = null;
+    this.readinessStableSinceMs = null;
+    this.readinessAlreadySent = false;
+    this.emit();
+    return epoch;
+  }
+
+  /**
+   * Shared MediaPipe + camera acquisition path.
+   * Does not create engine state and does not choose acquiring/running.
+   */
+  private async acquireCameraAndModel(
+    video: HTMLVideoElement,
+    canvas: HTMLCanvasElement,
+    epoch: number,
+  ): Promise<void> {
+    const isCurrent = () => this.sessionEpoch === epoch;
+
+    // Import MediaPipe
+    const { PoseLandmarker, FilesetResolver } = await import("@mediapipe/tasks-vision");
+    if (!isCurrent()) return;
+
+    this.initPhase = "model";
     this.emit();
 
+    // Init FilesetResolver
+    const fileset = await FilesetResolver.forVisionTasks(this.config.wasmUrl);
+    if (!isCurrent()) return;
+
+    // Create PoseLandmarker
+    const baseOptions = { modelAssetPath: this.config.modelUrl, delegate: "GPU" as const };
+    const options = { baseOptions, runningMode: "VIDEO" as const, numPoses: 1 };
+
+    let landmarker: PoseLandmarkerInstance;
     try {
-      // Import MediaPipe
-      const { PoseLandmarker, FilesetResolver } = await import("@mediapipe/tasks-vision");
-      if (!isCurrent()) return;
-
-      this.initPhase = "model";
-      this.emit();
-
-      // Init FilesetResolver
-      const fileset = await FilesetResolver.forVisionTasks(this.config.wasmUrl);
-      if (!isCurrent()) return;
-
-      // Create PoseLandmarker
-      const baseOptions = { modelAssetPath: this.config.modelUrl, delegate: "GPU" as const };
-      const options = { baseOptions, runningMode: "VIDEO" as const, numPoses: 1 };
-
-      let landmarker: PoseLandmarkerInstance;
-      try {
-        landmarker = await PoseLandmarker.createFromOptions(fileset, options);
-      } catch {
-        // Fallback to CPU
-        landmarker = await PoseLandmarker.createFromOptions(fileset, {
-          ...options,
-          baseOptions: { ...baseOptions, delegate: "CPU" },
-        });
-      }
-
-      if (!isCurrent()) {
-        landmarker.close?.();
-        return;
-      }
-      this.poseLandmarker = landmarker;
-
-      this.initPhase = "camera";
-      this.emit();
-
-      // Wait for video element layout
-      await waitForVideoElementLayout(video);
-      if (!isCurrent()) {
-        this.poseLandmarker?.close?.();
-        this.poseLandmarker = null;
-        return;
-      }
-
-      // Release any existing stream
-      releaseMediaStream(this.stream, video);
-
-      // getUserMedia
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: "user" },
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-        },
-        audio: false,
+      landmarker = await PoseLandmarker.createFromOptions(fileset, options);
+    } catch {
+      // Fallback to CPU
+      landmarker = await PoseLandmarker.createFromOptions(fileset, {
+        ...options,
+        baseOptions: { ...baseOptions, delegate: "CPU" },
       });
+    }
 
-      if (!isCurrent()) {
-        stream.getTracks().forEach((track) => track.stop());
-        this.poseLandmarker?.close?.();
-        this.poseLandmarker = null;
-        return;
-      }
-      this.stream = stream;
+    if (!isCurrent()) {
+      landmarker.close?.();
+      return;
+    }
+    this.poseLandmarker = landmarker;
 
-      // Attach to video element
-      video.srcObject = stream;
+    this.initPhase = "camera";
+    this.emit();
 
-      // Wait for video playback
-      await waitForDecodedVideoFrames(video);
+    // Wait for video element layout
+    await waitForVideoElementLayout(video);
+    if (!isCurrent()) {
+      this.poseLandmarker?.close?.();
+      this.poseLandmarker = null;
+      return;
+    }
+
+    // Release any existing stream
+    releaseMediaStream(this.stream, video);
+
+    // getUserMedia
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: "user" },
+        width: { ideal: 640 },
+        height: { ideal: 480 },
+      },
+      audio: false,
+    });
+
+    if (!isCurrent()) {
+      stream.getTracks().forEach((track) => track.stop());
+      this.poseLandmarker?.close?.();
+      this.poseLandmarker = null;
+      return;
+    }
+    this.stream = stream;
+
+    // Attach to video element
+    video.srcObject = stream;
+
+    // Wait for video playback
+    await waitForDecodedVideoFrames(video);
+    if (!isCurrent()) return;
+
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      throw new Error("Camera opened but no video frames detected.");
+    }
+
+    // canvas reserved for frame-loop overlay; kept for API symmetry with callers
+    void canvas;
+  }
+
+  private handleAcquisitionFailure(err: unknown, epoch: number): void {
+    const isCurrent = () => this.sessionEpoch === epoch;
+
+    if (err instanceof DOMException) {
+      console.error("[LateralReachCameraDetector] Camera acquisition DOMException:", {
+        name: err.name,
+        message: err.message,
+        code: err.code,
+        constructor: err.constructor.name,
+        detectorStream: this.stream ? "exists" : "null",
+        detectorStreamTracks: this.stream?.getTracks().map(t => ({
+          kind: t.kind,
+          readyState: t.readyState,
+          enabled: t.enabled,
+          label: t.label,
+        })) ?? [],
+        videoSrcObject: this.videoEl?.srcObject ? "exists" : "null",
+        videoSrcObjectTracks: this.videoEl?.srcObject instanceof MediaStream
+          ? (this.videoEl.srcObject as MediaStream).getTracks().map(t => ({
+              kind: t.kind,
+              readyState: t.readyState,
+              enabled: t.enabled,
+              label: t.label,
+            }))
+          : [],
+        mediaDevicesAvailable: Boolean(navigator.mediaDevices),
+      });
+    } else {
+      console.error("[LateralReachCameraDetector] Camera acquisition error:", err);
+    }
+
+    if (this.poseLandmarker && this.currentEpoch === epoch) {
+      this.poseLandmarker.close?.();
+      this.poseLandmarker = null;
+    }
+
+    if (!isCurrent()) return;
+    this.stop();
+    this.error = mapStartError(err);
+    this.status = "error";
+    this.emit();
+  }
+
+  /**
+   * Start camera session with Lateral Reach engine configuration.
+   * Async operations protected by epoch cancellation.
+   *
+   * Observable success sequence remains initializing → running and never
+   * emits acquiring (acquisition-only mode uses startAcquisition()).
+   */
+  async start(
+    video: HTMLVideoElement,
+    canvas: HTMLCanvasElement,
+    engineConfig: LateralReachConfig,
+  ): Promise<void> {
+    // Validate config eagerly BEFORE camera/session mutation.
+    const configResult = validateLateralReachConfig(engineConfig);
+    if (!configResult.ok) {
+      throw new Error(`Invalid Lateral Reach config: ${configResult.reason}`);
+    }
+
+    const epoch = this.beginSession(video, canvas);
+    // Preserve legacy assignment timing: validated config is held before acquire.
+    this.engineConfig = configResult.config;
+    const isCurrent = () => this.sessionEpoch === epoch;
+
+    try {
+      await this.acquireCameraAndModel(video, canvas, epoch);
       if (!isCurrent()) return;
-
-      if (video.videoWidth === 0 || video.videoHeight === 0) {
-        throw new Error("Camera opened but no video frames detected.");
+      if (!this.engineConfig) {
+        throw new Error("Failed to create Lateral Reach state: missing engine config");
       }
 
-      // Initialize Lateral Reach engine
+      // Initialize Lateral Reach engine before first frame / running.
       const stateResult = createLateralReachAttemptState(
         this.engineConfig,
         0, // attemptIndex
@@ -418,48 +507,79 @@ export class LateralReachCameraDetector {
 
       this.startFrameLoop(video);
     } catch (err) {
-      // Log comprehensive diagnostics for camera acquisition failures
-      if (err instanceof DOMException) {
-        console.error("[LateralReachCameraDetector] Camera acquisition DOMException:", {
-          name: err.name,
-          message: err.message,
-          code: err.code,
-          constructor: err.constructor.name,
-          detectorStream: this.stream ? "exists" : "null",
-          detectorStreamTracks: this.stream?.getTracks().map(t => ({
-            kind: t.kind,
-            readyState: t.readyState,
-            enabled: t.enabled,
-            label: t.label,
-          })) ?? [],
-          videoSrcObject: this.videoEl?.srcObject ? "exists" : "null",
-          videoSrcObjectTracks: this.videoEl?.srcObject instanceof MediaStream
-            ? (this.videoEl.srcObject as MediaStream).getTracks().map(t => ({
-                kind: t.kind,
-                readyState: t.readyState,
-                enabled: t.enabled,
-                label: t.label,
-              }))
-            : [],
-          mediaDevicesAvailable: Boolean(navigator.mediaDevices),
-        });
-      } else {
-        console.error("[LateralReachCameraDetector] Camera acquisition error:", err);
-      }
-
-      // Always clean up resources created during this session
-      if (this.poseLandmarker && this.currentEpoch === epoch) {
-        this.poseLandmarker.close?.();
-        this.poseLandmarker = null;
-      }
-
-      if (!isCurrent()) return;
-      this.stop();
-      this.error = mapStartError(err);
-      this.status = "error";
-      this.emit();
+      // Capture currency before failure cleanup: stop() advances the epoch.
+      const stillCurrent = this.sessionEpoch === epoch;
+      this.handleAcquisitionFailure(err, epoch);
+      if (!stillCurrent) return;
       throw err;
     }
+  }
+
+  /**
+   * Acquisition-only camera/MediaPipe start.
+   * Fail-closed: legal only from idle; never creates engine state.
+   */
+  async startAcquisition(
+    video: HTMLVideoElement,
+    canvas: HTMLCanvasElement,
+  ): Promise<void> {
+    // Synchronous fail-closed guard before any await / session mutation.
+    if (this.status !== "idle") {
+      throw new RangeError(
+        'startAcquisition requires status "idle"',
+      );
+    }
+
+    const epoch = this.beginSession(video, canvas);
+    const isCurrent = () => this.sessionEpoch === epoch;
+
+    try {
+      await this.acquireCameraAndModel(video, canvas, epoch);
+      if (!isCurrent()) return;
+
+      this.status = "acquiring";
+      this.initPhase = null;
+      this.emit();
+      this.startFrameLoop(video);
+    } catch (err) {
+      const stillCurrent = this.sessionEpoch === epoch;
+      this.handleAcquisitionFailure(err, epoch);
+      if (!stillCurrent) return;
+      throw err;
+    }
+  }
+
+  /**
+   * Activate the Lateral Reach engine on an acquisition-only session.
+   * Fail-closed: legal only while acquiring with no active engine.
+   */
+  startEngine(engineConfig: LateralReachConfig): void {
+    if (this.status !== "acquiring" || this.engineState !== null) {
+      throw new RangeError(
+        'startEngine requires status "acquiring" with no active engine',
+      );
+    }
+
+    const configResult = validateLateralReachConfig(engineConfig);
+    if (!configResult.ok) {
+      throw new RangeError(`Invalid Lateral Reach config: ${configResult.reason}`);
+    }
+
+    const stateResult = createLateralReachAttemptState(
+      configResult.config,
+      0,
+      performance.now(),
+    );
+    if (!stateResult.ok) {
+      throw new RangeError(
+        `Failed to create Lateral Reach state: ${stateResult.reason}`,
+      );
+    }
+
+    this.engineConfig = configResult.config;
+    this.engineState = stateResult.state;
+    this.status = "running";
+    this.emit();
   }
 
   /**
@@ -661,8 +781,8 @@ export class LateralReachCameraDetector {
       // Guard: session still active
       if (this.sessionEpoch !== epoch) return;
 
-      // Guard: resources ready
-      if (!this.poseLandmarker || !this.engineState) return;
+      // Guard: acquisition resources ready (engine may be absent in acquiring mode)
+      if (!this.poseLandmarker) return;
 
       // Guard: video ready
       if (video.videoWidth === 0 || video.videoHeight === 0) {
@@ -718,35 +838,39 @@ export class LateralReachCameraDetector {
           // Update laterality diagnostics
           this.updateLateralityDiagnostics(landmarks);
 
-          // Feed engine
           if (frame) {
             // CASE A: Valid frame from adapter
-            // Normalize timestamp with frame-specific strict-increase constraint
-            const frameTimestamp = this.normalizeCommandTimestamp(rawTimestamp, true);
+            if (this.engineState) {
+              // Normalize timestamp with frame-specific strict-increase constraint
+              const frameTimestamp = this.normalizeCommandTimestamp(rawTimestamp, true);
 
-            const engineResult = applyLateralReachCommand(this.engineState, {
-              type: "frame",
-              nowMs: frameTimestamp,
-              frame,
-            });
+              const engineResult = applyLateralReachCommand(this.engineState, {
+                type: "frame",
+                nowMs: frameTimestamp,
+                frame,
+              });
 
-            // BLOCKER 2 FIX: Only update command feedback for rejected frame commands
-            if (engineResult.status === "rejected") {
-              this.lastCommandType = "frame";
-              this.lastCommandStatus = "rejected";
-              this.lastCommandRejectionReason = engineResult.reason;
+              // BLOCKER 2 FIX: Only update command feedback for rejected frame commands
+              if (engineResult.status === "rejected") {
+                this.lastCommandType = "frame";
+                this.lastCommandStatus = "rejected";
+                this.lastCommandRejectionReason = engineResult.reason;
+              }
+
+              if (engineResult.status === "applied") {
+                this.engineState = engineResult.state;
+                // Update unified command clock
+                this.lastCommandNowMs = frameTimestamp;
+                this.lastFrameNowMs = frameTimestamp;
+              }
+
+              // Frame exposure seam: after engine handling, applied or rejected.
+              notifyLateralReachCameraFrameObserver(this.callbacks.onFrame, frame);
+            } else {
+              // Acquisition-only: expose frame with zero engine commands.
+              notifyLateralReachCameraFrameObserver(this.callbacks.onFrame, frame);
             }
-
-            if (engineResult.status === "applied") {
-              this.engineState = engineResult.state;
-              // Update unified command clock
-              this.lastCommandNowMs = frameTimestamp;
-              this.lastFrameNowMs = frameTimestamp;
-            }
-
-            // Frame exposure seam: after engine handling, applied or rejected.
-            notifyLateralReachCameraFrameObserver(this.callbacks.onFrame, frame);
-          } else {
+          } else if (this.engineState) {
             // CASE C: MediaPipe returned landmarks but adapter returned null
             // Normalize timestamp with general monotonic constraint
             const commandTimestamp = this.normalizeCommandTimestamp(rawTimestamp, false);
@@ -769,28 +893,32 @@ export class LateralReachCameraDetector {
               this.lastCommandNowMs = commandTimestamp;
             }
           }
+          // Acquisition-only CASE C: no engine command, no onFrame.
         } else {
           // CASE B: MediaPipe returned no pose landmarks
-          // Normalize timestamp with general monotonic constraint
-          const commandTimestamp = this.normalizeCommandTimestamp(rawTimestamp, false);
+          if (this.engineState) {
+            // Normalize timestamp with general monotonic constraint
+            const commandTimestamp = this.normalizeCommandTimestamp(rawTimestamp, false);
 
-          const engineResult = applyLateralReachCommand(this.engineState, {
-            type: "observationUnavailable",
-            nowMs: commandTimestamp,
-          });
+            const engineResult = applyLateralReachCommand(this.engineState, {
+              type: "observationUnavailable",
+              nowMs: commandTimestamp,
+            });
 
-          // BLOCKER 2 FIX: Only update command feedback for rejected observationUnavailable
-          if (engineResult.status === "rejected") {
-            this.lastCommandType = "observationUnavailable";
-            this.lastCommandStatus = "rejected";
-            this.lastCommandRejectionReason = engineResult.reason;
+            // BLOCKER 2 FIX: Only update command feedback for rejected observationUnavailable
+            if (engineResult.status === "rejected") {
+              this.lastCommandType = "observationUnavailable";
+              this.lastCommandStatus = "rejected";
+              this.lastCommandRejectionReason = engineResult.reason;
+            }
+
+            if (engineResult.status === "applied") {
+              this.engineState = engineResult.state;
+              // Update general command clock only
+              this.lastCommandNowMs = commandTimestamp;
+            }
           }
-
-          if (engineResult.status === "applied") {
-            this.engineState = engineResult.state;
-            // Update general command clock only
-            this.lastCommandNowMs = commandTimestamp;
-          }
+          // Acquisition-only CASE B: no engine command.
 
           // Clear laterality diagnostics
           this.lastRightWristVisibility = null;
