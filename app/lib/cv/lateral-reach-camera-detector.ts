@@ -16,6 +16,7 @@
 import type { PoseLandmark } from "@/app/lib/cv/pose-landmark-overlay";
 import { BLAZEPOSE_ACQUISITION_ADAPTER } from "@/app/lib/input-acquisition/adapters/motion/blazepose-acquisition-adapter";
 import type { InputAcquisitionContext } from "@/app/lib/input-acquisition/contract";
+import type { NormalizedMotionFrame } from "@/app/lib/motion-intelligence";
 import {
   applyLateralReachCommand,
   createLateralReachAttemptState,
@@ -60,6 +61,24 @@ export function normalizeCommandTimestampForTesting(
   }
 
   return normalized;
+}
+
+/**
+ * Isolated optional onFrame notification.
+ * Observer failures must not escape into detector frame processing.
+ *
+ * @internal Exported for regression testing only.
+ */
+export function notifyLateralReachCameraFrameObserver(
+  onFrame: ((frame: NormalizedMotionFrame) => void) | undefined,
+  frame: NormalizedMotionFrame,
+): void {
+  if (!onFrame) return;
+  try {
+    onFrame(frame);
+  } catch (err) {
+    console.error("[LateralReachCameraDetector] Frame observer error:", err);
+  }
 }
 
 export type LateralReachCameraStatus = "idle" | "initializing" | "running" | "error";
@@ -117,6 +136,8 @@ const BODY_LANDMARKS_TO_DRAW = [11, 12, 13, 14, 15, 16];
 
 export type LateralReachCameraDetectorCallbacks = {
   onSnapshot: (snapshot: LateralReachCameraSnapshot) => void;
+  /** Optional — acquisition observation only; invoked after engine frame handling. */
+  onFrame?: (frame: NormalizedMotionFrame) => void;
 };
 
 type LateralReachCameraConfig = {
@@ -722,6 +743,9 @@ export class LateralReachCameraDetector {
               this.lastCommandNowMs = frameTimestamp;
               this.lastFrameNowMs = frameTimestamp;
             }
+
+            // Frame exposure seam: after engine handling, applied or rejected.
+            notifyLateralReachCameraFrameObserver(this.callbacks.onFrame, frame);
           } else {
             // CASE C: MediaPipe returned landmarks but adapter returned null
             // Normalize timestamp with general monotonic constraint
