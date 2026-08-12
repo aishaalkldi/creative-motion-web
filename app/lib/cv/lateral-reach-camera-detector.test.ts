@@ -1,7 +1,12 @@
 /**
- * Lateral Reach Camera Detector — Slice 14 frame-exposure seam tests.
+ * Lateral Reach Camera Detector — Slice 14/15 tests.
  *
- * Proves optional onFrame delivery semantics without MediaPipe / getUserMedia / RAF.
+ * Slice 14: optional onFrame delivery semantics.
+ * Slice 15: acquisition-only mode + deferred engine start.
+ *
+ * Lifecycle tests stub only the private MediaPipe/camera acquire helper so the
+ * real beginSession / startAcquisition / start / startEngine / frame-loop
+ * contracts can be exercised without getUserMedia.
  *
  * Run (approved harness):
  *   $env:JITI_ALIAS = @{ '@' = (Get-Location).Path } | ConvertTo-Json -Compress
@@ -389,16 +394,21 @@ describe("testedSide independence and scope guards", () => {
 
     const caseAIndex = source.indexOf("// CASE A: Valid frame from adapter");
     assert.ok(caseAIndex >= 0);
-    const caseASlice = source.slice(caseAIndex, source.indexOf("// CASE C:", caseAIndex));
+    const engineBranch = source.slice(
+      caseAIndex,
+      source.indexOf("// Acquisition-only: expose frame", caseAIndex),
+    );
 
-    const applyIndex = caseASlice.indexOf("applyLateralReachCommand");
-    const notifyIndex = caseASlice.indexOf("notifyLateralReachCameraFrameObserver");
+    const applyIndex = engineBranch.indexOf("applyLateralReachCommand");
+    const notifyIndex = engineBranch.indexOf("notifyLateralReachCameraFrameObserver");
     assert.ok(applyIndex >= 0);
     assert.ok(notifyIndex >= 0);
     assert.ok(applyIndex < notifyIndex);
 
-    // CASE B / CASE C must not notify.
-    const caseBSlice = source.slice(source.indexOf("// CASE B:"));
+    // CASE B body must not notify.
+    const caseBIndex = source.indexOf("// CASE B: MediaPipe returned no pose landmarks");
+    assert.ok(caseBIndex >= 0);
+    const caseBSlice = source.slice(caseBIndex, caseBIndex + 800);
     assert.equal(caseBSlice.includes("notifyLateralReachCameraFrameObserver"), false);
 
     assert.equal(source.includes("resolveLateralReachCalibrationSampleFromFrame"), false);
@@ -408,7 +418,476 @@ describe("testedSide independence and scope guards", () => {
     assert.equal(source.includes("interaction-calibration"), false);
 
     // Frame exposure must not select wrist by testedSide.
-    const notifyCallSite = caseASlice.slice(notifyIndex);
+    const notifyCallSite = engineBranch.slice(notifyIndex);
     assert.equal(notifyCallSite.includes("testedSide"), false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Slice 15 — acquisition-only + deferred engine start
+// ---------------------------------------------------------------------------
+
+type DetectorInternals = {
+  status: string;
+  initPhase: string | null;
+  engineConfig: LateralReachConfig | null;
+  engineState: LateralReachAttemptState | null;
+  poseLandmarker: {
+    detectForVideo: (
+      video: HTMLVideoElement,
+      ts: number,
+    ) => { landmarks?: Array<Array<{ x: number; y: number; visibility?: number }>> };
+    close?: () => void;
+  } | null;
+  sessionEpoch: number;
+  currentEpoch: number;
+  lastCommandType: string | null;
+  acquireCameraAndModel: (
+    video: HTMLVideoElement,
+    canvas: HTMLCanvasElement,
+    epoch: number,
+  ) => Promise<void>;
+  startFrameLoop: (video: HTMLVideoElement) => void;
+  emit: () => void;
+};
+
+function asInternals(detector: LateralReachCameraDetector): DetectorInternals {
+  return detector as unknown as DetectorInternals;
+}
+
+function fakeVideo(): HTMLVideoElement {
+  return {
+    videoWidth: 640,
+    videoHeight: 480,
+    srcObject: null,
+  } as HTMLVideoElement;
+}
+
+function fakeCanvas(): HTMLCanvasElement {
+  return {
+    width: 0,
+    height: 0,
+    getContext: () => null,
+  } as unknown as HTMLCanvasElement;
+}
+
+function installRafCapture(): {
+  callbacks: FrameRequestCallback[];
+  restore: () => void;
+} {
+  const callbacks: FrameRequestCallback[] = [];
+  const originalRaf = globalThis.requestAnimationFrame;
+  const originalCancel = globalThis.cancelAnimationFrame;
+  globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+    callbacks.push(cb);
+    return callbacks.length;
+  }) as typeof requestAnimationFrame;
+  globalThis.cancelAnimationFrame = (() => {}) as typeof cancelAnimationFrame;
+  return {
+    callbacks,
+    restore: () => {
+      globalThis.requestAnimationFrame = originalRaf;
+      globalThis.cancelAnimationFrame = originalCancel;
+    },
+  };
+}
+
+function stubAcquireWithPhaseEmits(
+  detector: LateralReachCameraDetector,
+  landmarkerFactory: () => DetectorInternals["poseLandmarker"],
+): void {
+  const internals = asInternals(detector);
+  internals.acquireCameraAndModel = async () => {
+    internals.initPhase = "model";
+    internals.emit();
+    internals.initPhase = "camera";
+    internals.emit();
+    internals.poseLandmarker = landmarkerFactory();
+  };
+}
+
+function validWristLandmarks(): Array<{ x: number; y: number; visibility?: number }> {
+  return buildLandmarks({
+    [16]: { x: 0.3, y: 0.5, visibility: 0.9 },
+  }) as Array<{ x: number; y: number; visibility?: number }>;
+}
+
+describe("Slice 15 — legacy start() compatibility", () => {
+  it("emits initializing/import → model → camera → running and never acquiring", async () => {
+    const statuses: Array<{ status: string; initPhase: string | null }> = [];
+    const detector = new LateralReachCameraDetector({
+      onSnapshot: (s) => statuses.push({ status: s.status, initPhase: s.initPhase }),
+    });
+    stubAcquireWithPhaseEmits(detector, () => ({
+      detectForVideo: () => ({ landmarks: [validWristLandmarks()] }),
+    }));
+    const raf = installRafCapture();
+    try {
+      await detector.start(fakeVideo(), fakeCanvas(), buildConfig());
+      const sequence = statuses.map((s) => `${s.status}/${String(s.initPhase)}`);
+      assert.deepEqual(sequence, [
+        "initializing/import",
+        "initializing/model",
+        "initializing/camera",
+        "running/null",
+      ]);
+      assert.equal(sequence.includes("acquiring/null"), false);
+      assert.ok(statuses.at(-1)?.status === "running");
+      assert.ok(detector.getSnapshot().engineSnapshot !== null);
+    } finally {
+      detector.stop();
+      raf.restore();
+    }
+  });
+});
+
+describe("Slice 15 — startAcquisition()", () => {
+  it("emits initializing/import → model → camera → acquiring and never running", async () => {
+    const statuses: Array<{ status: string; initPhase: string | null }> = [];
+    const detector = new LateralReachCameraDetector({
+      onSnapshot: (s) => statuses.push({ status: s.status, initPhase: s.initPhase }),
+    });
+    stubAcquireWithPhaseEmits(detector, () => ({
+      detectForVideo: () => ({ landmarks: [validWristLandmarks()] }),
+    }));
+    const raf = installRafCapture();
+    try {
+      await detector.startAcquisition(fakeVideo(), fakeCanvas());
+      const sequence = statuses.map((s) => `${s.status}/${String(s.initPhase)}`);
+      assert.deepEqual(sequence, [
+        "initializing/import",
+        "initializing/model",
+        "initializing/camera",
+        "acquiring/null",
+      ]);
+      assert.equal(sequence.some((s) => s.startsWith("running/")), false);
+      assert.equal(detector.getSnapshot().engineSnapshot, null);
+      assert.equal(asInternals(detector).engineConfig, null);
+      assert.equal(asInternals(detector).engineState, null);
+    } finally {
+      detector.stop();
+      raf.restore();
+    }
+  });
+
+  it("delivers real adapter frames via onFrame with zero engine side effects", async () => {
+    const received: NormalizedMotionFrame[] = [];
+    const detector = new LateralReachCameraDetector({
+      onSnapshot: () => {},
+      onFrame: (f) => received.push(f),
+    });
+    stubAcquireWithPhaseEmits(detector, () => ({
+      detectForVideo: () => ({ landmarks: [validWristLandmarks()] }),
+    }));
+    const raf = installRafCapture();
+    try {
+      await detector.startAcquisition(fakeVideo(), fakeCanvas());
+      assert.equal(raf.callbacks.length, 1);
+      raf.callbacks[0]!(0);
+      assert.equal(received.length, 1);
+      assert.ok(received[0]?.joints.right_wrist);
+      assert.equal(detector.getSnapshot().engineSnapshot, null);
+      assert.equal(asInternals(detector).lastCommandType, null);
+      assert.equal(detector.getSnapshot().status, "acquiring");
+    } finally {
+      detector.stop();
+      raf.restore();
+    }
+  });
+
+  it("rejects non-idle startAcquisition without mutating an existing session", async () => {
+    const detector = new LateralReachCameraDetector({ onSnapshot: () => {} });
+    stubAcquireWithPhaseEmits(detector, () => ({
+      detectForVideo: () => ({ landmarks: [validWristLandmarks()] }),
+    }));
+    const raf = installRafCapture();
+    try {
+      await detector.startAcquisition(fakeVideo(), fakeCanvas());
+      const epochBefore = asInternals(detector).sessionEpoch;
+      await assert.rejects(
+        () => detector.startAcquisition(fakeVideo(), fakeCanvas()),
+        (err: unknown) =>
+          err instanceof RangeError &&
+          err.message === 'startAcquisition requires status "idle"',
+      );
+      assert.equal(asInternals(detector).sessionEpoch, epochBefore);
+      assert.equal(detector.getSnapshot().status, "acquiring");
+    } finally {
+      detector.stop();
+      raf.restore();
+    }
+  });
+
+  it("rejects a concurrent second startAcquisition before it can begin a session", async () => {
+    const detector = new LateralReachCameraDetector({ onSnapshot: () => {} });
+    let acquireStarted = 0;
+    asInternals(detector).acquireCameraAndModel = async () => {
+      acquireStarted += 1;
+      await new Promise((r) => setTimeout(r, 20));
+      asInternals(detector).poseLandmarker = {
+        detectForVideo: () => ({ landmarks: [validWristLandmarks()] }),
+      };
+    };
+    const raf = installRafCapture();
+    try {
+      const p1 = detector.startAcquisition(fakeVideo(), fakeCanvas());
+      assert.equal(detector.getSnapshot().status, "initializing");
+      await assert.rejects(
+        () => detector.startAcquisition(fakeVideo(), fakeCanvas()),
+        RangeError,
+      );
+      await p1;
+      assert.equal(acquireStarted, 1);
+      assert.equal(detector.getSnapshot().status, "acquiring");
+    } finally {
+      detector.stop();
+      raf.restore();
+    }
+  });
+
+  it("throws while running and leaves the engine session undisturbed", async () => {
+    const detector = new LateralReachCameraDetector({ onSnapshot: () => {} });
+    stubAcquireWithPhaseEmits(detector, () => ({
+      detectForVideo: () => ({ landmarks: [validWristLandmarks()] }),
+    }));
+    const raf = installRafCapture();
+    try {
+      await detector.start(fakeVideo(), fakeCanvas(), buildConfig());
+      const snap = detector.getSnapshot();
+      assert.equal(snap.status, "running");
+      assert.ok(snap.engineSnapshot);
+      const epoch = asInternals(detector).sessionEpoch;
+      await assert.rejects(
+        () => detector.startAcquisition(fakeVideo(), fakeCanvas()),
+        RangeError,
+      );
+      assert.equal(asInternals(detector).sessionEpoch, epoch);
+      assert.equal(detector.getSnapshot().status, "running");
+      assert.ok(detector.getSnapshot().engineSnapshot);
+    } finally {
+      detector.stop();
+      raf.restore();
+    }
+  });
+
+  it("throws while error", async () => {
+    const detector = new LateralReachCameraDetector({ onSnapshot: () => {} });
+    asInternals(detector).status = "error";
+    await assert.rejects(
+      () => detector.startAcquisition(fakeVideo(), fakeCanvas()),
+      RangeError,
+    );
+    assert.equal(detector.getSnapshot().status, "error");
+  });
+});
+
+describe("Slice 15 — startEngine()", () => {
+  it("activates acquiring → running exactly once and routes later frames through engine", async () => {
+    const order: string[] = [];
+    const detector = new LateralReachCameraDetector({
+      onSnapshot: (s) => order.push(`snap:${s.status}`),
+      onFrame: () => order.push("onFrame"),
+    });
+    stubAcquireWithPhaseEmits(detector, () => ({
+      detectForVideo: () => ({ landmarks: [validWristLandmarks()] }),
+    }));
+    const raf = installRafCapture();
+    try {
+      await detector.startAcquisition(fakeVideo(), fakeCanvas());
+      assert.equal(detector.getSnapshot().engineSnapshot, null);
+
+      detector.startEngine(buildConfig());
+      assert.equal(detector.getSnapshot().status, "running");
+      assert.ok(detector.getSnapshot().engineSnapshot);
+
+      const before = order.length;
+      raf.callbacks.at(-1)!(0);
+      const after = order.slice(before);
+      // Engine-active CASE A still notifies onFrame after engine handling.
+      assert.ok(after.includes("onFrame"));
+      assert.ok(detector.getSnapshot().engineSnapshot);
+
+      assert.throws(() => detector.startEngine(buildConfig()), RangeError);
+    } finally {
+      detector.stop();
+      raf.restore();
+    }
+  });
+
+  it("throws before acquisition and after stop with no mutation", () => {
+    const detector = new LateralReachCameraDetector({ onSnapshot: () => {} });
+    assert.equal(detector.getSnapshot().status, "idle");
+    assert.throws(() => detector.startEngine(buildConfig()), RangeError);
+    assert.equal(detector.getSnapshot().status, "idle");
+    assert.equal(asInternals(detector).engineState, null);
+  });
+
+  it("throws after stop from acquiring", async () => {
+    const detector = new LateralReachCameraDetector({ onSnapshot: () => {} });
+    stubAcquireWithPhaseEmits(detector, () => ({
+      detectForVideo: () => ({ landmarks: [validWristLandmarks()] }),
+    }));
+    const raf = installRafCapture();
+    try {
+      await detector.startAcquisition(fakeVideo(), fakeCanvas());
+      detector.stop();
+      assert.equal(detector.getSnapshot().status, "idle");
+      assert.throws(() => detector.startEngine(buildConfig()), RangeError);
+      assert.equal(asInternals(detector).engineState, null);
+    } finally {
+      raf.restore();
+    }
+  });
+
+  it("invalid config keeps acquiring live and later onFrame continues", async () => {
+    const received: NormalizedMotionFrame[] = [];
+    const detector = new LateralReachCameraDetector({
+      onSnapshot: () => {},
+      onFrame: (f) => received.push(f),
+    });
+    stubAcquireWithPhaseEmits(detector, () => ({
+      detectForVideo: () => ({ landmarks: [validWristLandmarks()] }),
+    }));
+    const raf = installRafCapture();
+    try {
+      await detector.startAcquisition(fakeVideo(), fakeCanvas());
+      assert.throws(
+        () =>
+          detector.startEngine({
+            ...buildConfig(),
+            tracking: { minWristVisibility: 2, maxAllowedGapMs: 300 },
+          } as LateralReachConfig),
+        RangeError,
+      );
+      assert.equal(detector.getSnapshot().status, "acquiring");
+      assert.equal(asInternals(detector).engineState, null);
+      assert.equal(asInternals(detector).engineConfig, null);
+      raf.callbacks[0]!(0);
+      assert.equal(received.length, 1);
+    } finally {
+      detector.stop();
+      raf.restore();
+    }
+  });
+});
+
+describe("Slice 15 — acquisition-only CASE B/C and stop/epoch", () => {
+  it("CASE B acquisition-only issues no engine command and no onFrame", async () => {
+    let frames = 0;
+    const detector = new LateralReachCameraDetector({
+      onSnapshot: () => {},
+      onFrame: () => {
+        frames += 1;
+      },
+    });
+    stubAcquireWithPhaseEmits(detector, () => ({
+      detectForVideo: () => ({ landmarks: undefined }),
+    }));
+    const raf = installRafCapture();
+    try {
+      await detector.startAcquisition(fakeVideo(), fakeCanvas());
+      raf.callbacks[0]!(0);
+      assert.equal(frames, 0);
+      assert.equal(asInternals(detector).lastCommandType, null);
+      assert.equal(detector.getSnapshot().engineSnapshot, null);
+    } finally {
+      detector.stop();
+      raf.restore();
+    }
+  });
+
+  it("CASE C acquisition-only issues no engine command and no onFrame", async () => {
+    let frames = 0;
+    const detector = new LateralReachCameraDetector({
+      onSnapshot: () => {},
+      onFrame: () => {
+        frames += 1;
+      },
+    });
+    // All-invalid landmarks → adapter null.
+    stubAcquireWithPhaseEmits(detector, () => ({
+      detectForVideo: () => ({ landmarks: [buildLandmarks({}) as never] }),
+    }));
+    const raf = installRafCapture();
+    try {
+      await detector.startAcquisition(fakeVideo(), fakeCanvas());
+      raf.callbacks[0]!(0);
+      assert.equal(frames, 0);
+      assert.equal(asInternals(detector).lastCommandType, null);
+    } finally {
+      detector.stop();
+      raf.restore();
+    }
+  });
+
+  it("stop during acquisition-only tears down safely; stale RAF is inert", async () => {
+    const detector = new LateralReachCameraDetector({
+      onSnapshot: () => {},
+      onFrame: () => {
+        throw new Error("should not run after stop");
+      },
+    });
+    stubAcquireWithPhaseEmits(detector, () => ({
+      detectForVideo: () => ({ landmarks: [validWristLandmarks()] }),
+    }));
+    const raf = installRafCapture();
+    try {
+      await detector.startAcquisition(fakeVideo(), fakeCanvas());
+      const pending = raf.callbacks[0]!;
+      detector.stop();
+      assert.equal(detector.getSnapshot().status, "idle");
+      assert.doesNotThrow(() => pending(0));
+      assert.equal(asInternals(detector).poseLandmarker, null);
+    } finally {
+      raf.restore();
+    }
+  });
+
+  it("legacy start while acquisition-only supersedes via epoch and reaches running", async () => {
+    const statuses: string[] = [];
+    const detector = new LateralReachCameraDetector({
+      onSnapshot: (s) => statuses.push(s.status),
+    });
+    stubAcquireWithPhaseEmits(detector, () => ({
+      detectForVideo: () => ({ landmarks: [validWristLandmarks()] }),
+    }));
+    const raf = installRafCapture();
+    try {
+      await detector.startAcquisition(fakeVideo(), fakeCanvas());
+      assert.equal(detector.getSnapshot().status, "acquiring");
+      await detector.start(fakeVideo(), fakeCanvas(), buildConfig());
+      assert.equal(detector.getSnapshot().status, "running");
+      assert.ok(detector.getSnapshot().engineSnapshot);
+      assert.ok(statuses.includes("acquiring"));
+      assert.equal(statuses.at(-1), "running");
+    } finally {
+      detector.stop();
+      raf.restore();
+    }
+  });
+
+  it("rapid repeated legacy start preserves last-caller-wins supersession", async () => {
+    const detector = new LateralReachCameraDetector({ onSnapshot: () => {} });
+    let acquires = 0;
+    asInternals(detector).acquireCameraAndModel = async (_v, _c, epoch) => {
+      acquires += 1;
+      await new Promise((r) => setTimeout(r, 15));
+      if (asInternals(detector).sessionEpoch !== epoch) return;
+      asInternals(detector).poseLandmarker = {
+        detectForVideo: () => ({ landmarks: [validWristLandmarks()] }),
+      };
+    };
+    const raf = installRafCapture();
+    try {
+      const p1 = detector.start(fakeVideo(), fakeCanvas(), buildConfig());
+      const p2 = detector.start(fakeVideo(), fakeCanvas(), buildConfig());
+      await Promise.allSettled([p1, p2]);
+      assert.ok(acquires >= 2);
+      assert.equal(detector.getSnapshot().status, "running");
+      assert.ok(detector.getSnapshot().engineSnapshot);
+    } finally {
+      detector.stop();
+      raf.restore();
+    }
   });
 });
