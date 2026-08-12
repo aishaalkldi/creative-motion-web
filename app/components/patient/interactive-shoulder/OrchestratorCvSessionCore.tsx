@@ -58,6 +58,14 @@ import {
   shouldDispatchBlockRunner,
 } from "@/app/lib/interactive-shoulder/orchestrator-cv-runtime-fault";
 import { shouldFireSessionCompleteCallback } from "@/app/lib/interactive-shoulder/orchestrator-cv-session-completion";
+import {
+  applyDispatchOutcomesToAdaptiveState,
+  resolveAttemptCompensationObservation,
+} from "@/app/lib/interactive-shoulder/adaptive/adaptive-attempt-runtime";
+import { resolveDifficultyConfigForSessionFromEnv } from "@/app/lib/interactive-shoulder/adaptive/difficulty-config-registry";
+import { createAdaptiveDifficultyState } from "@/app/lib/interactive-shoulder/adaptive/adaptive-difficulty";
+import type { AdaptiveDifficultyState } from "@/app/lib/interactive-shoulder/adaptive/adaptive-difficulty-types";
+import type { TargetAttemptTickConfig } from "@/app/lib/interactive-shoulder/orchestrator-cv-block-dispatch";
 import type { TherapeuticTarget } from "@/app/lib/interactive-shoulder/types";
 import { INTERACTIVE_SHOULDER_CV_EXERCISE_ID } from "@/app/lib/interactive-shoulder/interactive-shoulder-exercise-ids";
 import {
@@ -190,6 +198,16 @@ export function OrchestratorCvSessionCore({
   const snapshotRef = useRef<ShoulderAbductionReachPoseDetectorSnapshot | null>(null);
   const therapeuticSideRef = useRef(resolvedTherapeuticSide.side);
   therapeuticSideRef.current = resolvedTherapeuticSide.side;
+  /**
+   * SESSION-SCOPED adaptive state, or null when adaptive difficulty is not enabled for
+   * this session. Held in a ref alongside the other runtime state this loop owns.
+   *
+   * It is deliberately NOT part of `runnerStatesRef`: that bag is rebuilt by
+   * `resetRunnerStatesForBlockTransition` on every block change, and adaptation must
+   * survive block transitions. It is created and reset only at the session boundary in
+   * `startSession` below.
+   */
+  const adaptiveStateRef = useRef<AdaptiveDifficultyState | null>(null);
 
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [consentChecked, setConsentChecked] = useState(false);
@@ -321,6 +339,13 @@ export function OrchestratorCvSessionCore({
       orchestrator.completeCalibration(now);
       sessionStartedRef.current = true;
       sessionCompleteFiredRef.current = false;
+      // SESSION BOUNDARY for adaptation. `startSession` is the only place a session
+      // begins or begins again, so it is the only place adaptive state is built. A null
+      // config — the production default — leaves adaptive behaviour off entirely.
+      const difficultyConfig = resolveDifficultyConfigForSessionFromEnv(sessionDefinition);
+      adaptiveStateRef.current = difficultyConfig
+        ? createAdaptiveDifficultyState(difficultyConfig)
+        : null;
       runnerStatesRef.current = {
         instructional: createInitialInstructionalLifecycle(),
         target: createInitialTargetLifecycle(),
@@ -427,6 +452,10 @@ export function OrchestratorCvSessionCore({
           setPatternState(transition.states.pattern);
           setActiveMotionPattern(transition.activeMotionPattern);
           activeMotionPatternRef.current = transition.activeMotionPattern;
+          // adaptiveStateRef is intentionally NOT reset here. Adaptation is session-scoped:
+          // a patient who has adapted through one block keeps that adaptation in the next.
+          // Resetting it alongside the block-scoped runner states would silently discard
+          // the session's adaptation at every block boundary.
           if (transition.fault) {
             applyRuntimeFault(transition.fault, orchestrator, now);
           }
@@ -438,6 +467,24 @@ export function OrchestratorCvSessionCore({
           (isDevMouseSimulationEnabled() ? devMouseRef.current : null);
 
         if (shouldDispatchBlockRunner(runtimeFaultRef.current)) {
+          // The attempt seam is supplied only while adaptive difficulty is enabled. When
+          // it is not, `targetAttempt` stays undefined and dispatch behaves exactly as it
+          // did before this stage — including the unconditional no-wrist skip.
+          const adaptiveState = adaptiveStateRef.current;
+          const targetAttempt: TargetAttemptTickConfig | undefined = adaptiveState
+            ? {
+                // The engine's current window, fed back through the seam CHANGE-004 built.
+                attemptTimeoutMs: adaptiveState.attemptTimeoutMs,
+                // Latch true, never assert false — see resolveAttemptCompensationObservation.
+                compensationObservedDuringAttempt: resolveAttemptCompensationObservation(
+                  poseSnap?.compensationFlagged,
+                ),
+                // levelDegrees is deliberately NOT supplied. It cannot move a target yet
+                // (target-generator places randomly), so feeding it would transport a value
+                // with no effect and make the loop look closed when it is not.
+              }
+            : undefined;
+
           const dispatch = dispatchOrchestratorCvBlock({
             snap,
             nowMs: now,
@@ -446,6 +493,7 @@ export function OrchestratorCvSessionCore({
             hitExitTransitionMs,
             states: runnerStatesRef.current,
             activeMotionPattern: activeMotionPatternRef.current,
+            ...(targetAttempt ? { targetAttempt } : {}),
           });
 
           if (dispatch.status === "fault") {
@@ -495,6 +543,18 @@ export function OrchestratorCvSessionCore({
                 setTargetHitAnnouncement(null);
                 hitFeedbackTimeoutRef.current = null;
               }, Math.max(hitExitTransitionMs, 480));
+            }
+            // ADDITIVE adaptive consumption. Deliberately placed after every existing
+            // handler above: the session-input path, the HUD and the burst feedback all
+            // run exactly as before, and this reads the same facts a second time rather
+            // than intercepting them. Nothing here reports to the orchestrator — there is
+            // no session-input event for an expired attempt, and this stage does not
+            // invent one. Runs only while adaptive difficulty is enabled.
+            if (adaptiveState) {
+              adaptiveStateRef.current = applyDispatchOutcomesToAdaptiveState(adaptiveState, {
+                targetContact: dispatch.targetContact,
+                targetAttemptTimeout: dispatch.targetAttemptTimeout,
+              }).state;
             }
           }
         }
