@@ -320,8 +320,23 @@ describe("target-block-runner — CHANGE-004 attempt output forwarding", () => {
     assert.equal(viaRunner.completionEvent, null, "an expired attempt is never also a hit");
     assert.equal(
       viaRunner.attemptStartedEvents.length,
-      1,
-      "the expired attempt's successor starts in the same tick — the runner keeps both facts",
+      0,
+      "CHANGE-008: a terminal tick carries its outcome alone; the successor starts later",
+    );
+
+    // The successor — and its attempt start — arrive on the following tick, forwarded by
+    // the runner just as unmodified as the terminal event was.
+    const successorInput = tickInput({
+      nowMs: T0 + FIXTURE_TIMEOUT_MS + 16,
+      blockElapsedSeconds: FIXTURE_TIMEOUT_MS / 1000 + 0.016,
+      attemptTimeoutMs: FIXTURE_TIMEOUT_MS,
+    });
+    const successor = TARGET_BLOCK_RUNNER.tick("active", viaRunner.state, successorInput);
+    assert.equal(successor.attemptStartedEvents.length, 1);
+    assert.equal(successor.attemptTimeoutEvent, null);
+    assert.deepEqual(
+      successor.attemptStartedEvents,
+      tickTargetLifecycleIfActive("active", direct.state, successorInput).attemptStartedEvents,
     );
   });
 
@@ -348,10 +363,17 @@ describe("target-block-runner — CHANGE-004 attempt output forwarding", () => {
     assert.equal(viaRunner.attemptTimeoutEvent, null);
     assert.equal(
       viaRunner.attemptStartedEvents.length,
-      1,
-      "a contacted target spawns its successor immediately, starting exactly one new attempt",
+      0,
+      "CHANGE-008: a contacted target's successor starts on a later tick, not this one",
     );
-    assert.notEqual(viaRunner.attemptStartedEvents[0]?.targetId, target.id);
+
+    const successor = TARGET_BLOCK_RUNNER.tick(
+      "active",
+      viaRunner.state,
+      tickInput({ nowMs: T0 + 516, blockElapsedSeconds: 0.516, attemptTimeoutMs: FIXTURE_TIMEOUT_MS }),
+    );
+    assert.equal(successor.attemptStartedEvents.length, 1);
+    assert.notEqual(successor.attemptStartedEvents[0]?.targetId, target.id);
   });
 
   for (const sessionState of ["paused", "safetyHold", "completed"] as const) {

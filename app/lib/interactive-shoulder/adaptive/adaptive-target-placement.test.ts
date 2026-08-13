@@ -405,7 +405,17 @@ describe("CHANGE-007 lifecycle seam", () => {
       }),
     );
     assert.ok(hit.hitEvent);
-    const successor = hit.state.currentTarget;
+    // CHANGE-008: the successor is built on the following tick, from that tick's placement.
+    assert.equal(hit.state.currentTarget, null);
+    const spawned = tickTargetLifecycle(
+      hit.state,
+      lifecycleInput({
+        nowMs: T0 + 516,
+        preferredTargetPosition: highPlacement.position,
+        levelDegrees: highPlacement.levelDegrees,
+      }),
+    );
+    const successor = spawned.state.currentTarget;
     assert.ok(successor);
     assert.equal(successor.x, highPlacement.position.x);
     assert.equal(successor.y, highPlacement.position.y);
@@ -528,18 +538,23 @@ describe("CHANGE-007 false auto-hit prevention", () => {
     assert.equal(spawned.hitEvent, null);
     assert.equal(spawned.state.wristInside, false);
 
-    // The patient reaches in. Real entry → real hit → successor spawns in the SAME tick,
-    // at the same adaptive placement, i.e. directly under the wrist that just arrived.
+    // The patient reaches in. Real entry → real hit. Since CHANGE-008 the successor is
+    // built on the NEXT tick, still at the same adaptive placement — i.e. directly under
+    // the wrist that just arrived and has not moved.
     const earned = tickTargetLifecycle(spawned.state, input(T0 + 100, { ...placed.position }));
     assert.ok(earned.hitEvent, "reaching the first target is a real hit");
     assert.equal(earned.state.interaction.targetsReached, 1);
-    assert.equal(earned.state.currentTarget?.x, placed.position.x);
-    assert.equal(earned.state.wristInside, true, "the successor starts with the wrist inside");
+    assert.equal(earned.state.currentTarget, null);
+
+    const successor = tickTargetLifecycle(earned.state, input(T0 + 116, { ...placed.position }));
+    assert.equal(successor.hitEvent, null, "the successor must not pay out on arrival");
+    assert.equal(successor.state.currentTarget?.x, placed.position.x);
+    assert.equal(successor.state.wristInside, true, "the successor starts with the wrist inside");
 
     // Holding still must not chain a second, unearned hit on any later frame.
-    let state = earned.state;
+    let state = successor.state;
     for (let i = 1; i <= 10; i += 1) {
-      const result = tickTargetLifecycle(state, input(T0 + 100 + i * 16, { ...placed.position }));
+      const result = tickTargetLifecycle(state, input(T0 + 116 + i * 16, { ...placed.position }));
       assert.equal(result.hitEvent, null, `frame ${i} after the successor must not hit`);
       state = result.state;
     }
@@ -576,9 +591,10 @@ describe("CHANGE-007 false auto-hit prevention", () => {
     );
     assert.ok(expired.attemptTimeoutEvent, "the first attempt must expire");
     assert.equal(expired.hitEvent, null);
-    assert.equal(expired.state.currentTarget?.x, placed.position.x);
+    assert.equal(expired.state.currentTarget, null);
 
-    const nextFrame = tickTargetLifecycle(
+    // CHANGE-008: the successor is built on the following tick, landing under the wrist.
+    const successorFrame = tickTargetLifecycle(
       expired.state,
       lifecycleInput({
         nowMs: T0 + 1_216,
@@ -588,7 +604,20 @@ describe("CHANGE-007 false auto-hit prevention", () => {
         preferredTargetPosition: placed.position,
       }),
     );
-    assert.equal(nextFrame.hitEvent, null, "the expired attempt's successor is not a free hit");
+    assert.equal(successorFrame.state.currentTarget?.x, placed.position.x);
+    assert.equal(successorFrame.hitEvent, null, "the expired attempt's successor is not a free hit");
+
+    const nextFrame = tickTargetLifecycle(
+      successorFrame.state,
+      lifecycleInput({
+        nowMs: T0 + 1_232,
+        wrist,
+        blockElapsedSeconds: 1.232,
+        attemptTimeoutMs: 1_000,
+        preferredTargetPosition: placed.position,
+      }),
+    );
+    assert.equal(nextFrame.hitEvent, null, "and not on the frame after it either");
     assert.equal(nextFrame.state.interaction.targetsReached, 0);
   });
 
@@ -793,19 +822,23 @@ describe("CHANGE-007 dispatch integration", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 6. Known limitation — characterised, not masked
+// 6. Successor placement across the terminal boundary
 // ---------------------------------------------------------------------------
 
-describe("CHANGE-007 known immediate-successor lag", () => {
-  it("34. a same-tick successor uses the level in force BEFORE this tick's outcome", () => {
-    // CHARACTERISATION, NOT AN ENDORSEMENT. The component resolves placement once per tick
-    // and applies adaptive outcomes AFTER dispatch returns, so a terminal event that spawns
-    // its successor in the same tick (timeout, or a hit with hitExitTransitionMs === 0)
-    // necessarily places that successor at the pre-change level. The corrected level takes
-    // effect on the target after it. Fixing the ordering is CHANGE-008; this test exists so
-    // the lag can never disappear silently or be "fixed" by accident without being noticed.
-    const oldLevel = expectPlaced(placementAt(40));
-    const newLevel = expectPlaced(placementAt(70));
+describe("CHANGE-007 successor placement across a terminal event", () => {
+  // These two tests replace CHANGE-007's characterisation of the one-target lag. That lag
+  // was a consequence of the successor being built in the SAME tick as its predecessor's
+  // outcome, before the caller could adapt. CHANGE-008 removed the same-tick spawn, so the
+  // lag no longer exists on any path; what is asserted here is the placement half of that
+  // guarantee — the successor is built from the placement supplied to the tick that builds
+  // it, never from the one supplied to the tick that ended the previous attempt. The
+  // adaptive half is proved end to end in `immediate-successor-feedback.test.ts`.
+  const OLD = () => expectPlaced(placementAt(40));
+  const NEW = () => expectPlaced(placementAt(70));
+
+  it("34. after a timeout, the successor takes the placement of the tick that builds it", () => {
+    const oldLevel = OLD();
+    const newLevel = NEW();
 
     const spawned = tickTargetLifecycle(
       createInitialTargetLifecycle(),
@@ -820,8 +853,7 @@ describe("CHANGE-007 known immediate-successor lag", () => {
     );
     assert.equal(spawned.state.currentTarget?.levelDegrees, 40);
 
-    // The tick that expires attempt 1 still carries the OLD placement — the adaptive state
-    // has not been updated yet at the moment dispatch runs.
+    // The expiring tick still carries the OLD placement — and builds nothing with it.
     const expired = tickTargetLifecycle(
       spawned.state,
       lifecycleInput({
@@ -834,75 +866,68 @@ describe("CHANGE-007 known immediate-successor lag", () => {
       }),
     );
     assert.ok(expired.attemptTimeoutEvent);
-    assert.equal(
-      expired.state.currentTarget?.levelDegrees,
-      40,
-      "documented lag: the immediate successor keeps the pre-outcome level",
-    );
+    assert.equal(expired.state.currentTarget, null);
+    assert.equal(expired.attemptStartedEvents.length, 0);
 
-    // Only the FOLLOWING spawn sees the new level — the lag is exactly one target.
-    const afterHit = tickTargetLifecycle(
+    // The next tick carries the NEW placement, and that is what the successor gets.
+    const successor = tickTargetLifecycle(
       expired.state,
       lifecycleInput({
-        nowMs: T0 + 1_300,
-        wrist: { ...(expired.state.currentTarget as NormalizedPoint) },
-        blockElapsedSeconds: 1.3,
+        nowMs: T0 + 1_216,
+        wrist: { x: 0.2, y: 0.2 },
+        blockElapsedSeconds: 1.216,
         attemptTimeoutMs: 1_000,
         preferredTargetPosition: newLevel.position,
         levelDegrees: newLevel.levelDegrees,
       }),
     );
-    assert.ok(afterHit.hitEvent, "the lagged successor is reached normally");
-    assert.equal(afterHit.hitEvent.levelDegrees, 40, "it was still the old level's target");
-    assert.equal(
-      afterHit.state.currentTarget?.levelDegrees,
-      70,
-      "the target after the lagged one carries the new level",
-    );
-    assert.equal(afterHit.state.currentTarget?.x, newLevel.position.x);
+    assert.equal(successor.state.currentTarget?.levelDegrees, 70);
+    assert.equal(successor.state.currentTarget?.x, newLevel.position.x);
+    assert.equal(successor.state.currentTarget?.y, newLevel.position.y);
   });
 
-  it("35. the normal (non-reduced-motion) hit path has NO lag", () => {
-    // With an exit transition the successor spawns on a LATER tick, by which time the
-    // component has already applied the outcome and resolved placement from the new level.
-    const oldLevel = expectPlaced(placementAt(40));
-    const newLevel = expectPlaced(placementAt(70));
+  it("35. the same holds on the hit path, with and without an exit transition", () => {
+    for (const hitExitTransitionMs of [0, 480]) {
+      const oldLevel = OLD();
+      const newLevel = NEW();
 
-    const spawned = tickTargetLifecycle(
-      createInitialTargetLifecycle(),
-      lifecycleInput({
-        nowMs: T0,
-        wrist: { x: 0.2, y: 0.2 },
-        hitExitTransitionMs: 480,
-        preferredTargetPosition: oldLevel.position,
-        levelDegrees: oldLevel.levelDegrees,
-      }),
-    );
-    const hit = tickTargetLifecycle(
-      spawned.state,
-      lifecycleInput({
-        nowMs: T0 + 100,
-        wrist: { ...oldLevel.position },
-        hitExitTransitionMs: 480,
-        preferredTargetPosition: oldLevel.position,
-        levelDegrees: oldLevel.levelDegrees,
-      }),
-    );
-    assert.ok(hit.hitEvent);
-    assert.equal(hit.state.currentTarget, null, "the spawn lock holds the successor back");
+      const spawned = tickTargetLifecycle(
+        createInitialTargetLifecycle(),
+        lifecycleInput({
+          nowMs: T0,
+          wrist: { x: 0.2, y: 0.2 },
+          hitExitTransitionMs,
+          preferredTargetPosition: oldLevel.position,
+          levelDegrees: oldLevel.levelDegrees,
+        }),
+      );
+      const hit = tickTargetLifecycle(
+        spawned.state,
+        lifecycleInput({
+          nowMs: T0 + 100,
+          wrist: { ...oldLevel.position },
+          hitExitTransitionMs,
+          preferredTargetPosition: oldLevel.position,
+          levelDegrees: oldLevel.levelDegrees,
+        }),
+      );
+      assert.ok(hit.hitEvent, `hit expected at transition ${hitExitTransitionMs}`);
+      assert.equal(hit.state.currentTarget, null);
 
-    // A later tick, after the outcome has moved the level, spawns at the NEW placement.
-    const afterLock = tickTargetLifecycle(
-      hit.state,
-      lifecycleInput({
-        nowMs: T0 + 700,
-        wrist: { x: 0.2, y: 0.2 },
-        hitExitTransitionMs: 480,
-        preferredTargetPosition: newLevel.position,
-        levelDegrees: newLevel.levelDegrees,
-      }),
-    );
-    assert.equal(afterLock.state.currentTarget?.levelDegrees, 70);
-    assert.equal(afterLock.state.currentTarget?.x, newLevel.position.x);
+      // Past any exit transition, the first tick that builds the successor decides its
+      // placement — and it carries the new level in both motion modes.
+      const successor = tickTargetLifecycle(
+        hit.state,
+        lifecycleInput({
+          nowMs: T0 + 700,
+          wrist: { x: 0.2, y: 0.2 },
+          hitExitTransitionMs,
+          preferredTargetPosition: newLevel.position,
+          levelDegrees: newLevel.levelDegrees,
+        }),
+      );
+      assert.equal(successor.state.currentTarget?.levelDegrees, 70);
+      assert.equal(successor.state.currentTarget?.x, newLevel.position.x);
+    }
   });
 });

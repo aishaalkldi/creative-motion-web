@@ -18,13 +18,41 @@ import {
 } from "./types";
 
 export type TargetLifecycleState = {
+  /**
+   * The active target, or null when no attempt is running.
+   *
+   * `null` is also the structural exactly-once guarantee (CHANGE-008): every terminal path
+   * sets it to null and returns, and both terminal paths require a non-null target to fire.
+   * A target that has produced its hit or its expiry is therefore unreachable — it cannot
+   * produce a second one no matter how many ticks follow.
+   */
   currentTarget: TherapeuticTarget | null;
-  /** Target currently playing an exit animation — hit registration is locked. */
+  /** Target currently playing an exit animation — presentation only, never contactable. */
   exitingTarget: TherapeuticTarget | null;
-  /** Blocks spawn and additional hits until the exit transition completes. */
+  /**
+   * Presentation hold: withholds the next target until a hit's exit animation finishes.
+   *
+   * PRESENTATION ONLY (CHANGE-008). It EXTENDS the wait before a successor appears; it does
+   * not create it. A successor is always built on a tick after the one that ended its
+   * predecessor, whether or not a hold was set — see the successor phase in
+   * `tickTargetLifecycle`.
+   */
   spawnLockedUntilMs: number | null;
   wristInside: boolean;
   targetHit: boolean;
+  /**
+   * Position of the most recently retired target, or null before the first one ends.
+   *
+   * PLACEMENT REFERENCE ONLY — not a second target and not a second owner. It exists
+   * because the random generator's `MIN_TARGET_SEPARATION` guard needs somewhere to read
+   * "where the last target was" from, and since CHANGE-008 no target is active at the
+   * moment a successor is built. A position rather than a `TherapeuticTarget` so it cannot
+   * be mistaken for something contactable, renderable, or attributable to an attempt.
+   *
+   * Deliberately NOT `exitingTarget`: that is a presentation slot, set only when a hit
+   * animates out, and an expired attempt must produce no patient-facing feedback.
+   */
+  retiredTargetPosition: NormalizedPoint | null;
   sequence: number;
   interaction: ShoulderInteractionMetrics;
   /**
@@ -42,6 +70,7 @@ export function createInitialTargetLifecycle(): TargetLifecycleState {
     spawnLockedUntilMs: null,
     wristInside: false,
     targetHit: false,
+    retiredTargetPosition: null,
     sequence: 0,
     interaction: createEmptyShoulderInteractionMetrics(),
     attemptCompensationObserved: null,
@@ -109,11 +138,14 @@ export type TargetLifecycleTickResult = {
   state: TargetLifecycleState;
   hitEvent: TargetHitEvent | null;
   /**
-   * Attempt starts produced by this tick, in spawn order — exactly one per spawned
-   * target, and empty when nothing spawned. It is a list rather than a single slot
-   * because one tick legitimately spawns twice (a target that spawns and is contacted
-   * on the same tick immediately spawns its successor); a single slot would silently
-   * drop an attempt identity.
+   * Attempt starts produced by this tick — exactly one per spawned target, and empty when
+   * nothing spawned.
+   *
+   * Since CHANGE-008 a tick spawns at most once: a terminal path clears the target and
+   * returns, so the successor is built on a later tick. The list shape is deliberately
+   * KEPT rather than narrowed to a single slot, because a single slot is the shape that
+   * silently drops an attempt identity if a second spawn ever becomes reachable again. The
+   * cost of the wider type is one `[]`; the cost of the narrower one is a lost attempt.
    */
   attemptStartedEvents: TargetAttemptStartEvent[];
   /** Emitted at most once per target, and never together with a `hitEvent` for it. */
@@ -178,7 +210,14 @@ function spawnNextTarget(
     side: input.side,
     nowMs: input.nowMs,
     sequence: nextSequence,
-    previousTarget: state.currentTarget,
+    // The position the RANDOM sampler must keep its distance from. It is read from
+    // `retiredTargetPosition` rather than from `currentTarget`, which is null on every
+    // spawn: a target is only ever built when none is active. Before CHANGE-008 this read
+    // `currentTarget` and so silently passed null on the normal-motion hit path, where the
+    // contacted target had already been cleared for its exit animation — the separation
+    // guard was live on two paths out of three. Routing it through the retired position
+    // makes it live on all of them.
+    previousTarget: state.retiredTargetPosition,
     random: input.random,
     // Forwarded verbatim. The generator decides what to do with it — including ignoring it
     // when it is absent or unusable, which is the legacy path.
@@ -258,17 +297,33 @@ export function tickTargetLifecycle(
     return spawned.state;
   };
 
-  if (next.spawnLockedUntilMs !== null) {
-    if (input.nowMs < next.spawnLockedUntilMs) {
-      // Presentation exit transition. No target is active, so no attempt is running and
-      // nothing here can expire.
-      return {
-        state: { ...next, wristInside: false },
-        hitEvent: null,
-        attemptStartedEvents,
-        attemptTimeoutEvent: null,
-      };
-    }
+  // SUCCESSOR PHASE (CHANGE-008).
+  //
+  // Every terminal path below clears `currentTarget` and returns, so a successor is never
+  // built in the same tick as the outcome that ended its predecessor. It is built here, on
+  // a LATER tick, from that tick's own inputs — which is what lets the caller apply the
+  // attempt's adaptive outcome in between and have the successor reflect it.
+  //
+  // This one branch now serves both spawn causes — the first target of a block and the
+  // successor of a terminated attempt — because after CHANGE-008 they are the same
+  // situation: no target is active, and nothing is holding one back. The previous code
+  // needed two branches only because a hit with an exit transition deferred its successor
+  // while a hit without one, and every timeout, spawned inline.
+  //
+  // `spawnLockedUntilMs` is now purely a PRESENTATION hold (the hit exit animation). It
+  // extends the wait; it is no longer what creates it.
+  if (next.spawnLockedUntilMs !== null && input.nowMs < next.spawnLockedUntilMs) {
+    // Exit transition still playing. No target is active, so no attempt is running and
+    // nothing here can expire.
+    return {
+      state: { ...next, wristInside: false },
+      hitEvent: null,
+      attemptStartedEvents,
+      attemptTimeoutEvent: null,
+    };
+  }
+
+  if (!next.currentTarget) {
     next = spawn({
       ...next,
       exitingTarget: null,
@@ -276,10 +331,6 @@ export function tickTargetLifecycle(
       wristInside: false,
       targetHit: false,
     });
-  }
-
-  if (!next.currentTarget && !next.spawnLockedUntilMs) {
-    next = spawn(next);
   }
 
   // Sticky for the current attempt only; `spawnNextTarget` clears it for the next one.
@@ -318,23 +369,25 @@ export function tickTargetLifecycle(
           reactionTimesMs: [...next.interaction.reactionTimesMs, reactionTimeMs],
         },
       };
-      if (exitTransitionMs > 0) {
-        next = {
-          ...next,
-          currentTarget: null,
-          exitingTarget: hitTarget,
-          spawnLockedUntilMs: input.nowMs + exitTransitionMs,
-          wristInside: false,
-          targetHit: false,
-        };
-        return { state: next, hitEvent, attemptStartedEvents, attemptTimeoutEvent: null };
-      }
-      next = spawn(next);
-      // The successor's wrist-entry state comes from `spawnNextTarget` and is returned as
-      // it stands. Overwriting it with `false` here — which was a redundant no-op while
-      // spawns always started outside — would re-arm exactly the false immediate hit the
-      // seeding exists to prevent, and would do so on the reduced-motion path specifically,
-      // since that is where `hitExitTransitionMs === 0` sends the flow.
+      // TERMINAL: the attempt is over and its target is retired here, in one shape for both
+      // motion preferences. `hitExitTransitionMs` selects only the PRESENTATION effects —
+      // whether an exiting orb animates out and for how long the next target is withheld.
+      // It no longer decides whether the successor is built now or later: it is always
+      // later. That is what makes reduced motion an animation preference rather than a
+      // different adaptive timeline.
+      next = {
+        ...next,
+        currentTarget: null,
+        exitingTarget: exitTransitionMs > 0 ? hitTarget : null,
+        spawnLockedUntilMs: exitTransitionMs > 0 ? input.nowMs + exitTransitionMs : null,
+        retiredTargetPosition: { x: hitTarget.x, y: hitTarget.y },
+        wristInside: false,
+        targetHit: false,
+        // Cleared with the target it described. `spawnNextTarget` clears it too, but that
+        // now happens a tick later, and leaving a finished attempt's observation sitting in
+        // the state in between would make it readable when it no longer means anything.
+        attemptCompensationObserved: null,
+      };
       return { state: next, hitEvent, attemptStartedEvents, attemptTimeoutEvent: null };
     }
     next = { ...next, wristInside: isInside };
@@ -383,14 +436,26 @@ export function tickTargetLifecycle(
           : {}),
         ...(compensated !== null ? { compensatedDuringAttempt: compensated } : {}),
       };
-      // The expired attempt is terminal: its target is replaced here, exactly as a hit
-      // with no exit transition replaces its own. Nothing holds a reference that could
-      // expire a second time, and the successor spawns with a fresh attempt baseline.
-      // No exit transition, no spawn lock and no exiting target are used — those are hit
-      // presentation effects, and an expired attempt produces no patient-facing feedback.
-      next = spawn(next);
-      // Seeded wrist-entry state is preserved here for the same reason as on the hit path
-      // above: an expired attempt's successor can land under a wrist that never left.
+      // TERMINAL: the expired attempt's target is retired here and its successor is built
+      // on a later tick, exactly as on the hit path above — so an incomplete attempt and a
+      // successful one hand the caller the same opportunity to adapt before the patient is
+      // shown what to reach for next. For a struggling patient that opportunity is the
+      // whole point: the easier level and the longer window apply to the very next target,
+      // not the one after it.
+      //
+      // No exiting target and no spawn lock: those are hit presentation effects, and an
+      // expired attempt produces no patient-facing feedback. The successor therefore
+      // appears on the next tick rather than after an animation.
+      next = {
+        ...next,
+        currentTarget: null,
+        exitingTarget: null,
+        spawnLockedUntilMs: null,
+        retiredTargetPosition: { x: expiringTarget.x, y: expiringTarget.y },
+        wristInside: false,
+        targetHit: false,
+        attemptCompensationObserved: null,
+      };
       return {
         state: next,
         hitEvent: null,

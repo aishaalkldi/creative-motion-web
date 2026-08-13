@@ -279,25 +279,52 @@ describe("adaptive attempt runtime — real orchestrator feedback edge", () => {
     assert.equal(frame.adaptive.struggleStreak, 1, "the real timeout moved adaptive state");
   });
 
+  /**
+   * One full attempt cycle at whatever window the engine currently grants: a frame that
+   * spawns the target, then a frame exactly one window later that expires it.
+   *
+   * Those are two DISTINCT frames since CHANGE-008 — a terminal frame retires its target
+   * and stops, and the successor is built by the following frame, after the caller has
+   * applied the outcome. Returning the expiry frame's time lets the next cycle start
+   * strictly after it.
+   */
+  function runExpiringAttempt(
+    orchestrator: SessionOrchestrator,
+    states: ActiveBlockRunnerStates,
+    adaptive: AdaptiveDifficultyState,
+    spawnAtMs: number,
+  ) {
+    const spawnFrame = runFrame(orchestrator, states, adaptive, spawnAtMs);
+    assert.ok(spawnFrame.states.target.currentTarget, "a cycle must begin with a spawned target");
+    const expireAtMs = spawnAtMs + spawnFrame.adaptive.attemptTimeoutMs;
+    const expiryFrame = runFrame(
+      orchestrator,
+      spawnFrame.states,
+      spawnFrame.adaptive,
+      expireAtMs,
+    );
+    assert.ok(
+      expiryFrame.dispatched.status === "dispatched" && expiryFrame.dispatched.targetAttemptTimeout,
+      "a cycle must end with a real expiry",
+    );
+    return { ...expiryFrame, expiredAtMs: expireAtMs };
+  }
+
   it("12. THE FEEDBACK EDGE: a changed attemptTimeoutMs is used by the next attempt", () => {
     const orchestrator = startedOrchestrator(T0);
     let states = emptyStates();
     let adaptive = freshState();
-    // The time the most recent frame ran. The target currently in play was spawned by
-    // that frame, so its attempt baseline is that frame's block-elapsed time — probes
-    // below must be measured from here, not from a separately advanced cursor.
-    let lastFrameMs = T0;
+    let frameMs = T0;
 
     assert.equal(adaptive.attemptTimeoutMs, CONFIG.normalAttemptTimeoutMs);
 
     // Drive expiries until the engine reaches the floor and grants the extended window.
     // Fixture path: 2 expiries decrease 50 -> 40 (the floor), 2 more grant extended time.
-    for (let i = 0; i < 5 && adaptive.attemptTimeoutMs === CONFIG.normalAttemptTimeoutMs; i += 1) {
-      const frameMs = T0 + i * CONFIG.normalAttemptTimeoutMs;
-      const frame = runFrame(orchestrator, states, adaptive, frameMs);
-      states = frame.states;
-      adaptive = frame.adaptive;
-      lastFrameMs = frameMs;
+    for (let i = 0; i < 6 && adaptive.attemptTimeoutMs === CONFIG.normalAttemptTimeoutMs; i += 1) {
+      const cycle = runExpiringAttempt(orchestrator, states, adaptive, frameMs);
+      states = cycle.states;
+      adaptive = cycle.adaptive;
+      frameMs = cycle.expiredAtMs + 16;
     }
 
     assert.equal(
@@ -310,14 +337,27 @@ describe("adaptive attempt runtime — real orchestrator feedback edge", () => {
       CONFIG.extendedAttemptTimeoutMs,
       "at the floor the engine granted the extended attempt window",
     );
+    assert.equal(
+      states.target.currentTarget,
+      null,
+      "CHANGE-008: the expiring frame left no successor behind for the old window to own",
+    );
 
-    // The proof: the NEXT attempt must actually be measured against the extended window.
+    // The successor is built on the NEXT frame — the first frame that runs with the
+    // extended window already in force.
+    const spawnFrame = runFrame(orchestrator, states, adaptive, frameMs);
+    states = spawnFrame.states;
+    adaptive = spawnFrame.adaptive;
+    assert.ok(states.target.currentTarget, "the successor spawns under the new window");
+    const baselineMs = frameMs;
+
+    // The proof: that attempt must actually be measured against the extended window.
     // At exactly the OLD (normal) window the attempt must NOT yet expire.
     const before = runFrame(
       orchestrator,
       states,
       adaptive,
-      lastFrameMs + CONFIG.normalAttemptTimeoutMs,
+      baselineMs + CONFIG.normalAttemptTimeoutMs,
     );
     assert.equal(
       before.dispatched.status === "dispatched" && before.dispatched.targetAttemptTimeout,
@@ -330,7 +370,7 @@ describe("adaptive attempt runtime — real orchestrator feedback edge", () => {
       orchestrator,
       before.states,
       before.adaptive,
-      lastFrameMs + CONFIG.extendedAttemptTimeoutMs,
+      baselineMs + CONFIG.extendedAttemptTimeoutMs,
     );
     assert.ok(
       after.dispatched.status === "dispatched" && after.dispatched.targetAttemptTimeout,

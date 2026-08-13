@@ -217,6 +217,26 @@ describe("CHANGE-006 wiring — additive consumption", () => {
     );
   });
 
+  it("16. CHANGE-008 per-frame ordering: resolve placement → dispatch → apply outcome", () => {
+    // The lifecycle guarantees the successor is built on a tick AFTER the terminal one.
+    // That only delivers post-outcome adaptation if the component, within a frame, resolves
+    // placement from the adaptive state BEFORE dispatch and writes the outcome back AFTER
+    // it. Both halves are behavioural everywhere except here — the component itself has no
+    // test harness in this repository — so the frame order is pinned structurally.
+    const resolvePlacement = source.indexOf("resolveAdaptiveTargetPlacement({");
+    const dispatchCall = source.indexOf("const dispatch = dispatchOrchestratorCvBlock({");
+    const applyOutcome = source.indexOf("applyDispatchOutcomesToAdaptiveState(adaptiveState");
+    assert.ok(resolvePlacement >= 0, "placement must be resolved in the loop");
+    assert.ok(dispatchCall > resolvePlacement, "placement is resolved before dispatch runs");
+    assert.ok(applyOutcome > dispatchCall, "the outcome is applied after dispatch returns");
+
+    // And the resolved placement must come from the ref the outcome is written back to,
+    // not from a value captured earlier in the frame under another name.
+    const seam = seamBody();
+    assert.match(seam, /const adaptiveState = adaptiveStateRef\.current;/);
+    assert.match(seam, /adaptiveState,/, "the live state feeds the placement resolver");
+  });
+
   it("15. trackingLost is not wired — tracking loss stays a safety-hold concern", () => {
     assert.doesNotMatch(
       source,

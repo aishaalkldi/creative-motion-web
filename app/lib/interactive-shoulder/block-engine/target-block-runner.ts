@@ -36,12 +36,16 @@ import {
  * The shared runner result plus the two target-attempt outputs, forwarded verbatim from
  * `target-lifecycle`.
  *
- * They are additional fields rather than a reshaping of `completionEvent` because a hit
- * and an attempt start/timeout are different facts that can legitimately occur on the
- * same tick — a contacted target immediately spawns its successor, which starts a new
- * attempt. Both are REQUIRED (not optional) so that a runner physically cannot return a
- * result in which an attempt event was quietly omitted; "no events this tick" must be
- * spelled `[]` / `null`.
+ * They are additional fields rather than a reshaping of `completionEvent` because a hit,
+ * an attempt start and an attempt timeout are different facts about different attempts.
+ * Both are REQUIRED (not optional) so that a runner physically cannot return a result in
+ * which an attempt event was quietly omitted; "no events this tick" must be spelled
+ * `[]` / `null`.
+ *
+ * Since CHANGE-008 a terminal tick carries its outcome only — the successor, and therefore
+ * the next attempt start, arrives on a later tick, after the caller has had the chance to
+ * adapt. This wrapper neither knows nor enforces that; it is stated here because the field
+ * shapes were originally justified by the old same-tick behaviour.
  *
  * Exactly-once ownership stays in `target-lifecycle`. This wrapper never filters,
  * deduplicates, buffers or re-emits these values — see the module doc above.

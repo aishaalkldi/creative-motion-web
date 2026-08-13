@@ -56,6 +56,22 @@ function wristAt(state: TargetLifecycleState) {
   return { x: target.x, y: target.y };
 }
 
+/**
+ * CHANGE-008: a terminal tick retires its target and returns — the successor is built on a
+ * LATER tick, which is the window in which the caller applies the attempt's adaptive
+ * outcome. Tests that care about the successor therefore advance one tick rather than
+ * reading it off the terminal result.
+ */
+function advanceToSuccessor(
+  state: TargetLifecycleState,
+  overrides: Partial<TargetLifecycleTickInput> = {},
+) {
+  assert.equal(state.currentTarget, null, "expected a retired target awaiting its successor");
+  const result = tickTargetLifecycle(state, baseInput(overrides));
+  assert.ok(result.state.currentTarget, "expected the successor to spawn on this tick");
+  return result;
+}
+
 describe("target attempt lifecycle — attempt start", () => {
   it("1. spawning a target starts exactly one attempt", () => {
     const spawned = spawnedWithTiming(12);
@@ -89,10 +105,20 @@ describe("target attempt lifecycle — attempt start", () => {
         attemptTimeoutMs: TIMEOUT_MS,
       }),
     );
+    // The terminal tick carries the outcome only — no successor, no second attempt start.
+    assert.ok(hit.hitEvent);
+    assert.equal(hit.attemptStartedEvents.length, 0);
+    assert.equal(hit.state.currentTarget, null);
+
     // The successor attempt keeps identity aligned with the successor target.
-    assert.equal(hit.attemptStartedEvents.length, 1);
-    assert.equal(hit.attemptStartedEvents[0].sequence, 2);
-    assert.equal(hit.attemptStartedEvents[0].targetId, hit.state.currentTarget!.id);
+    const successor = advanceToSuccessor(hit.state, {
+      nowMs: T0 + 600,
+      blockElapsedSeconds: 12.6,
+      attemptTimeoutMs: TIMEOUT_MS,
+    });
+    assert.equal(successor.attemptStartedEvents.length, 1);
+    assert.equal(successor.attemptStartedEvents[0].sequence, 2);
+    assert.equal(successor.attemptStartedEvents[0].targetId, successor.state.currentTarget!.id);
   });
 
   it("carries the reach side supplied to the tick, without claiming an affected side", () => {
@@ -128,9 +154,11 @@ describe("target attempt lifecycle — legacy compatibility", () => {
     );
     assert.ok(hit.hitEvent);
     assert.equal(hit.attemptTimeoutEvent, null);
-    assert.notEqual(hit.state.currentTarget?.id, firstId);
-    assert.equal(hit.state.interaction.targetsShown, 2);
     assert.equal(hit.state.interaction.targetsReached, 1);
+
+    const successor = advanceToSuccessor(hit.state, { nowMs: T0 + 6_002_000 });
+    assert.notEqual(successor.state.currentTarget!.id, firstId);
+    assert.equal(successor.state.interaction.targetsShown, 2);
   });
 
   it("a configured timeout without block elapsed time cannot expire an attempt", () => {
@@ -269,23 +297,32 @@ describe("target attempt lifecycle — expiration", () => {
       spawned.state,
       baseInput({ nowMs: T0 + 5_000, blockElapsedSeconds: 15, attemptTimeoutMs: TIMEOUT_MS }),
     );
-    assert.ok(expired.state.currentTarget);
-    assert.notEqual(expired.state.currentTarget.id, expiredId);
-    assert.equal(expired.state.sequence, 2);
-    assert.equal(expired.state.interaction.targetsShown, 2);
-    assert.equal(expired.state.targetHit, false);
-    // The successor attempt is announced like any other.
-    assert.equal(expired.attemptStartedEvents.length, 1);
-    assert.equal(expired.attemptStartedEvents[0].targetId, expired.state.currentTarget.id);
-    // An expiry produces no hit presentation effects.
+    // CHANGE-008: the expiring tick retires the target and stops there, so the caller can
+    // adapt before the patient is shown the next one. No successor yet, no attempt start.
+    assert.equal(expired.state.currentTarget, null);
+    assert.equal(expired.attemptStartedEvents.length, 0);
+    // An expiry produces no hit presentation effects, so nothing withholds the successor.
     assert.equal(expired.state.exitingTarget, null);
     assert.equal(expired.state.spawnLockedUntilMs, null);
 
+    const successor = advanceToSuccessor(expired.state, {
+      nowMs: T0 + 5_100,
+      blockElapsedSeconds: 15.1,
+      attemptTimeoutMs: TIMEOUT_MS,
+    });
+    assert.notEqual(successor.state.currentTarget!.id, expiredId);
+    assert.equal(successor.state.sequence, 2);
+    assert.equal(successor.state.interaction.targetsShown, 2);
+    assert.equal(successor.state.targetHit, false);
+    // The successor attempt is announced like any other.
+    assert.equal(successor.attemptStartedEvents.length, 1);
+    assert.equal(successor.attemptStartedEvents[0].targetId, successor.state.currentTarget!.id);
+
     // The successor is contactable normally.
     const hit = tickTargetLifecycle(
-      expired.state,
+      successor.state,
       baseInput({
-        wrist: wristAt(expired.state),
+        wrist: wristAt(successor.state),
         nowMs: T0 + 5_500,
         blockElapsedSeconds: 15.5,
         attemptTimeoutMs: TIMEOUT_MS,
@@ -301,19 +338,28 @@ describe("target attempt lifecycle — expiration", () => {
       spawned.state,
       baseInput({ nowMs: T0 + 5_000, blockElapsedSeconds: 15, attemptTimeoutMs: TIMEOUT_MS }),
     );
-    assert.equal(expired.state.currentTarget!.spawnedAtBlockElapsedS, 15);
-    assert.equal(expired.attemptStartedEvents[0].startedAtBlockElapsedS, 15);
+    assert.ok(expired.attemptTimeoutEvent);
+
+    // The successor's baseline is taken when it actually spawns — the tick AFTER the one
+    // that expired its predecessor, not the expiring tick itself.
+    const successor = advanceToSuccessor(expired.state, {
+      nowMs: T0 + 5_000,
+      blockElapsedSeconds: 15,
+      attemptTimeoutMs: TIMEOUT_MS,
+    });
+    assert.equal(successor.state.currentTarget!.spawnedAtBlockElapsedS, 15);
+    assert.equal(successor.attemptStartedEvents[0].startedAtBlockElapsedS, 15);
 
     // Just under a full fresh window measured from 15s — must not expire.
     const early = tickTargetLifecycle(
-      expired.state,
+      successor.state,
       baseInput({ nowMs: T0 + 8_900, blockElapsedSeconds: 18.9, attemptTimeoutMs: TIMEOUT_MS }),
     );
     assert.equal(early.attemptTimeoutEvent, null);
 
     // A full fresh window later — expires on its own baseline, not the first target's.
     const second = tickTargetLifecycle(
-      expired.state,
+      successor.state,
       baseInput({ nowMs: T0 + 9_000, blockElapsedSeconds: 19, attemptTimeoutMs: TIMEOUT_MS }),
     );
     assert.ok(second.attemptTimeoutEvent);
@@ -638,7 +684,16 @@ describe("target attempt lifecycle — optional metadata", () => {
     );
     assert.ok(hit.hitEvent);
     assert.equal(hit.hitEvent.levelDegrees, 65);
-    assert.equal(hit.state.currentTarget!.levelDegrees, 80);
+
+    // The next level reaches the successor on the tick that actually builds it — which,
+    // since CHANGE-008, is the tick after the outcome rather than the same one.
+    const successor = advanceToSuccessor(hit.state, {
+      nowMs: T0 + 1_100,
+      blockElapsedSeconds: 11.1,
+      attemptTimeoutMs: TIMEOUT_MS,
+      levelDegrees: 80,
+    });
+    assert.equal(successor.state.currentTarget!.levelDegrees, 80);
   });
 
   it("16. an optional placement level survives spawn → timeout", () => {
@@ -657,7 +712,14 @@ describe("target attempt lifecycle — optional metadata", () => {
     );
     assert.ok(expired.attemptTimeoutEvent);
     assert.equal(expired.attemptTimeoutEvent.levelDegrees, 65);
-    assert.equal(expired.state.currentTarget!.levelDegrees, 45);
+
+    const successor = advanceToSuccessor(expired.state, {
+      nowMs: T0 + 5_100,
+      blockElapsedSeconds: 15.1,
+      attemptTimeoutMs: TIMEOUT_MS,
+      levelDegrees: 45,
+    });
+    assert.equal(successor.state.currentTarget!.levelDegrees, 45);
   });
 
   it("17. no placement level is invented when the caller supplies none", () => {
@@ -672,10 +734,17 @@ describe("target attempt lifecycle — optional metadata", () => {
     assert.ok(expired.attemptTimeoutEvent);
     assert.equal("levelDegrees" in expired.attemptTimeoutEvent, false);
 
+    const successor = advanceToSuccessor(expired.state, {
+      nowMs: T0 + 5_100,
+      blockElapsedSeconds: 15.1,
+      attemptTimeoutMs: TIMEOUT_MS,
+    });
+    assert.equal("levelDegrees" in successor.state.currentTarget!, false);
+
     const hit = tickTargetLifecycle(
-      expired.state,
+      successor.state,
       baseInput({
-        wrist: wristAt(expired.state),
+        wrist: wristAt(successor.state),
         nowMs: T0 + 5_500,
         blockElapsedSeconds: 15.5,
         attemptTimeoutMs: TIMEOUT_MS,
@@ -750,8 +819,14 @@ describe("target attempt lifecycle — optional metadata", () => {
     assert.equal(hit.state.interaction.targetsReached, 1);
 
     // Compensation also rides along an expired attempt, then resets.
+    const successor = advanceToSuccessor(hit.state, {
+      nowMs: T0 + 1_000,
+      blockElapsedSeconds: 11,
+      attemptTimeoutMs: TIMEOUT_MS,
+    });
+    assert.equal(successor.state.attemptCompensationObserved, null);
     const compensatedExpiry = tickTargetLifecycle(
-      hit.state,
+      successor.state,
       baseInput({
         nowMs: T0 + 5_000,
         blockElapsedSeconds: 15,
@@ -786,7 +861,17 @@ describe("target attempt lifecycle — purity", () => {
     assert.deepEqual(priorState, snapshot);
     assert.deepEqual({ ...input, random: undefined }, inputSnapshot);
     assert.notEqual(result.state, priorState);
-    assert.notEqual(result.state.interaction, priorState.interaction);
+
+    // A terminal tick changes no interaction counter, so it legitimately carries the same
+    // (never mutated) interaction object forward. The tick that DOES change one must
+    // replace it rather than write through the shared reference.
+    const successor = advanceToSuccessor(result.state, {
+      nowMs: T0 + 5_100,
+      blockElapsedSeconds: 15.1,
+      attemptTimeoutMs: TIMEOUT_MS,
+    });
+    assert.notEqual(successor.state.interaction, priorState.interaction);
+    assert.deepEqual(priorState, snapshot);
   });
 
   it("appends metrics by replacing arrays rather than mutating the prior ones", () => {

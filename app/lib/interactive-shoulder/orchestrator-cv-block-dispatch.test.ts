@@ -682,8 +682,7 @@ describe("orchestrator-cv-block-dispatch — CHANGE-004 null wrist behaviour", (
     const timeoutsPerTarget = new Map<string, number>();
     let contacts = 0;
 
-    // Keep ticking well past the first expiration. The first attempt must be reported
-    // once and never again, even though its successors keep the block running.
+    // Keep ticking well past the first expiration with the wrist unavailable throughout.
     for (let elapsedS = 4; elapsedS <= 20; elapsedS += 1) {
       const ticked = dispatchOrchestratorCvBlock({
         snap: snapAt(elapsedS),
@@ -695,6 +694,10 @@ describe("orchestrator-cv-block-dispatch — CHANGE-004 null wrist behaviour", (
         activeMotionPattern: null,
         targetAttempt: { attemptTimeoutMs: FIXTURE_TIMEOUT_MS },
       });
+      // Once the in-flight attempt has ended, no target is active, so the pre-existing
+      // "never present a target to an untracked patient" rule takes over and dispatch
+      // skips. That is the intended outcome — see the assertion below.
+      if (ticked.status === "skipped") continue;
       assert.equal(ticked.status, "dispatched");
       if (ticked.status !== "dispatched") return;
       if (ticked.targetContact) contacts += 1;
@@ -711,6 +714,31 @@ describe("orchestrator-cv-block-dispatch — CHANGE-004 null wrist behaviour", (
       assert.equal(count, 1, `target ${id} expired more than once`);
     }
     assert.equal(contacts, 0, "no contact can occur while the wrist is unavailable");
+
+    // SAFETY PROPERTY STRENGTHENED BY CHANGE-008. Only the attempt that was already in
+    // flight when tracking dropped can expire. Because a successor is now built on a later
+    // tick rather than inline, and because that later tick is skipped while the wrist is
+    // unavailable, a tracking gap can no longer manufacture a CHAIN of incomplete attempts
+    // out of a patient who is simply not visible.
+    assert.equal(timeoutsPerTarget.size, 1, "a tracking gap must not manufacture attempts");
+    assert.equal(states.target.currentTarget, null, "no target is presented while untracked");
+
+    // Tracking returns: the successor appears and the block continues normally.
+    const recovered = dispatchOrchestratorCvBlock({
+      snap: snapAt(21),
+      nowMs: T0 + 21_000,
+      wrist: { x: 0.02, y: 0.98 },
+      side: "right",
+      hitExitTransitionMs: 0,
+      states,
+      activeMotionPattern: null,
+      targetAttempt: { attemptTimeoutMs: FIXTURE_TIMEOUT_MS },
+    });
+    assert.equal(recovered.status, "dispatched");
+    if (recovered.status !== "dispatched") return;
+    assert.ok(recovered.states.target.currentTarget, "the successor spawns once tracking returns");
+    assert.equal(recovered.targetAttemptStarted.length, 1);
+    assert.equal(recovered.targetAttemptTimeout, null);
   });
 });
 
@@ -855,14 +883,21 @@ describe("orchestrator-cv-block-dispatch — CHANGE-004 gating and spawn-lock se
     let states = spawnedTargetStates({ attemptTimeoutMs: FIXTURE_TIMEOUT_MS }).states;
     const outcomes = new Map<string, string>();
 
-    // Tracked frames arrive every 7.5s of block time, further apart than the 4s fixture
-    // window, so successive attempts genuinely end both ways: some are contacted, and the
-    // ones spanning an untracked stretch expire. Both terminal paths are therefore
-    // exercised repeatedly against the same state machine.
+    // The wrist is tracked on every frame — it simply rests outside the safe target bounds
+    // except on contact frames, so it can never be inside a target by accident. Attempts
+    // therefore end both ways: every tenth frame is reached, and the ones in between run
+    // past the 4s fixture window and expire. Both terminal paths are exercised repeatedly
+    // against the same state machine.
+    //
+    // Tracking is kept present deliberately: since CHANGE-008 a successor is built on a
+    // later tick, and an untracked tick legitimately refuses to present a new target, so a
+    // null-wrist loop would stall rather than exercise successive attempts. That refusal is
+    // asserted directly in test 18/19.
     for (let step = 0; step < 40; step += 1) {
       const elapsedS = step * 0.75;
       const current = states.target.currentTarget;
-      const wrist = step % 10 === 0 && current ? { x: current.x, y: current.y } : null;
+      const wrist =
+        step % 10 === 0 && current ? { x: current.x, y: current.y } : { x: 0.02, y: 0.98 };
       const ticked = dispatchOrchestratorCvBlock({
         snap: snapAt(elapsedS),
         nowMs: T0 + elapsedS * 1000,

@@ -108,8 +108,20 @@ describe("interactive shoulder — target lifecycle", () => {
       random: deterministicRandom,
     });
     assert.ok(hit.hitEvent);
-    assert.notEqual(hit.state.currentTarget?.id, firstId);
-    assert.equal(hit.state.interaction.targetsShown, 2);
+    // CHANGE-008: the hit tick retires the contacted target; the successor is built on the
+    // next tick, which is the window the caller uses to adapt difficulty first.
+    assert.equal(hit.state.currentTarget, null);
+
+    const successor = tickTargetLifecycle(hit.state, {
+      wrist: null,
+      nowMs: T0 + 1_016,
+      side: "right",
+      bounds: DEFAULT_SAFE_TARGET_BOUNDS,
+      random: deterministicRandom,
+    });
+    assert.ok(successor.state.currentTarget);
+    assert.notEqual(successor.state.currentTarget.id, firstId);
+    assert.equal(successor.state.interaction.targetsShown, 2);
   });
 
   it("4. keeps generated targets inside configured safe bounds", () => {

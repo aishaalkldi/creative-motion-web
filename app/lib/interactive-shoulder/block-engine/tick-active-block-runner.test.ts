@@ -445,8 +445,28 @@ describe("tick-active-block-runner — CHANGE-004 target attempt propagation", (
     assert.equal(expired.targetAttemptTimeout?.activeElapsedMs, FIXTURE_TIMEOUT_MS);
     assert.equal(expired.targetAttemptTimeout?.attemptTimeoutMs, FIXTURE_TIMEOUT_MS);
     assert.equal(expired.targetContact, null, "an expired attempt is never reported as contact");
-    assert.equal(expired.targetAttemptStarted.length, 1);
-    assert.notEqual(expired.targetAttemptStarted[0].targetId, expiringTargetId);
+    // CHANGE-008: the terminal tick carries the outcome alone. Dispatch forwards whatever
+    // the lifecycle produced — which is now no attempt start until the successor is built.
+    assert.equal(expired.targetAttemptStarted.length, 0);
+    assert.equal(expired.states.target.currentTarget, null);
+
+    const successor = tickActiveBlockRunner({
+      sessionState: "active",
+      blockType: "movement-target",
+      nowMs: T0 + FIXTURE_TIMEOUT_MS + 16,
+      blockElapsedSeconds: FIXTURE_TIMEOUT_MS / 1000 + 0.016,
+      states: expired.states,
+      wrist: null,
+      side: "right",
+      bounds: DEFAULT_SAFE_TARGET_BOUNDS,
+      random: () => 0.5,
+      attemptTimeoutMs: FIXTURE_TIMEOUT_MS,
+    });
+    assert.equal(successor.status, "ticked");
+    if (successor.status !== "ticked") return;
+    assert.equal(successor.targetAttemptStarted.length, 1);
+    assert.notEqual(successor.targetAttemptStarted[0].targetId, expiringTargetId);
+    assert.equal(successor.targetAttemptTimeout, null);
   });
 
   it("target attempt fields stay inert when no attempt configuration is supplied", () => {
