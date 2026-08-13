@@ -9,8 +9,13 @@ import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
 import { GAIT_WALKING_OBSERVATION_EXERCISE_ID } from "@/app/lib/cv/gait-assessment-exercise-ids";
 import type { PatientRow } from "@/app/lib/validate-patient-ownership";
 
-export const DEMO_NOTICE =
-  "Backend unavailable — showing sample demo data for local preview. Connect Supabase or start FastAPI for live data.";
+export const DEMO_NOTICE_EN =
+  "Service unavailable — showing sample demo data for local preview. Connect Supabase or start FastAPI for live data.";
+
+export const DEMO_NOTICE_AR =
+  "الخدمة غير متاحة — يتم عرض بيانات تجريبية نموذجية للمعاينة المحلية. قم بتوصيل Supabase أو تشغيل FastAPI للحصول على بيانات حية.";
+
+export const DEMO_NOTICE = DEMO_NOTICE_EN;
 
 export const DEMO_PROVIDER_ID = "00000000-0000-4000-a000-000000000099";
 export const DEMO_PATIENT_SARAH_ID = "00000000-0000-4000-a000-000000000001";

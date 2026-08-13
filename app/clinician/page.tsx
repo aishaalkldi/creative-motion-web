@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { useGlobalLanguage } from "@/app/components/GlobalLanguageProvider";
 import type { ClinicianResultsResponse } from "@/app/api/clinician/results/route";
 import { PilotChecklistCard } from "@/app/components/clinician/PilotChecklistCard";
 import { DemoOfflineBanner } from "@/app/components/clinician/DemoOfflineBanner";
@@ -28,7 +29,7 @@ import type { PatientRow } from "@/app/lib/validate-patient-ownership";
 
 // ── Static data ────────────────────────────────────────────────────────────────
 
-const QUICK_ACTIONS = [
+const QUICK_ACTIONS_EN = [
   { title: "Add Patient",          description: "Create a new patient file",              href: "/clinician/patients/new" },
   { title: "Assessment Center",    description: "Plan and review movement assessments.",  href: "/clinician/assessments" },
   { title: "Start Assessment",     description: "In-clinic or remote patient link",       href: "/clinician/assessment/start" },
@@ -38,7 +39,17 @@ const QUICK_ACTIONS = [
   { title: "Generate Remote Link", description: "Send a remote assessment request",     href: "/clinician/request" },
 ];
 
-const WORKFLOW_STEPS = [
+const QUICK_ACTIONS_AR = [
+  { title: "إضافة مريض", description: "إنشاء ملف جديد للمريض", href: "/clinician/patients/new" },
+  { title: "مركز التقييم", description: "خطط ومراجعة تقييمات الحركة.", href: "/clinician/assessments" },
+  { title: "بدء التقييم", description: "رابط مريض داخل العيادة أو عن بُعد", href: "/clinician/assessment/start" },
+  { title: "مراجعة النتائج", description: "قائمة التقييمات والتقدم في إعادة التأهيل", href: "/clinician/results" },
+  { title: "إنشاء خطة", description: "تعيين برنامج إعادة تأهيل", href: "/clinician/plans/new" },
+  { title: "قائمة المرضى", description: "فتح أي ملف مريض", href: "/clinician/patients" },
+  { title: "إنشاء رابط عن بُعد", description: "إرسال طلب تقييم عن بُعد", href: "/clinician/request" },
+];
+
+const WORKFLOW_STEPS_EN = [
   { title: "1. Add Patient",          description: "Create a patient file from the clinician portal.",           href: "/clinician/patients/new" },
   { title: "2. Open Patient Profile", description: "Review details, send a remote link, or start in clinic.",   href: "/clinician/patients" },
   { title: "3. Start Assessment",     description: "Patient completes remotely or you document in clinic.",      href: "/clinician/assessment/start" },
@@ -46,6 +57,16 @@ const WORKFLOW_STEPS = [
   { title: "5. Assign Plan",          description: "Build and assign a structured rehabilitation plan.",         href: "/clinician/plans/new" },
   { title: "6. Patient Portal",       description: "Patient completes home sessions and reports effort/pain.",   href: "/clinician/patients" },
   { title: "7. Track Progress",       description: "Review adherence, flags, and the review queue.",             href: "/clinician/results" },
+];
+
+const WORKFLOW_STEPS_AR = [
+  { title: "1. إضافة مريض", description: "أنشئ ملف المريض من بوابة الطبيب.", href: "/clinician/patients/new" },
+  { title: "2. فتح ملف المريض", description: "راجع التفاصيل، أرسل رابطًا عن بُعد، أو ابدأ داخل العيادة.", href: "/clinician/patients" },
+  { title: "3. بدء التقييم", description: "يكتمل التقييم عن بُعد أو تُوثقه أنت داخل العيادة.", href: "/clinician/assessment/start" },
+  { title: "4. مراجعة التقرير", description: "افتح ملخص التقييم وملاحظات الطبيب.", href: "/clinician/results" },
+  { title: "5. تعيين الخطة", description: "أنشئ خطة إعادة تأهيل منظمة وخصصها.", href: "/clinician/plans/new" },
+  { title: "6. بوابة المريض", description: "يُكمل المريض جلساته المنزلية ويبلغ عن الجهد والألم.", href: "/clinician/patients" },
+  { title: "7. متابعة التقدم", description: "راجع الالتزام والإشارات وقائمة المتابعة.", href: "/clinician/results" },
 ];
 
 // ── Components ─────────────────────────────────────────────────────────────────
@@ -60,9 +81,12 @@ function priorityBadgeClass(priority: PilotAttentionPriority): string {
   return "border-[#1E2D42] bg-[#0B1220] text-white/45";
 }
 
-function PilotAttentionQueueRow({ item }: { item: PilotAttentionItem }) {
+function PilotAttentionQueueRow({ item, isArabic }: { item: PilotAttentionItem; isArabic: boolean }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3">
+    <div
+      dir={isArabic ? "rtl" : "ltr"}
+      className="flex flex-wrap items-center justify-between gap-3 rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3"
+    >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <p className="text-sm font-semibold text-white">{item.patientName}</p>
@@ -99,6 +123,10 @@ function buildPilotSummaryText(stats: DashboardStats | null, loading: boolean): 
 }
 
 export default function ClinicianDashboardPage() {
+  const { language } = useGlobalLanguage();
+  const isArabic = language === "ar";
+  const quickActions = isArabic ? QUICK_ACTIONS_AR : QUICK_ACTIONS_EN;
+  const workflowSteps = isArabic ? WORKFLOW_STEPS_AR : WORKFLOW_STEPS_EN;
   const [stats, setStats]   = useState<DashboardStats | null>(null);
   const [patients, setPatients] = useState<PatientRow[]>([]);
   const [results, setResults] = useState<ClinicianResultsResponse | null>(null);
@@ -109,7 +137,6 @@ export default function ClinicianDashboardPage() {
 
   useEffect(() => {
     let isMounted = true;
-    setLoading(true);
     Promise.all([
       getDashboardStats().catch(() => null),
       fetchPatientsList().catch(() => ({
@@ -157,25 +184,25 @@ export default function ClinicianDashboardPage() {
   }
 
   const metricCards = [
-    { title: "Total Patients", value: formatDashboardMetric(stats?.totalPatients, loading), subtitle: "Connected patient records", attention: false },
-    { title: "Active Cases", value: formatDashboardMetric(stats?.activeCases, loading), subtitle: "Patients with active rehabilitation plans", attention: false },
-    { title: "Pending Reviews", value: formatDashboardMetric(stats?.pendingReviews, loading), subtitle: "Unreviewed clinical review flags", attention: true },
-    { title: "Remote Assessments Pending", value: formatDashboardMetric(stats?.remoteAssessmentsPending, loading), subtitle: "Assessment links awaiting response", attention: false },
+    { title: isArabic ? "إجمالي المرضى" : "Total Patients", value: formatDashboardMetric(stats?.totalPatients, loading), subtitle: isArabic ? "سجلات المرضى المرتبطة" : "Connected patient records", attention: false },
+    { title: isArabic ? "الحالات النشطة" : "Active Cases", value: formatDashboardMetric(stats?.activeCases, loading), subtitle: isArabic ? "مرضى لديهم خطط إعادة تأهيل نشطة" : "Patients with active rehabilitation plans", attention: false },
+    { title: isArabic ? "المراجعات المعلقة" : "Pending Reviews", value: formatDashboardMetric(stats?.pendingReviews, loading), subtitle: isArabic ? "علامات مراجعة سريرية غير مراجعة" : "Unreviewed clinical review flags", attention: true },
+    { title: isArabic ? "التقييمات عن بُعد المعلقة" : "Remote Assessments Pending", value: formatDashboardMetric(stats?.remoteAssessmentsPending, loading), subtitle: isArabic ? "روابط تقييم بانتظار الرد" : "Assessment links awaiting response", attention: false },
   ];
 
   const operationalKpiCards = [
-    { title: "Sessions This Week", value: formatDashboardMetric(stats?.sessionsCompletedThisWeek, loading), subtitle: "Completed home/clinic sessions logged", attention: false },
-    { title: "Avg Plan Adherence", value: formatDashboardAdherencePct(stats?.averagePlanAdherencePct, loading), subtitle: "Mean completion across active plans", attention: false },
-    { title: "Assessments This Month", value: formatDashboardMetric(stats?.assessmentsSubmittedThisMonth, loading), subtitle: "Submitted assessment records", attention: false },
-    { title: "CV Captures This Month", value: formatDashboardMetric(stats?.cvCapturesThisMonth, loading), subtitle: "Camera-assisted session metrics saved", attention: false },
+    { title: isArabic ? "الجلسات هذا الأسبوع" : "Sessions This Week", value: formatDashboardMetric(stats?.sessionsCompletedThisWeek, loading), subtitle: isArabic ? "تم تسجيل جلسات منزلية/عيادية مكتملة" : "Completed home/clinic sessions logged", attention: false },
+    { title: isArabic ? "متوسط الالتزام بالخطة" : "Avg Plan Adherence", value: formatDashboardAdherencePct(stats?.averagePlanAdherencePct, loading), subtitle: isArabic ? "متوسط الإنجاز عبر الخطط النشطة" : "Mean completion across active plans", attention: false },
+    { title: isArabic ? "التقييمات هذا الشهر" : "Assessments This Month", value: formatDashboardMetric(stats?.assessmentsSubmittedThisMonth, loading), subtitle: isArabic ? "سجلات تقييم تم تقديمها" : "Submitted assessment records", attention: false },
+    { title: isArabic ? "لقطات CV هذا الشهر" : "CV Captures This Month", value: formatDashboardMetric(stats?.cvCapturesThisMonth, loading), subtitle: isArabic ? "تم حفظ مقاييس جلسات بمساعدة الكاميرا" : "Camera-assisted session metrics saved", attention: false },
   ];
 
   const snapshotRows = [
-    { label: "Patients created", value: formatDashboardSnapshotMetric(stats?.totalPatients, loading) },
-    { label: "Active rehabilitation plans", value: formatDashboardSnapshotMetric(stats?.activeCases, loading) },
-    { label: "Unreviewed review flags", value: formatDashboardSnapshotMetric(stats?.pendingReviews, loading) },
-    { label: "Pending assessment links", value: formatDashboardSnapshotMetric(stats?.remoteAssessmentsPending, loading) },
-    { label: "Generated", value: formatDashboardGeneratedAt(stats?.generatedAt, loading) },
+    { label: isArabic ? "المرضى الذين تم إنشاؤهم" : "Patients created", value: formatDashboardSnapshotMetric(stats?.totalPatients, loading) },
+    { label: isArabic ? "خطط إعادة التأهيل النشطة" : "Active rehabilitation plans", value: formatDashboardSnapshotMetric(stats?.activeCases, loading) },
+    { label: isArabic ? "علامات المراجعة غير المراجعة" : "Unreviewed review flags", value: formatDashboardSnapshotMetric(stats?.pendingReviews, loading) },
+    { label: isArabic ? "روابط التقييم المعلقة" : "Pending assessment links", value: formatDashboardSnapshotMetric(stats?.remoteAssessmentsPending, loading) },
+    { label: isArabic ? "تم الإنشاء" : "Generated", value: formatDashboardGeneratedAt(stats?.generatedAt, loading) },
   ];
 
   const statsUpdatedAt = formatDashboardStatsTime(stats?.generatedAt);
@@ -187,8 +214,9 @@ export default function ClinicianDashboardPage() {
         stats,
         results,
         limit: 8,
+        language: isArabic ? "ar" : "en",
       }),
-    [patients, stats, results],
+    [patients, stats, results, isArabic],
   );
 
   return (
@@ -198,26 +226,26 @@ export default function ClinicianDashboardPage() {
         {/* ── Header ── */}
         <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">Provider workspace</p>
-            <h1 className="mt-1.5 text-2xl font-bold text-white">Dashboard</h1>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">{isArabic ? "مساحة مقدم الخدمة" : "Provider workspace"}</p>
+            <h1 className="mt-1.5 text-2xl font-bold text-white">{isArabic ? "لوحة التحكم" : "Dashboard"}</h1>
             <p className="mt-1 text-sm text-white/40">
-              Manage patients, assessments, and rehabilitation plans from one place.
+              {isArabic ? "إدارة المرضى والتقييمات وخطط إعادة التأهيل من مكان واحد." : "Manage patients, assessments, and rehabilitation plans from one place."}
             </p>
             {!loading && statsUpdatedAt && (
               <p className="mt-1 text-[11px] text-white/25">
-                Data updated: {statsUpdatedAt}
+                {isArabic ? "تم تحديث البيانات:" : "Data updated:"} {statsUpdatedAt}
               </p>
             )}
           </div>
           <div className="flex items-center gap-2">
             <Link href="/clinician/patients/new" className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]">
-              + Add Patient
+              {isArabic ? "+ إضافة مريض" : "+ Add Patient"}
             </Link>
             <Link href="/clinician/results" className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-4 py-2.5 text-sm font-semibold text-white/70 transition hover:border-[#1D9E75]/25 hover:text-white">
-              Review Results
+              {isArabic ? "مراجعة النتائج" : "Review Results"}
             </Link>
             <Link href="/clinician/assessment/start" className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-4 py-2.5 text-sm font-semibold text-white/70 transition hover:border-[#1D9E75]/25 hover:text-white">
-              Start Assessment
+              {isArabic ? "بدء التقييم" : "Start Assessment"}
             </Link>
           </div>
         </div>
@@ -228,17 +256,17 @@ export default function ClinicianDashboardPage() {
 
         {/* ── Clinical pathway hint ── */}
         <div className="mb-6 rounded-[8px] border border-[#1E2D42] bg-[#0F1825] px-5 py-3.5 text-sm text-white/40">
-          <span className="font-semibold text-white/65">Clinical pathway:</span>{" "}
-          Patient →{" "}
-          <Link href="/clinician/assessment/start" className="text-[#5DCAA5] hover:text-[#1D9E75]">Assessment</Link>{" "}
+          <span className="font-semibold text-white/65">{isArabic ? "المسار السريري:" : "Clinical pathway:"}</span>{" "}
+          {isArabic ? "المريض" : "Patient"} →{" "}
+          <Link href="/clinician/assessment/start" className="text-[#5DCAA5] hover:text-[#1D9E75]">{isArabic ? "التقييم" : "Assessment"}</Link>{" "}
           →{" "}
-          <Link href="/clinician/results" className="text-[#5DCAA5] hover:text-[#1D9E75]">Results</Link>{" "}
+          <Link href="/clinician/results" className="text-[#5DCAA5] hover:text-[#1D9E75]">{isArabic ? "النتائج" : "Results"}</Link>{" "}
           →{" "}
-          <Link href="/clinician/plans/new" className="text-[#5DCAA5] hover:text-[#1D9E75]">Assign Plan</Link>{" "}
+          <Link href="/clinician/plans/new" className="text-[#5DCAA5] hover:text-[#1D9E75]">{isArabic ? "تعيين الخطة" : "Assign Plan"}</Link>{" "}
           →{" "}
-          <Link href="/clinician/patients" className="text-[#5DCAA5] hover:text-[#1D9E75]">Patient Portal</Link>{" "}
+          <Link href="/clinician/patients" className="text-[#5DCAA5] hover:text-[#1D9E75]">{isArabic ? "بوابة المريض" : "Patient Portal"}</Link>{" "}
           →{" "}
-          <Link href="/clinician/results" className="text-[#5DCAA5] hover:text-[#1D9E75]">Progress</Link>
+          <Link href="/clinician/results" className="text-[#5DCAA5] hover:text-[#1D9E75]">{isArabic ? "التقدم" : "Progress"}</Link>
         </div>
 
         {/* ── Metric cards ── */}
@@ -255,7 +283,7 @@ export default function ClinicianDashboardPage() {
 
         <section className="mb-6">
           <h2 className="mb-3 text-xs font-bold uppercase tracking-widest text-white/35">
-            Operational KPIs
+            {isArabic ? "مؤشرات الأداء التشغيلية" : "Operational KPIs"}
           </h2>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {operationalKpiCards.map((c) => (
@@ -267,24 +295,24 @@ export default function ClinicianDashboardPage() {
         <section className="mb-6 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-sm font-bold text-white">Movement assessments</h2>
+              <h2 className="text-sm font-bold text-white">{isArabic ? "تقييمات الحركة" : "Movement assessments"}</h2>
               <p className="mt-1 text-xs text-white/35">
-                Launch camera-assisted capture modules for demo-ready therapist review.
+                {isArabic ? "شغّل وحدات التقاط بمساعدة الكاميرا لمراجعة الطبيب الجاهزة للعرض." : "Launch camera-assisted capture modules for demo-ready therapist review."}
               </p>
             </div>
             <Link
               href="/clinician/assessments"
               className="shrink-0 rounded-[6px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3 py-1.5 text-[11px] font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
             >
-              Assessment Center
+              {isArabic ? "مركز التقييم" : "Assessment Center"}
             </Link>
           </div>
           <div className="mt-4 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
             {[
-              { href: "/clinician/assessments/gait", title: "Gait v1", detail: "Walking observation capture" },
-              { href: "/clinician/assessments/single-leg-stance", title: "Single Leg Stance", detail: "Hold-time capture" },
-              { href: "/clinician/assessments/functional-reach", title: "Functional Reach", detail: "Reach cycle capture" },
-              { href: "/clinician/assessments/timed-up-and-go", title: "Timed Up and Go", detail: "Manual task timer" },
+              { href: "/clinician/assessments/gait", title: isArabic ? "المشي v1" : "Gait v1", detail: isArabic ? "التقاط مراقبة المشي" : "Walking observation capture" },
+              { href: "/clinician/assessments/single-leg-stance", title: isArabic ? "التوازن على قدم واحدة" : "Single Leg Stance", detail: isArabic ? "التقاط زمن الثبات" : "Hold-time capture" },
+              { href: "/clinician/assessments/functional-reach", title: isArabic ? "المدى الوظيفي" : "Functional Reach", detail: isArabic ? "التقاط دورة الوصول" : "Reach cycle capture" },
+              { href: "/clinician/assessments/timed-up-and-go", title: isArabic ? "الوقوف والمشي" : "Timed Up and Go", detail: isArabic ? "مؤقت المهمة اليدوية" : "Manual task timer" },
             ].map((module) => (
               <Link
                 key={module.href}
@@ -302,9 +330,9 @@ export default function ClinicianDashboardPage() {
         <section className="mb-6 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h2 className="text-sm font-bold text-white">Pilot Evidence Snapshot</h2>
+              <h2 className="text-sm font-bold text-white">{isArabic ? "ملخص أدلة التجربة" : "Pilot Evidence Snapshot"}</h2>
               <p className="mt-1 text-xs text-white/35">
-                Compact summary for clinic demos and investor evidence.
+                {isArabic ? "ملخص موجز للعروض العيادية ودليل المستثمر." : "Compact summary for clinic demos and investor evidence."}
               </p>
             </div>
             <button
@@ -314,10 +342,10 @@ export default function ClinicianDashboardPage() {
               className="shrink-0 rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-1.5 text-[11px] font-semibold text-white/50 transition hover:border-[#1D9E75]/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
               {copyFeedback === "copied"
-                ? "Copied"
+                ? (isArabic ? "تم النسخ" : "Copied")
                 : copyFeedback === "unavailable"
-                  ? "Copy unavailable"
-                  : "Copy pilot summary"}
+                  ? (isArabic ? "النسخ غير متاح" : "Copy unavailable")
+                  : (isArabic ? "نسخ ملخص التجربة" : "Copy pilot summary")}
             </button>
           </div>
           <dl className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -344,11 +372,11 @@ export default function ClinicianDashboardPage() {
           {/* Quick actions + activity */}
           <div className="space-y-5">
             <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <h2 className="text-base font-bold text-white">Quick Actions</h2>
-              <p className="mt-1 text-sm text-white/35">Common tasks to keep your workflow moving.</p>
+              <h2 className="text-base font-bold text-white">{isArabic ? "إجراءات سريعة" : "Quick Actions"}</h2>
+              <p className="mt-1 text-sm text-white/35">{isArabic ? "مهام شائعة للحفاظ على سير العمل." : "Common tasks to keep your workflow moving."}</p>
 
               <div className="mt-4 grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
-                {QUICK_ACTIONS.map((action) => (
+                {quickActions.map((action) => (
                   <Link
                     key={action.title}
                     href={action.href}
@@ -364,16 +392,16 @@ export default function ClinicianDashboardPage() {
             <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                  <h2 className="text-base font-bold text-white">Pilot Attention Queue</h2>
+                  <h2 className="text-base font-bold text-white">{isArabic ? "قائمة متابعة التجربة" : "Pilot Attention Queue"}</h2>
                   <p className="mt-1 text-sm text-white/35">
-                    Actionable follow-up from assessments, plans, and session activity.
+                    {isArabic ? "متابعة قابلة للتنفيذ من التقييمات والخطط ونشاط الجلسات." : "Actionable follow-up from assessments, plans, and session activity."}
                   </p>
                 </div>
                 <Link
                   href="/clinician/results"
                   className="shrink-0 text-xs font-semibold text-[#5DCAA5] transition hover:text-[#1D9E75]"
                 >
-                  View full results queue →
+                  {isArabic ? "عرض قائمة النتائج كاملة →" : "View full results queue →"}
                 </Link>
               </div>
               <div className="mt-4 space-y-2">
@@ -383,13 +411,14 @@ export default function ClinicianDashboardPage() {
                   </p>
                 ) : attentionQueue.length === 0 ? (
                   <p className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3 text-sm leading-relaxed text-white/45">
-                    No active follow-up items. Continue monitoring patient activity and submitted assessments.
+                    {isArabic ? "لا توجد عناصر متابعة نشطة. تابع مراقبة نشاط المرضى والتقييمات المقدمة." : "No active follow-up items. Continue monitoring patient activity and submitted assessments."}
                   </p>
                 ) : (
                   attentionQueue.map((item) => (
                     <PilotAttentionQueueRow
                       key={`${item.patientId || "aggregate"}-${item.source}-${item.reason}`}
                       item={item}
+                      isArabic={isArabic}
                     />
                   ))
                 )}
@@ -399,18 +428,18 @@ export default function ClinicianDashboardPage() {
 
           {/* Workflow map */}
           <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-            <h2 className="text-base font-bold text-white">Workflow Map</h2>
-            <p className="mt-1 text-sm text-white/35">Recommended clinical sequence from intake to outcome.</p>
+            <h2 className="text-base font-bold text-white">{isArabic ? "خريطة سير العمل" : "Workflow Map"}</h2>
+            <p className="mt-1 text-sm text-white/35">{isArabic ? "التسلسل السريري الموصى به من الاستلام إلى النتيجة." : "Recommended clinical sequence from intake to outcome."}</p>
 
             <div className="mt-4 space-y-2">
-              {WORKFLOW_STEPS.map((step, i) => (
+              {workflowSteps.map((step, i) => (
                 <div key={step.title} className="flex gap-3">
                   {/* Step number */}
                   <div className="flex flex-col items-center">
                     <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1E2D42] bg-[#0B1220] text-[11px] font-bold text-[#5DCAA5]/60">
                       {i + 1}
                     </span>
-                    {i < WORKFLOW_STEPS.length - 1 && (
+                    {i < workflowSteps.length - 1 && (
                       <span className="mt-1 w-px flex-1 bg-[#1E2D42]" />
                     )}
                   </div>
@@ -419,7 +448,7 @@ export default function ClinicianDashboardPage() {
                     <p className="mt-0.5 text-xs leading-5 text-white/35">{step.description}</p>
                     {step.href && (
                       <Link href={step.href} className="mt-1 inline-block text-xs font-semibold text-[#5DCAA5] hover:text-[#1D9E75]">
-                        Open →
+                        {isArabic ? "فتح →" : "Open →"}
                       </Link>
                     )}
                   </div>

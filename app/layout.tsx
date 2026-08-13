@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
+import { GlobalLanguageProvider } from "@/app/components/GlobalLanguageProvider";
 import "./globals.css";
 
 /* ── Fonts ────────────────────────────────────────────────────────────────── */
@@ -49,10 +50,15 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      suppressHydrationWarning
       className={`h-full antialiased ${inter.variable} ${ibmPlexMono.variable} ${spaceGrotesk.variable}`}
     >
-      <body className="min-h-full flex flex-col bg-[#080E14] text-[#e8edf2]" style={{ fontFamily: "var(--font-inter, ui-sans-serif, system-ui, sans-serif)" }}>
-        {children}
+      <body
+        suppressHydrationWarning
+        className="min-h-full flex flex-col bg-[#080E14] text-[#e8edf2]"
+        style={{ fontFamily: "var(--font-inter, ui-sans-serif, system-ui, sans-serif)" }}
+      >
+        <GlobalLanguageProvider>{children}</GlobalLanguageProvider>
       </body>
     </html>
   );

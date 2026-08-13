@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useGlobalLanguage } from "@/app/components/GlobalLanguageProvider";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Hooks
@@ -39,6 +40,235 @@ function useCountUp(target: number, duration = 600, active = false) {
   }, [active, target, duration]);
   return val;
 }
+
+type UiLanguage = "en" | "ar";
+
+const uiCopy = {
+  en: {
+    nav: {
+      assess: "Assess",
+      treat: "Treat",
+      track: "Track",
+      providers: "Providers",
+      patients: "Patients",
+      login: "Login",
+    },
+    hero: {
+      eyebrow: "CLINIC-LED REMOTE REHABILITATION PLATFORM",
+      headline: "Clinic-led remote rehabilitation",
+      headlineAccent: "from assessment to progress tracking.",
+      tagline: "Rehabilitation, precisely.",
+      subheadline:
+        "RASQ by Creative Motion Lab — a clinic-led remote rehabilitation platform. Assess patients, assign plans, track adherence, and export clinical reports from one clinician workspace.",
+      providers: "For Providers",
+      patients: "For Patients",
+      statsLabel: "Illustrative data",
+      adherence: "Session adherence",
+      templates: "Assessment templates",
+      rehab: "Specialty rehab",
+      panelPatient: "Patient",
+      panelWeek: "Week 4 / 8",
+      patientName: "Sarah Al-Ahmad",
+      patientMeta: "ACL Rehabilitation · Phase 2",
+      active: "Active",
+      recovery: "Recovery Progress",
+      knee: "Knee Bend",
+      balance: "Leg Balance",
+      sessions: "Sessions",
+      intelligence: "RASQ Intelligence",
+      aiDraft: "AI · Draft",
+      aiBlurb1: "Phase 2 clearance criteria met. Consider advancing to dynamic control exercises next session.",
+      aiBlurb2: "Load symmetry improved 11% since last assessment. Single-leg progression recommended.",
+      decisionSupport: "Clinical decision support · Therapist review required before implementing",
+    },
+    trust: [
+      "Clinical workflows co-designed with rehabilitation specialists",
+      "Tokenised patient access — no login required for remote assessments",
+      "Export-ready clinical reports — structured for clinician review and referral",
+    ],
+    workflow: {
+      label: "Platform",
+      title: "One platform. Assessment through recovery.",
+      steps: [
+        { num: "01", label: "Assess", desc: "Structured MSK and functional assessments — in-clinic or via secure remote links." },
+        { num: "02", label: "Report", desc: "Review patient submissions and generate clinician-reviewed clinical reports." },
+        { num: "03", label: "Plan", desc: "Assign rehabilitation plans and share secure patient portal access." },
+        { num: "04", label: "Track", desc: "Patient sessions and adherence tracking with session-level outcome data." },
+        { num: "05", label: "Export", desc: "Progress snapshots and export-ready clinical reports for your records." },
+      ],
+    },
+    intelligence: {
+      label: "Intelligence proof",
+      title: "From first session to full recovery.",
+      intro:
+        "RASQ supports the clinician workflow from remote assessment through plan assignment and progress review — with decision-support drafts for therapist review.",
+      patientJourney: "Patient journey — Sarah Al-Ahmad",
+      signals: {
+        movement: "Movement quality",
+        load: "Load symmetry",
+        rom: "Range of motion",
+      },
+      draft: "Week 8 · Draft",
+      status: "On track",
+      improving: "Improving",
+    },
+    access: {
+      label: "Access",
+      title: "Built for providers and patients.",
+      provider: "For Providers",
+      providerTitle: "Provider Workspace",
+      providerDesc: "Manage patients, run assessments, prescribe rehabilitation plans, review clinical reports, and track outcomes — for solo therapists to multidisciplinary teams.",
+      clinicianWorkspace: "Clinician Workspace",
+      clinicianSub: "Patients · Assessments · Plans · Sessions",
+      adminWorkspace: "Admin Workspace",
+      adminSub: "Clinicians · Assignments · Overview",
+      patient: "For Patients",
+      patientTitle: "Patient Portal",
+      patientDesc: "View your plan, complete guided sessions, track progress, and access appointments through a secure clinic invitation.",
+      patientNote: "Use the secure link from your therapist",
+      patientNoteSub: "Real patients receive a unique clinic link — not this website's demo pages.",
+      assessmentLink: "I have an assessment link",
+      assessmentLinkSub: "Enter your token to begin a remote assessment",
+    },
+    future: {
+      label: "What's next",
+      title: "Rehabilitation intelligence, extended.",
+      intro: "Rehabilitation intelligence, wherever care happens.",
+      sense: "RASQ Sense",
+      senseTag: "Wearable motion intelligence",
+      senseDesc:
+        "Continuous biomechanical data beyond the session — IMU-based motion capture, real-time load tracking, and movement quality scoring between clinic visits.",
+      motion: "RASQ Motion",
+      motionTag: "Extended reality rehabilitation",
+      motionDesc:
+        "Immersive, XR-guided rehabilitation sessions. Guided movement. Measurable outcomes. Clinician-prescribed protocols delivered in extended reality.",
+      coming: "Coming 2026",
+    },
+    footer: {
+      platform: "Platform",
+      product: "Product",
+      trust: "Trust",
+      privacy: "Privacy-conscious",
+      secure: "Tokenised patient access",
+      reports: "Export-ready reports",
+      ux: "Clinical-grade UX",
+      copyright: "© 2026 Creative Motion Lab. All rights reserved.",
+      secureText: "Secure · Privacy-conscious · Built for clinical workflows",
+    },
+  },
+  ar: {
+    nav: {
+      assess: "التقييم",
+      treat: "العلاج",
+      track: "المتابعة",
+      providers: "مقدمو الرعاية",
+      patients: "المرضى",
+      login: "تسجيل الدخول",
+    },
+    hero: {
+      eyebrow: "منصة إعادة التأهيل عن بُعد بقيادة العيادة",
+      headline: "إعادة تأهيل عن بُعد بقيادة العيادة",
+      headlineAccent: "من التقييم إلى متابعة التقدم.",
+      tagline: "إعادة التأهيل بدقة.",
+      subheadline:
+        "RASQ من Creative Motion Lab — منصة إعادة التأهيل عن بُعد بقيادة العيادة. قيّم المرضى، وقم بتعيين الخطط، ومتابعة الالتزام، وتصدير التقارير السريرية من واجهة واحدة.",
+      providers: "للمقدمي الرعاية",
+      patients: "للمرضى",
+      statsLabel: "بيانات توضيحية",
+      adherence: "التزام الجلسات",
+      templates: "قوالب التقييم",
+      rehab: "إعادة التأهيل المتخصصة",
+      panelPatient: "المريض",
+      panelWeek: "الأسبوع 4 / 8",
+      patientName: "سارة الأحمد",
+      patientMeta: "إعادة تأهيل الرباط الصليبي · المرحلة 2",
+      active: "نشط",
+      recovery: "تقدم التعافي",
+      knee: "انثناء الركبة",
+      balance: "توازن الساق",
+      sessions: "الجلسات",
+      intelligence: "ذكاء RASQ",
+      aiDraft: "ذكاء · مسودة",
+      aiBlurb1: "تم تحقيق معايير الموافقة على المرحلة 2. فكر في التقدم إلى تمارين التحكم الديناميكي في الجلسة القادمة.",
+      aiBlurb2: "تحسن تناسق الحمل بنسبة 11٪ منذ آخر تقييم. موصى بالتقدم على ساق واحدة.",
+      decisionSupport: "دعم القرار السريري · يلزم مراجعة الطبيب قبل التنفيذ",
+    },
+    trust: [
+      "مسارات سريرية تم تصميمها بالتعاون مع متخصصي إعادة التأهيل",
+      "وصول مُميز للمرضى — لا يلزم تسجيل الدخول للتقييمات عن بُعد",
+      "تقارير سريرية جاهزة للتصدير — منظمة لمراجعة الأطباء وإحالة المرضى",
+    ],
+    workflow: {
+      label: "المنصة",
+      title: "منصة واحدة. من التقييم إلى التعافي.",
+      steps: [
+        { num: "01", label: "التقييم", desc: "تقييمات هيكلية ووظيفية — داخل العيادة أو عبر روابط آمنة عن بُعد." },
+        { num: "02", label: "التقرير", desc: "مراجعة طلبات المرضى وإنشاء تقارير سريرية مُراجعة من قبل الأطباء." },
+        { num: "03", label: "الخطة", desc: "تعيين خطط إعادة التأهيل ومشاركة بوابة المريض الآمنة." },
+        { num: "04", label: "المتابعة", desc: "جلسات المرضى ومتابعة الالتزام مع بيانات النتائج على مستوى الجلسة." },
+        { num: "05", label: "التصدير", desc: "لقطات التقدم وتقارير سريرية جاهزة للتصدير لسجلاتك." },
+      ],
+    },
+    intelligence: {
+      label: "دليل الذكاء",
+      title: "من الجلسة الأولى إلى التعافي الكامل.",
+      intro:
+        "يدعم RASQ سير عمل الطبيب من التقييم عن بُعد إلى تعيين الخطة ومراجعة التقدم — مع مسودات لدعم القرار تحتاج إلى مراجعة الطبيب.",
+      patientJourney: "رحلة المريض — سارة الأحمد",
+      signals: {
+        movement: "جودة الحركة",
+        load: "تناسق الحمل",
+        rom: "نطاق الحركة",
+      },
+      draft: "الأسبوع 8 · مسودة",
+      status: "على المسار الصحيح",
+      improving: "يتحسن",
+    },
+    access: {
+      label: "الوصول",
+      title: "مصمم لمقدمي الرعاية والمرضى.",
+      provider: "لمقدمي الرعاية",
+      providerTitle: "مساحة مقدم الرعاية",
+      providerDesc: "إدارة المرضى، تشغيل التقييمات، وصف خطط إعادة التأهيل، مراجعة التقارير السريرية، وتتبع النتائج — سواء لك فرديًا أو لفريق متعدد التخصصات.",
+      clinicianWorkspace: "مساحة الطبيب",
+      clinicianSub: "المرضى · التقييمات · الخطط · الجلسات",
+      adminWorkspace: "مساحة الإدارة",
+      adminSub: "الأطباء · التعيينات · النظرة العامة",
+      patient: "للمرضى",
+      patientTitle: "بوابة المريض",
+      patientDesc: "اعرض خطتك، أكمل الجلسات الموجهة، وتتبع التقدم، وافتح المواعيد عبر رابط عيادة آمن.",
+      patientNote: "استخدم الرابط الآمن من طبيبك",
+      patientNoteSub: "يحصل المرضى الحقيقيون على رابط فريد من العيادة — وليس صفحات العرض التوضيحيّة في هذا الموقع.",
+      assessmentLink: "لدي رابط تقييم",
+      assessmentLinkSub: "أدخل رمزك للبدء بتقييم عن بعد",
+    },
+    future: {
+      label: "ماذا بعد",
+      title: "ذكاء إعادة التأهيل، ممتد.",
+      intro: "ذكاء إعادة التأهيل، أينما يحدث الرعاية.",
+      sense: "RASQ Sense",
+      senseTag: "ذكاء الحركة القابل للارتداء",
+      senseDesc:
+        "بيانات حركية مستمرة ما بعد الجلسة — التقاط حركة IMU، وتتبع الحمل في الوقت الفعلي، وتقييم جودة الحركة بين زيارات العيادة.",
+      motion: "RASQ Motion",
+      motionTag: "إعادة التأهيل عبر الواقع الممتد",
+      motionDesc:
+        "جلسات إعادة تأهيل غامرة وموجهة عبر XR. حركة موجهة. نتائج قابلة للقياس. بروتوكولات موصى بها من الطبيب وتُقدَّم عبر الواقع الممتد.",
+      coming: "قادم 2026",
+    },
+    footer: {
+      platform: "المنصة",
+      product: "المنتج",
+      trust: "الثقة",
+      privacy: "حساس للخصوصية",
+      secure: "وصول مميز للمرضى",
+      reports: "تقارير جاهزة للتصدير",
+      ux: "تجربة سريرية متقدمة",
+      copyright: "© 2026 Creative Motion Lab. جميع الحقوق محفوظة.",
+      secureText: "آمن · حساس للخصوصية · مبني لسير العمل السريري",
+    },
+  },
+} as const;
 
 /* ═══════════════════════════════════════════════════════════════════════════
    RASQ Arc Mark
@@ -83,13 +313,15 @@ function ArcMark({ size = 20, animate = false }: { size?: number; animate?: bool
    Section 1 — Navbar (52px sticky)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function Navbar() {
+function Navbar({ language }: { language: UiLanguage }) {
+  const copy = uiCopy[language];
+
   return (
     <header
       className="sticky top-0 z-50 border-b border-[#1E2D42] bg-[#080E14]"
       style={{ height: "52px" }}
     >
-      <div className="mx-auto flex h-full max-w-6xl items-center justify-between px-6">
+      <div className="mx-auto flex h-full max-w-6xl items-center justify-between gap-3 px-6">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
           <ArcMark size={20} animate />
@@ -105,11 +337,11 @@ function Navbar() {
         <nav className="hidden items-center gap-0.5 md:flex">
           {(
             [
-              ["Assess",    "#platform"],
-              ["Treat",     "#platform"],
-              ["Track",     "#platform"],
-              ["Providers", "#providers"],
-              ["Patients",  "#patients"],
+              [copy.nav.assess, "#platform"],
+              [copy.nav.treat, "#platform"],
+              [copy.nav.track, "#platform"],
+              [copy.nav.providers, "#providers"],
+              [copy.nav.patients, "#patients"],
             ] as [string, string][]
           ).map(([label, href]) => (
             <a
@@ -122,12 +354,14 @@ function Navbar() {
           ))}
         </nav>
 
-        <Link
-          href="/login"
-          className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-5 py-2 text-sm font-semibold text-white transition hover:border-[#1D9E75]/40 hover:text-[#5DCAA5]"
-        >
-          Login
-        </Link>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/login"
+            className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-5 py-2 text-sm font-semibold text-white transition hover:border-[#1D9E75]/40 hover:text-[#5DCAA5]"
+          >
+            {copy.nav.login}
+          </Link>
+        </div>
       </div>
     </header>
   );
@@ -137,7 +371,8 @@ function Navbar() {
    Section 2 — Hero (55 / 45 grid)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function HeroSection() {
+function HeroSection({ language }: { language: UiLanguage }) {
+  const copy = uiCopy[language];
   const [statsRef, statsRevealed] = useReveal(0.4);
   const c1 = useCountUp(94, 600, statsRevealed);
   const c2 = useCountUp(12, 600, statsRevealed);
@@ -176,7 +411,7 @@ function HeroSection() {
                 className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#5DCAA5]/80"
                 style={{ fontFamily: "var(--rasq-font-mono)" }}
               >
-                CLINIC-LED REMOTE REHABILITATION PLATFORM
+                {copy.hero.eyebrow}
               </span>
             </div>
 
@@ -188,8 +423,9 @@ function HeroSection() {
                 fontFamily: "var(--rasq-font-display)",
               }}
             >
-              Clinic-led remote rehabilitation<br />
-              <span className="text-white/55">from assessment to progress tracking.</span>
+              {copy.hero.headline}
+              <br />
+              <span className="text-white/55">{copy.hero.headlineAccent}</span>
             </h1>
 
             {/* Tagline — muted, below headline, not competing */}
@@ -197,7 +433,7 @@ function HeroSection() {
               className="rasq-stagger-item mt-4 text-sm font-semibold uppercase tracking-[0.12em] text-white/30"
               style={{ animationDelay: "80ms" }}
             >
-              Rehabilitation, precisely.
+              {copy.hero.tagline}
             </p>
 
             {/* Subheadline */}
@@ -205,9 +441,7 @@ function HeroSection() {
               className="rasq-stagger-item mt-4 max-w-xl text-base leading-7 text-white/45"
               style={{ animationDelay: "120ms" }}
             >
-              RASQ by Creative Motion Lab — a clinic-led remote rehabilitation platform.
-              Assess patients, assign plans, track adherence, and export clinical reports
-              from one clinician workspace.
+              {copy.hero.subheadline}
             </p>
 
             {/* CTAs */}
@@ -219,13 +453,13 @@ function HeroSection() {
                 href="/login?role=clinician"
                 className="rounded-[7px] bg-[#1D9E75] px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-[#179165]"
               >
-                For Providers
+                {copy.hero.providers}
               </Link>
               <a
                 href="#patients"
                 className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-6 py-2.5 text-sm font-semibold text-white/70 transition hover:border-[#1D9E75]/30 hover:text-white"
               >
-                For Patients
+                {copy.hero.patients}
               </a>
             </div>
 
@@ -234,7 +468,7 @@ function HeroSection() {
               className="rasq-stagger-item mt-10 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-white/25"
               style={{ animationDelay: "200ms" }}
             >
-              Illustrative data
+              {copy.hero.statsLabel}
             </p>
             <div
               ref={statsRef as React.RefObject<HTMLDivElement>}
@@ -242,9 +476,9 @@ function HeroSection() {
               style={{ animationDelay: "200ms" }}
             >
               {[
-                { val: c1, suffix: "%", label: "Session adherence" },
-                { val: c2, suffix: "+", label: "Assessment templates" },
-                { val: c3, suffix: " pathways", label: "Specialty rehab" },
+                { val: c1, suffix: "%", label: copy.hero.adherence },
+                { val: c2, suffix: "+", label: copy.hero.templates },
+                { val: c3, suffix: language === "ar" ? " مسارات" : " pathways", label: copy.hero.rehab },
               ].map(({ val, suffix, label }) => (
                 <div key={label} className="flex flex-col items-center px-4 py-4 bg-[#0F1825]">
                   <span
@@ -283,33 +517,33 @@ function HeroSection() {
                   className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/30"
                   style={{ fontFamily: "var(--rasq-font-mono)" }}
                 >
-                  Patient
+                  {copy.hero.panelPatient}
                 </span>
                 <span
                   className="text-[10px] font-semibold text-[#5DCAA5]"
                   style={{ fontFamily: "var(--rasq-font-mono)" }}
                 >
-                  Week 4 / 8
+                  {copy.hero.panelWeek}
                 </span>
               </div>
 
               {/* Patient info */}
               <div className="mt-3 flex items-start justify-between gap-2">
                 <div>
-                  <p className="text-sm font-semibold text-white">Sarah Al-Ahmad</p>
+                  <p className="text-sm font-semibold text-white">{copy.hero.patientName}</p>
                   <p className="mt-0.5 text-xs text-white/40">
-                    ACL Rehabilitation &nbsp;·&nbsp; Phase 2
+                    {copy.hero.patientMeta}
                   </p>
                 </div>
                 <span className="mt-0.5 rounded-[5px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-2 py-0.5 text-[10px] font-semibold text-[#5DCAA5]">
-                  Active
+                  {copy.hero.active}
                 </span>
               </div>
 
               {/* Progress bar */}
               <div className="mt-4">
                 <div className="mb-1.5 flex items-center justify-between">
-                  <span className="text-[11px] text-white/35">Recovery Progress</span>
+                  <span className="text-[11px] text-white/35">{copy.hero.recovery}</span>
                   <span
                     className="text-[11px] font-semibold text-[#5DCAA5]"
                     style={{ fontFamily: "var(--rasq-font-mono)" }}
@@ -328,9 +562,9 @@ function HeroSection() {
               {/* Metrics row */}
               <div className="mt-4 grid grid-cols-3 divide-x divide-[#1E2D42] rounded-[8px] border border-[#1E2D42] overflow-hidden">
                 {[
-                  { label: "Knee Bend", val: "108°" },
-                  { label: "Leg Balance", val: "74%" },
-                  { label: "Sessions", val: "8/12" },
+                  { label: copy.hero.knee, val: "108°" },
+                  { label: copy.hero.balance, val: "74%" },
+                  { label: copy.hero.sessions, val: "8/12" },
                 ].map(({ label, val }) => (
                   <div key={label} className="flex flex-col items-center px-2 py-2.5">
                     <span
@@ -360,18 +594,15 @@ function HeroSection() {
                   className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/30"
                   style={{ fontFamily: "var(--rasq-font-mono)" }}
                 >
-                  RASQ Intelligence
+                  {copy.hero.intelligence}
                 </span>
                 <span className="rounded-[5px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-[#5DCAA5]/70">
-                  AI · Draft
+                  {copy.hero.aiDraft}
                 </span>
               </div>
 
               <ul className="mt-4 space-y-3">
-                {[
-                  "Phase 2 clearance criteria met. Consider advancing to dynamic control exercises next session.",
-                  "Load symmetry improved 11% since last assessment. Single-leg progression recommended.",
-                ].map((item) => (
+                {[copy.hero.aiBlurb1, copy.hero.aiBlurb2].map((item) => (
                   <li key={item} className="flex gap-2.5">
                     <span
                       className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#1D9E75]"
@@ -383,7 +614,7 @@ function HeroSection() {
               </ul>
 
               <p className="mt-4 border-t border-[#1E2D42] pt-3 text-[10px] text-white/20">
-                Clinical decision support · Therapist review required before implementing
+                {copy.hero.decisionSupport}
               </p>
             </div>
           </div>
@@ -397,14 +628,9 @@ function HeroSection() {
    Section 3 — Trust bar
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function TrustBar() {
+function TrustBar({ language }: { language: UiLanguage }) {
   const [ref, revealed] = useReveal(0.3);
-
-  const items = [
-    "Clinical workflows co-designed with rehabilitation specialists",
-    "Tokenised patient access — no login required for remote assessments",
-    "Export-ready clinical reports — structured for clinician review and referral",
-  ];
+  const items = uiCopy[language].trust;
 
   return (
     <section
@@ -426,16 +652,9 @@ function TrustBar() {
    Section 4 — Workflow (5 steps + animated connector)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const WORKFLOW_STEPS = [
-  { num: "01", label: "Assess", desc: "Structured MSK and functional assessments — in-clinic or via secure remote links." },
-  { num: "02", label: "Report", desc: "Review patient submissions and generate clinician-reviewed clinical reports." },
-  { num: "03", label: "Plan", desc: "Assign rehabilitation plans and share secure patient portal access." },
-  { num: "04", label: "Track", desc: "Patient sessions and adherence tracking with session-level outcome data." },
-  { num: "05", label: "Export", desc: "Progress snapshots and export-ready clinical reports for your records." },
-];
-
-function WorkflowSection() {
+function WorkflowSection({ language }: { language: UiLanguage }) {
   const [ref, revealed] = useReveal(0.2);
+  const copy = uiCopy[language].workflow;
 
   return (
     <section
@@ -450,13 +669,13 @@ function WorkflowSection() {
             className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]"
             style={{ fontFamily: "var(--rasq-font-mono)" }}
           >
-            Platform
+            {copy.label}
           </p>
           <h2
             className="mt-2 text-2xl font-bold tracking-tight text-white lg:text-3xl"
             style={{ fontFamily: "var(--rasq-font-display)" }}
           >
-            One platform. Assessment through recovery.
+            {copy.title}
           </h2>
         </div>
 
@@ -464,10 +683,10 @@ function WorkflowSection() {
         <div
           className={`rasq-reveal-children mt-12 grid grid-cols-1 gap-8 sm:grid-cols-5 ${revealed ? "is-revealed" : ""}`}
         >
-          {WORKFLOW_STEPS.map((step, i) => (
+          {copy.steps.map((step, i) => (
             <div key={step.num} className="relative flex flex-col">
               {/* Connector — rendered as sibling overlay, not inside the step */}
-              {i < WORKFLOW_STEPS.length - 1 && (
+              {i < copy.steps.length - 1 && (
                 <div
                   className={`rasq-connector absolute left-[calc(100%+0px)] top-[22px] hidden h-px w-full bg-[#1E2D42] sm:block ${revealed ? "is-revealed" : ""}`}
                   style={{ width: "calc(100% - 44px)", left: "calc(50% + 22px)" }}
@@ -496,22 +715,40 @@ function WorkflowSection() {
    Section 5 — Intelligence proof
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const RECOVERY_TIMELINE = [
-  { week: "Week 1", title: "Initial Assessment", detail: "Pain 6/10 · ROM 72° · Phase 1 initiated" },
-  { week: "Week 3", title: "Progress Check", detail: "Pain 3/10 · ROM 88° · Movement quality improving" },
-  { week: "Week 6", title: "Phase Transition", detail: "Phase 1 complete · Cleared for Phase 2 exercises" },
-  { week: "Week 8", title: "Strength Review", detail: "Load symmetry 74% · Dynamic control exercises added" },
-  { week: "Week 10", title: "Return Assessment", detail: "Return to sport evaluation — scheduled", pending: true },
-];
+const RECOVERY_TIMELINE = {
+  en: [
+    { week: "Week 1", title: "Initial Assessment", detail: "Pain 6/10 · ROM 72° · Phase 1 initiated" },
+    { week: "Week 3", title: "Progress Check", detail: "Pain 3/10 · ROM 88° · Movement quality improving" },
+    { week: "Week 6", title: "Phase Transition", detail: "Phase 1 complete · Cleared for Phase 2 exercises" },
+    { week: "Week 8", title: "Strength Review", detail: "Load symmetry 74% · Dynamic control exercises added" },
+    { week: "Week 10", title: "Return Assessment", detail: "Return to sport evaluation — scheduled", pending: true },
+  ],
+  ar: [
+    { week: "الأسبوع 1", title: "التقييم الأولي", detail: "الألم 6/10 · المدى 72° · بدأت المرحلة 1" },
+    { week: "الأسبوع 3", title: "فحص التقدم", detail: "الألم 3/10 · المدى 88° · جودة الحركة تتحسن" },
+    { week: "الأسبوع 6", title: "انتقال المرحلة", detail: "اكتملت المرحلة 1 · تم السماح بتمارين المرحلة 2" },
+    { week: "الأسبوع 8", title: "مراجعة القوة", detail: "تناسق الحمل 74% · تم إضافة تمارين التحكم الديناميكي" },
+    { week: "الأسبوع 10", title: "تقييم العودة", detail: "تقييم العودة إلى الرياضة — مجدول", pending: true },
+  ],
+} as const;
 
-const INTELLIGENCE_ITEMS = [
-  { signal: "Movement quality", value: "87/100", status: "On track", note: "Consistent with Phase 2 progression targets" },
-  { signal: "Load symmetry", value: "74%", status: "Improving", note: "+11% since initial assessment · Single-leg progression indicated" },
-  { signal: "Range of motion", value: "108°", status: "On track", note: "Target 130° · Continue current exercise protocol" },
-];
+const INTELLIGENCE_ITEMS = {
+  en: [
+    { signal: "Movement quality", value: "87/100", status: "On track", note: "Consistent with Phase 2 progression targets" },
+    { signal: "Load symmetry", value: "74%", status: "Improving", note: "+11% since initial assessment · Single-leg progression indicated" },
+    { signal: "Range of motion", value: "108°", status: "On track", note: "Target 130° · Continue current exercise protocol" },
+  ],
+  ar: [
+    { signal: "جودة الحركة", value: "87/100", status: "على المسار الصحيح", note: "متوافق مع أهداف تقدم المرحلة 2" },
+    { signal: "تناسق الحمل", value: "74%", status: "يتحسن", note: "+11٪ منذ التقييم الأولي · تشير إلى التقدم على ساق واحدة" },
+    { signal: "نطاق الحركة", value: "108°", status: "على المسار الصحيح", note: "الهدف 130° · استمر في بروتوكول التمرين الحالي" },
+  ],
+} as const;
 
-function IntelligenceSection() {
+function IntelligenceSection({ language }: { language: UiLanguage }) {
   const [ref, revealed] = useReveal(0.15);
+  const copy = uiCopy[language].intelligence;
+  const recoveryItems = RECOVERY_TIMELINE[language];
 
   return (
     <section
@@ -524,17 +761,16 @@ function IntelligenceSection() {
             className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]"
             style={{ fontFamily: "var(--rasq-font-mono)" }}
           >
-            Intelligence proof
+            {copy.label}
           </p>
           <h2
             className="mt-2 text-2xl font-bold tracking-tight text-white lg:text-3xl"
             style={{ fontFamily: "var(--rasq-font-display)" }}
           >
-            From first session to full recovery.
+            {copy.title}
           </h2>
           <p className="mt-3 max-w-lg text-sm leading-6 text-white/40">
-            RASQ supports the clinician workflow from remote assessment through plan
-            assignment and progress review — with decision-support drafts for therapist review.
+            {copy.intro}
           </p>
         </div>
 
@@ -542,12 +778,12 @@ function IntelligenceSection() {
           {/* Recovery timeline */}
           <div className={`rasq-reveal ${revealed ? "is-revealed" : ""}`} style={{ transitionDelay: "80ms" }}>
             <p className="mb-5 text-xs font-semibold uppercase tracking-[0.1em] text-white/30">
-              Patient journey — Sarah Al-Ahmad
+              {copy.patientJourney}
             </p>
             <div className="relative space-y-0">
               {/* Vertical connector line */}
               <div className="absolute left-[11px] top-3 bottom-3 w-px bg-[#1E2D42]" />
-              {RECOVERY_TIMELINE.map((item) => (
+              {recoveryItems.map((item) => (
                 <div key={item.week} className="relative flex gap-5 pb-6 last:pb-0">
                   <div
                     className={`relative z-10 mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
@@ -595,16 +831,16 @@ function IntelligenceSection() {
                   className="text-xs font-bold text-white"
                   style={{ fontFamily: "var(--rasq-font-mono)" }}
                 >
-                  RASQ Intelligence
+                  {copy.label === "Intelligence proof" ? "RASQ Intelligence" : "ذكاء RASQ"}
                 </span>
               </div>
               <span className="rounded-[5px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-[#5DCAA5]/70">
-                Week 8 · Draft
+                {copy.draft}
               </span>
             </div>
 
             <div className="divide-y divide-[#1E2D42]">
-              {INTELLIGENCE_ITEMS.map((item) => (
+              {INTELLIGENCE_ITEMS[language].map((item) => (
                 <div key={item.signal} className="px-5 py-4">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-white/55">{item.signal}</span>
@@ -627,7 +863,9 @@ function IntelligenceSection() {
 
             <div className="border-t border-[#1E2D42] px-5 py-3">
               <p className="text-[10px] text-white/20">
-                Clinical decision support · Not a diagnosis · Therapist review required
+                {language === "ar"
+                  ? "دعم القرار السريري · ليس تشخيصًا · يلزم مراجعة الطبيب"
+                  : "Clinical decision support · Not a diagnosis · Therapist review required"}
               </p>
             </div>
           </div>
@@ -641,8 +879,9 @@ function IntelligenceSection() {
    Section 6 — Dual pathway (dark provider / light patient)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function DualPathwaySection() {
+function DualPathwaySection({ language }: { language: UiLanguage }) {
   const [ref, revealed] = useReveal(0.15);
+  const copy = uiCopy[language].access;
 
   return (
     <section
@@ -656,13 +895,13 @@ function DualPathwaySection() {
             className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]"
             style={{ fontFamily: "var(--rasq-font-mono)" }}
           >
-            Access
+            {copy.label}
           </p>
           <h2
             className="mt-2 text-2xl font-bold tracking-tight text-white lg:text-3xl"
             style={{ fontFamily: "var(--rasq-font-display)" }}
           >
-            Built for providers and patients.
+            {copy.title}
           </h2>
         </div>
 
@@ -679,18 +918,16 @@ function DualPathwaySection() {
               </svg>
             </div>
             <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.14em] text-white/25">
-              For Providers
+              {copy.provider}
             </p>
             <h3
               className="mt-1.5 text-xl font-bold text-white"
               style={{ fontFamily: "var(--rasq-font-display)" }}
             >
-              Provider Workspace
+              {copy.providerTitle}
             </h3>
             <p className="mt-2.5 text-sm leading-6 text-white/40">
-              Manage patients, run assessments, prescribe rehabilitation plans,
-              review clinical reports, and track outcomes — for solo therapists
-              to multidisciplinary teams.
+              {copy.providerDesc}
             </p>
             <div className="mt-6 space-y-2">
               <Link
@@ -698,8 +935,8 @@ function DualPathwaySection() {
                 className="flex items-center justify-between rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-4 py-3 transition hover:bg-[#1D9E75]/16 group"
               >
                 <div>
-                  <p className="text-sm font-semibold text-white">Clinician Workspace</p>
-                  <p className="text-xs text-white/35">Patients · Assessments · Plans · Sessions</p>
+                  <p className="text-sm font-semibold text-white">{copy.clinicianWorkspace}</p>
+                  <p className="text-xs text-white/35">{copy.clinicianSub}</p>
                 </div>
                 <svg className="h-4 w-4 text-white/20 transition group-hover:text-[#5DCAA5]/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
@@ -710,8 +947,8 @@ function DualPathwaySection() {
                 className="flex items-center justify-between rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-4 py-3 transition hover:border-[#1D9E75]/20 group"
               >
                 <div>
-                  <p className="text-sm font-semibold text-white/70">Admin Workspace</p>
-                  <p className="text-xs text-white/25">Clinicians · Assignments · Overview</p>
+                  <p className="text-sm font-semibold text-white/70">{copy.adminWorkspace}</p>
+                  <p className="text-xs text-white/25">{copy.adminSub}</p>
                 </div>
                 <svg className="h-4 w-4 text-white/15 transition group-hover:text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
@@ -734,26 +971,25 @@ function DualPathwaySection() {
               </svg>
             </div>
             <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.14em] text-[#4a7060]">
-              For Patients
+              {copy.patient}
             </p>
             <h3
               className="mt-1.5 text-xl font-bold text-[#0f2e22]"
               style={{ fontFamily: "var(--rasq-font-display)" }}
             >
-              Patient Portal
+              {copy.patientTitle}
             </h3>
             <p className="mt-2.5 text-sm leading-6 text-[#4a7060]">
-              View your plan, complete guided sessions, track progress, and access
-              appointments through a secure clinic invitation.
+              {copy.patientDesc}
             </p>
             <div className="mt-6 space-y-2">
               <div
                 className="rounded-[7px] border border-[#d1dbd6] bg-white px-4 py-3 text-[#0f2e22]"
                 role="note"
               >
-                <p className="text-sm font-semibold">Use the secure link from your therapist</p>
+                <p className="text-sm font-semibold">{copy.patientNote}</p>
                 <p className="mt-0.5 text-xs text-[#4a7060]">
-                  Real patients receive a unique clinic link — not this website&apos;s demo pages.
+                  {copy.patientNoteSub}
                 </p>
               </div>
               <Link
@@ -761,9 +997,9 @@ function DualPathwaySection() {
                 className="group flex items-center justify-between rounded-[7px] border border-[#d1dbd6] bg-white px-4 py-3 text-[#0f2e22] transition hover:border-[#1D9E75]/40"
               >
                 <div>
-                  <p className="text-sm font-semibold">I have an assessment link</p>
+                  <p className="text-sm font-semibold">{copy.assessmentLink}</p>
                   <p className="text-xs text-[#4a7060]">
-                    Enter your token to begin a remote assessment
+                    {copy.assessmentLinkSub}
                   </p>
                 </div>
                 <svg className="h-4 w-4 text-[#0f2e22] opacity-25 transition group-hover:opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -782,25 +1018,24 @@ function DualPathwaySection() {
    Section 7 — Future vision (RASQ Sense + RASQ Motion)
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function FutureVisionSection() {
+function FutureVisionSection({ language }: { language: UiLanguage }) {
   const [ref, revealed] = useReveal(0.15);
+  const copy = uiCopy[language].future;
 
   const cards = [
     {
       id: "sense",
-      name: "RASQ Sense",
-      tagline: "Wearable motion intelligence",
-      desc:
-        "Continuous biomechanical data beyond the session — IMU-based motion capture, real-time load tracking, and movement quality scoring between clinic visits.",
-      specs: ["IMU motion capture", "Real-time load analysis", "Between-session data"],
+      name: copy.sense,
+      tagline: copy.senseTag,
+      desc: copy.senseDesc,
+      specs: language === "ar" ? ["التقاط الحركة عبر IMU", "تحليل الحمل في الوقت الفعلي", "بيانات ما بين الجلسات"] : ["IMU motion capture", "Real-time load analysis", "Between-session data"],
     },
     {
       id: "motion",
-      name: "RASQ Motion",
-      tagline: "Extended reality rehabilitation",
-      desc:
-        "Immersive, XR-guided rehabilitation sessions. Guided movement. Measurable outcomes. Clinician-prescribed protocols delivered in extended reality.",
-      specs: ["XR-guided sessions", "Clinician-prescribed", "Measurable outcomes"],
+      name: copy.motion,
+      tagline: copy.motionTag,
+      desc: copy.motionDesc,
+      specs: language === "ar" ? ["جلسات موجهة عبر XR", "موصى بها من الطبيب", "نتائج قابلة للقياس"] : ["XR-guided sessions", "Clinician-prescribed", "Measurable outcomes"],
     },
   ];
 
@@ -815,16 +1050,16 @@ function FutureVisionSection() {
             className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]"
             style={{ fontFamily: "var(--rasq-font-mono)" }}
           >
-            What&apos;s next
+            {copy.label}
           </p>
           <h2
             className="mt-2 text-2xl font-bold tracking-tight text-white lg:text-3xl"
             style={{ fontFamily: "var(--rasq-font-display)" }}
           >
-            Rehabilitation intelligence, extended.
+            {copy.title}
           </h2>
           <p className="mt-3 max-w-lg text-sm leading-6 text-white/40">
-            Rehabilitation intelligence, wherever care happens.
+            {copy.intro}
           </p>
         </div>
 
@@ -845,7 +1080,7 @@ function FutureVisionSection() {
                 className="absolute right-4 top-4 rounded-[5px] border border-[#1E2D42] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-white/25"
                 style={{ fontFamily: "var(--rasq-font-mono)" }}
               >
-                Coming 2026
+                {copy.coming}
               </span>
 
               {/* Icon */}
@@ -895,7 +1130,8 @@ function FutureVisionSection() {
    Section 8 — Footer
    ═══════════════════════════════════════════════════════════════════════════ */
 
-function Footer() {
+function Footer({ language }: { language: UiLanguage }) {
+  const copy = uiCopy[language].footer;
   return (
     <footer className="border-t border-[#1E2D42] bg-[#080E14]">
       <div className="mx-auto max-w-6xl px-6 py-12">
@@ -912,18 +1148,23 @@ function Footer() {
               </span>
             </div>
             <p className="mt-2.5 text-xs leading-5 text-white/30">
-              Rehabilitation, precisely.
+              {language === "ar" ? "إعادة التأهيل بدقة." : "Rehabilitation, precisely."}
             </p>
             <p className="mt-4 text-[11px] text-white/20">
-              RASQ by Creative Motion Lab
+              {language === "ar" ? "RASQ من Creative Motion Lab" : "RASQ by Creative Motion Lab"}
             </p>
           </div>
 
           {/* Platform */}
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/25">Platform</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/25">{copy.platform}</p>
             <ul className="mt-3 space-y-2.5">
-              {[["Clinician Workspace", "/login?role=clinician"], ["Patient access", "#patients"], ["Admin Workspace", "/login?role=admin"], ["Remote Assessment", "/assessment-access"]].map(([l, h]) => (
+              {[
+                [language === "ar" ? "مساحة الطبيب" : "Clinician Workspace", "/login?role=clinician"],
+                [language === "ar" ? "وصول المريض" : "Patient access", "#patients"],
+                [language === "ar" ? "مساحة الإدارة" : "Admin Workspace", "/login?role=admin"],
+                [language === "ar" ? "التقييم عن بُعد" : "Remote Assessment", "/assessment-access"],
+              ].map(([l, h]) => (
                 <li key={h}>
                   <Link href={h} className="text-xs text-white/35 transition hover:text-white">{l}</Link>
                 </li>
@@ -933,9 +1174,15 @@ function Footer() {
 
           {/* Product */}
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/25">Product</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/25">{copy.product}</p>
             <ul className="mt-3 space-y-2.5">
-              {[["Assessments", "#platform"], ["Treatment Plans", "#platform"], ["Therapy Sessions", "#platform"], ["RASQ Sense", "#"], ["RASQ Motion", "#"]].map(([l, h]) => (
+              {[
+                [language === "ar" ? "التقييمات" : "Assessments", "#platform"],
+                [language === "ar" ? "خطط العلاج" : "Treatment Plans", "#platform"],
+                [language === "ar" ? "جلسات العلاج" : "Therapy Sessions", "#platform"],
+                ["RASQ Sense", "#"],
+                ["RASQ Motion", "#"],
+              ].map(([l, h]) => (
                 <li key={l}>
                   <a href={h} className="text-xs text-white/35 transition hover:text-white">{l}</a>
                 </li>
@@ -945,9 +1192,9 @@ function Footer() {
 
           {/* Security */}
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/25">Trust</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/25">{copy.trust}</p>
             <ul className="mt-3 space-y-2.5">
-              {["Privacy-conscious", "Tokenised patient access", "Export-ready reports", "Clinical-grade UX"].map((l) => (
+              {[copy.privacy, copy.secure, copy.reports, copy.ux].map((l) => (
                 <li key={l} className="text-xs text-white/35">{l}</li>
               ))}
             </ul>
@@ -956,13 +1203,13 @@ function Footer() {
 
         <div className="mt-10 flex flex-col items-start justify-between gap-4 border-t border-[#1E2D42] pt-8 sm:flex-row sm:items-center">
           <p className="text-[11px] text-white/20">
-            © 2026 Creative Motion Lab. All rights reserved.
+            {copy.copyright}
           </p>
           <p
             className="text-[11px] text-white/15"
             style={{ fontFamily: "var(--rasq-font-mono)" }}
           >
-            Secure · Privacy-conscious · Built for clinical workflows
+            {copy.secureText}
           </p>
         </div>
       </div>
@@ -975,19 +1222,23 @@ function Footer() {
    ═══════════════════════════════════════════════════════════════════════════ */
 
 export default function HomePage() {
+  const { language } = useGlobalLanguage();
+
   return (
     <div
       className="min-h-screen bg-[#080E14] text-white"
       style={{ fontFamily: "var(--rasq-font-body)" }}
+      dir={language === "ar" ? "rtl" : "ltr"}
+      lang={language}
     >
-      <Navbar />
-      <HeroSection />
-      <TrustBar />
-      <WorkflowSection />
-      <IntelligenceSection />
-      <DualPathwaySection />
-      <FutureVisionSection />
-      <Footer />
+      <Navbar language={language} />
+      <HeroSection language={language} />
+      <TrustBar language={language} />
+      <WorkflowSection language={language} />
+      <IntelligenceSection language={language} />
+      <DualPathwaySection language={language} />
+      <FutureVisionSection language={language} />
+      <Footer language={language} />
     </div>
   );
 }

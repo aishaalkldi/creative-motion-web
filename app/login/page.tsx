@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useGlobalLanguage } from "@/app/components/GlobalLanguageProvider";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TrustFooter } from "../components/trust/TrustFooter";
@@ -25,7 +26,7 @@ interface RoleConfig {
   defaultRedirect: string;
 }
 
-const ROLE_CONFIG: Record<Role, RoleConfig> = {
+const ROLE_CONFIG_EN: Record<Role, RoleConfig> = {
   clinician: {
     title:           "Provider Access",
     subtitle:        "Manage patients, assessments, reports, treatment plans, and rehabilitation progress.",
@@ -40,6 +41,21 @@ const ROLE_CONFIG: Record<Role, RoleConfig> = {
   },
 };
 
+const ROLE_CONFIG_AR: Record<Role, RoleConfig> = {
+  clinician: {
+    title:           "وصول مقدم الخدمة",
+    subtitle:        "إدارة المرضى والتقييمات والتقارير وخطط العلاج ومتابعة إعادة التأهيل.",
+    badge:           "مساحة مقدم الخدمة",
+    defaultRedirect: "/clinician",
+  },
+  admin: {
+    title:           "وصول الإدارة",
+    subtitle:        "إدارة عمليات العيادة والمقدمي الرعاية والمرضى وتعيينات النظام.",
+    badge:           "مساحة الإدارة",
+    defaultRedirect: "/admin",
+  },
+};
+
 function resolveRole(raw: string | null): Role {
   if (raw === "admin") return "admin";
   return "clinician";
@@ -50,6 +66,8 @@ function resolveRole(raw: string | null): Role {
 function LoginForm() {
   const router       = useRouter();
   const searchParams = useSearchParams();
+  const { language } = useGlobalLanguage();
+  const isArabic = language === "ar";
 
   const urlRole  = resolveRole(searchParams.get("role"));
   const returnTo = searchParams.get("returnTo") ?? "";
@@ -60,12 +78,12 @@ function LoginForm() {
   const [error, setError]       = useState("");
   const [loading, setLoading]   = useState(false);
 
-  const cfg = ROLE_CONFIG[role];
+  const cfg = isArabic ? ROLE_CONFIG_AR[role] : ROLE_CONFIG_EN[role];
   const redirectDest = returnTo || cfg.defaultRedirect;
 
   async function handleLogin() {
     if (!email.trim() || !password) {
-      setError("Please enter your email and password.");
+      setError(isArabic ? "يرجى إدخال البريد الإلكتروني وكلمة المرور." : "Please enter your email and password.");
       return;
     }
     setError("");
@@ -82,10 +100,16 @@ function LoginForm() {
         });
 
         if (!sbError) {
-          // Repair missing providers row from auth metadata before clinician entry
-          await ensureProviderProfile({
-            email: email.trim().toLowerCase(),
-          });
+          // Repair missing providers row from auth metadata before clinician entry.
+          // Keep login successful even if provider setup is unavailable or the table
+          // is not migrated yet; the portal should still load for the user.
+          try {
+            await ensureProviderProfile({
+              email: email.trim().toLowerCase(),
+            });
+          } catch {
+            // Intentionally ignore — provider bootstrap is non-blocking for sign-in.
+          }
           router.push(redirectDest);
           router.refresh();
           return;
@@ -107,7 +131,7 @@ function LoginForm() {
       router.push(redirectDest);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+      setError(err instanceof Error ? err.message : isArabic ? "حدث خطأ ما. يرجى المحاولة مرة أخرى." : "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -115,7 +139,7 @@ function LoginForm() {
 
   function handleDevBypass() {
     if (process.env.NODE_ENV !== "development") {
-      setError("Dev bypass is only available in development mode.");
+      setError(isArabic ? "تجاوز التطوير متاح فقط في الوضع التطويري." : "Dev bypass is only available in development mode.");
       return;
     }
     setupDevAuthSession();
@@ -159,7 +183,7 @@ function LoginForm() {
                     : "text-white/35 hover:text-white/60"
                 }`}
               >
-                {r === "clinician" ? "Provider" : "Admin"}
+                {r === "clinician" ? (isArabic ? "مقدم الخدمة" : "Provider") : (isArabic ? "الإدارة" : "Admin")}
               </button>
             ))}
           </div>
@@ -177,13 +201,13 @@ function LoginForm() {
           >
             <div>
               <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-white/35">
-                Email
+                {isArabic ? "البريد الإلكتروني" : "Email"}
               </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@clinic.com"
+                placeholder={isArabic ? "you@clinic.com" : "you@clinic.com"}
                 autoComplete="email"
                 className="w-full rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-[#1D9E75]/40 focus:bg-[#0d1c14]"
               />
@@ -191,13 +215,13 @@ function LoginForm() {
 
             <div>
               <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-white/35">
-                Password
+                {isArabic ? "كلمة المرور" : "Password"}
               </label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password"
+                placeholder={isArabic ? "أدخل كلمة المرور" : "Enter password"}
                 autoComplete="current-password"
                 className="w-full rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-[#1D9E75]/40 focus:bg-[#0d1c14]"
               />
@@ -207,7 +231,7 @@ function LoginForm() {
                     href="/reset-password"
                     className="text-[11px] text-[#6B7280] transition hover:text-[#9CA3AF]"
                   >
-                    Forgot your password?
+                    {isArabic ? "هل نسيت كلمة المرور؟" : "Forgot your password?"}
                   </Link>
                 </div>
               )}
@@ -226,7 +250,9 @@ function LoginForm() {
               disabled={loading}
               className="w-full rounded-[7px] bg-[#1D9E75] py-3.5 text-sm font-bold text-white transition hover:bg-[#179165] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {loading ? "Signing in…" : `Sign in as ${role === "clinician" ? "Provider" : "Admin"}`}
+              {loading
+                ? (isArabic ? "جارٍ تسجيل الدخول…" : "Signing in…")
+                : (isArabic ? `تسجيل الدخول كـ ${role === "clinician" ? "مقدم الخدمة" : "الإدارة"}` : `Sign in as ${role === "clinician" ? "Provider" : "Admin"}`)}
             </button>
 
             {/* Dev bypass */}
@@ -236,20 +262,20 @@ function LoginForm() {
                 onClick={handleDevBypass}
                 className="w-full rounded-[7px] border border-amber-400/20 bg-amber-400/6 py-3 text-sm font-semibold text-amber-300/80 transition hover:border-amber-400/30 hover:text-amber-300"
               >
-                Dev bypass → {redirectDest}
+                {isArabic ? "تجاوز التطوير →" : "Dev bypass →"} {redirectDest}
               </button>
             )}
 
             <p className="pt-1 text-center text-sm text-white/30">
-              Don&apos;t have an account?{" "}
+              {isArabic ? "ليس لديك حساب؟" : "Don&apos;t have an account?"}{" "}
               <Link href="/signup" className="font-semibold text-white/55 transition hover:text-white">
-                Sign up
+                {isArabic ? "إنشاء حساب" : "Sign up"}
               </Link>
             </p>
 
             {process.env.NODE_ENV === "development" && (
               <p className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5 text-center text-[11px] leading-5 text-white/20">
-                Local dev: API on <code className="text-white/35">:8000</code> · PostgreSQL in{" "}
+                {isArabic ? "التطوير المحلي: API على" : "Local dev: API on"} <code className="text-white/35">:8000</code> · {isArabic ? " PostgreSQL في" : "PostgreSQL in"}{" "}
                 <code className="text-white/35">backend/.env</code>
               </p>
             )}
@@ -257,7 +283,7 @@ function LoginForm() {
         </div>
 
         <p className="mt-4 text-center text-xs text-white/15">
-          RASQ by Creative Motion Lab · Secure · Built for clinical workflows
+          {isArabic ? "RASQ من Creative Motion Lab · آمن · مصمم لسير العمل السريري" : "RASQ by Creative Motion Lab · Secure · Built for clinical workflows"}
         </p>
         <TrustFooter variant="dark" className="mt-2 border-none" />
       </div>

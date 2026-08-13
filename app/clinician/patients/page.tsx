@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useGlobalLanguage } from "@/app/components/GlobalLanguageProvider";
 import {
   formatLastSessionLine,
   formatSessionsLine,
@@ -38,25 +39,34 @@ function OperationalBadge({ badge }: { badge: PatientOperationalBadge }) {
   );
 }
 
-function NoRecentSessionBadge() {
+function NoRecentSessionBadge({ isArabic }: { isArabic: boolean }) {
   return (
     <span className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2 py-0.5 text-[10px] font-semibold text-white/45">
-      No recent session
+      {isArabic ? "لا توجد جلسة حديثة" : "No recent session"}
     </span>
   );
 }
 
-function StatusBadge({ status }: { status: string | null }) {
+function StatusBadge({ status, isArabic }: { status: string | null; isArabic: boolean }) {
   const s = status ?? "";
+  const normalized = s.toLowerCase();
   const cls =
-    s.toLowerCase() === "active"
+    normalized === "active"
       ? "border-[#1D9E75]/25 bg-[#1D9E75]/10 text-[#5DCAA5]"
-      : s.toLowerCase() === "review"
+      : normalized === "review"
       ? "border-amber-400/25 bg-amber-400/10 text-amber-300"
       : "border-[#1E2D42] bg-[#0B1220] text-white/35";
+
+  const label =
+    normalized === "review"
+      ? (isArabic ? "مراجعة" : "Review")
+      : normalized === "active"
+        ? (isArabic ? "نشط" : "Active")
+        : (isArabic ? "نشط" : "Active");
+
   return (
     <span className={`rounded-[5px] border px-2 py-0.5 text-[10px] font-semibold ${cls}`}>
-      {s || "Active"}
+      {s || label}
     </span>
   );
 }
@@ -64,6 +74,7 @@ function StatusBadge({ status }: { status: string | null }) {
 /* ─── Page ───────────────────────────────────────────────────────────────── */
 
 export default function PatientsPage() {
+  const { language, isArabic } = useGlobalLanguage();
   const {
     patients,
     setPatients,
@@ -119,9 +130,13 @@ export default function PatientsPage() {
     <>
       <ConfirmModal
         open={!!confirmTarget}
-        title="Delete Patient"
-        message={`"${confirmTarget?.full_name}" will be permanently removed. This cannot be undone.`}
-        confirmLabel="Yes, Delete"
+        title={language === "ar" ? "حذف المريض" : "Delete Patient"}
+        message={
+          language === "ar"
+            ? `سيتم حذف "${confirmTarget?.full_name}" نهائيًا. لا يمكن التراجع عن هذا الإجراء.`
+            : `"${confirmTarget?.full_name}" will be permanently removed. This cannot be undone.`
+        }
+        confirmLabel={language === "ar" ? "نعم، احذف" : "Yes, Delete"}
         loading={deletingId !== null}
         onConfirm={handleConfirmDelete}
         onCancel={() => setConfirmTarget(null)}
@@ -133,14 +148,16 @@ export default function PatientsPage() {
           <DemoOfflineBanner visible={demoMode} notice={demoNotice} />
 
           {/* ── Header ── */}
-          <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-4" dir={isArabic ? "rtl" : "ltr"}>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">
-                Provider workspace
+                {isArabic ? "مساحة مقدم الخدمة" : "Provider workspace"}
               </p>
-              <h1 className="mt-1.5 text-2xl font-bold text-white">Patients</h1>
+              <h1 className="mt-1.5 text-2xl font-bold text-white">{isArabic ? "المرضى" : "Patients"}</h1>
               <p className="mt-1 text-sm text-white/40">
-                {patients.length} records · {activeCount} active
+                {isArabic
+                  ? `${patients.length} سجل · ${activeCount} نشط`
+                  : `${patients.length} records · ${activeCount} active`}
               </p>
             </div>
             <div className="flex items-center gap-2.5">
@@ -148,32 +165,32 @@ export default function PatientsPage() {
                 href="/clinician/patients/new"
                 className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]"
               >
-                Add Patient
+                {isArabic ? "إضافة مريض" : "Add Patient"}
               </Link>
               <Link
                 href="/clinician/assessment/new"
                 className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-4 py-2.5 text-sm font-semibold text-white/60 transition hover:border-[#1D9E75]/25 hover:text-white"
               >
-                New Assessment
+                {isArabic ? "تقييم جديد" : "New Assessment"}
               </Link>
             </div>
           </div>
 
           {/* ── Error banner ── */}
           {error && (
-            <ClinicianInlineError message={`Could not load patients. ${error}`} />
+            <ClinicianInlineError message={isArabic ? `تعذّر تحميل المرضى. ${error}` : `Could not load patients. ${error}`} />
           )}
 
           {/* ── Search ── */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5" dir={isArabic ? "rtl" : "ltr"}>
             <div className="relative flex-1">
               <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/25" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
               </svg>
               <input
                 type="search"
-                aria-label="Search patients by name, diagnosis, or phone"
-                placeholder="Search by name, diagnosis, or phone…"
+                aria-label={isArabic ? "البحث عن المرضى بالاسم أو التشخيص أو الهاتف" : "Search patients by name, diagnosis, or phone"}
+                placeholder={isArabic ? "ابحث باسم المريض أو التشخيص أو الهاتف…" : "Search by name, diagnosis, or phone…"}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full rounded-[7px] border border-[#1E2D42] bg-[#0F1825] py-2.5 pl-9 pr-4 text-sm text-white outline-none placeholder:text-white/20 focus:border-[#1D9E75]/40"
@@ -185,7 +202,7 @@ export default function PatientsPage() {
                 onClick={() => setSearch("")}
                 className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2.5 text-xs font-semibold text-white/40 transition hover:text-white"
               >
-                Clear
+                {isArabic ? "مسح" : "Clear"}
               </button>
             )}
           </div>
@@ -195,7 +212,14 @@ export default function PatientsPage() {
             <table className="min-w-full">
               <thead className="bg-[#0B1220]">
                 <tr>
-                  {["Patient", "Diagnosis", "Phone", "Status", "Added", ""].map((h) => (
+                  {[
+                    isArabic ? "المريض" : "Patient",
+                    isArabic ? "التشخيص" : "Diagnosis",
+                    isArabic ? "الهاتف" : "Phone",
+                    isArabic ? "الحالة" : "Status",
+                    isArabic ? "تاريخ الإضافة" : "Added",
+                    "",
+                  ].map((h) => (
                     <th
                       key={h}
                       className="px-5 py-3 text-left text-[10px] font-bold uppercase tracking-wider text-white/25"
@@ -210,21 +234,23 @@ export default function PatientsPage() {
                 {isLoading ? (
                   <tr>
                     <td colSpan={6} className="px-5 py-10 text-sm text-white/30" aria-busy="true">
-                      Loading patients…
+                      {isArabic ? "جارٍ تحميل المرضى…" : "Loading patients…"}
                     </td>
                   </tr>
                 ) : filtered.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-5 py-10 text-center">
                       <p className="text-[12px] text-[#6B7280]">
-                        {search ? "No patients match the current search." : "No patients yet. Add your first patient to begin the pilot workflow."}
+                        {search
+                          ? (isArabic ? "لا توجد مرضى مطابقون للبحث الحالي." : "No patients match the current search.")
+                          : (isArabic ? "لا يوجد مرضى بعد. أضف أول مريض لك لبدء سير العمل التجريبي." : "No patients yet. Add your first patient to begin the pilot workflow.")}
                       </p>
                       {!search && (
                         <Link
                           href="/clinician/patients/new"
                           className="mt-4 inline-flex rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]"
                         >
-                          Add your first patient
+                          {isArabic ? "أضف أول مريض لك" : "Add your first patient"}
                         </Link>
                       )}
                     </td>
@@ -269,12 +295,12 @@ export default function PatientsPage() {
                                 {operational.badges.map((badge) => (
                                   <OperationalBadge key={badge.label} badge={badge} />
                                 ))}
-                                {showNoRecent && <NoRecentSessionBadge />}
+                                {showNoRecent && <NoRecentSessionBadge isArabic={isArabic} />}
                               </div>
                             )}
                             {showNoRecent && operational && operational.badges.length === 0 && (
                               <div className="mt-1.5">
-                                <NoRecentSessionBadge />
+                                <NoRecentSessionBadge isArabic={isArabic} />
                               </div>
                             )}
                             {sessionsLine && (
@@ -295,7 +321,7 @@ export default function PatientsPage() {
                       {/* Diagnosis */}
                       <td className="px-5 py-3.5">
                         <span className="text-sm text-white/55">
-                          {patient.diagnosis || "Not specified"}
+                          {patient.diagnosis || (isArabic ? "غير محدد" : "Not specified")}
                         </span>
                       </td>
 
@@ -306,7 +332,7 @@ export default function PatientsPage() {
 
                       {/* Status */}
                       <td className="px-5 py-3.5">
-                        <StatusBadge status={patient.status} />
+                        <StatusBadge status={patient.status} isArabic={isArabic} />
                       </td>
 
                       {/* Added date */}
@@ -323,7 +349,7 @@ export default function PatientsPage() {
                             href={`/clinician/patients/${patient.id}`}
                             className="rounded-[6px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3 py-1.5 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
                           >
-                            Open profile
+                            {isArabic ? "فتح الملف" : "Open profile"}
                           </Link>
                           <button
                             type="button"
@@ -331,7 +357,7 @@ export default function PatientsPage() {
                             onClick={() => setConfirmTarget(patient)}
                             className="rounded-[6px] border border-rose-400/20 bg-[#0B1220] px-3 py-1.5 text-xs font-semibold text-rose-400/60 transition hover:border-rose-400/40 hover:text-rose-300 disabled:opacity-40"
                           >
-                            {deletingId === patient.id ? "…" : "Delete"}
+                            {deletingId === patient.id ? "…" : (isArabic ? "حذف" : "Delete")}
                           </button>
                         </div>
                       </td>
@@ -346,8 +372,9 @@ export default function PatientsPage() {
           {/* Footer count */}
           {!isLoading && (
             <p className="text-xs text-white/20">
-              {filtered.length} of {patients.length} patient{patients.length !== 1 ? "s" : ""}
-              {search ? ` matching "${search}"` : " shown"}
+              {isArabic
+                ? `${filtered.length} من ${patients.length} مريض${patients.length !== 1 ? "" : ""} ${search ? `مطابق لبحث "${search}"` : "معروض"}`
+                : `${filtered.length} of ${patients.length} patient${patients.length !== 1 ? "s" : ""}${search ? ` matching "${search}"` : " shown"}`}
             </p>
           )}
         </div>
