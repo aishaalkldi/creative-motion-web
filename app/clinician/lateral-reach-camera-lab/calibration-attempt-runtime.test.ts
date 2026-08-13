@@ -743,4 +743,37 @@ describe("executeCalibrationStartupTransaction", () => {
     assert.strictEqual(stopCallCount, 0); // Must not stop newer detector
     assert.strictEqual(gate.startupOwner, 3); // Newer owner preserved
   });
+  it("stale after controller start does not stop newer detector", async () => {
+    const gate = createCalibrationRuntimeGate();
+    const gen1 = tryBeginCalibrationStartup(gate)!;
+    const configuredController = buildMockController("configured");
+
+    let stopCallCount = 0;
+
+    const deps: StartupDependencies = {
+      startAcquisition: async () => {},
+      stopDetector: () => {
+        stopCallCount++;
+      },
+      getDetectorStatus: () => "acquiring",
+      now: () => 1000,
+      startController: () => {
+        invalidateCalibrationRuntime(gate);
+        const gen2 = tryBeginCalibrationStartup(gate);
+        assert.strictEqual(gen2, 3);
+        return buildMockController("capturing_start");
+      },
+    };
+
+    const result = await executeCalibrationStartupTransaction(
+      gate,
+      gen1,
+      configuredController,
+      deps,
+    );
+
+    assert.strictEqual(result.kind, "stale");
+    assert.strictEqual(stopCallCount, 0);
+    assert.strictEqual(gate.startupOwner, 3);
+  });
 });

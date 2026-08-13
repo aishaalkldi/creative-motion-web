@@ -115,7 +115,7 @@ export default function LateralReachCameraLabPage() {
 
     // Slice 18 — legacy/calibration mutual exclusion
     const eligibility = checkLegacyStartEligibility(
-      snapshot?.status ?? "idle",
+      detector.getSnapshot().status,
       startInProgressRef.current,
       runtimeGateRef.current.startupOwner !== null,
       activeControllerRef.current.current !== null,
@@ -149,7 +149,7 @@ export default function LateralReachCameraLabPage() {
     } finally {
       startInProgressRef.current = false;
     }
-  }, [testedSide, snapshot?.status]);
+  }, [testedSide]);
 
   // Slice 18 — stop during starting (invalidate + stop + idle, no controller)
   const handleStopDuringStarting = useCallback(() => {
@@ -199,7 +199,7 @@ export default function LateralReachCameraLabPage() {
 
     // Check eligibility
     const eligibility = checkCalibrationStartEligibility(
-      snapshot?.status ?? "idle",
+      detector.getSnapshot().status,
       startInProgressRef.current,
       runtimeGateRef.current.startupOwner !== null,
       activeControllerRef.current.current !== null,
@@ -276,7 +276,7 @@ export default function LateralReachCameraLabPage() {
     } finally {
       releaseCalibrationStartup(runtimeGateRef.current, generation);
     }
-  }, [snapshot?.status, attemptPlanLock, configLock, testedSide]);
+  }, [attemptPlanLock, configLock, testedSide]);
 
   const handleArmReadiness = useCallback(() => {
     detectorRef.current?.armReadiness();

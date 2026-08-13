@@ -340,8 +340,7 @@ export async function executeCalibrationStartupTransaction(
 
   // Step 6: Final ownership check before publishing (defensive)
   if (!isCalibrationStartupCurrent(gate, generation)) {
-    // Extremely unlikely but handle it: stale after successful start
-    deps.stopDetector();
+    // Stale owner: true no-op; do not stop a detector that may belong to a newer attempt.
     return { kind: "stale" };
   }
 
