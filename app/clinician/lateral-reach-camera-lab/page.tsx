@@ -19,6 +19,32 @@ import {
   tryLockLateralReachLabTechnicalConfig,
   type LabTechnicalConfigLock,
 } from "@/app/clinician/lateral-reach-camera-lab/technical-config-intake";
+// Slice 18 — calibration attempt runtime
+import {
+  cancelLateralReachCalibrationAttempt,
+  getLateralReachCalibrationOutcome,
+  startLateralReachCalibrationAttempt,
+} from "@/app/lib/upper-limb-motor-screen/lateral-reach-calibration-controller";
+import type {
+  LateralReachCalibrationControllerInput,
+  LateralReachCalibrationControllerState,
+  LateralReachCalibrationControllerOutcome,
+} from "@/app/lib/upper-limb-motor-screen/lateral-reach-calibration-controller";
+import {
+  checkCalibrationStartEligibility,
+  checkLegacyStartEligibility,
+  consumeActiveCalibrationController,
+  createActiveCalibrationControllerOwner,
+  createCalibrationRuntimeGate,
+  createConfiguredCalibrationController,
+  executeCalibrationStartupTransaction,
+  invalidateCalibrationRuntime,
+  releaseCalibrationStartup,
+  tryBeginCalibrationStartup,
+  type ActiveCalibrationControllerOwner,
+  type CalibrationLifecycle,
+  type CalibrationRuntimeGate,
+} from "./calibration-attempt-runtime";
 
 const CANVAS_WIDTH = 640;
 const CANVAS_HEIGHT = 480;
@@ -40,6 +66,19 @@ export default function LateralReachCameraLabPage() {
   const [configLock, setConfigLock] = useState<LabTechnicalConfigLock | null>(null);
   const [configLockError, setConfigLockError] = useState<string | null>(null);
 
+  // Slice 18 — calibration attempt runtime state
+  const runtimeGateRef = useRef<CalibrationRuntimeGate>(createCalibrationRuntimeGate());
+  const activeControllerRef = useRef<ActiveCalibrationControllerOwner>(
+    createActiveCalibrationControllerOwner(),
+  );
+  const [activeController, setActiveController] =
+    useState<LateralReachCalibrationControllerState | null>(null);
+  const [calibrationLifecycle, setCalibrationLifecycle] =
+    useState<CalibrationLifecycle>("idle");
+  const [startupError, setStartupError] = useState<string | null>(null);
+  const [lastCalibrationOutcome, setLastCalibrationOutcome] =
+    useState<LateralReachCalibrationControllerOutcome | null>(null);
+
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const detectorRef = useRef<LateralReachCameraDetector | null>(null);
@@ -52,7 +91,14 @@ export default function LateralReachCameraLabPage() {
     });
     detectorRef.current = detector;
 
+    const runtimeGate = runtimeGateRef.current;
+    const activeControllerOwner = activeControllerRef.current;
+
     return () => {
+      // Slice 18 — unmount cleanup (no stale async activation)
+      invalidateCalibrationRuntime(runtimeGate);
+      consumeActiveCalibrationController(activeControllerOwner);
+
       detector.stop();
       detectorRef.current = null;
     };
@@ -63,7 +109,20 @@ export default function LateralReachCameraLabPage() {
     const video = videoRef.current;
     const canvas = canvasRef.current;
 
-    if (!detector || !video || !canvas || startInProgressRef.current || snapshot?.status === "running") {
+    if (!detector || !video || !canvas) {
+      return;
+    }
+
+    // Slice 18 — legacy/calibration mutual exclusion
+    const eligibility = checkLegacyStartEligibility(
+      detector.getSnapshot().status,
+      startInProgressRef.current,
+      runtimeGateRef.current.startupOwner !== null,
+      activeControllerRef.current.current !== null,
+    );
+
+    if (!eligibility.allowed) {
+      console.warn(`Legacy start blocked: ${eligibility.reason}`);
       return;
     }
 
@@ -90,11 +149,134 @@ export default function LateralReachCameraLabPage() {
     } finally {
       startInProgressRef.current = false;
     }
-  }, [testedSide, snapshot?.status]);
+  }, [testedSide]);
+
+  // Slice 18 — stop during starting (invalidate + stop + idle, no controller)
+  const handleStopDuringStarting = useCallback(() => {
+    invalidateCalibrationRuntime(runtimeGateRef.current);
+    detectorRef.current?.stop();
+    setCalibrationLifecycle("idle");
+  }, []);
+
+  // Slice 18 — cancel active calibration (consume + cancel + stop + outcome)
+  const handleCancelCalibration = useCallback(() => {
+    const controller = consumeActiveCalibrationController(activeControllerRef.current);
+    if (!controller) return; // Already cancelled
+
+    invalidateCalibrationRuntime(runtimeGateRef.current);
+
+    const terminalController = cancelLateralReachCalibrationAttempt(controller);
+    const outcome = getLateralReachCalibrationOutcome(terminalController);
+
+    detectorRef.current?.stop();
+
+    setActiveController(null);
+    setLastCalibrationOutcome(outcome);
+    setCalibrationLifecycle("idle");
+  }, []);
 
   const handleStop = useCallback(() => {
-    detectorRef.current?.stop();
-  }, []);
+    // Slice 18 — lifecycle-aware stop
+    if (calibrationLifecycle === "starting") {
+      handleStopDuringStarting();
+    } else if (activeControllerRef.current.current !== null) {
+      handleCancelCalibration();
+    } else {
+      // Legacy detector stop
+      detectorRef.current?.stop();
+    }
+  }, [calibrationLifecycle, handleStopDuringStarting, handleCancelCalibration]);
+
+  // Slice 18 — explicit calibration startup
+  const handleStartCalibration = useCallback(async () => {
+    const detector = detectorRef.current;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    if (!detector || !video || !canvas) {
+      return;
+    }
+
+    // Check eligibility
+    const eligibility = checkCalibrationStartEligibility(
+      detector.getSnapshot().status,
+      startInProgressRef.current,
+      runtimeGateRef.current.startupOwner !== null,
+      activeControllerRef.current.current !== null,
+      attemptPlanLock !== null,
+      configLock !== null,
+    );
+
+    if (!eligibility.allowed) {
+      console.warn(`Calibration start blocked: ${eligibility.reason}`);
+      setStartupError(eligibility.reason ?? "start_blocked");
+      return;
+    }
+
+    // Try to begin startup
+    const generation = tryBeginCalibrationStartup(runtimeGateRef.current);
+    if (generation === null) {
+      console.warn("Calibration startup already owned");
+      return;
+    }
+
+    try {
+      // Snapshot locked inputs
+      const controllerInput: LateralReachCalibrationControllerInput = {
+        testedSide,
+        plan: attemptPlanLock!.lockedPlan,
+        startCaptureConfig: configLock!.lockedConfig.startCaptureConfig,
+        endpointCaptureConfig: configLock!.lockedConfig.endpointCaptureConfig,
+        zoneRadii: configLock!.lockedConfig.zoneRadii,
+        noiseFloor: configLock!.lockedConfig.noiseFloor.minDirectionAlignedMagnitude,
+      };
+
+      // Create configured controller (local, throws on invalid config)
+      const configuredController = createConfiguredCalibrationController(controllerInput);
+
+      // Only after configuration succeeds: publish starting state
+      setCalibrationLifecycle("starting");
+      setStartupError(null);
+      setLastCalibrationOutcome(null);
+
+      // Execute async startup transaction
+      const result = await executeCalibrationStartupTransaction(
+        runtimeGateRef.current,
+        generation,
+        configuredController,
+        {
+          startAcquisition: () => detector.startAcquisition(video, canvas),
+          stopDetector: () => detector.stop(),
+          getDetectorStatus: () => detector.getSnapshot().status,
+          now: () => performance.now(),
+          startController: startLateralReachCalibrationAttempt,
+        },
+      );
+
+      if (result.kind === "stale") {
+        // Stale: no mutation, return silently
+        return;
+      }
+
+      if (result.kind === "failed") {
+        setStartupError(result.error);
+        setCalibrationLifecycle("idle");
+        return;
+      }
+
+      // Active: publish controller
+      activeControllerRef.current.current = result.capturingController;
+      setActiveController(result.capturingController);
+      setCalibrationLifecycle("active");
+    } catch (err) {
+      // Configuration or unexpected error before acquisition
+      console.error("Calibration startup error:", err);
+      setStartupError(err instanceof Error ? err.message : String(err));
+      setCalibrationLifecycle("idle");
+    } finally {
+      releaseCalibrationStartup(runtimeGateRef.current, generation);
+    }
+  }, [attemptPlanLock, configLock, testedSide]);
 
   const handleArmReadiness = useCallback(() => {
     detectorRef.current?.armReadiness();
@@ -144,7 +326,7 @@ export default function LateralReachCameraLabPage() {
     setConfigLockError(null);
   }, [configInput, configLock]);
 
-  const showVideo = snapshot?.status === "running" || snapshot?.initPhase === "camera";
+  const showVideo = snapshot?.status === "running" || snapshot?.status === "acquiring" || snapshot?.initPhase === "camera";
   const canArmReadiness =
     snapshot?.status === "running" &&
     snapshot?.engineSnapshot &&
@@ -236,38 +418,40 @@ export default function LateralReachCameraLabPage() {
         {/* Controls */}
         <div className="mt-6 space-y-4">
           {/* Tested Side Selection */}
-          {snapshot?.status !== "running" && (
-            <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-4">
-              <p className="text-sm font-medium text-[#F9FAFB]">Tested Side</p>
-              <p className="mt-1 text-xs text-[#6B7280]">
-                Select which anatomical side to track
-              </p>
-              <div className="mt-3 flex gap-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="testedSide"
-                    value="right"
-                    checked={testedSide === "right"}
-                    onChange={() => setTestedSide("right")}
-                    className="h-4 w-4 text-[#1D9E75]"
-                  />
-                  <span className="text-sm text-[#F9FAFB]">Right</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="testedSide"
-                    value="left"
-                    checked={testedSide === "left"}
-                    onChange={() => setTestedSide("left")}
-                    className="h-4 w-4 text-[#1D9E75]"
-                  />
-                  <span className="text-sm text-[#F9FAFB]">Left</span>
-                </label>
+          {snapshot?.status !== "running" &&
+            calibrationLifecycle !== "starting" &&
+            calibrationLifecycle !== "active" && (
+              <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-4">
+                <p className="text-sm font-medium text-[#F9FAFB]">Tested Side</p>
+                <p className="mt-1 text-xs text-[#6B7280]">
+                  Select which anatomical side to track
+                </p>
+                <div className="mt-3 flex gap-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="testedSide"
+                      value="right"
+                      checked={testedSide === "right"}
+                      onChange={() => setTestedSide("right")}
+                      className="h-4 w-4 text-[#1D9E75]"
+                    />
+                    <span className="text-sm text-[#F9FAFB]">Right</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="radio"
+                      name="testedSide"
+                      value="left"
+                      checked={testedSide === "left"}
+                      onChange={() => setTestedSide("left")}
+                      className="h-4 w-4 text-[#1D9E75]"
+                    />
+                    <span className="text-sm text-[#F9FAFB]">Left</span>
+                  </label>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Slice 16 — pre-movement calibration attempt-plan intake (lab only) */}
           <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-4">
@@ -453,6 +637,73 @@ export default function LateralReachCameraLabPage() {
 }`}
               </pre>
             </details>
+          </div>
+
+          {/* Slice 18 — Calibration Startup */}
+          <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-4">
+            <p className="text-sm font-medium text-[#F9FAFB]">
+              Calibration Startup (Slice 18)
+            </p>
+            <p className="mt-1 text-xs leading-[1.7] text-[#6B7280]">
+              Explicit one-shot calibration attempt with acquisition lifecycle. Requires locked
+              attempt plan and technical config. Defers controller capture start until detector
+              confirms &quot;acquiring&quot;. No frame submission (Slice 19). No engine activation (Slice 20).
+            </p>
+
+            {/* Calibration Lifecycle Diagnostic */}
+            <div className="mt-3 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-3">
+              <p className="text-xs font-semibold text-[#F9FAFB]">
+                Calibration Lifecycle:{" "}
+                <span className="font-mono text-[#1D9E75]">{calibrationLifecycle}</span>
+              </p>
+              {activeController && (
+                <p className="mt-1 text-xs text-[#9CA3AF]">
+                  Active Controller Phase:{" "}
+                  <span className="font-mono text-[#F9FAFB]">{activeController.phase}</span>
+                </p>
+              )}
+              {lastCalibrationOutcome && (
+                <p className="mt-1 text-xs text-[#9CA3AF]">
+                  Last Outcome:{" "}
+                  <span className="font-mono text-[#F9FAFB]">{lastCalibrationOutcome.kind}</span>
+                </p>
+              )}
+            </div>
+
+            {/* Startup Error */}
+            {startupError && (
+              <div className="mt-3 rounded-[8px] border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-xs text-rose-200">
+                Startup Error: {startupError}
+              </div>
+            )}
+
+            {/* Start Calibration Button */}
+            {calibrationLifecycle === "idle" && snapshot?.status !== "running" && (
+              <button
+                type="button"
+                onClick={handleStartCalibration}
+                disabled={
+                  !attemptPlanLock ||
+                  !configLock ||
+                  snapshot?.status === "initializing" ||
+                  startInProgressRef.current
+                }
+                className="mt-3 rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#179165] disabled:opacity-50"
+              >
+                Start Calibration
+              </button>
+            )}
+
+            {/* Cancel Calibration */}
+            {(calibrationLifecycle === "starting" || calibrationLifecycle === "active") && (
+              <button
+                type="button"
+                onClick={handleStop}
+                className="mt-3 rounded-[7px] border border-rose-400/30 bg-rose-400/10 px-4 py-2.5 text-sm font-semibold text-rose-100 transition hover:bg-rose-400/20"
+              >
+                {calibrationLifecycle === "starting" ? "Stop Startup" : "Cancel Calibration"}
+              </button>
+            )}
           </div>
 
           {/* Start/Stop Buttons */}
