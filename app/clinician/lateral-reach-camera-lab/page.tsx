@@ -14,6 +14,11 @@ import {
   type LabAttemptPlanLock,
   type LabScreenHorizontalDirectionSelection,
 } from "@/app/clinician/lateral-reach-camera-lab/attempt-plan-intake";
+import {
+  canLockLateralReachLabTechnicalConfig,
+  tryLockLateralReachLabTechnicalConfig,
+  type LabTechnicalConfigLock,
+} from "@/app/clinician/lateral-reach-camera-lab/technical-config-intake";
 
 const CANVAS_WIDTH = 640;
 const CANVAS_HEIGHT = 480;
@@ -29,6 +34,11 @@ export default function LateralReachCameraLabPage() {
   const [attemptPlanLockError, setAttemptPlanLockError] = useState<string | null>(
     null,
   );
+
+  // Slice 17 — technical-config intake state
+  const [configInput, setConfigInput] = useState<string>("");
+  const [configLock, setConfigLock] = useState<LabTechnicalConfigLock | null>(null);
+  const [configLockError, setConfigLockError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -111,6 +121,28 @@ export default function LateralReachCameraLabPage() {
     setAttemptPlanLock(result.lock);
     setAttemptPlanLockError(null);
   }, [screenHorizontalDirection, attemptPlanLock]);
+
+  // Slice 17 — technical-config lock handler
+  const handleLockTechnicalConfig = useCallback(() => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(configInput);
+    } catch (err) {
+      setConfigLockError(
+        `Invalid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      return;
+    }
+
+    const result = tryLockLateralReachLabTechnicalConfig(parsed, configLock);
+    if (!result.ok) {
+      setConfigLockError(result.error);
+      // previousLock retained — do not clear a valid prior lock
+      return;
+    }
+    setConfigLock(result.lock);
+    setConfigLockError(null);
+  }, [configInput, configLock]);
 
   const showVideo = snapshot?.status === "running" || snapshot?.initPhase === "camera";
   const canArmReadiness =
@@ -322,6 +354,105 @@ export default function LateralReachCameraLabPage() {
                 </p>
               </div>
             )}
+          </div>
+
+          {/* Slice 17 — technical-config intake (lab only) */}
+          <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-4">
+            <p className="text-sm font-medium text-[#F9FAFB]">
+              Technical Configuration (Experimental Lab Values)
+            </p>
+            <p className="mt-1 text-xs leading-[1.7] text-[#6B7280]">
+              Explicit numeric parameters for calibration and engine runtime. These are
+              lab-supplied experimental values — NOT production defaults, NOT clinically
+              validated thresholds, NOT device-validated constants. All values require
+              explicit entry. No production policy is established by this intake.
+            </p>
+
+            <div className="mt-3">
+              <label htmlFor="config-input" className="block text-xs font-medium text-[#F9FAFB]">
+                Configuration JSON (no defaults provided)
+              </label>
+              <textarea
+                id="config-input"
+                value={configInput}
+                onChange={(e) => setConfigInput(e.target.value)}
+                disabled={configLock !== null}
+                rows={12}
+                placeholder="Enter configuration JSON"
+                className="mt-2 w-full rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2 font-mono text-xs text-[#F9FAFB] placeholder-[#6B7280] disabled:opacity-50"
+              />
+            </div>
+
+            <div className="mt-3">
+              <button
+                type="button"
+                onClick={handleLockTechnicalConfig}
+                disabled={
+                  configLock !== null ||
+                  !canLockLateralReachLabTechnicalConfig(configInput)
+                }
+                className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2 text-xs font-semibold text-[#F9FAFB] transition hover:border-[#1D9E75] disabled:opacity-50"
+              >
+                Confirm / lock technical config
+              </button>
+            </div>
+
+            {configLockError && (
+              <p className="mt-3 text-xs text-rose-200">{configLockError}</p>
+            )}
+
+            {configLock && (
+              <div className="mt-3 rounded-[8px] border border-[#1D9E75]/40 bg-[#0B1220] p-3 text-xs">
+                <p className="font-semibold text-[#1D9E75]">
+                  Locked Technical Configuration (Experimental Lab Snapshot)
+                </p>
+                <pre className="mt-2 overflow-x-auto text-[10px] text-[#9CA3AF]">
+                  {JSON.stringify(configLock.lockedConfig, null, 2)}
+                </pre>
+                <p className="mt-2 text-[#6B7280]">
+                  Diagnostics above are from the locked snapshot, not the editable textarea.
+                </p>
+              </div>
+            )}
+
+            <details className="mt-3">
+              <summary className="cursor-pointer text-xs font-medium text-[#1D9E75]">
+                Structure Reference (no defaults)
+              </summary>
+              <pre className="mt-2 overflow-x-auto rounded-[7px] border border-[#1E2D42] bg-[#0B1220] p-3 text-[10px] text-[#6B7280]">
+{`{
+  "startCaptureConfig": {
+    "minStableDurationMs": <number >= 0>,
+    "maxJitterRadius": <number >= 0>,
+    "minStableSampleCount": <integer >= 1>,
+    "totalTimeoutMs": <number >= minStableDurationMs>
+  },
+  "endpointCaptureConfig": {
+    "minStableDurationMs": <number >= 0>,
+    "maxJitterRadius": <number >= 0>,
+    "minStableSampleCount": <integer >= 1>,
+    "totalTimeoutMs": <number >= minStableDurationMs>,
+    "minDisplacementFromStart": <number > 0>
+  },
+  "zoneRadii": {
+    "startingZoneRadius": <number > 0>,
+    "fixedTargetRadius": <number > 0>
+  },
+  "noiseFloor": {
+    "minDirectionAlignedMagnitude": <number > 0>
+  },
+  "tracking": {
+    "minWristVisibility": <number in [0,1]>,
+    "maxAllowedGapMs": <number >= 0>
+  },
+  "timing": {
+    "onsetConfirmationMs": <number >= 0>,
+    "dwellDurationMs": <number >= 0>,
+    "returnConfirmationMs": <number >= 0>
+  }
+}`}
+              </pre>
+            </details>
           </div>
 
           {/* Start/Stop Buttons */}
