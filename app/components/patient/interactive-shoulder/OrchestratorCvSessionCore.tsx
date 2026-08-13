@@ -43,6 +43,7 @@ import {
 } from "@/app/lib/interactive-shoulder/interactive-shoulder-ui";
 import { resolveHitExitTransitionMs } from "@/app/lib/interactive-shoulder/reach-the-light-motion";
 import { registerAllBlockRunners } from "@/app/lib/interactive-shoulder/block-engine/register-all-block-runners";
+import { DEFAULT_SAFE_TARGET_BOUNDS } from "@/app/lib/interactive-shoulder/target-generator";
 import type { ActiveBlockRunnerStates } from "@/app/lib/interactive-shoulder/block-engine/tick-active-block-runner";
 import {
   dispatchOrchestratorCvBlock,
@@ -62,6 +63,7 @@ import {
   applyDispatchOutcomesToAdaptiveState,
   resolveAttemptCompensationObservation,
 } from "@/app/lib/interactive-shoulder/adaptive/adaptive-attempt-runtime";
+import { resolveAdaptiveTargetPlacement } from "@/app/lib/interactive-shoulder/adaptive/adaptive-target-placement";
 import { resolveDifficultyConfigForSessionFromEnv } from "@/app/lib/interactive-shoulder/adaptive/difficulty-config-registry";
 import { createAdaptiveDifficultyState } from "@/app/lib/interactive-shoulder/adaptive/adaptive-difficulty";
 import type { AdaptiveDifficultyState } from "@/app/lib/interactive-shoulder/adaptive/adaptive-difficulty-types";
@@ -471,6 +473,23 @@ export function OrchestratorCvSessionCore({
           // it is not, `targetAttempt` stays undefined and dispatch behaves exactly as it
           // did before this stage — including the unconditional no-wrist skip.
           const adaptiveState = adaptiveStateRef.current;
+          // CHANGE-007. Resolved every tick from the CURRENT adaptive level and the CURRENT
+          // frame's geometry, and consumed by the lifecycle only at the moment it spawns.
+          // With adaptive off this is `placed: false, reason: "adaptiveDisabled"` and no
+          // placement key is ever added to the seam below.
+          //
+          // `DEFAULT_SAFE_TARGET_BOUNDS` is the same constant `dispatchOrchestratorCvBlock`
+          // hands the target runner, so the position is resolved against the bounds the
+          // generator will actually place within. Should those two ever diverge, the
+          // generator's own clamp still owns the safety property — the placement would be
+          // slightly off, never out of bounds.
+          const adaptivePlacement = resolveAdaptiveTargetPlacement({
+            adaptiveState,
+            affectedSide: therapeuticSideRef.current,
+            shoulderAnchorNormalized: poseSnap?.primaryShoulderNormalized ?? null,
+            reachRadiusNormalized: poseSnap?.estimatedArmLengthNormalized ?? null,
+            bounds: DEFAULT_SAFE_TARGET_BOUNDS,
+          });
           const targetAttempt: TargetAttemptTickConfig | undefined = adaptiveState
             ? {
                 // The engine's current window, fed back through the seam CHANGE-004 built.
@@ -479,9 +498,16 @@ export function OrchestratorCvSessionCore({
                 compensationObservedDuringAttempt: resolveAttemptCompensationObservation(
                   poseSnap?.compensationFlagged,
                 ),
-                // levelDegrees is deliberately NOT supplied. It cannot move a target yet
-                // (target-generator places randomly), so feeding it would transport a value
-                // with no effect and make the loop look closed when it is not.
+                // Position and level are supplied TOGETHER or not at all. Stamping a level
+                // on a randomly placed target would claim the target sits at an angle it
+                // does not; when the geometry is unavailable the honest report is that this
+                // target has no placement level, and the legacy random path runs.
+                ...(adaptivePlacement.placed
+                  ? {
+                      preferredTargetPosition: adaptivePlacement.position,
+                      levelDegrees: adaptivePlacement.levelDegrees,
+                    }
+                  : {}),
               }
             : undefined;
 

@@ -33,6 +33,15 @@ function startSessionBody(): string {
   return source.slice(start, end);
 }
 
+/** The dispatch seam construction inside the animation loop. */
+function seamBody(): string {
+  const start = source.indexOf("const adaptiveState = adaptiveStateRef.current;");
+  assert.ok(start >= 0, "the seam must exist");
+  const end = source.indexOf("if (dispatch.status ===", start);
+  assert.ok(end > start, "the seam body must be bounded");
+  return source.slice(start, end);
+}
+
 /** Body of the block-transition branch inside the animation loop. */
 function blockTransitionBody(): string {
   const start = source.indexOf("resetRunnerStatesForBlockTransition({");
@@ -111,17 +120,22 @@ describe("CHANGE-006 wiring — dispatch seam", () => {
     );
   });
 
-  it("8. levelDegrees is NOT fed into the runtime seam — that is CHANGE-007", () => {
-    // Transporting a value that cannot move a target would make the loop look closed.
-    const dispatchStart = source.indexOf("const targetAttempt: TargetAttemptTickConfig");
-    const dispatchEnd = source.indexOf("if (dispatch.status ===", dispatchStart);
-    assert.ok(dispatchStart >= 0 && dispatchEnd > dispatchStart);
-    // Asserts on a property ASSIGNMENT rather than on the identifier appearing at all, so
-    // the comment explaining the omission does not trip its own guard.
-    assert.doesNotMatch(
-      source.slice(dispatchStart, dispatchEnd),
-      /levelDegrees\s*:/,
-      "levelDegrees must not be supplied as a seam property by CHANGE-006",
+  it("8. CHANGE-007 supersedes the CHANGE-006 omission: levelDegrees now rides with a position", () => {
+    // CHANGE-006 asserted the OPPOSITE here — that levelDegrees must not be transported,
+    // because a value that could not move a target would make the loop look closed. That
+    // reason expired the moment placement became real, so the assertion is inverted rather
+    // than deleted: the guarantee it protects (no metadata-only transport) still holds, it
+    // is just now expressed as "never a level without the position it describes".
+    const seam = seamBody();
+    assert.match(seam, /levelDegrees:\s*adaptivePlacement\.levelDegrees/);
+    assert.match(seam, /preferredTargetPosition:\s*adaptivePlacement\.position/);
+
+    // Both keys must sit inside the SAME conditional spread. Two independent spreads would
+    // let a future edit ship a level for a randomly placed target.
+    assert.match(
+      seam,
+      /\.\.\.\(adaptivePlacement\.placed\s*\?\s*\{[^}]*preferredTargetPosition:[^}]*levelDegrees:[^}]*\}\s*:\s*\{\}\)/s,
+      "position and level must be supplied together, gated on a resolved placement",
     );
   });
 });

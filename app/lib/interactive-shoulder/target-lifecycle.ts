@@ -77,8 +77,26 @@ export type TargetLifecycleTickInput = {
   /**
    * Placement level in degrees to stamp on the next spawned target. Geometry only, and
    * never defaulted — see `TherapeuticTarget.levelDegrees`.
+   *
+   * Callers that also resolve `preferredTargetPosition` should supply the level the
+   * position was actually built from, so the stamped level and the target's coordinates
+   * describe the same placement. A level supplied WITHOUT a position is still legal (it is
+   * then pure metadata on a randomly placed target), but it is not what CHANGE-007 wires.
    */
   levelDegrees?: number;
+  /**
+   * Position the next spawned target should occupy, resolved by the caller — today, the
+   * adaptive shoulder-anchored geometry in `adaptive/adaptive-target-placement.ts`.
+   *
+   * Read ONLY at spawn, and forwarded verbatim to `generateTherapeuticTarget`, which stays
+   * the single target-construction authority and applies its own safe-bounds clamp. The
+   * lifecycle resolves no geometry of its own, owns no adaptive state, and imports nothing
+   * from the adaptive module.
+   *
+   * OPTIONAL, NEVER DEFAULTED: omitted or null means the generator's existing random
+   * placement runs unchanged.
+   */
+  preferredTargetPosition?: NormalizedPoint | null;
   /**
    * Caller-reported compensation for the current attempt. The lifecycle only accumulates
    * it (sticky until the next spawn) and passes it through on the terminal event; it runs
@@ -152,6 +170,7 @@ type SpawnResult = {
 function spawnNextTarget(
   state: TargetLifecycleState,
   input: TargetLifecycleTickInput,
+  config: TargetHitConfig,
 ): SpawnResult {
   const nextSequence = state.sequence + 1;
   const generated = generateTherapeuticTarget({
@@ -161,6 +180,9 @@ function spawnNextTarget(
     sequence: nextSequence,
     previousTarget: state.currentTarget,
     random: input.random,
+    // Forwarded verbatim. The generator decides what to do with it — including ignoring it
+    // when it is absent or unusable, which is the legacy path.
+    preferredPosition: input.preferredTargetPosition,
   });
   // Optional metadata is attached only when the caller actually supplied it — an absent
   // level stays absent rather than becoming a fabricated clinical default.
@@ -171,12 +193,38 @@ function spawnNextTarget(
   if (input.blockElapsedSeconds !== undefined && Number.isFinite(input.blockElapsedSeconds)) {
     target.spawnedAtBlockElapsedS = input.blockElapsedSeconds;
   }
+  // WRIST-ENTRY SEEDING — the invariant that keeps a spawn from paying out a free hit.
+  //
+  // A hit is registered on ENTRY only (`shouldRegisterTargetHit`: false → true). Seeding
+  // this flag to a flat `false` therefore asserted "the wrist is outside the new target",
+  // which is a claim about the patient that the lifecycle had not checked. Whenever it was
+  // wrong — a successor landing where the wrist already is — the very next tick saw a
+  // false → true edge that no movement produced, and credited a reach that never happened.
+  //
+  // Deterministic adaptive placement makes that case ordinary rather than rare: two
+  // attempts at the same level with an unmoved patient land in the same spot, so the wrist
+  // that just hit target N is inside target N+1 at the instant it appears.
+  //
+  // Reading the wrist's ACTUAL relationship to the new target fixes it at the source. A
+  // wrist already inside begins inside, so the patient must leave the target and come back
+  // for the entry edge to occur — one real reach, one hit.
+  //
+  // This is a software interaction invariant, not a clinical rule, and it is deliberately
+  // NOT conditional on adaptive difficulty: a randomly placed target can also land under
+  // the wrist, and two different hit semantics depending on a feature flag would be worse
+  // than either. No threshold is invented — the caller's own `config.collisionRadius` and
+  // the existing `isWristInsideTarget` decide, exactly as they do for every other tick.
+  const wristInsideAtSpawn =
+    input.wrist !== null && input.wrist !== undefined
+      ? isWristInsideTarget(input.wrist, target, config)
+      : false;
+
   return {
     state: {
       ...state,
       sequence: nextSequence,
       currentTarget: target,
-      wristInside: false,
+      wristInside: wristInsideAtSpawn,
       targetHit: false,
       attemptCompensationObserved: null,
       interaction: {
@@ -205,7 +253,7 @@ export function tickTargetLifecycle(
   const attemptStartedEvents: TargetAttemptStartEvent[] = [];
 
   const spawn = (from: TargetLifecycleState): TargetLifecycleState => {
-    const spawned = spawnNextTarget(from, input);
+    const spawned = spawnNextTarget(from, input, config);
     attemptStartedEvents.push(spawned.attemptStartedEvent);
     return spawned.state;
   };
@@ -282,12 +330,12 @@ export function tickTargetLifecycle(
         return { state: next, hitEvent, attemptStartedEvents, attemptTimeoutEvent: null };
       }
       next = spawn(next);
-      return {
-        state: { ...next, wristInside: false },
-        hitEvent,
-        attemptStartedEvents,
-        attemptTimeoutEvent: null,
-      };
+      // The successor's wrist-entry state comes from `spawnNextTarget` and is returned as
+      // it stands. Overwriting it with `false` here — which was a redundant no-op while
+      // spawns always started outside — would re-arm exactly the false immediate hit the
+      // seeding exists to prevent, and would do so on the reduced-motion path specifically,
+      // since that is where `hitExitTransitionMs === 0` sends the flow.
+      return { state: next, hitEvent, attemptStartedEvents, attemptTimeoutEvent: null };
     }
     next = { ...next, wristInside: isInside };
   } else {
@@ -341,8 +389,10 @@ export function tickTargetLifecycle(
       // No exit transition, no spawn lock and no exiting target are used — those are hit
       // presentation effects, and an expired attempt produces no patient-facing feedback.
       next = spawn(next);
+      // Seeded wrist-entry state is preserved here for the same reason as on the hit path
+      // above: an expired attempt's successor can land under a wrist that never left.
       return {
-        state: { ...next, wristInside: false },
+        state: next,
         hitEvent: null,
         attemptStartedEvents,
         attemptTimeoutEvent,

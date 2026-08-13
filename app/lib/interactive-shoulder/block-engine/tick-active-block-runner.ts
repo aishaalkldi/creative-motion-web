@@ -95,7 +95,13 @@ export type InstructionalBlockTickInput = ActiveBlockTickBase & {
  */
 export type TargetAttemptTickConfig = Pick<
   TargetLifecycleTickInput,
-  "attemptTimeoutMs" | "levelDegrees" | "compensationObservedDuringAttempt"
+  | "attemptTimeoutMs"
+  | "levelDegrees"
+  | "compensationObservedDuringAttempt"
+  // CHANGE-007. Transport only: this layer resolves no geometry, knows nothing about
+  // adaptive levels, and — exactly as with `attemptTimeoutMs` — an omitted value means
+  // "the caller resolved no placement", never "use a default position".
+  | "preferredTargetPosition"
 >;
 
 export type TargetBlockTickInput = ActiveBlockTickBase &
@@ -237,6 +243,7 @@ export function tickActiveBlockRunner(input: ActiveBlockTickInput): ActiveBlockT
         attemptTimeoutMs: input.attemptTimeoutMs,
         levelDegrees: input.levelDegrees,
         compensationObservedDuringAttempt: input.compensationObservedDuringAttempt,
+        preferredTargetPosition: input.preferredTargetPosition,
       });
       nextStates.target = ticked.state;
       return {
