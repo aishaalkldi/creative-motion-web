@@ -193,10 +193,19 @@ function mapTickResult(
  *    accomplish nothing and would only diverge from legacy behaviour. This is what makes
  *    "config omitted ⇒ legacy behaviour" a structural property rather than a promise.
  * 2. A target is currently active. This preserves target AVAILABILITY semantics exactly:
- *    with `currentTarget === null` the lifecycle's next tick would SPAWN — the first
- *    target of a block, or the successor waiting behind a hit's exit transition/spawn
- *    lock. Presenting a patient with a fresh target while their arm is not being tracked
- *    is a behaviour change this stage does not make, so those cases still skip.
+ *    with `currentTarget === null` the lifecycle's next tick would SPAWN, and presenting a
+ *    patient with a fresh target while their arm is not being tracked is a behaviour this
+ *    path has never had. Those ticks still skip.
+ *
+ * WHAT CHANGE-008 DID TO CONDITION 2 — a safety improvement, not a side effect.
+ * `currentTarget === null` used to mean only "the first target of a block" or "a hit's
+ * successor waiting out its exit transition", because every other terminal path replaced
+ * its target inline. Since terminal events now retire their target and leave the successor
+ * to a later tick, it also covers "a just-ended attempt's successor". So a tracking gap can
+ * no longer manufacture a CHAIN of incomplete attempts: the attempt already in flight
+ * expires exactly once, and nothing new is presented to — or scored against — a patient the
+ * detector cannot see. The chain is asserted absent in `orchestrator-cv-block-dispatch.test`
+ * (18/19) and end to end in `adaptive/immediate-successor-feedback.test` (13).
  *
  * Note what this is NOT: a missing wrist is never treated as failure and never produces a
  * timeout by itself. Expiration remains caused by elapsed active block time alone, and

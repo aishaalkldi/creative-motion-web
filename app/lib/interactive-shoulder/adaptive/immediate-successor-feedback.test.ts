@@ -930,6 +930,164 @@ describe("CHANGE-008 scripted multi-attempt flow", () => {
     assert.equal(reduced.rt.adaptive!.attemptTimeoutMs, normal.rt.adaptive!.attemptTimeoutMs);
   });
 
+  it("26. VERIFY-005 full journey: one session through every runtime state, in sequence", () => {
+    // THE RELEASE ARTIFACT. The other tests each isolate one property; this one proves the
+    // properties compose, in one continuous session, in the order a patient would meet
+    // them. Every stage asserts the invariant that matters at that stage, and every target
+    // the patient is shown is recorded so the whole arc can be read at the end.
+    const rt = createRuntime();
+    const shown: Array<{ seq: number; level: number | undefined }> = [];
+    const terminalIds: string[] = [];
+    let nowMs = T0;
+
+    const recordShownTarget = () => {
+      const target = activeTarget(rt);
+      shown.push({ seq: rt.states.target.sequence, level: target.levelDegrees });
+    };
+    const recordTerminal = (frame: FrameResult) => {
+      const d = contactOf(frame);
+      const id = d.targetContact?.targetId ?? d.targetAttemptTimeout?.targetId;
+      assert.ok(id, "a terminal frame must identify its attempt");
+      assert.equal(terminalIds.includes(id), false, `attempt ${id} ended twice`);
+      terminalIds.push(id);
+      // A terminal frame never builds its own successor — the whole point of CHANGE-008.
+      assert.equal(rt.states.target.currentTarget, null);
+      assert.equal(d.targetAttemptStarted.length, 0);
+    };
+    const buildSuccessor = () => {
+      nowMs += 32;
+      const frame = runFrame(rt, { nowMs, wrist: RESTING_WRIST, hitExitTransitionMs: NORMAL_EXIT_MS });
+      assert.equal(contactOf(frame).targetAttemptStarted.length, 1);
+      recordShownTarget();
+      // Whatever the engine last decided is already on the target the patient now sees.
+      assert.equal(activeTarget(rt).levelDegrees, rt.adaptive!.currentLevel);
+    };
+
+    // ── 1. Session starts with its first target ────────────────────────────────
+    runFrame(rt, { nowMs, wrist: RESTING_WRIST, hitExitTransitionMs: NORMAL_EXIT_MS });
+    recordShownTarget();
+    assert.equal(rt.states.target.sequence, 1);
+    assert.equal(activeTarget(rt).levelDegrees, CONFIG.startLevel);
+
+    // ── 2-3. The patient struggles: two timeouts lower the level ───────────────
+    for (let i = 0; i < 2; i += 1) {
+      const spawnedAt = nowMs;
+      recordTerminal(expireActiveAttempt(rt, spawnedAt, NORMAL_EXIT_MS));
+      nowMs = spawnedAt + rt.adaptive!.attemptTimeoutMs;
+      buildSuccessor();
+    }
+    assert.equal(rt.adaptive!.currentLevel, CONFIG.startLevel - CONFIG.decreaseStep);
+    assert.equal(rt.adaptive!.currentLevel, CONFIG.minLevel, "the fixture floor");
+
+    // ── 4. Still struggling at the floor: time is extended, never lowered ──────
+    for (let i = 0; i < 2; i += 1) {
+      const spawnedAt = nowMs;
+      recordTerminal(expireActiveAttempt(rt, spawnedAt, NORMAL_EXIT_MS));
+      nowMs = spawnedAt + rt.adaptive!.attemptTimeoutMs;
+      buildSuccessor();
+    }
+    assert.equal(rt.adaptive!.currentLevel, CONFIG.minLevel, "never below the floor");
+    assert.equal(rt.adaptive!.attemptTimeoutMs, CONFIG.extendedAttemptTimeoutMs);
+
+    // ── 5. A compensated success: counted, but it must not advance progression ─
+    nowMs += 200;
+    const compensatedTarget = activeTarget(rt);
+    const compensated = runFrame(rt, {
+      nowMs,
+      wrist: { x: compensatedTarget.x, y: compensatedTarget.y },
+      hitExitTransitionMs: NORMAL_EXIT_MS,
+      compensationFlagged: true,
+    });
+    assert.equal(contactOf(compensated).targetContact?.compensatedDuringAttempt, true);
+    recordTerminal(compensated);
+    assert.equal(rt.adaptive!.successStreak, 0, "a compensated success never advances the streak");
+    nowMs += NORMAL_EXIT_MS;
+    buildSuccessor();
+
+    // ── 6. Clean successes: the streak fires and the level rises ───────────────
+    const levelBeforeIncrease = rt.adaptive!.currentLevel;
+    for (let i = 0; i < CONFIG.successStreakToIncrease; i += 1) {
+      nowMs += 200;
+      recordTerminal(reachActiveTarget(rt, nowMs, NORMAL_EXIT_MS));
+      nowMs += NORMAL_EXIT_MS;
+      buildSuccessor();
+    }
+    assert.equal(rt.adaptive!.currentLevel, levelBeforeIncrease + CONFIG.increaseStep);
+    // Progressing away from the floor withdraws the extended accommodation.
+    assert.equal(rt.adaptive!.attemptTimeoutMs, CONFIG.normalAttemptTimeoutMs);
+
+    // ── 7. Pause and resume: no duplicate outcome, no duplicate target ─────────
+    const beforePause = { ...rt.adaptive! };
+    const sequenceBeforePause = rt.states.target.sequence;
+    const targetIdBeforePause = activeTarget(rt).id;
+    rt.orchestrator.pause(nowMs);
+    for (let i = 0; i < 5; i += 1) {
+      nowMs += 400;
+      assert.equal(runFrame(rt, { nowMs, wrist: RESTING_WRIST }).dispatched.status, "not_active");
+    }
+    rt.orchestrator.resume(nowMs);
+    nowMs += 32;
+    const afterResume = runFrame(rt, { nowMs, wrist: RESTING_WRIST, hitExitTransitionMs: NORMAL_EXIT_MS });
+    assert.equal(afterResume.dispatched.status, "dispatched");
+    assert.equal(rt.states.target.sequence, sequenceBeforePause, "the pause spawned nothing");
+    assert.equal(activeTarget(rt).id, targetIdBeforePause, "the same attempt resumed");
+    assert.equal(rt.adaptive!.currentLevel, beforePause.currentLevel);
+    assert.equal(rt.adaptive!.successStreak, beforePause.successStreak);
+
+    // ── 8. Tracking loss and recovery: no outcome, no new target ───────────────
+    rt.orchestrator.reportInputEvent({ type: "trackerLost", capturedAtMs: nowMs }, nowMs);
+    for (let i = 0; i < 3; i += 1) {
+      nowMs += 500;
+      const frame = runFrame(rt, { nowMs, wrist: null });
+      assert.equal(frame.dispatched.status, "not_active", "a held session dispatches nothing");
+    }
+    rt.orchestrator.reportInputEvent({ type: "trackerReady", capturedAtMs: nowMs }, nowMs);
+    assert.equal(rt.orchestrator.getSnapshot(nowMs).sessionState, "active");
+    assert.equal(rt.adaptive!.struggleStreak, 0, "tracking loss is never patient failure");
+    assert.equal(rt.states.target.sequence, sequenceBeforePause);
+    assert.equal(activeTarget(rt).id, targetIdBeforePause);
+
+    // ── 9. The session continues normally ─────────────────────────────────────
+    nowMs += 200;
+    recordTerminal(reachActiveTarget(rt, nowMs, NORMAL_EXIT_MS));
+    nowMs += NORMAL_EXIT_MS;
+    buildSuccessor();
+
+    // ── Whole-journey invariants ──────────────────────────────────────────────
+    // Every attempt ended exactly once (enforced per-terminal above) and every target the
+    // patient saw was a distinct, monotonically numbered one.
+    assert.deepEqual(
+      shown.map((s) => s.seq),
+      shown.map((_, i) => i + 1),
+      "target sequence is strictly monotonic with no gaps and no repeats",
+    );
+    assert.equal(terminalIds.length, shown.length - 1, "every target but the live one ended");
+    assert.equal(new Set(terminalIds).size, terminalIds.length, "no attempt ended twice");
+
+    // The level arc the patient actually experienced: start, ease to the floor, hold at the
+    // floor while time is extended, then climb back once reaches succeed. Every entry is
+    // the level in force at the moment that target was built — never one target behind.
+    assert.deepEqual(
+      shown.map((s) => s.level),
+      //  1   2   3   4   5   6   7   8   9   ← target sequence
+      //  ─── struggling ───  ┊   ┊   ┊   ┊
+      //          ↑ decrease  ┊   ┊   ┊   ┊
+      //              ↑ extended window      (level held at the floor, not lowered)
+      //                  ↑ compensated hit — counted, no progression
+      //                      ↑   ↑ two clean reaches → increase
+      //                              ↑ pause / tracking loss changed nothing
+      [50, 50, 40, 40, 40, 40, 40, 50, 50],
+    );
+
+    assert.deepEqual(
+      rt.adaptive!.changes.map((c) => c.reason),
+      ["consecutiveStruggle", "minLevelExtendedTimeout", "consecutiveSuccess"],
+    );
+    // Contacts reached the orchestrator through the untouched existing session path.
+    assert.equal(rt.sessionInputs.length, rt.states.target.interaction.targetsReached);
+    assert.ok(rt.sessionInputs.every((e) => e.type === "targetContact"));
+  });
+
   it("24. the whole flow is deterministic when repeated", () => {
     const first = runScriptedFlow(NORMAL_EXIT_MS);
     for (let run = 0; run < 3; run += 1) {

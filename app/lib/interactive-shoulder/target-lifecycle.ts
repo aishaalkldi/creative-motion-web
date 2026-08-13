@@ -358,25 +358,24 @@ export function tickTargetLifecycle(
           : {}),
         ...(compensated !== null ? { compensatedDuringAttempt: compensated } : {}),
       };
+      // TERMINAL: the attempt is over. Its metrics are recorded and its target is retired in
+      // one step — the two were separate objects while a successor still had to be spawned
+      // between them, and splitting them now would only assign a `wristInside`/`targetHit`
+      // pair that the very next line overwrites.
+      //
+      // One shape serves both motion preferences. `hitExitTransitionMs` selects only the
+      // PRESENTATION effects — whether an exiting orb animates out, and how long the next
+      // target is withheld. It no longer decides whether the successor is built now or
+      // later: it is always later. That is what makes reduced motion an animation
+      // preference rather than a different adaptive timeline.
       next = {
         ...next,
-        wristInside: isInside,
-        targetHit: true,
         interaction: {
           ...next.interaction,
           targetsReached: next.interaction.targetsReached + 1,
           targetHitTimestampsMs: [...next.interaction.targetHitTimestampsMs, input.nowMs],
           reactionTimesMs: [...next.interaction.reactionTimesMs, reactionTimeMs],
         },
-      };
-      // TERMINAL: the attempt is over and its target is retired here, in one shape for both
-      // motion preferences. `hitExitTransitionMs` selects only the PRESENTATION effects —
-      // whether an exiting orb animates out and for how long the next target is withheld.
-      // It no longer decides whether the successor is built now or later: it is always
-      // later. That is what makes reduced motion an animation preference rather than a
-      // different adaptive timeline.
-      next = {
-        ...next,
         currentTarget: null,
         exitingTarget: exitTransitionMs > 0 ? hitTarget : null,
         spawnLockedUntilMs: exitTransitionMs > 0 ? input.nowMs + exitTransitionMs : null,
