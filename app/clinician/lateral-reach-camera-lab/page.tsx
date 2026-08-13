@@ -8,6 +8,12 @@ import {
 } from "@/app/lib/cv/lateral-reach-camera-detector";
 import { validateLateralReachConfig } from "@/app/lib/upper-limb-motor-screen/lateral-reach-engine";
 import type { UpperLimbSide } from "@/app/lib/upper-limb-motor-screen/types";
+import {
+  canLockLateralReachLabAttemptPlan,
+  tryLockLateralReachLabAttemptPlan,
+  type LabAttemptPlanLock,
+  type LabScreenHorizontalDirectionSelection,
+} from "@/app/clinician/lateral-reach-camera-lab/attempt-plan-intake";
 
 const CANVAS_WIDTH = 640;
 const CANVAS_HEIGHT = 480;
@@ -15,6 +21,14 @@ const CANVAS_HEIGHT = 480;
 export default function LateralReachCameraLabPage() {
   const [snapshot, setSnapshot] = useState<LateralReachCameraSnapshot | null>(null);
   const [testedSide, setTestedSide] = useState<UpperLimbSide>("right");
+  const [screenHorizontalDirection, setScreenHorizontalDirection] =
+    useState<LabScreenHorizontalDirectionSelection>(null);
+  const [attemptPlanLock, setAttemptPlanLock] = useState<LabAttemptPlanLock | null>(
+    null,
+  );
+  const [attemptPlanLockError, setAttemptPlanLockError] = useState<string | null>(
+    null,
+  );
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -83,6 +97,20 @@ export default function LateralReachCameraLabPage() {
   const handleResume = useCallback(() => {
     detectorRef.current?.resumeAfterPause("clinician");
   }, []);
+
+  const handleLockAttemptPlan = useCallback(() => {
+    const result = tryLockLateralReachLabAttemptPlan(
+      screenHorizontalDirection,
+      attemptPlanLock,
+    );
+    if (!result.ok) {
+      setAttemptPlanLockError(result.error);
+      // previousLock retained — do not clear a valid prior lock
+      return;
+    }
+    setAttemptPlanLock(result.lock);
+    setAttemptPlanLockError(null);
+  }, [screenHorizontalDirection, attemptPlanLock]);
 
   const showVideo = snapshot?.status === "running" || snapshot?.initPhase === "camera";
   const canArmReadiness =
@@ -208,6 +236,93 @@ export default function LateralReachCameraLabPage() {
               </div>
             </div>
           )}
+
+          {/* Slice 16 — pre-movement calibration attempt-plan intake (lab only) */}
+          <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-4">
+            <p className="text-sm font-medium text-[#F9FAFB]">
+              Calibration attempt plan (screen-x)
+            </p>
+            <p className="mt-1 text-xs leading-[1.7] text-[#6B7280]">
+              Pre-movement structured direction for a future calibration attempt. Values are
+              raw normalized camera/screen x: positive_x = increasing raw x, negative_x =
+              decreasing raw x. The CSS-mirrored preview does not change this stored value.
+              Independent of testedSide. Not anatomical left/right. Not used by legacy Start
+              Session.
+            </p>
+            <div className="mt-3 flex flex-col gap-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="screenHorizontalDirection"
+                  value="positive_x"
+                  checked={screenHorizontalDirection === "positive_x"}
+                  onChange={() => setScreenHorizontalDirection("positive_x")}
+                  disabled={attemptPlanLock !== null}
+                  className="h-4 w-4 text-[#1D9E75]"
+                />
+                <span className="text-sm text-[#F9FAFB]">
+                  Positive normalized X (positive_x)
+                </span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="radio"
+                  name="screenHorizontalDirection"
+                  value="negative_x"
+                  checked={screenHorizontalDirection === "negative_x"}
+                  onChange={() => setScreenHorizontalDirection("negative_x")}
+                  disabled={attemptPlanLock !== null}
+                  className="h-4 w-4 text-[#1D9E75]"
+                />
+                <span className="text-sm text-[#F9FAFB]">
+                  Negative normalized X (negative_x)
+                </span>
+              </label>
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={handleLockAttemptPlan}
+                disabled={
+                  attemptPlanLock !== null ||
+                  !canLockLateralReachLabAttemptPlan(screenHorizontalDirection)
+                }
+                className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2 text-xs font-semibold text-[#F9FAFB] transition hover:border-[#1D9E75] disabled:opacity-50"
+              >
+                Confirm / lock attempt plan
+              </button>
+              <span className="text-xs text-[#6B7280]">
+                Editable selection:{" "}
+                <span className="font-mono text-[#9CA3AF]">
+                  {screenHorizontalDirection ?? "null (unselected)"}
+                </span>
+              </span>
+            </div>
+            {attemptPlanLockError && (
+              <p className="mt-3 text-xs text-rose-200">{attemptPlanLockError}</p>
+            )}
+            {attemptPlanLock && (
+              <div className="mt-3 rounded-[8px] border border-[#1D9E75]/40 bg-[#0B1220] p-3 text-xs">
+                <p className="font-semibold text-[#1D9E75]">Locked attempt plan</p>
+                <p className="mt-2 text-[#9CA3AF]">
+                  screenHorizontalDirection:{" "}
+                  <span className="font-mono text-[#F9FAFB]">
+                    {attemptPlanLock.lockedPlan.screenHorizontalDirection}
+                  </span>
+                </p>
+                <p className="mt-1 text-[#9CA3AF]">
+                  expectedHorizontalDirectionSign:{" "}
+                  <span className="font-mono text-[#F9FAFB]">
+                    {attemptPlanLock.lockedIntention.expectedHorizontalDirectionSign}
+                  </span>
+                </p>
+                <p className="mt-2 text-[#6B7280]">
+                  Diagnostics above are from the locked snapshot, not the editable radio
+                  selection.
+                </p>
+              </div>
+            )}
+          </div>
 
           {/* Start/Stop Buttons */}
           {snapshot?.status !== "running" ? (
