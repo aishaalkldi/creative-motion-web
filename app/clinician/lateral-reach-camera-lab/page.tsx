@@ -8,6 +8,7 @@ import {
   type LateralReachCameraSnapshot,
 } from "@/app/lib/cv/lateral-reach-camera-detector";
 import { validateLateralReachConfig } from "@/app/lib/upper-limb-motor-screen/lateral-reach-engine";
+import { buildLateralReachEngineConfig } from "@/app/lib/interaction-calibration/lateral-reach/engine-config-adapter";
 import type { UpperLimbSide } from "@/app/lib/upper-limb-motor-screen/types";
 import {
   canLockLateralReachLabAttemptPlan,
@@ -48,6 +49,8 @@ import {
 } from "./calibration-attempt-runtime";
 // Slice 19 — camera observation → calibration frame bridge
 import { submitLateralReachCalibrationObservation } from "./calibration-frame-bridge";
+// Slice 20 — calibration → engine handoff eligibility
+import { resolveLateralReachEngineHandoffInputs } from "./calibration-engine-handoff";
 
 const CANVAS_WIDTH = 640;
 const CANVAS_HEIGHT = 480;
@@ -83,6 +86,9 @@ export default function LateralReachCameraLabPage() {
     useState<LateralReachCalibrationControllerOutcome | null>(null);
   // Slice 19 — frozen once per active attempt from configLock; no defaults.
   const frozenMinWristVisibilityRef = useRef<number | null>(null);
+
+  // Slice 20 — explicit calibration → engine handoff state (lab only)
+  const [engineHandoffError, setEngineHandoffError] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -282,6 +288,7 @@ export default function LateralReachCameraLabPage() {
       setCalibrationLifecycle("starting");
       setStartupError(null);
       setLastCalibrationOutcome(null);
+      setEngineHandoffError(null);
 
       // Execute async startup transaction
       const result = await executeCalibrationStartupTransaction(
@@ -323,6 +330,54 @@ export default function LateralReachCameraLabPage() {
       releaseCalibrationStartup(runtimeGateRef.current, generation);
     }
   }, [attemptPlanLock, configLock, testedSide]);
+
+  // Slice 20 — explicit calibration → engine handoff (lab only).
+  // Fully synchronous: reads a fresh detector snapshot once, resolves
+  // eligibility from that snapshot plus current locked state, then either
+  // fails closed with a typed reason or calls detector.startEngine(...)
+  // once. No React state is used for the eligibility decision itself, so a
+  // same-tick re-entry cannot observe stale detector state; detector.
+  // startEngine(...) remains the final authoritative guard.
+  const handleStartEngine = useCallback(() => {
+    const detector = detectorRef.current;
+    if (!detector) return;
+
+    const detectorSnapshot = detector.getSnapshot();
+
+    const handoff = resolveLateralReachEngineHandoffInputs({
+      calibrationOutcome: lastCalibrationOutcome,
+      configLock,
+      detectorStatus: detectorSnapshot.status,
+      engineActive: detectorSnapshot.engineSnapshot !== null,
+      calibrationLifecycle,
+    });
+
+    if (!handoff.ok) {
+      console.warn(`Engine handoff blocked: ${handoff.reason}`);
+      setEngineHandoffError(handoff.reason);
+      return;
+    }
+
+    const configResult = buildLateralReachEngineConfig(
+      handoff.readyResult,
+      handoff.tracking,
+      handoff.timing,
+    );
+
+    if (!configResult.ok) {
+      console.warn(`Engine config invalid: ${configResult.reason}`);
+      setEngineHandoffError(configResult.reason);
+      return;
+    }
+
+    try {
+      detector.startEngine(configResult.config);
+      setEngineHandoffError(null);
+    } catch (err) {
+      console.error("Engine start failed:", err);
+      setEngineHandoffError(err instanceof Error ? err.message : String(err));
+    }
+  }, [lastCalibrationOutcome, configLock, calibrationLifecycle]);
 
   const handleArmReadiness = useCallback(() => {
     detectorRef.current?.armReadiness();
@@ -371,6 +426,20 @@ export default function LateralReachCameraLabPage() {
     setConfigLock(result.lock);
     setConfigLockError(null);
   }, [configInput, configLock]);
+
+  // Slice 20 — engine handoff UI gating. Diagnostic only; the handler
+  // re-resolves eligibility from a fresh detector snapshot at click time.
+  const readyCalibrationResult =
+    lastCalibrationOutcome?.kind === "result" &&
+    lastCalibrationOutcome.result.geometryOutcome === "ready"
+      ? lastCalibrationOutcome.result
+      : null;
+  const canStartEngine =
+    calibrationLifecycle === "idle" &&
+    readyCalibrationResult !== null &&
+    configLock !== null &&
+    snapshot?.status === "acquiring" &&
+    !snapshot?.engineSnapshot;
 
   const showVideo = snapshot?.status === "running" || snapshot?.status === "acquiring" || snapshot?.initPhase === "camera";
   const canArmReadiness =
@@ -752,6 +821,36 @@ export default function LateralReachCameraLabPage() {
               </button>
             )}
           </div>
+
+          {/* Slice 20 — explicit engine handoff (lab only) */}
+          {readyCalibrationResult && (
+            <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-4">
+              <p className="text-sm font-medium text-[#F9FAFB]">
+                Engine Handoff (Slice 20 — Lab)
+              </p>
+              <p className="mt-1 text-xs leading-[1.7] text-[#6B7280]">
+                Explicit, one-shot activation of the existing Lateral Reach engine on the
+                completed calibration&apos;s frozen geometry. Engineering wiring check only —
+                pressing this button does not indicate clinical readiness or a valid
+                assessment attempt.
+              </p>
+
+              {engineHandoffError && (
+                <div className="mt-3 rounded-[8px] border border-rose-400/25 bg-rose-400/10 px-3 py-2 text-xs text-rose-200">
+                  Engine Handoff Error: {engineHandoffError}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={handleStartEngine}
+                disabled={!canStartEngine}
+                className="mt-3 rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#179165] disabled:opacity-50"
+              >
+                Start Engine From Calibration (Lab)
+              </button>
+            </div>
+          )}
 
           {/* Start/Stop Buttons */}
           {snapshot?.status !== "running" ? (
