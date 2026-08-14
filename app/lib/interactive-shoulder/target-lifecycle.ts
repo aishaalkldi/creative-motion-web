@@ -61,6 +61,34 @@ export type TargetLifecycleState = {
    * the next target. Metadata only — it never influences hits, timeouts or difficulty.
    */
   attemptCompensationObserved: boolean | null;
+  /**
+   * Block-elapsed seconds accumulated during the CURRENT attempt while no wrist
+   * measurement was available. Attempt-scoped: reset on every spawn and on every terminal
+   * path, so an earlier attempt's tracking gap can never shorten a later attempt.
+   *
+   * WHY THIS EXISTS (REVIEW FIX, BLOCKER 2)
+   * ---------------------------------------
+   * The attempt clock is the orchestrator's pause-aware `blockElapsedSeconds`, and it
+   * keeps advancing whenever the SESSION is healthy. But the affected-side wrist has its
+   * own per-joint presence rule in the detector, so `primaryWristNormalized` can be null
+   * on a frame where landmarks were found, no `trackerLost` fired, and no safety hold was
+   * entered (see `shoulder-abduction-reach-pose-detector.ts`). Without this accumulator
+   * that interval was charged to the patient's reach window, and a long enough one expired
+   * the attempt into `incomplete` → `struggleStreak` → a LOWER level, on the strength of a
+   * measurement the runtime never had.
+   *
+   * Subtracting it makes the comparison against `attemptTimeoutMs` a measurable-time
+   * comparison. This is the same exclusion principle the orchestrator already applies for
+   * pause and safety hold, applied to the one gap the orchestrator cannot see, and it
+   * introduces no second clock: every value here is read from `blockElapsedSeconds`.
+   */
+  attemptUnmeasuredElapsedS: number;
+  /**
+   * `blockElapsedSeconds` as of the previous tick that observed it, or null before the
+   * first. A CURSOR, not a clock: it exists only so an interval can be measured between
+   * two consecutive readings of the orchestrator's own value.
+   */
+  lastObservedBlockElapsedS: number | null;
 };
 
 export function createInitialTargetLifecycle(): TargetLifecycleState {
@@ -74,6 +102,8 @@ export function createInitialTargetLifecycle(): TargetLifecycleState {
     sequence: 0,
     interaction: createEmptyShoulderInteractionMetrics(),
     attemptCompensationObserved: null,
+    attemptUnmeasuredElapsedS: 0,
+    lastObservedBlockElapsedS: null,
   };
 }
 
@@ -171,20 +201,87 @@ function resolveConfiguredAttemptTimeoutMs(value: number | undefined): number | 
 }
 
 /**
- * Pause-aware active attempt duration in ms, or null when it cannot be computed —
- * which is the case for every legacy caller that ticks without block elapsed time.
+ * Whether this tick carried a usable wrist sample.
  *
- * Clamped at 0 so that block elapsed time restarting at a block boundary can never
- * expire an attempt through a negative interval.
+ * The single definition of "the runtime could observe the patient's reach this frame",
+ * used both by the accumulator below and by the hit path's own guard. Note what it is
+ * NOT: a statement about the tracker, the session, or the patient. A null wrist is a gap
+ * in one measurement, and this module draws no further conclusion from it.
  */
-function resolveAttemptActiveElapsedMs(
+function hasWristMeasurement(wrist: NormalizedPoint | null | undefined): boolean {
+  return wrist !== null && wrist !== undefined;
+}
+
+/**
+ * Accumulates block time that elapsed while the attempt could not be measured.
+ *
+ * ATTRIBUTION RULE: the interval BETWEEN the previous reading and this one is charged as
+ * unmeasured when THIS tick has no wrist sample. Only facts already in hand are used —
+ * the previous cursor and the current sample — so no interval is ever guessed at.
+ *
+ * It composes with pause and safety hold rather than competing with them: those freeze
+ * `blockElapsedSeconds` itself upstream, so the interval measured here is already near
+ * zero across a pause and nothing is double-counted.
+ */
+function accumulateUnmeasuredAttemptTime(
+  state: TargetLifecycleState,
+  input: TargetLifecycleTickInput,
+): TargetLifecycleState {
+  const blockElapsedSeconds = input.blockElapsedSeconds;
+  // No attempt clock supplied: expiration is off entirely, so there is no window to
+  // protect and no interval that could be measured.
+  if (blockElapsedSeconds === undefined || !Number.isFinite(blockElapsedSeconds)) {
+    return state;
+  }
+  // No attempt in flight. The cursor still advances so the gap before a spawn is never
+  // charged to the attempt that follows it.
+  if (!state.currentTarget) {
+    return { ...state, lastObservedBlockElapsedS: blockElapsedSeconds };
+  }
+  if (hasWristMeasurement(input.wrist)) {
+    return { ...state, lastObservedBlockElapsedS: blockElapsedSeconds };
+  }
+  const previous = state.lastObservedBlockElapsedS;
+  // Clamped at 0: a block boundary can restart block elapsed time, and a negative
+  // interval must never CREDIT measurable time back to the attempt.
+  const unmeasuredIntervalS =
+    previous === null ? 0 : Math.max(0, blockElapsedSeconds - previous);
+  return {
+    ...state,
+    lastObservedBlockElapsedS: blockElapsedSeconds,
+    attemptUnmeasuredElapsedS: state.attemptUnmeasuredElapsedS + unmeasuredIntervalS,
+  };
+}
+
+/**
+ * Pause-aware, MEASURABLE active attempt duration in ms, or null when it cannot be
+ * computed — which is the case for every legacy caller that ticks without block elapsed
+ * time.
+ *
+ * Two exclusions, both by construction rather than by inspection:
+ *   - frozen block time (pause, safety hold) — excluded upstream by the orchestrator,
+ *     which stops advancing `blockElapsedSeconds` at all;
+ *   - unmeasurable time (no wrist sample) — excluded here, via the attempt-scoped
+ *     accumulator.
+ *
+ * What remains is the time during which the patient was actually being observed trying to
+ * reach the target, which is the only quantity a reach window may be compared against.
+ *
+ * MONOTONIC: the span and the accumulator advance by the same interval on an unmeasured
+ * tick, so the result holds flat rather than moving backwards, and resumes growing when
+ * measurement returns. Clamped at 0 for the same block-boundary reason as before.
+ */
+function resolveAttemptMeasurableElapsedMs(
   target: TherapeuticTarget,
   blockElapsedSeconds: number | undefined,
+  unmeasuredElapsedS: number,
 ): number | null {
   const baselineS = target.spawnedAtBlockElapsedS;
   if (baselineS === undefined || !Number.isFinite(baselineS)) return null;
   if (blockElapsedSeconds === undefined || !Number.isFinite(blockElapsedSeconds)) return null;
-  return Math.max(0, (blockElapsedSeconds - baselineS) * 1000);
+  const spanS = blockElapsedSeconds - baselineS;
+  const measurableS = spanS - unmeasuredElapsedS;
+  return Math.max(0, measurableS * 1000);
 }
 
 type SpawnResult = {
@@ -266,6 +363,15 @@ function spawnNextTarget(
       wristInside: wristInsideAtSpawn,
       targetHit: false,
       attemptCompensationObserved: null,
+      // Attempt-scoped, re-established here with every other per-attempt value: the new
+      // attempt starts with a full, unspent measurable window whatever happened during
+      // the last one. The cursor is seeded to this tick's own reading so the interval
+      // BEFORE the spawn is never charged to the attempt that just started.
+      attemptUnmeasuredElapsedS: 0,
+      lastObservedBlockElapsedS:
+        input.blockElapsedSeconds !== undefined && Number.isFinite(input.blockElapsedSeconds)
+          ? input.blockElapsedSeconds
+          : state.lastObservedBlockElapsedS,
       interaction: {
         ...state.interaction,
         targetsShown: state.interaction.targetsShown + 1,
@@ -333,6 +439,11 @@ export function tickTargetLifecycle(
     });
   }
 
+  // ATTEMPT MEASURABILITY (review fix, blocker 2) — evaluated before contact and before
+  // expiration, so both read a cursor that is current for this tick. On a tick that just
+  // spawned, the interval is zero by construction.
+  next = accumulateUnmeasuredAttemptTime(next, input);
+
   // Sticky for the current attempt only; `spawnNextTarget` clears it for the next one.
   if (input.compensationObservedDuringAttempt !== undefined && next.currentTarget) {
     next = {
@@ -386,6 +497,9 @@ export function tickTargetLifecycle(
         // now happens a tick later, and leaving a finished attempt's observation sitting in
         // the state in between would make it readable when it no longer means anything.
         attemptCompensationObserved: null,
+        // Same reasoning: the finished attempt's unmeasured total describes an attempt
+        // that no longer exists and must not be readable against the next one.
+        attemptUnmeasuredElapsedS: 0,
       };
       return { state: next, hitEvent, attemptStartedEvents, attemptTimeoutEvent: null };
     }
@@ -403,10 +517,23 @@ export function tickTargetLifecycle(
   // attempt against visible contact would be a false negative.
   //
   // This runs whether or not a wrist was available, because expiration is caused by
-  // elapsed active time alone — never by `wrist === null`. Tracking loss is not patient
-  // failure and is not represented here at all: the orchestrator freezes block elapsed
-  // time during safety hold and the gating layer stops ticking, so a lost tracker cannot
-  // burn attempt time.
+  // elapsed MEASURABLE time alone — never by `wrist === null`. A missing wrist cannot
+  // cause an expiry and cannot bring one closer: the interval it spans is excluded from
+  // the comparison by `resolveAttemptMeasurableElapsedMs`, so the attempt is held, not
+  // failed, until measurement returns.
+  //
+  // THREE DISTINCT UNAVAILABILITIES, THREE OWNERS (review fix, blocker 2). The previous
+  // note here said "tracking loss" but described only the GLOBAL tracker, which is why
+  // the wrist-only case fell through it:
+  //   - session paused / safety held → the orchestrator freezes `blockElapsedSeconds`
+  //     and the gating layer stops ticking this function at all;
+  //   - global tracker lost          → the same safety-hold path, entered from the
+  //     detector's `trackerLost` event;
+  //   - affected-side wrist absent   → NEITHER of the above fires. The detector's
+  //     per-joint presence rule can drop `primaryWristNormalized` on a frame where
+  //     landmarks were found and the session is perfectly healthy. That gap is owned
+  //     here, by the attempt-scoped accumulator, because this is the only layer that
+  //     knows which attempt it belongs to.
   const attemptTimeoutMs = resolveConfiguredAttemptTimeoutMs(input.attemptTimeoutMs);
   const blockElapsedSeconds = input.blockElapsedSeconds;
   if (
@@ -420,7 +547,11 @@ export function tickTargetLifecycle(
     !next.targetHit
   ) {
     const expiringTarget = next.currentTarget;
-    const activeElapsedMs = resolveAttemptActiveElapsedMs(expiringTarget, blockElapsedSeconds);
+    const activeElapsedMs = resolveAttemptMeasurableElapsedMs(
+      expiringTarget,
+      blockElapsedSeconds,
+      next.attemptUnmeasuredElapsedS,
+    );
     if (activeElapsedMs !== null && activeElapsedMs >= attemptTimeoutMs) {
       const compensated = next.attemptCompensationObserved;
       const attemptTimeoutEvent: TargetAttemptTimeoutEvent = {
@@ -454,6 +585,7 @@ export function tickTargetLifecycle(
         wristInside: false,
         targetHit: false,
         attemptCompensationObserved: null,
+        attemptUnmeasuredElapsedS: 0,
       };
       return {
         state: next,

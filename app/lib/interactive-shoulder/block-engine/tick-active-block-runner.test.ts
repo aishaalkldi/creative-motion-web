@@ -376,6 +376,14 @@ describe("tick-active-block-runner", () => {
 const FIXTURE_TIMEOUT_MS = 4_000;
 const FIXTURE_LEVEL_DEGREES = 45;
 
+/**
+ * A tracked wrist at rest, outside `DEFAULT_SAFE_TARGET_BOUNDS`. Required wherever an
+ * attempt is meant to expire: since the blocker-2 review fix an attempt only spends its
+ * window on ticks where the wrist was actually measured, so a timeout scenario must
+ * supply one. `wrist: null` now models a measurement gap, which holds the window instead.
+ */
+const RESTING_WRIST = { x: 0.02, y: 0.97 };
+
 describe("tick-active-block-runner — CHANGE-004 target attempt propagation", () => {
   it("7. propagates target attempt start events out of the target runner", () => {
     registerAllBlockRunners();
@@ -415,7 +423,7 @@ describe("tick-active-block-runner — CHANGE-004 target attempt propagation", (
       nowMs: T0,
       blockElapsedSeconds: 0,
       states: nullPatternStates(),
-      wrist: null,
+      wrist: RESTING_WRIST,
       side: "right",
       bounds: DEFAULT_SAFE_TARGET_BOUNDS,
       random: () => 0.5,
@@ -431,7 +439,7 @@ describe("tick-active-block-runner — CHANGE-004 target attempt propagation", (
       nowMs: T0 + FIXTURE_TIMEOUT_MS,
       blockElapsedSeconds: FIXTURE_TIMEOUT_MS / 1000,
       states: spawned.states,
-      wrist: null,
+      wrist: RESTING_WRIST,
       side: "right",
       bounds: DEFAULT_SAFE_TARGET_BOUNDS,
       random: () => 0.5,
@@ -456,7 +464,7 @@ describe("tick-active-block-runner — CHANGE-004 target attempt propagation", (
       nowMs: T0 + FIXTURE_TIMEOUT_MS + 16,
       blockElapsedSeconds: FIXTURE_TIMEOUT_MS / 1000 + 0.016,
       states: expired.states,
-      wrist: null,
+      wrist: RESTING_WRIST,
       side: "right",
       bounds: DEFAULT_SAFE_TARGET_BOUNDS,
       random: () => 0.5,

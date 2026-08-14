@@ -49,7 +49,10 @@ import { SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION } from "../shoulder-abduct
 import type { NormalizedPoint, TherapeuticTarget } from "../types";
 import { createAdaptiveDifficultyState } from "./adaptive-difficulty";
 import type { AdaptiveDifficultyState } from "./adaptive-difficulty-types";
-import { DEVELOPMENT_ADAPTIVE_DIFFICULTY_CONFIG } from "./difficulty-config-registry";
+import {
+  DEVELOPMENT_ADAPTIVE_DIFFICULTY_CONFIG,
+  resolveDifficultyConfigForSessionFromEnv,
+} from "./difficulty-config-registry";
 import {
   applyDispatchOutcomesToAdaptiveState,
   resolveAttemptCompensationObservation,
@@ -111,6 +114,24 @@ type FrameOptions = {
   wrist: NormalizedPoint | null;
   hitExitTransitionMs?: number;
   compensationFlagged?: boolean;
+  /**
+   * Compensation observation supplied DIRECTLY through the `targetAttempt` seam,
+   * bypassing `resolveAttemptCompensationObservation`.
+   *
+   * WHY THIS EXISTS (REVIEW FIX, BLOCKER 1)
+   * ---------------------------------------
+   * `resolveAttemptCompensationObservation` latches `true` and never asserts `false`,
+   * because today's detector cannot tell "measured clear" from "never evaluated". So the
+   * component currently reports every uncompensated attempt as UNKNOWN, and — correctly,
+   * after this fix — UNKNOWN can no longer escalate under `excludedFromIncrease`.
+   *
+   * `compensationObservedDuringAttempt` is nonetheless a caller-owned `boolean` on the
+   * seam, and a caller with a detector that CAN report measured-clear is entitled to send
+   * `false`. This option models exactly that caller, so the observed-clean path stays
+   * exercised end to end through the real dispatch runtime rather than only in the pure
+   * engine. It is not a claim about what the current component emits.
+   */
+  compensationObserved?: boolean;
   /** Skips `orchestrator.tick`, mirroring a frame the component suppresses on a fault. */
   skipOrchestratorTick?: boolean;
 };
@@ -158,9 +179,10 @@ function runFrame(rt: Runtime, opts: FrameOptions): FrameResult {
   const targetAttempt: TargetAttemptTickConfig | undefined = adaptiveState
     ? {
         attemptTimeoutMs: adaptiveState.attemptTimeoutMs,
-        compensationObservedDuringAttempt: resolveAttemptCompensationObservation(
-          opts.compensationFlagged,
-        ),
+        compensationObservedDuringAttempt:
+          "compensationObserved" in opts
+            ? opts.compensationObserved
+            : resolveAttemptCompensationObservation(opts.compensationFlagged),
         ...(placement.placed
           ? {
               preferredTargetPosition: placement.position,
@@ -218,11 +240,39 @@ function contactOf(result: FrameResult) {
   return result.dispatched;
 }
 
-/** Reaches the active target and returns the frame that registered the hit. */
+/**
+ * Reaches the active target and returns the frame that registered the hit.
+ *
+ * Compensation is UNKNOWN unless the caller says otherwise — the production shape. A
+ * reach whose point is that the streak advances must use `reachActiveTargetCleanly`.
+ */
 function reachActiveTarget(rt: Runtime, nowMs: number, hitExitTransitionMs = 0): FrameResult {
   const target = activeTarget(rt);
   const frame = runFrame(rt, { nowMs, wrist: { x: target.x, y: target.y }, hitExitTransitionMs });
   assert.ok(contactOf(frame).targetContact, `expected a hit at ${nowMs}`);
+  return frame;
+}
+
+/** Reaches the active target with compensation OBSERVED and reported clean. */
+function reachActiveTargetCleanly(
+  rt: Runtime,
+  nowMs: number,
+  hitExitTransitionMs = 0,
+): FrameResult {
+  const target = activeTarget(rt);
+  const frame = runFrame(rt, {
+    nowMs,
+    wrist: { x: target.x, y: target.y },
+    hitExitTransitionMs,
+    compensationObserved: false,
+  });
+  const contact = contactOf(frame).targetContact;
+  assert.ok(contact, `expected a hit at ${nowMs}`);
+  assert.equal(
+    contact.compensatedDuringAttempt,
+    false,
+    "the clean observation must reach the terminal event, not be dropped",
+  );
   return frame;
 }
 
@@ -445,7 +495,9 @@ function levelOfTargetAfterIncrease(hitExitTransitionMs: number) {
   const levelsAtHit: number[] = [];
   for (let i = 0; i < CONFIG.successStreakToIncrease; i += 1) {
     nowMs += 200;
-    const hit = reachActiveTarget(rt, nowMs, hitExitTransitionMs);
+    // OBSERVED clean — the fixture policy is `excludedFromIncrease`, under which only an
+    // observed-clean reach may build the increase streak. See `reachActiveTargetCleanly`.
+    const hit = reachActiveTargetCleanly(rt, nowMs, hitExitTransitionMs);
     levelsAtHit.push(hit.levelBefore!);
     // No successor may exist on the frame that scored the hit, whatever the exit style.
     assert.equal(rt.states.target.currentTarget, null);
@@ -629,30 +681,52 @@ describe("CHANGE-008 placement across the boundary", () => {
     // decides. It reads the RETIRED target's position — which, since CHANGE-008, is the
     // only record of where the last target was, because none is active at spawn time.
     // Both terminal paths and both motion preferences are exercised.
-    for (const hitExitTransitionMs of [0, NORMAL_EXIT_MS]) {
-      const rt = createRuntime({ adaptive: null });
-      let nowMs = T0;
-      runFrame(rt, { nowMs, wrist: RESTING_WRIST, hitExitTransitionMs });
-
-      for (let i = 0; i < 12; i += 1) {
-        const retired = activeTarget(rt);
-        nowMs += 200;
-        const hit = runFrame(rt, {
-          nowMs,
-          wrist: { x: retired.x, y: retired.y },
-          hitExitTransitionMs,
-        });
-        assert.ok(contactOf(hit).targetContact);
-        assert.deepEqual(rt.states.target.retiredTargetPosition, { x: retired.x, y: retired.y });
-
-        nowMs += hitExitTransitionMs + 32;
+    //
+    // DETERMINISM (review fix, PR #240). `runFrame` models the component, which supplies
+    // no `random`, so the generator falls back to `Math.random`. `generateTherapeuticTarget`
+    // is a rejection sampler with a BOUNDED retry budget: after 8 rejected candidates it
+    // returns the last one rather than looping forever, which is correct for production
+    // (a target must always be produced) but means the separation floor is best-effort,
+    // not guaranteed. Against a live `Math.random` this test therefore failed roughly one
+    // run in eight — a pre-existing flake, unrelated to the review-fix blockers.
+    //
+    // Seeding the generator makes the run reproducible without weakening the assertion or
+    // touching production code. The property under test is unchanged: the successor's
+    // separation is measured against the RETIRED target, on every terminal path.
+    const realRandom = Math.random;
+    let seed = 0x2f6e2b1;
+    Math.random = () => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    };
+    try {
+      for (const hitExitTransitionMs of [0, NORMAL_EXIT_MS]) {
+        const rt = createRuntime({ adaptive: null });
+        let nowMs = T0;
         runFrame(rt, { nowMs, wrist: RESTING_WRIST, hitExitTransitionMs });
-        const successor = activeTarget(rt);
-        assert.ok(
-          distance(successor, retired) >= 0.12,
-          `successor ${i} landed ${distance(successor, retired)} from its predecessor`,
-        );
+
+        for (let i = 0; i < 12; i += 1) {
+          const retired = activeTarget(rt);
+          nowMs += 200;
+          const hit = runFrame(rt, {
+            nowMs,
+            wrist: { x: retired.x, y: retired.y },
+            hitExitTransitionMs,
+          });
+          assert.ok(contactOf(hit).targetContact);
+          assert.deepEqual(rt.states.target.retiredTargetPosition, { x: retired.x, y: retired.y });
+
+          nowMs += hitExitTransitionMs + 32;
+          runFrame(rt, { nowMs, wrist: RESTING_WRIST, hitExitTransitionMs });
+          const successor = activeTarget(rt);
+          assert.ok(
+            distance(successor, retired) >= 0.12,
+            `successor ${i} landed ${distance(successor, retired)} from its predecessor`,
+          );
+        }
       }
+    } finally {
+      Math.random = realRandom;
     }
   });
 
@@ -885,10 +959,10 @@ function runScriptedFlow(hitExitTransitionMs: number) {
     assert.equal(shownLevels[shownLevels.length - 1], rt.adaptive!.currentLevel);
   }
 
-  // Phase 2 — a success streak: two reaches raise the level again.
+  // Phase 2 — a success streak: two OBSERVED-CLEAN reaches raise the level again.
   for (let i = 0; i < CONFIG.successStreakToIncrease; i += 1) {
     nowMs += 200;
-    reachActiveTarget(rt, nowMs, hitExitTransitionMs);
+    reachActiveTargetCleanly(rt, nowMs, hitExitTransitionMs);
     recordDecisions();
     nowMs += hitExitTransitionMs + 32;
     runFrame(rt, { nowMs, wrist: RESTING_WRIST, hitExitTransitionMs });
@@ -969,7 +1043,67 @@ describe("CHANGE-008 scripted multi-attempt flow", () => {
     assert.equal(rt.states.target.sequence, 1);
     assert.equal(activeTarget(rt).levelDegrees, CONFIG.startLevel);
 
-    // ── 2-3. The patient struggles: two timeouts lower the level ───────────────
+    // ── 1b. An UNKNOWN-compensation success (review fix, blocker 1) ────────────
+    // The production shape: the detector cannot report measured-clear, so the reach
+    // arrives with no compensation observation at all. It is a real success — counted,
+    // recorded, never a struggle — but it may not carry the patient toward a harder
+    // target, because nobody established that the movement was clean.
+    nowMs += 200;
+    const unknownFrame = reachActiveTarget(rt, nowMs, NORMAL_EXIT_MS);
+    const unknownContact = contactOf(unknownFrame).targetContact;
+    assert.ok(unknownContact);
+    assert.equal(
+      "compensatedDuringAttempt" in unknownContact,
+      false,
+      "absence must survive the whole chain as absence, never as a clean observation",
+    );
+    recordTerminal(unknownFrame);
+    assert.equal(rt.adaptive!.successStreak, 0, "UNKNOWN never advances the increase streak");
+    assert.equal(rt.adaptive!.struggleStreak, 0, "and is never mistaken for a struggle");
+    assert.equal(rt.adaptive!.currentLevel, CONFIG.startLevel, "so the level cannot rise");
+    assert.equal(rt.adaptive!.highestSuccessfulLevel, CONFIG.startLevel, "it IS still a success");
+    nowMs += NORMAL_EXIT_MS;
+    buildSuccessor();
+
+    // ── 1c. Wrist-only measurement loss (review fix, blocker 2) ────────────────
+    // The session stays ACTIVE, no tracker-loss event is reported, no safety hold is
+    // entered, and block elapsed time keeps advancing — only the affected-side wrist is
+    // missing. The attempt must be HELD, not failed.
+    const heldAttemptId = activeTarget(rt).id;
+    const beforeGap = { ...rt.adaptive! };
+    for (let s = 0; s < 15; s += 1) {
+      nowMs += 1_000;
+      const frame = runFrame(rt, { nowMs, wrist: null, hitExitTransitionMs: NORMAL_EXIT_MS });
+      assert.equal(frame.dispatched.status, "dispatched", "a healthy session keeps ticking");
+      assert.equal(
+        contactOf(frame).targetAttemptTimeout,
+        null,
+        "an unmeasurable interval must never expire an attempt",
+      );
+    }
+    const gapSnap = rt.orchestrator.getSnapshot(nowMs);
+    assert.equal(gapSnap.sessionState, "active", "this is a wrist-only gap, not a safety hold");
+    assert.equal(gapSnap.safetyStatus, "normal");
+    assert.ok(gapSnap.blockElapsedSeconds >= 15, "the block clock really did keep running");
+    assert.equal(rt.adaptive!.struggleStreak, beforeGap.struggleStreak, "not patient struggle");
+    assert.equal(rt.adaptive!.currentLevel, beforeGap.currentLevel, "the level did not drop");
+    assert.deepEqual(rt.adaptive!.changes, beforeGap.changes, "no decision was emitted");
+    assert.equal(activeTarget(rt).id, heldAttemptId, "the same attempt is still alive");
+    assert.equal(rt.states.target.sequence, 2, "no successor was manufactured out of the gap");
+
+    // Measurement returns: the attempt resumes rather than restarting or instantly ending.
+    nowMs += 1_000;
+    const recovered = runFrame(rt, { nowMs, wrist: RESTING_WRIST, hitExitTransitionMs: NORMAL_EXIT_MS });
+    assert.equal(
+      contactOf(recovered).targetAttemptTimeout,
+      null,
+      "recovery must not cash in the elapsed gap as an instant expiry",
+    );
+    assert.equal(activeTarget(rt).id, heldAttemptId);
+
+    // ── 2-3. The patient struggles: two MEASURED timeouts lower the level ──────
+    // The first of these expires the very attempt that was just held — proving the window
+    // resumed and that a genuine, observed non-reach still counts as incomplete.
     for (let i = 0; i < 2; i += 1) {
       const spawnedAt = nowMs;
       recordTerminal(expireActiveAttempt(rt, spawnedAt, NORMAL_EXIT_MS));
@@ -1004,11 +1138,11 @@ describe("CHANGE-008 scripted multi-attempt flow", () => {
     nowMs += NORMAL_EXIT_MS;
     buildSuccessor();
 
-    // ── 6. Clean successes: the streak fires and the level rises ───────────────
+    // ── 6. OBSERVED-clean successes: the streak fires and the level rises ──────
     const levelBeforeIncrease = rt.adaptive!.currentLevel;
     for (let i = 0; i < CONFIG.successStreakToIncrease; i += 1) {
       nowMs += 200;
-      recordTerminal(reachActiveTarget(rt, nowMs, NORMAL_EXIT_MS));
+      recordTerminal(reachActiveTargetCleanly(rt, nowMs, NORMAL_EXIT_MS));
       nowMs += NORMAL_EXIT_MS;
       buildSuccessor();
     }
@@ -1069,14 +1203,17 @@ describe("CHANGE-008 scripted multi-attempt flow", () => {
     // the level in force at the moment that target was built — never one target behind.
     assert.deepEqual(
       shown.map((s) => s.level),
-      //  1   2   3   4   5   6   7   8   9   ← target sequence
-      //  ─── struggling ───  ┊   ┊   ┊   ┊
-      //          ↑ decrease  ┊   ┊   ┊   ┊
-      //              ↑ extended window      (level held at the floor, not lowered)
-      //                  ↑ compensated hit — counted, no progression
-      //                      ↑   ↑ two clean reaches → increase
-      //                              ↑ pause / tracking loss changed nothing
-      [50, 50, 40, 40, 40, 40, 40, 50, 50],
+      //  1   2   3   4   5   6   7   8   9  10   ← target sequence
+      //  ↑ start
+      //      ↑ UNKNOWN-compensation hit — counted, no progression (blocker 1)
+      //      ↑ wrist-only measurement gap on this attempt — nothing at all (blocker 2)
+      //          ─── measured struggling ───
+      //              ↑ decrease
+      //                  ↑ extended window (level held at the floor, never lowered)
+      //                      ↑ compensated hit — counted, no progression
+      //                          ↑   ↑ two OBSERVED-clean reaches → increase
+      //                                  ↑ pause / tracking loss changed nothing
+      [50, 50, 50, 40, 40, 40, 40, 40, 50, 50],
     );
 
     assert.deepEqual(
@@ -1096,5 +1233,304 @@ describe("CHANGE-008 scripted multi-attempt flow", () => {
       assert.deepEqual(repeat.decisions, first.decisions);
       assert.deepEqual(repeat.rt.adaptive!.changes, first.rt.adaptive!.changes);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8. REVIEW FIX (PR #240) — measurement loss is never patient performance
+// ---------------------------------------------------------------------------
+
+/**
+ * These run the REAL path — a real `SessionOrchestrator`, the real block-runner registry,
+ * the real dispatch/lifecycle/mapper/engine chain — because the blockers were both about
+ * what the whole runtime concludes, not about what one function returns.
+ *
+ * Aisha's required scenario, exactly: an active attempt, `wrist = null`, NO `trackerLost`,
+ * the session still active, and block elapsed time advancing past `attemptTimeoutMs`.
+ */
+describe("review fix — wrist measurement unavailability (blocker 2)", () => {
+  /** Ticks with no wrist for `seconds` of live block time, returning every frame. */
+  function unmeasuredInterval(rt: Runtime, fromMs: number, seconds: number) {
+    const frames: FrameResult[] = [];
+    for (let s = 1; s <= seconds; s += 1) {
+      frames.push(runFrame(rt, { nowMs: fromMs + s * 1_000, wrist: null }));
+    }
+    return frames;
+  }
+
+  it("an active attempt + wrist=null + no trackerLost + elapsed > timeout ends nothing", () => {
+    const rt = createRuntime();
+    runFrame(rt, { nowMs: T0, wrist: RESTING_WRIST });
+    const attemptId = activeTarget(rt).id;
+    const before = { ...rt.adaptive! };
+
+    // Well past the window: 20s against a 6s fixture timeout.
+    assert.ok(20_000 > CONFIG.normalAttemptTimeoutMs * 3);
+    const frames = unmeasuredInterval(rt, T0, 20);
+
+    // THE SESSION IS HEALTHY THROUGHOUT — this is not a paused or safety-held session,
+    // and no tracker-loss event was ever reported. That is the whole point of the case.
+    const snap = rt.orchestrator.getSnapshot(T0 + 20_000);
+    assert.equal(snap.sessionState, "active");
+    assert.equal(snap.safetyStatus, "normal");
+    assert.ok(snap.blockElapsedSeconds >= 20, "block elapsed time really did advance");
+
+    // 1 — no timeout event anywhere in the interval.
+    for (const frame of frames) {
+      assert.equal(contactOf(frame).targetAttemptTimeout, null);
+      assert.equal(contactOf(frame).targetContact, null);
+    }
+
+    // 2 — and, the part Aisha asked to be proved beyond `timeoutEvent === undefined`:
+    // the adaptive engine drew no conclusion about the patient at all.
+    assert.equal(rt.adaptive!.struggleStreak, 0, "measurement loss is not struggle");
+    assert.equal(rt.adaptive!.struggleStreak, before.struggleStreak);
+    assert.equal(rt.adaptive!.currentLevel, before.currentLevel, "the level did not drop");
+    assert.equal(rt.adaptive!.successStreak, before.successStreak);
+    assert.equal(rt.adaptive!.attemptTimeoutMs, before.attemptTimeoutMs);
+    assert.deepEqual(rt.adaptive!.changes, [], "no adaptive decision was emitted");
+    assert.equal(rt.adaptive!.attemptsAtCurrentLevel, 0, "no attempt was counted");
+
+    // 3 — the attempt is held, not voided: same target, no churn, no lost identity.
+    assert.equal(activeTarget(rt).id, attemptId);
+    assert.equal(rt.states.target.sequence, 1);
+  });
+
+  it("recovery: the held attempt resumes and can still be reached", () => {
+    const rt = createRuntime();
+    runFrame(rt, { nowMs: T0, wrist: RESTING_WRIST });
+    const attemptId = activeTarget(rt).id;
+    unmeasuredInterval(rt, T0, 20);
+
+    // The patient reaches the target on the frame measurement returns.
+    const reached = reachActiveTargetCleanly(rt, T0 + 21_000);
+    assert.equal(contactOf(reached).targetContact?.targetId, attemptId);
+    assert.equal(rt.adaptive!.struggleStreak, 0);
+    assert.equal(rt.adaptive!.successStreak, 1, "a real success after the gap still counts");
+  });
+
+  it("13. a LEGITIMATE timeout after the gap still becomes incomplete and struggle", () => {
+    const rt = createRuntime();
+    runFrame(rt, { nowMs: T0, wrist: RESTING_WRIST });
+    unmeasuredInterval(rt, T0, 20);
+
+    // Measurement returns and the patient, now visible, still does not reach the target.
+    // The full window survived the gap, so it expires a full `normalAttemptTimeoutMs`
+    // of MEASURED time later — and that is a real incomplete attempt.
+    let timeout = null;
+    for (let s = 21; s <= 21 + CONFIG.normalAttemptTimeoutMs / 1_000; s += 1) {
+      const frame = runFrame(rt, { nowMs: T0 + s * 1_000, wrist: RESTING_WRIST });
+      if (contactOf(frame).targetAttemptTimeout) {
+        timeout = contactOf(frame).targetAttemptTimeout;
+        break;
+      }
+    }
+    assert.ok(timeout, "a measured non-reach must still expire");
+    assert.equal(
+      timeout.activeElapsedMs,
+      CONFIG.normalAttemptTimeoutMs,
+      "the reported duration excludes the 20s gap entirely",
+    );
+    assert.equal(rt.adaptive!.struggleStreak, 1, "a measured incomplete IS struggle");
+  });
+
+  it("a measured non-reach and an unmeasured interval of equal length differ completely", () => {
+    const measured = createRuntime();
+    runFrame(measured, { nowMs: T0, wrist: RESTING_WRIST });
+    for (let s = 1; s <= 8; s += 1) {
+      runFrame(measured, { nowMs: T0 + s * 1_000, wrist: RESTING_WRIST });
+    }
+
+    const unmeasured = createRuntime();
+    runFrame(unmeasured, { nowMs: T0, wrist: RESTING_WRIST });
+    for (let s = 1; s <= 8; s += 1) {
+      runFrame(unmeasured, { nowMs: T0 + s * 1_000, wrist: null });
+    }
+
+    // Same session, same clock, same duration. The only difference is whether the runtime
+    // could see the patient — and that difference must be total.
+    assert.equal(measured.adaptive!.struggleStreak, 1);
+    assert.equal(unmeasured.adaptive!.struggleStreak, 0);
+  });
+
+  it("8/9/10. pause, safety hold and global tracker loss are still handled upstream", () => {
+    // The wrist-gap fix must not have disturbed the three unavailabilities that were
+    // already correct — each still stops dispatch entirely rather than reaching the
+    // lifecycle's accumulator.
+    for (const scenario of ["pause", "safetyHold", "trackerLost"] as const) {
+      const rt = createRuntime();
+      runFrame(rt, { nowMs: T0, wrist: RESTING_WRIST });
+      const attemptId = activeTarget(rt).id;
+
+      if (scenario === "pause") rt.orchestrator.pause(T0);
+      else if (scenario === "trackerLost") {
+        rt.orchestrator.reportInputEvent({ type: "trackerLost", capturedAtMs: T0 }, T0);
+      } else {
+        rt.orchestrator.reportInputEvent({ type: "trackerLost", capturedAtMs: T0 }, T0);
+      }
+
+      for (let s = 1; s <= 20; s += 1) {
+        const frame = runFrame(rt, { nowMs: T0 + s * 1_000, wrist: null });
+        assert.equal(frame.dispatched.status, "not_active", `${scenario} must not dispatch`);
+      }
+      assert.equal(rt.adaptive!.struggleStreak, 0, `${scenario} is never patient failure`);
+      assert.deepEqual(rt.adaptive!.changes, []);
+      assert.equal(rt.states.target.currentTarget?.id, attemptId);
+    }
+  });
+
+  it("11. reduced motion behaves identically across a wrist gap", () => {
+    const run = (hitExitTransitionMs: number) => {
+      const rt = createRuntime();
+      runFrame(rt, { nowMs: T0, wrist: RESTING_WRIST, hitExitTransitionMs });
+      for (let s = 1; s <= 20; s += 1) {
+        runFrame(rt, { nowMs: T0 + s * 1_000, wrist: null, hitExitTransitionMs });
+      }
+      reachActiveTargetCleanly(rt, T0 + 21_000, hitExitTransitionMs);
+      return rt;
+    };
+    const normal = run(NORMAL_EXIT_MS);
+    const reduced = run(0);
+
+    assert.equal(reduced.adaptive!.currentLevel, normal.adaptive!.currentLevel);
+    assert.equal(reduced.adaptive!.successStreak, normal.adaptive!.successStreak);
+    assert.equal(reduced.adaptive!.struggleStreak, normal.adaptive!.struggleStreak);
+    assert.deepEqual(reduced.adaptive!.changes, normal.adaptive!.changes);
+  });
+
+  it("repeated gaps across a whole block never accumulate into a level decrease", () => {
+    const rt = createRuntime();
+    runFrame(rt, { nowMs: T0, wrist: RESTING_WRIST });
+    let nowMs = T0;
+
+    // Six separate gaps, each far longer than the attempt window, separated by single
+    // measured frames. If any of them leaked even one incomplete outcome, the fixture's
+    // struggle threshold of 2 would have fired a decrease.
+    for (let gap = 0; gap < 6; gap += 1) {
+      for (let s = 1; s <= 10; s += 1) {
+        nowMs += 1_000;
+        runFrame(rt, { nowMs, wrist: null });
+      }
+      nowMs += 1_000;
+      runFrame(rt, { nowMs, wrist: RESTING_WRIST });
+    }
+
+    assert.equal(rt.adaptive!.currentLevel, CONFIG.startLevel, "the level never dropped");
+    assert.equal(rt.adaptive!.attemptTimeoutMs, CONFIG.normalAttemptTimeoutMs);
+    assert.deepEqual(
+      rt.adaptive!.changes.filter((c) => c.direction === "decrease"),
+      [],
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9. REVIEW FIX (PR #240) — the two blockers together
+// ---------------------------------------------------------------------------
+
+describe("review fix — UNKNOWN compensation and measurement loss combined", () => {
+  it("an UNKNOWN-compensation attempt interrupted by a wrist gap moves nothing", () => {
+    const rt = createRuntime();
+    runFrame(rt, { nowMs: T0, wrist: RESTING_WRIST });
+    const before = { ...rt.adaptive! };
+
+    // A wrist gap opens mid-attempt and outlasts the window...
+    for (let s = 1; s <= 15; s += 1) {
+      runFrame(rt, { nowMs: T0 + s * 1_000, wrist: null });
+    }
+    // ...then the patient reaches the target, with compensation never observed.
+    const reached = reachActiveTarget(rt, T0 + 16_000);
+    const contact = contactOf(reached).targetContact;
+    assert.ok(contact);
+    assert.equal(
+      "compensatedDuringAttempt" in contact,
+      false,
+      "no observation was supplied, so none is claimed",
+    );
+
+    // Neither blocker's failure mode occurs:
+    assert.equal(rt.adaptive!.successStreak, 0, "UNKNOWN did not qualify as a clean success");
+    assert.equal(rt.adaptive!.struggleStreak, 0, "the gap did not register as struggle");
+    assert.equal(rt.adaptive!.currentLevel, before.currentLevel, "no increase, no decrease");
+    assert.deepEqual(rt.adaptive!.changes, [], "no decision was emitted at all");
+    // It is still a real, counted success — the engine simply drew no conclusion from it.
+    assert.equal(rt.adaptive!.attemptsAtCurrentLevel, 1);
+    assert.equal(rt.adaptive!.highestSuccessfulLevel, CONFIG.startLevel);
+  });
+
+  it("repeating that pattern can never escalate, however many times it happens", () => {
+    const rt = createRuntime();
+    runFrame(rt, { nowMs: T0, wrist: RESTING_WRIST });
+    let nowMs = T0;
+
+    // Eight unknown-compensation successes, each preceded by a measurement gap — four
+    // times the fixture's increase threshold.
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      for (let s = 1; s <= 8; s += 1) {
+        nowMs += 1_000;
+        runFrame(rt, { nowMs, wrist: null });
+      }
+      nowMs += 1_000;
+      reachActiveTarget(rt, nowMs);
+      nowMs += 32;
+      runFrame(rt, { nowMs, wrist: RESTING_WRIST });
+    }
+
+    assert.equal(rt.adaptive!.currentLevel, CONFIG.startLevel, "the level never moved");
+    assert.deepEqual(rt.adaptive!.changes, []);
+    assert.equal(rt.states.target.interaction.targetsReached, 8, "all eight really happened");
+    // The engine reacted to nothing, because nothing it could rely on was ever established.
+    assert.equal(rt.adaptive!.successStreak, 0);
+    assert.equal(rt.adaptive!.struggleStreak, 0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 10. REVIEW FIX (PR #240) — the feature flag stays off, and off means inert
+// ---------------------------------------------------------------------------
+
+describe("review fix — NEXT_PUBLIC_RASQ_ADAPTIVE_DIFFICULTY_V1 remains off by default", () => {
+  it("an unset or disabled flag resolves no configuration, so no adaptive state exists", () => {
+    // Re-asserted here, at the runtime edge, because both blocker fixes live on paths that
+    // only run when a config was resolved. The production default must still be "off".
+    for (const envValue of [undefined, "", "false", "TRUE", "1"]) {
+      assert.equal(
+        resolveDifficultyConfigForSessionFromEnv(
+          SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION,
+          envValue,
+        ),
+        null,
+        `${String(envValue)} must not enable adaptive difficulty`,
+      );
+    }
+  });
+
+  it("with adaptive off, neither review-fix path can run at all", () => {
+    // `adaptive: null` is exactly what the component holds when the flag is off: no
+    // `targetAttempt` seam is built, so there is no attempt window, no expiration, no
+    // compensation observation and no engine to move.
+    const rt = createRuntime({ adaptive: null });
+    let nowMs = T0;
+    runFrame(rt, { nowMs, wrist: RESTING_WRIST });
+    const targetId = activeTarget(rt).id;
+
+    // A long wrist gap: dispatch falls back to the historical unconditional skip, because
+    // the narrowed no-wrist path requires a `targetAttempt` that does not exist here.
+    for (let s = 0; s < 20; s += 1) {
+      nowMs += 1_000;
+      const frame = runFrame(rt, { nowMs, wrist: null });
+      assert.equal(frame.dispatched.status, "skipped", "legacy no-wrist behaviour is preserved");
+    }
+
+    // And a reach still works, with no adaptive consequence of any kind.
+    nowMs += 1_000;
+    const reached = reachActiveTarget(rt, nowMs);
+    assert.equal(contactOf(reached).targetContact?.targetId, targetId);
+    assert.equal(rt.adaptive, null, "no adaptive state was created");
+
+    // CHANGE-008: the successor arrives on a later tick, not on the terminal one.
+    nowMs += 32;
+    runFrame(rt, { nowMs, wrist: RESTING_WRIST });
+    assert.equal(activeTarget(rt).levelDegrees, undefined, "and no level was invented");
   });
 });

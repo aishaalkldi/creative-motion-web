@@ -661,7 +661,7 @@ describe("orchestrator-cv-block-dispatch — CHANGE-004 null wrist behaviour", (
     const expired = dispatchOrchestratorCvBlock({
       snap: snapAt(FIXTURE_TIMEOUT_MS / 1000),
       nowMs: T0 + FIXTURE_TIMEOUT_MS,
-      wrist: null,
+      wrist: WRIST_AWAY_FROM_TARGETS,
       side: "right",
       hitExitTransitionMs: 0,
       states: spawned.states,
@@ -682,21 +682,21 @@ describe("orchestrator-cv-block-dispatch — CHANGE-004 null wrist behaviour", (
     const timeoutsPerTarget = new Map<string, number>();
     let contacts = 0;
 
-    // Keep ticking well past the first expiration with the wrist unavailable throughout.
+    // Keep ticking well past the first expiration. The wrist is MEASURED throughout and
+    // simply nowhere near a target, which is what makes these attempts legitimately
+    // incomplete rather than merely unobserved (review fix, blocker 2). Every tick also
+    // builds and then expires a successor, so exactly-once is exercised repeatedly.
     for (let elapsedS = 4; elapsedS <= 20; elapsedS += 1) {
       const ticked = dispatchOrchestratorCvBlock({
         snap: snapAt(elapsedS),
         nowMs: T0 + elapsedS * 1000,
-        wrist: null,
+        wrist: WRIST_AWAY_FROM_TARGETS,
         side: "right",
         hitExitTransitionMs: 0,
         states,
         activeMotionPattern: null,
         targetAttempt: { attemptTimeoutMs: FIXTURE_TIMEOUT_MS },
       });
-      // Once the in-flight attempt has ended, no target is active, so the pre-existing
-      // "never present a target to an untracked patient" rule takes over and dispatch
-      // skips. That is the intended outcome — see the assertion below.
       if (ticked.status === "skipped") continue;
       assert.equal(ticked.status, "dispatched");
       if (ticked.status !== "dispatched") return;
@@ -713,32 +713,104 @@ describe("orchestrator-cv-block-dispatch — CHANGE-004 null wrist behaviour", (
     for (const [id, count] of timeoutsPerTarget) {
       assert.equal(count, 1, `target ${id} expired more than once`);
     }
-    assert.equal(contacts, 0, "no contact can occur while the wrist is unavailable");
+    assert.equal(contacts, 0, "the wrist never entered a target");
+  });
 
-    // SAFETY PROPERTY STRENGTHENED BY CHANGE-008. Only the attempt that was already in
-    // flight when tracking dropped can expire. Because a successor is now built on a later
-    // tick rather than inline, and because that later tick is skipped while the wrist is
-    // unavailable, a tracking gap can no longer manufacture a CHAIN of incomplete attempts
-    // out of a patient who is simply not visible.
-    assert.equal(timeoutsPerTarget.size, 1, "a tracking gap must not manufacture attempts");
-    assert.equal(states.target.currentTarget, null, "no target is presented while untracked");
+  // REVIEW FIX, BLOCKER 2 (PR #240) — the same loop, with the wrist UNAVAILABLE.
+  //
+  // This test previously ran the loop above with `wrist: null` and asserted that a
+  // tracking gap produced exactly ONE timeout. That was the defect Aisha found: the
+  // attempt was still being charged for time nobody could measure, so a long enough gap
+  // reported the patient as incomplete. The correct count is ZERO — see the adaptive
+  // consequence proved end to end in `adaptive/immediate-successor-feedback.test`.
+  it("18b. a wrist-only measurement gap expires nothing, however long it lasts", () => {
+    let states = spawnedTargetStates({ attemptTimeoutMs: FIXTURE_TIMEOUT_MS }).states;
+    const attemptTargetId = states.target.currentTarget?.id;
+    let timeouts = 0;
+    let contacts = 0;
 
-    // Tracking returns: the successor appears and the block continues normally.
-    const recovered = dispatchOrchestratorCvBlock({
+    // Sixteen seconds of block time — four times the fixture window — with the session
+    // fully active, no tracker loss, and no wrist sample.
+    for (let elapsedS = 4; elapsedS <= 20; elapsedS += 1) {
+      const ticked = dispatchOrchestratorCvBlock({
+        snap: snapAt(elapsedS),
+        nowMs: T0 + elapsedS * 1000,
+        wrist: null,
+        side: "right",
+        hitExitTransitionMs: 0,
+        states,
+        activeMotionPattern: null,
+        targetAttempt: { attemptTimeoutMs: FIXTURE_TIMEOUT_MS },
+      });
+      assert.equal(ticked.status, "dispatched", "the in-flight attempt keeps being ticked");
+      if (ticked.status !== "dispatched") return;
+      if (ticked.targetAttemptTimeout) timeouts += 1;
+      if (ticked.targetContact) contacts += 1;
+      states = ticked.states;
+    }
+
+    assert.equal(timeouts, 0, "measurement loss must never expire an attempt");
+    assert.equal(contacts, 0);
+    // The attempt is HELD, not voided: the same target is still live and still its own
+    // attempt, so no target churn and no lost attempt identity.
+    assert.equal(states.target.currentTarget?.id, attemptTargetId, "the same attempt is alive");
+    assert.equal(states.target.sequence, 1, "no successor was manufactured");
+
+    // Measurement returns. The window resumes from where it was held — it neither expires
+    // instantly against the 16 seconds that passed, nor restarts from zero.
+    const resumed = dispatchOrchestratorCvBlock({
       snap: snapAt(21),
       nowMs: T0 + 21_000,
-      wrist: { x: 0.02, y: 0.98 },
+      wrist: WRIST_AWAY_FROM_TARGETS,
       side: "right",
       hitExitTransitionMs: 0,
       states,
       activeMotionPattern: null,
       targetAttempt: { attemptTimeoutMs: FIXTURE_TIMEOUT_MS },
     });
-    assert.equal(recovered.status, "dispatched");
-    if (recovered.status !== "dispatched") return;
-    assert.ok(recovered.states.target.currentTarget, "the successor spawns once tracking returns");
-    assert.equal(recovered.targetAttemptStarted.length, 1);
-    assert.equal(recovered.targetAttemptTimeout, null);
+    assert.equal(resumed.status, "dispatched");
+    if (resumed.status !== "dispatched") return;
+    assert.equal(resumed.targetAttemptTimeout, null, "no instant expiry on recovery");
+    assert.equal(resumed.states.target.currentTarget?.id, attemptTargetId);
+
+    // Every second of this attempt so far was unmeasured, so its FULL window survives:
+    // the threshold is reached only after another `FIXTURE_TIMEOUT_MS` of measured time,
+    // at block second 24 — not at 22, and certainly not instantly at 21.
+    const stillRunning = dispatchOrchestratorCvBlock({
+      snap: snapAt(23),
+      nowMs: T0 + 23_000,
+      wrist: WRIST_AWAY_FROM_TARGETS,
+      side: "right",
+      hitExitTransitionMs: 0,
+      states: resumed.states,
+      activeMotionPattern: null,
+      targetAttempt: { attemptTimeoutMs: FIXTURE_TIMEOUT_MS },
+    });
+    assert.equal(stillRunning.status, "dispatched");
+    if (stillRunning.status !== "dispatched") return;
+    assert.equal(stillRunning.targetAttemptTimeout, null, "3s of measured time is not yet 4s");
+
+    const expired = dispatchOrchestratorCvBlock({
+      snap: snapAt(24),
+      nowMs: T0 + 24_000,
+      wrist: WRIST_AWAY_FROM_TARGETS,
+      side: "right",
+      hitExitTransitionMs: 0,
+      states: stillRunning.states,
+      activeMotionPattern: null,
+      targetAttempt: { attemptTimeoutMs: FIXTURE_TIMEOUT_MS },
+    });
+    assert.equal(expired.status, "dispatched");
+    if (expired.status !== "dispatched") return;
+    assert.ok(expired.targetAttemptTimeout, "measurable time still expires the attempt");
+    assert.equal(expired.targetAttemptTimeout?.targetId, attemptTargetId);
+    // The reported duration counts ONLY measured time. The attempt spanned 24 block
+    // seconds; 20 of them were unmeasured, and the event reports the other 4.
+    assert.equal(
+      expired.targetAttemptTimeout?.activeElapsedMs,
+      FIXTURE_TIMEOUT_MS,
+      "the 20s measurement gap was excluded from the reported attempt duration",
+    );
   });
 });
 
@@ -1048,7 +1120,7 @@ describe("orchestrator cv dispatch — CHANGE-004 real end-to-end attempt path",
     const expired = dispatchOrchestratorCvBlock({
       snap: orchestrator.getSnapshot(T0 + FIXTURE_TIMEOUT_MS),
       nowMs: T0 + FIXTURE_TIMEOUT_MS,
-      wrist: null,
+      wrist: WRIST_AWAY_FROM_TARGETS,
       side: "right",
       hitExitTransitionMs: 0,
       states: spawned.states,
@@ -1087,7 +1159,7 @@ describe("orchestrator cv dispatch — CHANGE-004 real end-to-end attempt path",
     const beforePause = dispatchOrchestratorCvBlock({
       snap: orchestrator.getSnapshot(T0 + 3_000),
       nowMs: T0 + 3_000,
-      wrist: null,
+      wrist: WRIST_AWAY_FROM_TARGETS,
       side: "right",
       hitExitTransitionMs: 0,
       states: spawned.states,
@@ -1107,7 +1179,7 @@ describe("orchestrator cv dispatch — CHANGE-004 real end-to-end attempt path",
     const whilePaused = dispatchOrchestratorCvBlock({
       snap: pausedSnap,
       nowMs: T0 + 63_000,
-      wrist: null,
+      wrist: WRIST_AWAY_FROM_TARGETS,
       side: "right",
       hitExitTransitionMs: 0,
       states: beforePause.states,
@@ -1124,7 +1196,7 @@ describe("orchestrator cv dispatch — CHANGE-004 real end-to-end attempt path",
     const stillRunning = dispatchOrchestratorCvBlock({
       snap: afterResume,
       nowMs: T0 + 63_500,
-      wrist: null,
+      wrist: WRIST_AWAY_FROM_TARGETS,
       side: "right",
       hitExitTransitionMs: 0,
       states: beforePause.states,
@@ -1145,7 +1217,7 @@ describe("orchestrator cv dispatch — CHANGE-004 real end-to-end attempt path",
     const finallyExpired = dispatchOrchestratorCvBlock({
       snap: orchestrator.getSnapshot(T0 + 64_000),
       nowMs: T0 + 64_000,
-      wrist: null,
+      wrist: WRIST_AWAY_FROM_TARGETS,
       side: "right",
       hitExitTransitionMs: 0,
       states: stillRunning.states,

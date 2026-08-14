@@ -50,6 +50,29 @@ export type CompensatedSuccessPolicy =
   | "excludedFromIncrease";
 
 /**
+ * The compensation state of one successful attempt, as three explicit facts.
+ *
+ * WHY THIS TYPE EXISTS (REVIEW-FIX)
+ * ---------------------------------
+ * The wire field is `compensated?: boolean`, and an optional boolean has exactly the
+ * failure mode that caused the blocker this type fixes: `outcome.compensated === true`
+ * reads a missing observation as "not compensated", which is a claim about the patient's
+ * movement that nobody made. The three states are named here so that the one place that
+ * interprets them must handle each by name, and so `unknown` cannot be reached by
+ * falling off the end of a truthiness check.
+ *
+ *   `clean`       — an observation was supplied and reported no compensatory pattern.
+ *   `compensated` — an observation was supplied and reported a compensatory pattern.
+ *   `unknown`     — NO observation was supplied. Not a third clinical finding and not a
+ *                   weaker form of `clean`: the attempt really was one of the other two,
+ *                   and the runtime simply cannot say which.
+ *
+ * See `resolveAttemptCompensationState` and `attemptCompensationAdvancesIncreaseStreak`
+ * in `adaptive-difficulty.ts` for how `unknown` is resolved for progression.
+ */
+export type AttemptCompensationState = "clean" | "compensated" | "unknown";
+
+/**
  * Clinical configuration for the adaptive engine. All fields are required and there is
  * deliberately no exported default, so a caller cannot inherit unvalidated thresholds.
  */
@@ -122,7 +145,21 @@ export type AdaptiveAttemptOutcome =
        * reshaping this contract. Optional precisely because adaptation never needs it.
        */
       reachTimeMs?: number;
-      /** True when the reach was achieved with a compensatory pattern. Defaults to false. */
+      /**
+       * Compensation observed during the reach — a THREE-state fact carried in an
+       * optional boolean, never a two-state one with a default:
+       *
+       *   true      → a compensatory pattern was observed
+       *   false     → compensation was evaluated and none was observed
+       *   undefined → no compensation observation was supplied — UNKNOWN
+       *
+       * ABSENCE IS NOT `false`. There is deliberately no default: defaulting the missing
+       * case to "no compensation" manufactures an observation of clean movement out of
+       * having failed to look, and lets an attempt nobody could evaluate carry a patient
+       * toward a harder target. `mapTargetHitToAdaptiveOutcome` preserves the distinction
+       * on the way in by omitting the key rather than coercing it, and
+       * `resolveAttemptCompensationState` names it `unknown` on the way out.
+       */
       compensated?: boolean;
     }
   | { kind: "incomplete" }

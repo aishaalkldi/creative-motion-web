@@ -22,6 +22,7 @@ import {
   type TargetLifecycleState,
   type TargetLifecycleTickInput,
 } from "./target-lifecycle";
+import type { NormalizedPoint } from "./types";
 
 const T0 = 5_000_000;
 const deterministicRandom = () => 0.42;
@@ -29,11 +30,24 @@ const deterministicRandom = () => 0.42;
 /** Fixture only — carries no clinical validation. */
 const TIMEOUT_MS = 4_000;
 
+/**
+ * A tracked wrist at rest, far outside `DEFAULT_SAFE_TARGET_BOUNDS`, so no target can
+ * ever be within its collision radius.
+ *
+ * This is what "the patient is being measured and is not at the target" looks like, and
+ * it is the default for these tests (REVIEW FIX, BLOCKER 2). The default used to be
+ * `wrist: null`, which conflated two different facts: a patient who is not reaching, and
+ * a runtime that cannot see the patient's wrist. Every expiration test in this file was
+ * written against the second while claiming to test the first. They now supply a real
+ * measurement, and `wrist: null` means only what it says.
+ */
+const RESTING_WRIST: NormalizedPoint = { x: 0.02, y: 0.97 };
+
 function baseInput(
   overrides: Partial<TargetLifecycleTickInput> = {},
 ): TargetLifecycleTickInput {
   return {
-    wrist: null,
+    wrist: RESTING_WRIST,
     nowMs: T0,
     side: "right",
     bounds: DEFAULT_SAFE_TARGET_BOUNDS,
@@ -552,10 +566,13 @@ describe("target attempt lifecycle — success and boundary precedence", () => {
 
 describe("target attempt lifecycle — tracking-loss safety", () => {
   /**
-   * Tracking loss is NOT patient failure. An absent wrist is never itself a reason to
-   * end an attempt; only elapsed active attempt time is. In a real session the
-   * orchestrator freezes block elapsed time during safety hold and the gating layer stops
-   * ticking, so a lost tracker cannot burn attempt time at all.
+   * Tracking loss is NOT patient failure. An absent wrist is never itself a reason to end
+   * an attempt; only elapsed MEASURABLE attempt time is.
+   *
+   * This suite covers the case where block time is frozen upstream — a safety hold from a
+   * global tracker loss. That upstream freeze was once believed to cover every tracking
+   * gap, which is exactly why the wrist-only gap went unnoticed: it happens with the
+   * session active and the block clock running. See the blocker-2 suite below.
    */
   it("an absent wrist never expires an attempt on its own", () => {
     const spawned = spawnedWithTiming(10);
@@ -587,6 +604,186 @@ describe("target attempt lifecycle — tracking-loss safety", () => {
     assert.ok(expired.attemptTimeoutEvent);
     assert.equal("reason" in expired.attemptTimeoutEvent, false);
     assert.equal("trackingLost" in expired.attemptTimeoutEvent, false);
+  });
+});
+
+// ── REVIEW FIX, BLOCKER 2 (PR #240) ─────────────────────────────────────────────
+// A wrist-only measurement gap must not consume the attempt window.
+//
+// The scenario Aisha confirmed: session ACTIVE, no `trackerLost`, no safety hold, block
+// elapsed time advancing normally — and `primaryWristNormalized === null`, because the
+// affected-side wrist has its own per-joint presence rule in the detector. Before the fix
+// that interval was charged against `attemptTimeoutMs`, so a long enough gap expired the
+// attempt into `incomplete`, which the adaptive engine counts as patient struggle.
+//
+// The chosen semantic is FREEZE, not void: the attempt stays alive and keeps its
+// identity, and only its measurable time stops advancing. The adaptive consequence — no
+// struggleStreak increment — is proved end to end in
+// `adaptive/immediate-successor-feedback.test`.
+
+describe("target attempt lifecycle — wrist measurement availability (review fix, blocker 2)", () => {
+  /** Ticks the lifecycle across a span of block seconds, one tick per second. */
+  function tickAcross(
+    state: TargetLifecycleState,
+    fromS: number,
+    toS: number,
+    overrides: Partial<TargetLifecycleTickInput> = {},
+  ) {
+    let current = state;
+    const timeouts = [];
+    for (let s = fromS; s <= toS; s += 1) {
+      const tick = tickTargetLifecycle(
+        current,
+        baseInput({
+          nowMs: T0 + s * 1_000,
+          blockElapsedSeconds: s,
+          attemptTimeoutMs: TIMEOUT_MS,
+          ...overrides,
+        }),
+      );
+      if (tick.attemptTimeoutEvent) timeouts.push(tick.attemptTimeoutEvent);
+      current = tick.state;
+    }
+    return { state: current, timeouts };
+  }
+
+  // 2, 4, 6, 7 — the headline scenario.
+  it("2/4/6/7. an active attempt does not expire across a long wrist gap on a live clock", () => {
+    const spawned = spawnedWithTiming(0);
+    const attemptId = spawned.state.currentTarget!.id;
+
+    // 40 block seconds — ten times the fixture window — of advancing, unfrozen block
+    // time, with a healthy session and no wrist sample on any frame.
+    const { state, timeouts } = tickAcross(spawned.state, 1, 40, { wrist: null });
+
+    assert.deepEqual(timeouts, [], "an unmeasurable interval must expire nothing");
+    // FROZEN, NOT VOIDED: same target, same attempt identity, no churn.
+    assert.equal(state.currentTarget?.id, attemptId, "the attempt is still alive");
+    assert.equal(state.sequence, 1, "no successor was manufactured");
+    assert.equal(state.interaction.targetsShown, 1);
+    // And the whole gap was accounted for as unmeasurable.
+    assert.equal(state.attemptUnmeasuredElapsedS, 40);
+  });
+
+  // 3 — a gap that starts just short of the boundary must not push it over.
+  it("3. a gap opening just before the boundary holds the attempt instead of expiring it", () => {
+    const spawned = spawnedWithTiming(0);
+    // 3.9s of measured time — just under the 4s window.
+    const measured = tickTargetLifecycle(
+      spawned.state,
+      baseInput({ nowMs: T0 + 3_900, blockElapsedSeconds: 3.9, attemptTimeoutMs: TIMEOUT_MS }),
+    );
+    assert.equal(measured.attemptTimeoutEvent, null);
+
+    // The wrist disappears exactly here. Block time keeps running well past the window.
+    const { state, timeouts } = tickAcross(measured.state, 4, 30, { wrist: null });
+    assert.deepEqual(timeouts, [], "the last 0.1s must not be paid out of unmeasured time");
+    assert.equal(state.currentTarget?.id, spawned.state.currentTarget!.id);
+  });
+
+  // 5, 12 — recovery, and the window resuming rather than restarting or instantly firing.
+  it("5/12. the window resumes on recovery — it neither restarts nor expires instantly", () => {
+    const spawned = spawnedWithTiming(0);
+    // 2 measured seconds of the 4s window are spent.
+    const measured = tickAcross(spawned.state, 1, 2);
+    assert.deepEqual(measured.timeouts, []);
+
+    // 30 seconds of measurement gap.
+    const gap = tickAcross(measured.state, 3, 32, { wrist: null });
+    assert.deepEqual(gap.timeouts, [], "no expiry during the gap");
+    assert.equal(gap.state.attemptUnmeasuredElapsedS, 30);
+
+    // Measurement returns. 2 measured seconds remain, so second 33 is not yet enough...
+    const resumedEarly = tickAcross(gap.state, 33, 33);
+    assert.deepEqual(resumedEarly.timeouts, [], "no instant expiry against the gap");
+
+    // ...and second 34 — the 4th measured second — reaches the threshold exactly.
+    const expired = tickAcross(resumedEarly.state, 34, 34);
+    assert.equal(expired.timeouts.length, 1, "measurable time still expires the attempt");
+    assert.equal(expired.timeouts[0].targetId, spawned.state.currentTarget!.id);
+    assert.equal(
+      expired.timeouts[0].activeElapsedMs,
+      TIMEOUT_MS,
+      "the reported duration is measured time only — the 30s gap is excluded",
+    );
+  });
+
+  // 1 — before any attempt exists there is nothing to protect, and nothing is charged.
+  it("1. a wrist gap before the first target is not charged to the attempt that follows", () => {
+    // The lifecycle is ticked with no wrist and no target for a long stretch. (In the real
+    // runtime dispatch skips these ticks entirely; the lifecycle must be correct anyway.)
+    const idle = tickAcross(createInitialTargetLifecycle(), 0, 0, { wrist: null });
+    assert.ok(idle.state.currentTarget, "a tick with no target still spawns one");
+
+    // The attempt that just spawned starts with a full, unspent window: it expires after
+    // its own 4 measured seconds, not sooner and not later.
+    const beforeThreshold = tickAcross(idle.state, 1, 3);
+    assert.deepEqual(beforeThreshold.timeouts, []);
+    const atThreshold = tickAcross(beforeThreshold.state, 4, 4);
+    assert.equal(atThreshold.timeouts.length, 1);
+    assert.equal(atThreshold.timeouts[0].activeElapsedMs, TIMEOUT_MS);
+  });
+
+  it("a gap in one attempt never shortens or lengthens the next", () => {
+    const spawned = spawnedWithTiming(0);
+    // Attempt 1: long gap, then measured time out to its expiry.
+    const gap = tickAcross(spawned.state, 1, 20, { wrist: null });
+    const expired = tickAcross(gap.state, 21, 24);
+    assert.equal(expired.timeouts.length, 1, "attempt 1 expired on measured time");
+    assert.equal(expired.state.currentTarget, null);
+    assert.equal(expired.state.attemptUnmeasuredElapsedS, 0, "the accumulator was cleared");
+
+    // Attempt 2 spawns and must get its own full, unspent window.
+    const successor = tickAcross(expired.state, 25, 25);
+    assert.ok(successor.state.currentTarget);
+    assert.deepEqual(successor.timeouts, []);
+    const stillRunning = tickAcross(successor.state, 26, 28);
+    assert.deepEqual(stillRunning.timeouts, [], "attempt 2 did not inherit attempt 1's gap");
+    const secondExpiry = tickAcross(stillRunning.state, 29, 29);
+    assert.equal(secondExpiry.timeouts.length, 1);
+    assert.equal(secondExpiry.timeouts[0].activeElapsedMs, TIMEOUT_MS);
+  });
+
+  // 14 — the exactly-once guarantee is untouched by the freeze.
+  it("14. exactly-once survives a gap: an attempt held then expired ends only once", () => {
+    const spawned = spawnedWithTiming(0);
+    const attemptId = spawned.state.currentTarget!.id;
+    const gap = tickAcross(spawned.state, 1, 15, { wrist: null });
+    const after = tickAcross(gap.state, 16, 40);
+
+    const forThisAttempt = after.timeouts.filter((t) => t.targetId === attemptId);
+    assert.equal(forThisAttempt.length, 1, "the held attempt expired exactly once");
+  });
+
+  it("a hit during a wrist gap is impossible, but a hit right after recovery still counts", () => {
+    const spawned = spawnedWithTiming(0);
+    const gap = tickAcross(spawned.state, 1, 20, { wrist: null });
+    assert.ok(gap.state.currentTarget, "the target is still there to be reached");
+
+    // The patient's wrist reappears already on the target.
+    const reached = tickTargetLifecycle(
+      gap.state,
+      baseInput({
+        nowMs: T0 + 21_000,
+        blockElapsedSeconds: 21,
+        attemptTimeoutMs: TIMEOUT_MS,
+        wrist: wristAt(gap.state),
+      }),
+    );
+    assert.ok(reached.hitEvent, "the held attempt was still winnable");
+    assert.equal(reached.attemptTimeoutEvent, null);
+    assert.equal(reached.state.interaction.targetsReached, 1);
+  });
+
+  it("a wrist gap is not confused with a wrist that is simply away from the target", () => {
+    const spawned = spawnedWithTiming(0);
+    // Measured, and nowhere near the target: this IS the patient failing to reach.
+    const measured = tickAcross(spawned.state, 1, 4);
+    assert.equal(measured.timeouts.length, 1, "a measured non-reach expires normally");
+
+    // The identical span with no measurement expires nothing.
+    const unmeasured = tickAcross(spawnedWithTiming(0).state, 1, 4, { wrist: null });
+    assert.deepEqual(unmeasured.timeouts, []);
   });
 });
 

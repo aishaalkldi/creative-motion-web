@@ -30,11 +30,18 @@ const FIXTURE_LEVEL_DEGREES = 45;
 
 const deterministicRandom = () => 0.5;
 
+/**
+ * A tracked wrist at rest, outside `DEFAULT_SAFE_TARGET_BOUNDS` so it can never be inside
+ * a target. "The patient is measured and is not reaching" — as distinct from `wrist: null`,
+ * which since the blocker-2 review fix means only "no measurement this frame".
+ */
+const RESTING_WRIST = { x: 0.02, y: 0.97 };
+
 function tickInput(
   overrides: Partial<TargetLifecycleTickInput> = {},
 ): TargetLifecycleTickInput {
   return {
-    wrist: null,
+    wrist: RESTING_WRIST,
     nowMs: T0,
     side: "right",
     bounds: DEFAULT_SAFE_TARGET_BOUNDS,

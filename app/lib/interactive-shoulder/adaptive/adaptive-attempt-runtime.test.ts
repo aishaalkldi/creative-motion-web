@@ -20,7 +20,11 @@ import {
   applyDispatchOutcomesToAdaptiveState,
   resolveAttemptCompensationObservation,
 } from "./adaptive-attempt-runtime";
-import { createAdaptiveDifficultyState } from "./adaptive-difficulty";
+import {
+  createAdaptiveDifficultyState,
+  resolveAttemptCompensationState,
+} from "./adaptive-difficulty";
+import { mapTargetHitToAdaptiveOutcome } from "./target-attempt-outcome";
 import { DEVELOPMENT_ADAPTIVE_DIFFICULTY_CONFIG } from "./difficulty-config-registry";
 import type { AdaptiveDifficultyState } from "./adaptive-difficulty-types";
 import type { TargetAttemptTimeoutEvent, TargetHitEvent } from "../types";
@@ -39,6 +43,14 @@ function freshState(): AdaptiveDifficultyState {
   return createAdaptiveDifficultyState(CONFIG);
 }
 
+/**
+ * A hit carrying NO compensation observation — UNKNOWN.
+ *
+ * This is deliberately the default shape, because it is what the production runtime
+ * actually emits today: `resolveAttemptCompensationObservation` latches `true` and never
+ * asserts `false`, so every uncompensated attempt reaches the engine as UNKNOWN. Tests
+ * that mean "an observed clean reach" must say so with `cleanHit()`.
+ */
 function hit(overrides: Partial<TargetHitEvent> = {}): TargetHitEvent {
   return {
     targetId: "target-1-8000000",
@@ -47,6 +59,11 @@ function hit(overrides: Partial<TargetHitEvent> = {}): TargetHitEvent {
     sequence: 1,
     ...overrides,
   };
+}
+
+/** A hit whose compensation WAS evaluated and reported clean. */
+function cleanHit(overrides: Partial<TargetHitEvent> = {}): TargetHitEvent {
+  return hit({ compensatedDuringAttempt: false, ...overrides });
 }
 
 function timeoutEvent(overrides: Partial<TargetAttemptTimeoutEvent> = {}): TargetAttemptTimeoutEvent {
@@ -67,12 +84,28 @@ describe("adaptive attempt runtime — outcome application", () => {
   it("1. a hit applies a success outcome", () => {
     const result = applyDispatchOutcomesToAdaptiveState(freshState(), {
       ...NO_OUTCOMES,
-      targetContact: hit(),
+      targetContact: cleanHit(),
     });
     assert.equal(result.appliedOutcomes, 1);
     assert.equal(result.state.successStreak, 1);
     assert.equal(result.state.struggleStreak, 0);
     assert.equal(result.state.highestSuccessfulLevel, CONFIG.startLevel);
+  });
+
+  it("1b. a hit is applied as a success whatever its compensation state", () => {
+    // All three states are successes: each is a counted attempt, each records the
+    // highest successful level, and none is ever a struggle. Only the increase streak
+    // distinguishes them — asserted per state in the blocker-1 suite below.
+    for (const contact of [cleanHit(), hit(), hit({ compensatedDuringAttempt: true })]) {
+      const result = applyDispatchOutcomesToAdaptiveState(freshState(), {
+        ...NO_OUTCOMES,
+        targetContact: contact,
+      });
+      assert.equal(result.appliedOutcomes, 1);
+      assert.equal(result.state.attemptsAtCurrentLevel, 1);
+      assert.equal(result.state.highestSuccessfulLevel, CONFIG.startLevel);
+      assert.equal(result.state.struggleStreak, 0);
+    }
   });
 
   it("2. a timeout applies an incomplete outcome", () => {
@@ -112,7 +145,7 @@ describe("adaptive attempt runtime — outcome application", () => {
     let state = freshState();
     state = applyDispatchOutcomesToAdaptiveState(state, {
       ...NO_OUTCOMES,
-      targetContact: hit(),
+      targetContact: cleanHit(),
     }).state;
     assert.equal(state.successStreak, 1);
 
@@ -125,28 +158,78 @@ describe("adaptive attempt runtime — outcome application", () => {
     assert.equal(afterCompensated.state.currentLevel, CONFIG.startLevel, "no increase");
   });
 
-  it("6. a hit with UNKNOWN compensation is treated as a clean success, not a compensated one", () => {
-    // Absent compensation must not be read as "compensated"; it also must not be recorded
-    // anywhere as an explicit clean observation. Two ordinary hits reach the threshold.
+  // REVIEW FIX, BLOCKER 1 (PR #240) — requirement D, at the real mapper→engine boundary.
+  //
+  // This test previously asserted the OPPOSITE: that a hit with no compensation
+  // observation "is treated as a clean success". That was the defect. Two such hits
+  // reached the threshold and raised the level on movement quality nobody had evaluated.
+  it("6. a hit with UNKNOWN compensation does not escalate through the mapper boundary", () => {
+    assert.equal(CONFIG.compensatedSuccessPolicy, "excludedFromIncrease");
+
     let state = freshState();
-    for (const sequence of [1, 2]) {
+    // Four hits — twice the fixture's threshold of 2 — none of them carrying an
+    // observation. Routed through the real mapper, not a hand-built outcome.
+    for (const sequence of [1, 2, 3, 4]) {
       state = applyDispatchOutcomesToAdaptiveState(state, {
         ...NO_OUTCOMES,
         targetContact: hit({ sequence }),
       }).state;
     }
+
+    assert.equal(state.currentLevel, CONFIG.startLevel, "the level never moved");
+    assert.equal(state.successStreak, 0, "no increase streak was built");
+    assert.deepEqual(state.changes, [], "no decision was emitted");
+    // Nor was the absence reinterpreted as struggle: these were successful reaches.
+    assert.equal(state.struggleStreak, 0);
+    assert.equal(state.attemptsAtCurrentLevel, 4);
+  });
+
+  it("6b. UNKNOWN survives the mapper as absent — it never becomes false", () => {
+    // The mapper is where a tri-state fact would be flattened into a boolean, so the
+    // distinction is asserted on the outcome it produces, not only on the engine's
+    // reaction to it.
     assert.equal(
-      state.currentLevel,
-      CONFIG.startLevel + CONFIG.increaseStep,
-      "two unknown-compensation hits advanced the clean streak to threshold",
+      "compensated" in mapTargetHitToAdaptiveOutcome(hit()),
+      false,
+      "an unobserved attempt carries no compensation key at all",
     );
+    assert.equal(mapTargetHitToAdaptiveOutcome(cleanHit()).compensated, false);
+    assert.equal(
+      mapTargetHitToAdaptiveOutcome(hit({ compensatedDuringAttempt: true })).compensated,
+      true,
+    );
+
+    // And the engine names those three payloads as three different states.
+    assert.equal(
+      resolveAttemptCompensationState(mapTargetHitToAdaptiveOutcome(hit()).compensated),
+      "unknown",
+    );
+    assert.equal(
+      resolveAttemptCompensationState(mapTargetHitToAdaptiveOutcome(cleanHit()).compensated),
+      "clean",
+    );
+  });
+
+  it("6c. an OBSERVED clean hit still escalates through the same boundary", () => {
+    // The counterpart to 6: the fix restricts escalation to observed-clean reaches, it
+    // does not disable escalation. Same path, same threshold, only the observation added.
+    let state = freshState();
+    for (const sequence of [1, 2]) {
+      state = applyDispatchOutcomesToAdaptiveState(state, {
+        ...NO_OUTCOMES,
+        targetContact: cleanHit({ sequence }),
+      }).state;
+    }
+    assert.equal(state.currentLevel, CONFIG.startLevel + CONFIG.increaseStep);
+    assert.equal(state.changes.length, 1);
+    assert.equal(state.changes[0].direction, "increase");
   });
 
   it("7. ordering: an expiry in the same tick is applied before a contact", () => {
     // Unreachable through the lifecycle today (each terminal path returns immediately),
     // but defined rather than left to chance. Expiry belongs to the earlier attempt.
     const result = applyDispatchOutcomesToAdaptiveState(freshState(), {
-      targetContact: hit({ sequence: 2 }),
+      targetContact: cleanHit({ sequence: 2 }),
       targetAttemptTimeout: timeoutEvent({ sequence: 1 }),
     });
     assert.equal(result.appliedOutcomes, 2);

@@ -113,7 +113,16 @@ export type TargetAttemptTimeoutEvent = {
   expiredAtMs: number;
   /** Pause-aware block elapsed seconds at which expiration was observed. */
   expiredAtBlockElapsedS: number;
-  /** Pause-aware ACTIVE attempt duration in ms. Frozen block time is excluded by construction. */
+  /**
+   * Pause-aware MEASURABLE attempt duration in ms — the value that was compared against
+   * `attemptTimeoutMs`, not the wall span of the attempt.
+   *
+   * Two kinds of time are excluded by construction: frozen block time (pause, safety
+   * hold), which the orchestrator never adds to `blockElapsedSeconds` in the first place;
+   * and time during which no wrist measurement was available, which the target lifecycle
+   * accumulates per attempt and subtracts. So this is time the patient was actually
+   * observed reaching — never time the runtime merely failed to watch.
+   */
   activeElapsedMs: number;
   /** The configured timeout that was reached. */
   attemptTimeoutMs: number;

@@ -21,6 +21,8 @@ import type {
   AdaptiveAttemptResult,
   AdaptiveChange,
   AdaptiveDifficultyState,
+  AttemptCompensationState,
+  CompensatedSuccessPolicy,
   DifficultyConfig,
   DifficultyConfigValidation,
 } from "./adaptive-difficulty-types";
@@ -118,6 +120,66 @@ export function validateDifficultyConfig(
   }
 
   return issues.length === 0 ? { valid: true, issues: [] } : { valid: false, issues };
+}
+
+/**
+ * Names the compensation state carried by a success outcome, without collapsing any of
+ * the three cases into another.
+ *
+ * The explicit `=== false` arm is the load-bearing one: it is what keeps "an observation
+ * was made and it was clean" distinguishable from "no observation was made at all". A
+ * truthiness check (`!outcome.compensated`) answers both with the same value and is the
+ * exact shape this function exists to prevent.
+ */
+export function resolveAttemptCompensationState(
+  compensated: boolean | undefined,
+): AttemptCompensationState {
+  if (compensated === true) return "compensated";
+  if (compensated === false) return "clean";
+  return "unknown";
+}
+
+/**
+ * Whether a success in this compensation state may advance the streak that raises the
+ * target-placement level.
+ *
+ * THE RULE FOR `unknown`: a success advances only when EVERY compensation state it could
+ * actually have been would also have advanced it.
+ *
+ * This invents no clinical interpretation of `unknown`, which is the whole point. An
+ * unobserved attempt was really either clean or compensated. When the configured policy
+ * would advance the streak for both, the missing observation could not have changed the
+ * decision, so advancing asserts nothing the runtime does not know. When the policy
+ * separates them — `excludedFromIncrease` — the decision genuinely depends on the fact
+ * that is missing, and the engine declines to resolve that ambiguity in the direction of
+ * a harder target. Unknown is never granted more credit than the worst state it might be.
+ *
+ * `unknown` is expressed as the conjunction of the other two arms rather than as a
+ * hand-written policy comparison so the property is structural: a future policy that
+ * changes how `clean` or `compensated` progress cannot leave `unknown` behind, and no
+ * edit can make `unknown` advance where `compensated` does not.
+ */
+export function attemptCompensationAdvancesIncreaseStreak(
+  state: AttemptCompensationState,
+  policy: CompensatedSuccessPolicy,
+): boolean {
+  switch (state) {
+    case "clean":
+      // An observed clean reach is the one case that always carries the patient forward.
+      return true;
+    case "compensated":
+      // Observed compensation advances only where the therapist-approved policy says it may.
+      return policy === "countsTowardIncrease";
+    case "unknown":
+      return (
+        attemptCompensationAdvancesIncreaseStreak("clean", policy) &&
+        attemptCompensationAdvancesIncreaseStreak("compensated", policy)
+      );
+    default: {
+      const _exhaustive: never = state;
+      return _exhaustive;
+    }
+  }
 }
 
 /** Clamps a level into the therapist-approved [minLevel, maxLevel] range. */
@@ -279,9 +341,16 @@ export function applyAttemptOutcome(
   let next: AdaptiveDifficultyState;
 
   if (outcome.kind === "success") {
-    const compensated = outcome.compensated === true;
-    const advancesStreak =
-      !compensated || config.compensatedSuccessPolicy === "countsTowardIncrease";
+    // Three states, resolved by name. Before the review fix this line was
+    // `outcome.compensated === true`, which answered "was compensation observed?" with
+    // the same `false` for an observed-clean reach and for an attempt nobody evaluated —
+    // so an UNKNOWN success advanced the streak exactly like a clean one and could raise
+    // the level on evidence that was never collected.
+    const compensationState = resolveAttemptCompensationState(outcome.compensated);
+    const advancesStreak = attemptCompensationAdvancesIncreaseStreak(
+      compensationState,
+      config.compensatedSuccessPolicy,
+    );
 
     // `outcome.reachTimeMs` is deliberately not read: reach times are a factual session
     // metric owned by the target lifecycle, never mirrored into adaptation state.
@@ -292,10 +361,14 @@ export function applyAttemptOutcome(
         state.highestSuccessfulLevel === null
           ? state.currentLevel
           : Math.max(state.highestSuccessfulLevel, state.currentLevel),
+      // The target WAS reached, whatever the compensation state. A success is never a
+      // struggle, so the struggle streak resets on all three — an unobserved reach must
+      // not lower the level any more than it may raise it.
       struggleStreak: 0,
-      // A compensated success under an excluding policy still counts as a successful
-      // target interaction (recorded by the event layer); it simply does not carry the
-      // patient toward a harder target.
+      // A success that does not advance the streak PRESERVES it rather than resetting it.
+      // The attempt still counts as a successful target interaction (recorded by the
+      // event layer); it simply does not carry the patient toward a harder target. This
+      // is the previously approved compensated-success semantic, now shared by UNKNOWN.
       successStreak: advancesStreak ? state.successStreak + 1 : state.successStreak,
     };
   } else {

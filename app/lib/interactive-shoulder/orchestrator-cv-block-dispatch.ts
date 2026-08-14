@@ -183,9 +183,13 @@ function mapTickResult(
  *
  * The historical rule was blunt: no wrist, no target dispatch at all. That rule is
  * deliberately kept for everything it used to cover, and narrowed in exactly one place —
- * an attempt that has ALREADY started needs its pause-aware clock to keep advancing, or
- * it would silently freeze whenever the tracker dropped a frame and then expire against
- * a stale elapsed time once the wrist reappeared.
+ * an attempt that has ALREADY started must keep being ticked, so the lifecycle can OBSERVE
+ * that the wrist is missing.
+ *
+ * That observation is the point (review fix, blocker 2). A no-wrist tick does not advance
+ * the attempt's measurable window; it is precisely how the lifecycle learns to exclude the
+ * interval from it. Skipping these ticks instead would leave the gap invisible, and the
+ * attempt would then expire against block time that elapsed while nobody was watching.
  *
  * Both conditions are required:
  *
@@ -208,8 +212,10 @@ function mapTickResult(
  * (18/19) and end to end in `adaptive/immediate-successor-feedback.test` (13).
  *
  * Note what this is NOT: a missing wrist is never treated as failure and never produces a
- * timeout by itself. Expiration remains caused by elapsed active block time alone, and
- * genuine tracker loss is handled upstream by the orchestrator freezing that time.
+ * timeout by itself — nor does it bring one closer. Expiration is caused by elapsed
+ * MEASURABLE attempt time alone. Global tracker loss is handled upstream by the
+ * orchestrator freezing block time; the wrist-only gap, which that path never sees, is
+ * excluded per attempt by `target-lifecycle.ts`.
  */
 function allowsNoWristTargetMaintenance(input: OrchestratorCvBlockDispatchInput): boolean {
   if (input.targetAttempt === undefined) return false;
