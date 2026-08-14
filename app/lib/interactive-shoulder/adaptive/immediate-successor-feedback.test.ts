@@ -234,6 +234,12 @@ function activeTarget(rt: Runtime): TherapeuticTarget {
   return target;
 }
 
+/** A wrist sample sitting on the active target — "the patient has not moved". */
+function onTargetOf(rt: Runtime): NormalizedPoint {
+  const target = activeTarget(rt);
+  return { x: target.x, y: target.y };
+}
+
 function contactOf(result: FrameResult) {
   assert.equal(result.dispatched.status, "dispatched");
   if (result.dispatched.status !== "dispatched") throw new Error("unreachable");
@@ -1532,5 +1538,144 @@ describe("review fix — NEXT_PUBLIC_RASQ_ADAPTIVE_DIFFICULTY_V1 remains off by 
     nowMs += 32;
     runFrame(rt, { nowMs, wrist: RESTING_WRIST });
     assert.equal(activeTarget(rt).levelDegrees, undefined, "and no level was invented");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REVIEW-FIX-003 — a wrist measurement gap must reach the adaptive engine as nothing
+// ---------------------------------------------------------------------------
+
+/**
+ * The lifecycle-level proof lives in `../wrist-measurement-gap.test.ts`. This suite exists
+ * because a fabricated hit does not stop at the lifecycle: it travels
+ *
+ *     TargetHitEvent → mapTargetHitToSessionInput → targetsReached
+ *                    → AdaptiveAttemptOutcome(success) → applyAttemptOutcome()
+ *                    → successStreak → level increase
+ *
+ * so the only assertion that fully retires the blocker is one taken against the real
+ * runtime, downstream of every one of those seams.
+ *
+ * This is also the path where the bug was genuinely reachable in production: with adaptive
+ * on and an attempt already in flight, `allowsNoWristTargetMaintenance` deliberately lets a
+ * no-wrist frame through to the lifecycle (review fix, blocker 2). The frame that keeps the
+ * attempt clock honest is exactly the frame that used to fabricate the exit.
+ */
+describe("REVIEW-FIX-003 wrist gap is not a measured exit", () => {
+  it("a gap under a stationary wrist produces no hit and moves the adaptive engine not at all", () => {
+    for (const hitExitTransitionMs of [0, NORMAL_EXIT_MS]) {
+      const rt = createRuntime();
+      let nowMs = T0;
+      runFrame(rt, { nowMs, wrist: RESTING_WRIST, hitExitTransitionMs });
+      // Captured once: the wrist never moves for the rest of this case, and deterministic
+      // placement puts the successor at the same level, i.e. right where it already is.
+      const onTarget = onTargetOf(rt);
+
+      // Earn one real hit, then let its successor land under the unmoved wrist — the
+      // ordinary deterministic-placement situation, and the reviewer's starting state.
+      nowMs += 200;
+      reachActiveTarget(rt, nowMs, hitExitTransitionMs);
+      nowMs += hitExitTransitionMs + 32;
+      const successor = runFrame(rt, { nowMs, wrist: onTarget, hitExitTransitionMs });
+      assert.ok(successor.target, `successor expected at transition ${hitExitTransitionMs}`);
+      assert.equal(contactOf(successor).targetContact, null);
+      assert.equal(rt.states.target.wristInside, true, "the attempt begins inside");
+
+      const targetId = activeTarget(rt).id;
+      const adaptiveBefore = structuredClone(rt.adaptive);
+      const reachedBefore = rt.states.target.interaction.targetsReached;
+      const inputsBefore = rt.sessionInputs.length;
+
+      // THE GAP. No trackerLost, no pause, no safety hold — only this one measurement is
+      // missing, and the frames still reach the lifecycle.
+      for (let i = 0; i < 10; i += 1) {
+        nowMs += 16;
+        const frame = runFrame(rt, { nowMs, wrist: null, hitExitTransitionMs });
+        assert.equal(frame.dispatched.status, "dispatched", "an in-flight attempt keeps ticking");
+        assert.equal(contactOf(frame).targetContact, null, `gap frame ${i} paid a hit`);
+        assert.equal(contactOf(frame).targetAttemptTimeout, null, `gap frame ${i} expired`);
+      }
+      assert.equal(
+        rt.states.target.wristInside,
+        true,
+        "the last MEASURED contact state stands across the gap",
+      );
+
+      // Measurement returns at the position the wrist never left.
+      nowMs += 16;
+      const recovered = runFrame(rt, { nowMs, wrist: onTarget, hitExitTransitionMs });
+
+      assert.equal(contactOf(recovered).targetContact, null, "no fake TargetHitEvent");
+      assert.equal(
+        rt.states.target.interaction.targetsReached,
+        reachedBefore,
+        "no fabricated targetsReached",
+      );
+      assert.equal(rt.sessionInputs.length, inputsBefore, "nothing was reported to the session");
+      assert.equal(activeTarget(rt).id, targetId, "the same attempt, not a duplicate successor");
+
+      // THE ADAPTIVE ASSERTION: no success, no streak increment, no level change, no
+      // timeout change — the engine cannot have been touched at all.
+      assert.deepEqual(
+        rt.adaptive,
+        adaptiveBefore,
+        `the gap moved the adaptive engine at transition ${hitExitTransitionMs}`,
+      );
+    }
+  });
+
+  it("and a real exit and re-entry after the gap still earns exactly one adaptive success", () => {
+    const rt = createRuntime();
+    let nowMs = T0;
+    runFrame(rt, { nowMs, wrist: RESTING_WRIST });
+    const onTarget = onTargetOf(rt);
+    nowMs += 200;
+    reachActiveTarget(rt, nowMs);
+    nowMs += 32;
+    runFrame(rt, { nowMs, wrist: onTarget });
+    assert.equal(rt.states.target.wristInside, true);
+
+    nowMs += 16;
+    runFrame(rt, { nowMs, wrist: null });
+    nowMs += 16;
+    assert.equal(contactOf(runFrame(rt, { nowMs, wrist: onTarget })).targetContact, null);
+
+    const reachedBefore = rt.states.target.interaction.targetsReached;
+    const streakBefore = rt.adaptive!.successStreak;
+    const targetId = activeTarget(rt).id;
+
+    // A MEASURED exit — the thing the gap was not.
+    nowMs += 16;
+    const exited = runFrame(rt, { nowMs, wrist: RESTING_WRIST });
+    assert.equal(contactOf(exited).targetContact, null);
+    assert.equal(rt.states.target.wristInside, false);
+    assert.equal(activeTarget(rt).id, targetId, "still the same attempt");
+
+    // ...and the re-entry the patient actually performed, observed clean so the success is
+    // allowed to advance the streak under `excludedFromIncrease`.
+    nowMs += 16;
+    const reentered = runFrame(rt, {
+      nowMs,
+      wrist: onTarget,
+      compensationObserved: false,
+    });
+    const contact = contactOf(reentered).targetContact;
+    assert.ok(contact, "a real reach must still count — the fix suppresses nothing");
+    assert.equal(contact.targetId, targetId);
+    assert.equal(rt.states.target.interaction.targetsReached, reachedBefore + 1);
+    assert.equal(
+      rt.adaptive!.successStreak,
+      streakBefore + 1,
+      "the legitimate reach did reach the adaptive engine",
+    );
+
+    // Exactly one: later frames on the retired target pay nothing more.
+    const afterReach = structuredClone(rt.adaptive);
+    for (let i = 0; i < 3; i += 1) {
+      nowMs += 16;
+      runFrame(rt, { nowMs, wrist: RESTING_WRIST });
+    }
+    assert.equal(rt.states.target.interaction.targetsReached, reachedBefore + 1);
+    assert.equal(rt.adaptive!.successStreak, afterReach!.successStreak);
   });
 });

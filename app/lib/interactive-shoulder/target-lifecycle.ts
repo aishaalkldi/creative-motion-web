@@ -38,6 +38,15 @@ export type TargetLifecycleState = {
    * `tickTargetLifecycle`.
    */
   spawnLockedUntilMs: number | null;
+  /**
+   * Whether the last MEASURED frame put the wrist inside the active target.
+   *
+   * Read only as one half of the entry edge that registers a hit, so what it must carry is
+   * "what the next measured frame is compared against". It is therefore written from
+   * measurement alone: a frame with no wrist sample leaves it untouched (REVIEW FIX,
+   * BLOCKER 3) rather than writing `false`, because `false` here means the measured claim
+   * "outside", and a gap is not that claim. See the no-else note in `tickTargetLifecycle`.
+   */
   wristInside: boolean;
   targetHit: boolean;
   /**
@@ -504,9 +513,43 @@ export function tickTargetLifecycle(
       return { state: next, hitEvent, attemptStartedEvents, attemptTimeoutEvent: null };
     }
     next = { ...next, wristInside: isInside };
-  } else {
-    next = { ...next, wristInside: false };
   }
+  // NO ELSE — a missing wrist sample leaves `wristInside` exactly as the last MEASURED
+  // frame left it (REVIEW FIX, BLOCKER 3).
+  //
+  // This branch used to set `wristInside = false`, which asserted "the wrist is outside the
+  // target" on the strength of a measurement the runtime never took. `hasWristMeasurement`
+  // already states the rule this file follows: a null wrist is a gap in one measurement,
+  // and no further conclusion may be drawn from it. Writing `false` drew exactly that
+  // conclusion, and the state machine cannot tell a written `false` from an observed one.
+  //
+  // The damage was a fabricated hit, because a hit is an ENTRY EDGE (`shouldRegisterTargetHit`:
+  // false → true). For a wrist resting inside the active target the sequence ran:
+  //
+  //     measured inside (true) → gap writes false → measurement returns inside (true)
+  //
+  // The runtime saw the false → true edge and paid out a `TargetHitEvent` — and with it a
+  // `targetsReached`, an `AdaptiveAttemptOutcome(success)`, a success streak and a possible
+  // level increase — for a patient who had not moved at all. The exit half of that edge was
+  // never observed; only the gap invented it. Deterministic adaptive placement makes the
+  // precondition ordinary rather than rare, since a successor lands where the wrist already is.
+  //
+  // Preserving the previous boolean is sufficient BECAUSE this flag is only ever read as one
+  // half of an edge against a MEASURED `isInside`. Holding the last measured value means a gap
+  // produces no edge in either direction, which is the correct reading of "inside/outside
+  // unknown for this frame". A third `unknown` state would have to answer the same question
+  // this answers — what does the next measured frame compare against — and would answer it by
+  // deferring to the last measured value anyway, so it would widen the type without changing a
+  // single outcome.
+  //
+  // Nothing is suppressed and no hit is deferred. A real exit still lands the moment an
+  // OUTSIDE measurement arrives (true → false), and the re-entry after it still pays exactly
+  // one hit. This is the same principle `attemptUnmeasuredElapsedS` applies to the attempt
+  // clock, applied to the contact state: missing measurement is not patient performance.
+  //
+  // Stale state cannot leak into a different target: every spawn re-seeds `wristInside` from
+  // the wrist's actual relationship to the NEW target (`spawnNextTarget`), and both terminal
+  // paths clear it with the target they retire.
 
   // ATTEMPT EXPIRATION — evaluated only after contact has had its chance above.
   //
