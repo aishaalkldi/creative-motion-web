@@ -81,6 +81,42 @@ export function notifyLateralReachCameraFrameObserver(
   }
 }
 
+/**
+ * One processed camera observation tick: a normalized frame when the
+ * adapter produced one, or null when no pose was available (no landmarks,
+ * or adapter rejected the landmarks). Uses the same raw acquisition
+ * timestamp as onFrame — no timestamp repair.
+ */
+export type LateralReachCameraAcquisitionObservation = {
+  capturedAtMs: number;
+  frame: NormalizedMotionFrame | null;
+};
+
+/**
+ * Isolated optional onAcquisitionObservation notification.
+ * Fires once per processed camera observation regardless of engine
+ * activation state. Observer failures must not escape into detector frame
+ * processing.
+ *
+ * @internal Exported for regression testing only.
+ */
+export function notifyLateralReachCameraAcquisitionObserver(
+  onAcquisitionObservation:
+    | ((observation: LateralReachCameraAcquisitionObservation) => void)
+    | undefined,
+  observation: LateralReachCameraAcquisitionObservation,
+): void {
+  if (!onAcquisitionObservation) return;
+  try {
+    onAcquisitionObservation(observation);
+  } catch (err) {
+    console.error(
+      "[LateralReachCameraDetector] Acquisition observation observer error:",
+      err,
+    );
+  }
+}
+
 export type LateralReachCameraStatus =
   | "idle"
   | "initializing"
@@ -143,6 +179,14 @@ export type LateralReachCameraDetectorCallbacks = {
   onSnapshot: (snapshot: LateralReachCameraSnapshot) => void;
   /** Optional — acquisition observation only; invoked after engine frame handling. */
   onFrame?: (frame: NormalizedMotionFrame) => void;
+  /**
+   * Optional — fires once per processed camera observation (frame present
+   * or absent) regardless of engine activation state. Uses the raw
+   * acquisition timestamp; no timestamp repair, no coordinate transforms.
+   */
+  onAcquisitionObservation?: (
+    observation: LateralReachCameraAcquisitionObservation,
+  ) => void;
 };
 
 type LateralReachCameraConfig = {
@@ -824,6 +868,9 @@ export class LateralReachCameraDetector {
         // Increment frame index
         this.frameIndex += 1;
 
+        // Slice 19 — resolved once below regardless of branch taken.
+        let acquisitionObservationFrame: NormalizedMotionFrame | null = null;
+
         if (landmarks && landmarks.length > 0) {
           // Create acquisition context (uses raw timestamp for metadata)
           const context: InputAcquisitionContext = {
@@ -839,6 +886,7 @@ export class LateralReachCameraDetector {
           this.updateLateralityDiagnostics(landmarks);
 
           if (frame) {
+            acquisitionObservationFrame = frame;
             // CASE A: Valid frame from adapter
             if (this.engineState) {
               // Normalize timestamp with frame-specific strict-increase constraint
@@ -926,6 +974,15 @@ export class LateralReachCameraDetector {
           this.lastRightWristCoords = null;
           this.lastLeftWristCoords = null;
         }
+
+        // Slice 19 — acquisition observation seam: fires once per processed
+        // camera tick regardless of engine state, using the raw acquisition
+        // timestamp captured above. No timestamp repair, no x inversion, no
+        // direction inference.
+        notifyLateralReachCameraAcquisitionObserver(
+          this.callbacks.onAcquisitionObservation,
+          { capturedAtMs: rawTimestamp, frame: acquisitionObservationFrame },
+        );
 
         // Check armed readiness (uses same unified clock)
         this.checkArmedReadiness(rawTimestamp);

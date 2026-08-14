@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   LateralReachCameraDetector,
+  type LateralReachCameraAcquisitionObservation,
   type LateralReachCameraSnapshot,
 } from "@/app/lib/cv/lateral-reach-camera-detector";
 import { validateLateralReachConfig } from "@/app/lib/upper-limb-motor-screen/lateral-reach-engine";
@@ -45,6 +46,8 @@ import {
   type CalibrationLifecycle,
   type CalibrationRuntimeGate,
 } from "./calibration-attempt-runtime";
+// Slice 19 — camera observation → calibration frame bridge
+import { submitLateralReachCalibrationObservation } from "./calibration-frame-bridge";
 
 const CANVAS_WIDTH = 640;
 const CANVAS_HEIGHT = 480;
@@ -78,16 +81,53 @@ export default function LateralReachCameraLabPage() {
   const [startupError, setStartupError] = useState<string | null>(null);
   const [lastCalibrationOutcome, setLastCalibrationOutcome] =
     useState<LateralReachCalibrationControllerOutcome | null>(null);
+  // Slice 19 — frozen once per active attempt from configLock; no defaults.
+  const frozenMinWristVisibilityRef = useRef<number | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const detectorRef = useRef<LateralReachCameraDetector | null>(null);
   const startInProgressRef = useRef(false);
 
+  // Slice 19 — bridge one acquisition observation into the active
+  // controller. Reads ONLY refs (never React state) so this stays correct
+  // across the lifetime of the detector instance it is attached to.
+  const handleAcquisitionObservation = useCallback(
+    (observation: LateralReachCameraAcquisitionObservation) => {
+      const controller = activeControllerRef.current.current;
+      if (!controller) return; // No active attempt, or already terminal — no-op.
+
+      const minWristVisibility = frozenMinWristVisibilityRef.current;
+      if (minWristVisibility === null) return; // Defensive: not yet frozen.
+
+      const { state, disposition } = submitLateralReachCalibrationObservation(
+        controller,
+        observation,
+        minWristVisibility,
+      );
+      if (disposition === "ignored_terminal") return;
+
+      activeControllerRef.current.current = state;
+      setActiveController(state);
+
+      if (state.phase === "terminal") {
+        const outcome = getLateralReachCalibrationOutcome(state);
+        activeControllerRef.current.current = null;
+        frozenMinWristVisibilityRef.current = null;
+        setActiveController(null);
+        setLastCalibrationOutcome(outcome);
+        setCalibrationLifecycle("idle");
+        // DO NOT stop detector — must remain acquiring for Slice 20.
+      }
+    },
+    [],
+  );
+
   // Initialize detector instance
   useEffect(() => {
     const detector = new LateralReachCameraDetector({
       onSnapshot: (newSnapshot) => setSnapshot(newSnapshot),
+      onAcquisitionObservation: handleAcquisitionObservation,
     });
     detectorRef.current = detector;
 
@@ -99,10 +139,13 @@ export default function LateralReachCameraLabPage() {
       invalidateCalibrationRuntime(runtimeGate);
       consumeActiveCalibrationController(activeControllerOwner);
 
+      // Slice 19 — clear frozen attempt-specific config
+      frozenMinWristVisibilityRef.current = null;
+
       detector.stop();
       detectorRef.current = null;
     };
-  }, []);
+  }, [handleAcquisitionObservation]);
 
   const handleStart = useCallback(async () => {
     const detector = detectorRef.current;
@@ -170,6 +213,7 @@ export default function LateralReachCameraLabPage() {
 
     detectorRef.current?.stop();
 
+    frozenMinWristVisibilityRef.current = null;
     setActiveController(null);
     setLastCalibrationOutcome(outcome);
     setCalibrationLifecycle("idle");
@@ -264,7 +308,9 @@ export default function LateralReachCameraLabPage() {
         return;
       }
 
-      // Active: publish controller
+      // Active: freeze minWristVisibility for this attempt, then publish controller.
+      // Slice 19 — frozen once here; never re-read from configLock per frame.
+      frozenMinWristVisibilityRef.current = configLock!.lockedConfig.tracking.minWristVisibility;
       activeControllerRef.current.current = result.capturingController;
       setActiveController(result.capturingController);
       setCalibrationLifecycle("active");
@@ -647,7 +693,8 @@ export default function LateralReachCameraLabPage() {
             <p className="mt-1 text-xs leading-[1.7] text-[#6B7280]">
               Explicit one-shot calibration attempt with acquisition lifecycle. Requires locked
               attempt plan and technical config. Defers controller capture start until detector
-              confirms &quot;acquiring&quot;. No frame submission (Slice 19). No engine activation (Slice 20).
+              confirms &quot;acquiring&quot;. Camera observations are bridged into the active
+              calibration attempt (Slice 19). No engine activation (Slice 20).
             </p>
 
             {/* Calibration Lifecycle Diagnostic */}
