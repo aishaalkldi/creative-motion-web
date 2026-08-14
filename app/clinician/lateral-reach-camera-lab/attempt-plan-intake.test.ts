@@ -160,7 +160,7 @@ describe("Slice 16 scope guards — lab intake / page", () => {
     assert.equal(source.includes("expectedHorizontalDirectionSign: -1"), false);
   });
 
-  it("lab page wires intake without forbidden calibration/runtime wiring", () => {
+  it("legacy handleStart path stays free of attempt-plan intake and engine handoff wiring", () => {
     const source = readFileSync(path.join(__dirname, "page.tsx"), "utf8");
     assert.match(source, /tryLockLateralReachLabAttemptPlan|lockLateralReachLabAttemptPlan/);
     assert.match(source, /positive_x/);
@@ -172,17 +172,22 @@ describe("Slice 16 scope guards — lab intake / page", () => {
       source.includes("resolveLateralReachCalibrationSampleFromFrame"),
       false,
     );
-    assert.equal(source.includes("buildLateralReachEngineConfig"), false);
-    assert.equal(source.includes("startEngine"), false);
     assert.equal(source.includes("targetPlacement"), false);
-    // Legacy start path must remain present and independent of locked plan.
+    // Legacy start path must remain present and independent of both the
+    // locked attempt plan and the later calibration → engine handoff wiring.
+    // Slice 20 intentionally added buildLateralReachEngineConfig/startEngine
+    // elsewhere on the page (the explicit engine-handoff button/handler), so
+    // those are no longer forbidden page-wide — only within handleStart's
+    // own body, which this callback never touches.
     assert.match(source, /detector\.start\(/);
     const handleStartMatch = source.match(
-      /const handleStart = useCallback\(async \(\) => \{[\s\S]*?\}, \[testedSide, snapshot\?\.status\]\);/,
+      /const handleStart = useCallback\(async \(\) => \{[\s\S]*?\}, \[[^\]]*\]\);/,
     );
     assert.ok(handleStartMatch, "handleStart callback should remain present");
     assert.equal(handleStartMatch[0].includes("attemptPlanLock"), false);
     assert.equal(handleStartMatch[0].includes("lockedPlan"), false);
     assert.equal(handleStartMatch[0].includes("screenHorizontalDirection"), false);
+    assert.equal(handleStartMatch[0].includes("buildLateralReachEngineConfig"), false);
+    assert.equal(handleStartMatch[0].includes("startEngine"), false);
   });
 });

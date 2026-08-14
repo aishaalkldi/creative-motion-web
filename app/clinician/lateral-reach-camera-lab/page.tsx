@@ -853,7 +853,11 @@ export default function LateralReachCameraLabPage() {
           )}
 
           {/* Start/Stop Buttons */}
-          {snapshot?.status !== "running" ? (
+          {/* Slice 20 QA fix — "acquiring" is a calibration-owned detector
+              state (Slice 18); the legacy Start Session control does not
+              apply here and would only be safely rejected if clicked, so it
+              is not rendered during this status. */}
+          {snapshot?.status === "acquiring" ? null : snapshot?.status !== "running" ? (
             <button
               type="button"
               disabled={snapshot?.status === "initializing" || startInProgressRef.current}
