@@ -59,6 +59,10 @@ import {
   isLegacyRetryEligible,
   isLegacyStartSessionEligible,
 } from "./error-provenance";
+import {
+  resolveCalibrationAcquisitionDiagnostics,
+  type CalibrationAcquisitionDiagnostic,
+} from "./calibration-acquisition-diagnostics";
 
 const CANVAS_WIDTH = 640;
 const CANVAS_HEIGHT = 480;
@@ -92,6 +96,8 @@ export default function LateralReachCameraLabPage() {
   const [startupError, setStartupError] = useState<string | null>(null);
   const [lastCalibrationOutcome, setLastCalibrationOutcome] =
     useState<LateralReachCalibrationControllerOutcome | null>(null);
+  const [lastCalibrationAcquisitionDiagnostic, setLastCalibrationAcquisitionDiagnostic] =
+    useState<CalibrationAcquisitionDiagnostic | null>(null);
   // Slice 19 — frozen once per active attempt from configLock; no defaults.
   const frozenMinWristVisibilityRef = useRef<number | null>(null);
 
@@ -119,6 +125,24 @@ export default function LateralReachCameraLabPage() {
 
       const minWristVisibility = frozenMinWristVisibilityRef.current;
       if (minWristVisibility === null) return; // Defensive: not yet frozen.
+
+      const detectorSnapshot = detectorRef.current?.getSnapshot();
+      if (detectorSnapshot) {
+        setLastCalibrationAcquisitionDiagnostic(
+          resolveCalibrationAcquisitionDiagnostics({
+            observation,
+            testedSide: controller.testedSide,
+            minWristVisibility,
+            detectorSnapshot: {
+              status: detectorSnapshot.status,
+              rightWristVisibility: detectorSnapshot.rightWristVisibility,
+              leftWristVisibility: detectorSnapshot.leftWristVisibility,
+              rightWristCoords: detectorSnapshot.rightWristCoords,
+              leftWristCoords: detectorSnapshot.leftWristCoords,
+            },
+          }),
+        );
+      }
 
       const { state, disposition } = submitLateralReachCalibrationObservation(
         controller,
@@ -318,6 +342,7 @@ export default function LateralReachCameraLabPage() {
       setCalibrationLifecycle("starting");
       setStartupError(null);
       setLastCalibrationOutcome(null);
+      setLastCalibrationAcquisitionDiagnostic(null);
       setEngineHandoffError(null);
 
       // Execute async startup transaction
@@ -859,6 +884,85 @@ export default function LateralReachCameraLabPage() {
                         )}
                       </>
                     )}
+                  </div>
+                </div>
+              )}
+              {lastCalibrationAcquisitionDiagnostic && (
+                <div className="mt-2 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-3">
+                  <div className="text-xs font-semibold text-[#9CA3AF]">
+                    Last Calibration Acquisition Diagnostic (Lab)
+                  </div>
+                  <div className="mt-2 space-y-1 font-mono text-[10px] text-[#F9FAFB]">
+                    <div>
+                      detectorStatus: {lastCalibrationAcquisitionDiagnostic.detectorStatus}
+                    </div>
+                    <div>
+                      attempt testedSide:{" "}
+                      {lastCalibrationAcquisitionDiagnostic.testedSide.toUpperCase()}
+                    </div>
+                    <div>
+                      rawRightWristVisibility:{" "}
+                      {lastCalibrationAcquisitionDiagnostic.rawRightWristVisibility !== null
+                        ? lastCalibrationAcquisitionDiagnostic.rawRightWristVisibility.toFixed(3)
+                        : "—"}
+                    </div>
+                    <div>
+                      rawRightWristCoords:{" "}
+                      {lastCalibrationAcquisitionDiagnostic.rawRightWristCoords
+                        ? `(${lastCalibrationAcquisitionDiagnostic.rawRightWristCoords.x.toFixed(3)}, ${lastCalibrationAcquisitionDiagnostic.rawRightWristCoords.y.toFixed(3)})`
+                        : "—"}
+                    </div>
+                    <div>
+                      rawLeftWristVisibility:{" "}
+                      {lastCalibrationAcquisitionDiagnostic.rawLeftWristVisibility !== null
+                        ? lastCalibrationAcquisitionDiagnostic.rawLeftWristVisibility.toFixed(3)
+                        : "—"}
+                    </div>
+                    <div>
+                      rawLeftWristCoords:{" "}
+                      {lastCalibrationAcquisitionDiagnostic.rawLeftWristCoords
+                        ? `(${lastCalibrationAcquisitionDiagnostic.rawLeftWristCoords.x.toFixed(3)}, ${lastCalibrationAcquisitionDiagnostic.rawLeftWristCoords.y.toFixed(3)})`
+                        : "—"}
+                    </div>
+                    <div>
+                      normalizedFramePresent:{" "}
+                      {lastCalibrationAcquisitionDiagnostic.normalizedFramePresent ? "yes" : "no"}
+                    </div>
+                    <div>
+                      selectedWristPresentInFrame:{" "}
+                      {lastCalibrationAcquisitionDiagnostic.selectedWristPresentInFrame
+                        ? "yes"
+                        : "no"}
+                    </div>
+                    <div>
+                      selectedWristConfidencePresent:{" "}
+                      {lastCalibrationAcquisitionDiagnostic.selectedWristConfidencePresent ===
+                      null
+                        ? "—"
+                        : lastCalibrationAcquisitionDiagnostic.selectedWristConfidencePresent
+                          ? "yes"
+                          : "no"}
+                    </div>
+                    <div>
+                      selectedWristVisibility:{" "}
+                      {lastCalibrationAcquisitionDiagnostic.selectedWristVisibility !== null
+                        ? lastCalibrationAcquisitionDiagnostic.selectedWristVisibility.toFixed(3)
+                        : "—"}
+                    </div>
+                    <div>
+                      frozen minWristVisibility:{" "}
+                      {lastCalibrationAcquisitionDiagnostic.minWristVisibility.toFixed(3)}
+                    </div>
+                    <div>
+                      trackingValid:{" "}
+                      {lastCalibrationAcquisitionDiagnostic.trackingValid ? "yes" : "no"}
+                    </div>
+                    <div>
+                      reasonLabel: {lastCalibrationAcquisitionDiagnostic.reasonLabel ?? "—"}
+                    </div>
+                    <div className="text-[#6B7280]">
+                      capturedAtMs: {lastCalibrationAcquisitionDiagnostic.capturedAtMs.toFixed(1)}
+                    </div>
                   </div>
                 </div>
               )}
