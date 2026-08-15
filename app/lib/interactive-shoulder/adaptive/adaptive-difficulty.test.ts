@@ -5,9 +5,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   applyAttemptOutcome,
+  attemptCompensationAdvancesIncreaseStreak,
   clampLevel,
   createAdaptiveDifficultyState,
   resetAdaptiveDifficultyState,
+  resolveAttemptCompensationState,
   validateDifficultyConfig,
 } from "./adaptive-difficulty";
 import type {
@@ -35,14 +37,28 @@ const TEST_CONFIG: DifficultyConfig = {
   compensatedSuccessPolicy: "excludedFromIncrease",
 };
 
+/**
+ * A CLEAN success — compensation was evaluated and none was observed.
+ *
+ * `compensated: false` is stated explicitly, and that is not noise. This fixture used to
+ * omit the field, which made every "clean success" assertion in this file silently an
+ * UNKNOWN-compensation assertion that passed only because the engine collapsed the two.
+ * Spelling it out is what keeps these tests about the case they claim to be about.
+ */
 const success = (reachTimeMs = 1_200): AdaptiveAttemptOutcome => ({
   kind: "success",
   reachTimeMs,
+  compensated: false,
 });
 const compensatedSuccess = (reachTimeMs = 1_200): AdaptiveAttemptOutcome => ({
   kind: "success",
   reachTimeMs,
   compensated: true,
+});
+/** A success for which NO compensation observation was supplied — UNKNOWN, not clean. */
+const unknownCompensationSuccess = (reachTimeMs = 1_200): AdaptiveAttemptOutcome => ({
+  kind: "success",
+  reachTimeMs,
 });
 const INCOMPLETE: AdaptiveAttemptOutcome = { kind: "incomplete" };
 const TRACKING_LOST: AdaptiveAttemptOutcome = { kind: "trackingLost" };
@@ -348,7 +364,13 @@ describe("adaptive difficulty — adaptation state accounting", () => {
   it("does not absorb the supplied reach time into adaptation state", () => {
     const start = createAdaptiveDifficultyState(TEST_CONFIG);
     const withReachTime = applyAttemptOutcome(start, success(1_450)).state;
-    const withoutReachTime = applyAttemptOutcome(start, { kind: "success" }).state;
+    // Compensation is held CONSTANT at clean so reach time is the only thing that varies.
+    // Omitting it here would vary compensation too — and now legitimately changes the
+    // streak — turning a reach-time test into an accidental UNKNOWN-compensation test.
+    const withoutReachTime = applyAttemptOutcome(start, {
+      kind: "success",
+      compensated: false,
+    }).state;
 
     // Reach time is factual metadata the engine passes over: supplying it, or omitting
     // it entirely, must produce byte-identical adaptation state.
@@ -718,6 +740,182 @@ describe("adaptive difficulty — compensated success policy", () => {
     assert.equal(preserved.currentLevel, 65);
     assert.equal(preserved.changes.length, 1);
     assert.equal(preserved.changes[0].direction, "increase");
+  });
+});
+
+// ── REVIEW FIX, BLOCKER 1 (PR #240) ─────────────────────────────────────────────
+// UNKNOWN compensation must never be interpreted as an observation of clean movement.
+//
+// Before this fix the engine asked `outcome.compensated === true`, so an attempt for
+// which NO compensation observation was supplied answered the same as an attempt that
+// was evaluated and found clean. Under `excludedFromIncrease` that let successes nobody
+// could evaluate build the increase streak and raise the target-placement level.
+//
+// None of this assigns a clinical meaning to UNKNOWN. The rule is only that the engine
+// may not resolve a missing observation in the direction of a harder target.
+
+describe("adaptive difficulty — UNKNOWN compensation (review fix, blocker 1)", () => {
+  it("names the three compensation states without collapsing any into another", () => {
+    assert.equal(resolveAttemptCompensationState(true), "compensated");
+    assert.equal(resolveAttemptCompensationState(false), "clean");
+    assert.equal(resolveAttemptCompensationState(undefined), "unknown");
+
+    // The distinction that the old `=== true` check destroyed: evaluated-and-clean and
+    // never-evaluated are different states, not two spellings of one.
+    assert.notEqual(
+      resolveAttemptCompensationState(false),
+      resolveAttemptCompensationState(undefined),
+    );
+  });
+
+  it("never lets UNKNOWN qualify where an observed compensated success would not", () => {
+    for (const policy of ["excludedFromIncrease", "countsTowardIncrease"] as const) {
+      const unknown = attemptCompensationAdvancesIncreaseStreak("unknown", policy);
+      const compensated = attemptCompensationAdvancesIncreaseStreak("compensated", policy);
+      const clean = attemptCompensationAdvancesIncreaseStreak("clean", policy);
+
+      // The safety property, stated directly: an unobserved attempt is never granted
+      // more credit toward a harder target than the worst state it might actually be.
+      assert.ok(
+        !unknown || compensated,
+        `UNKNOWN must not out-qualify an observed compensated success under ${policy}`,
+      );
+      // And it advances exactly when the missing observation could not have changed the
+      // answer — i.e. when both possible resolutions agree.
+      assert.equal(unknown, clean && compensated, `under ${policy}`);
+    }
+  });
+
+  // A — UNKNOWN cannot escalate, however many of them arrive.
+  it("A. never raises the level from UNKNOWN successes alone, well past the threshold", () => {
+    assert.equal(TEST_CONFIG.compensatedSuccessPolicy, "excludedFromIncrease");
+    assert.equal(TEST_CONFIG.successStreakToIncrease, 3);
+
+    const start = deepFreeze(createAdaptiveDifficultyState(TEST_CONFIG));
+    // Twelve — four times the configured threshold, so no off-by-one could hide an escape.
+    const state = applyAll(start, repeat(unknownCompensationSuccess(), 12));
+
+    assert.equal(state.currentLevel, 60, "the level never moved");
+    assert.equal(state.successStreak, 0, "no increase streak was ever built");
+    assert.deepEqual(state.changes, [], "no decision was emitted");
+    assert.equal(state.attemptTimeoutMs, TEST_CONFIG.normalAttemptTimeoutMs);
+  });
+
+  // E — and they are not reclassified as struggle either. UNKNOWN is not a failure.
+  it("E. does not turn UNKNOWN successes into struggle, incomplete or tracking loss", () => {
+    const start = createAdaptiveDifficultyState(TEST_CONFIG);
+    const state = applyAll(start, repeat(unknownCompensationSuccess(), 12));
+
+    assert.equal(state.struggleStreak, 0, "a success is never a struggle");
+    assert.equal(state.currentLevel, 60, "the level was not lowered either");
+    assert.deepEqual(state.changes, []);
+    // It is still a real, counted, successful target interaction.
+    assert.equal(state.attemptsAtCurrentLevel, 12);
+    assert.equal(state.highestSuccessfulLevel, 60);
+    assertNoSessionTotals(state, "after twelve UNKNOWN-compensation successes");
+  });
+
+  it("E. an UNKNOWN success still breaks a struggle streak, like any other success", () => {
+    const start = createAdaptiveDifficultyState(TEST_CONFIG);
+    // Threshold is 2, so without the reset in the middle this would decrease the level.
+    const state = applyAll(start, [INCOMPLETE, unknownCompensationSuccess(), INCOMPLETE]);
+
+    assert.equal(state.struggleStreak, 1, "the struggle streak was reset by the success");
+    assert.equal(state.currentLevel, 60);
+    assert.deepEqual(state.changes, []);
+  });
+
+  it("preserves — never resets — a clean streak across an UNKNOWN success", () => {
+    const start = createAdaptiveDifficultyState(TEST_CONFIG);
+    const state = applyAll(start, [success(), success(), unknownCompensationSuccess()]);
+
+    // Same approved semantic as an excluded compensated success: held, not advanced,
+    // not reset. UNKNOWN neither helps the patient nor punishes them.
+    assert.equal(state.successStreak, 2, "the clean streak is preserved");
+    assert.notEqual(state.successStreak, 3, "it is not advanced");
+    assert.notEqual(state.successStreak, 0, "it is not reset");
+    assert.equal(state.currentLevel, 60, "and no level change was triggered");
+    assert.deepEqual(state.changes, []);
+  });
+
+  // B — the clean path is untouched by the fix.
+  it("B. still raises the level on the configured run of OBSERVED clean successes", () => {
+    const start = createAdaptiveDifficultyState(TEST_CONFIG);
+    const state = applyAll(start, repeat(success(), 3));
+
+    assert.equal(state.currentLevel, 65, "clean successes still progress");
+    assert.equal(state.changes.length, 1);
+    assert.equal(state.changes[0].direction, "increase");
+    assert.equal(state.changes[0].reason, "consecutiveSuccess");
+  });
+
+  it("B. an UNKNOWN success cannot substitute for the clean success it is missing", () => {
+    const start = createAdaptiveDifficultyState(TEST_CONFIG);
+
+    // Two clean plus one unknown is NOT three clean — the run stops one short.
+    const withUnknown = applyAll(start, [success(), success(), unknownCompensationSuccess()]);
+    assert.equal(withUnknown.currentLevel, 60);
+    assert.deepEqual(withUnknown.changes, []);
+
+    // The same three attempts with the third actually observed clean do progress. The
+    // only difference between the two sequences is whether anyone looked.
+    const withClean = applyAll(start, [success(), success(), success()]);
+    assert.equal(withClean.currentLevel, 65);
+    assert.equal(withClean.changes.length, 1);
+  });
+
+  it("lets a later observed clean success complete a run an UNKNOWN paused", () => {
+    const start = createAdaptiveDifficultyState(TEST_CONFIG);
+    const state = applyAll(start, [
+      success(),
+      success(),
+      unknownCompensationSuccess(),
+      success(),
+    ]);
+
+    // The unknown attempt cost the patient nothing: the streak it preserved is completed
+    // by the next observed clean reach.
+    assert.equal(state.currentLevel, 65);
+    assert.equal(state.changes.length, 1);
+    assert.equal(state.changes[0].direction, "increase");
+  });
+
+  it("counts UNKNOWN toward the increase only where compensation cannot change it", () => {
+    // Under `countsTowardIncrease` the therapist has configured compensation as
+    // irrelevant to progression: an observed compensated success advances exactly like a
+    // clean one. No resolution of the missing observation could change the decision, so
+    // advancing asserts nothing the runtime does not know. This is the ONLY policy under
+    // which UNKNOWN progresses, and it progresses because compensation is not consulted
+    // at all — not because it was read as clean.
+    const permissive = createAdaptiveDifficultyState({
+      ...TEST_CONFIG,
+      compensatedSuccessPolicy: "countsTowardIncrease",
+    });
+    const state = applyAll(permissive, repeat(unknownCompensationSuccess(), 3));
+
+    assert.equal(state.currentLevel, 65);
+    assert.equal(state.changes.length, 1);
+    assert.equal(state.changes[0].direction, "increase");
+
+    // Under the excluding policy the identical sequence must not move at all.
+    const strict = createAdaptiveDifficultyState(TEST_CONFIG);
+    const strictState = applyAll(strict, repeat(unknownCompensationSuccess(), 3));
+    assert.equal(strictState.currentLevel, 60);
+    assert.deepEqual(strictState.changes, []);
+  });
+
+  it("keeps the engine pure and non-mutating for an UNKNOWN success", () => {
+    const start = deepFreeze(createAdaptiveDifficultyState(TEST_CONFIG));
+    const outcome = unknownCompensationSuccess(1_450);
+    const snapshot = structuredClone(outcome);
+    const before = structuredClone(start);
+
+    const first = applyAttemptOutcome(start, outcome);
+    const second = applyAttemptOutcome(start, outcome);
+
+    assert.deepEqual(first.state, second.state, "deterministic");
+    assert.deepEqual(start, before, "the input state was not mutated");
+    assert.deepEqual(outcome, snapshot, "the outcome was not mutated");
   });
 });
 
