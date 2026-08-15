@@ -27,7 +27,9 @@ import type { LateralReachCalibrationControllerOutcome } from "@/app/lib/upper-l
 import type { LateralReachCameraStatus } from "@/app/lib/cv/lateral-reach-camera-detector";
 import { lockLateralReachLabTechnicalConfig } from "./technical-config-intake";
 import {
+  classifyCalibrationHandoffReadiness,
   resolveLateralReachEngineHandoffInputs,
+  shouldRetainDetectorAcquisitionForTerminalCalibration,
   type LateralReachEngineHandoffInputs,
 } from "./calibration-engine-handoff";
 
@@ -289,6 +291,110 @@ describe("resolveLateralReachEngineHandoffInputs — calibration lifecycle", () 
     assert.equal(result.ok, false);
     if (result.ok) return;
     assert.equal(result.reason, "calibration_lifecycle_not_idle");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Shared calibration-outcome classification
+// ---------------------------------------------------------------------------
+
+describe("classifyCalibrationHandoffReadiness — resolver and acquisition policy agreement", () => {
+  const cases: Array<{
+    label: string;
+    outcome: LateralReachCalibrationControllerOutcome | null;
+    expectedReason:
+      | "no_calibration_outcome"
+      | "calibration_cancelled"
+      | "capture_failed"
+      | "geometry_not_constructible"
+      | null;
+  }> = [
+    { label: "null outcome", outcome: null, expectedReason: "no_calibration_outcome" },
+    { label: "cancelled", outcome: CANCELLED_OUTCOME, expectedReason: "calibration_cancelled" },
+    {
+      label: "capture failed",
+      outcome: { kind: "result", result: CAPTURE_FAILED_RESULT },
+      expectedReason: "capture_failed",
+    },
+    {
+      label: "geometry not constructible",
+      outcome: { kind: "result", result: NOT_CONSTRUCTIBLE_RESULT },
+      expectedReason: "geometry_not_constructible",
+    },
+    { label: "ready", outcome: READY_OUTCOME, expectedReason: null },
+  ];
+
+  for (const testCase of cases) {
+    it(`${testCase.label}: resolver and acquisition policy agree`, () => {
+      const classified = classifyCalibrationHandoffReadiness(testCase.outcome);
+      const retain = shouldRetainDetectorAcquisitionForTerminalCalibration(testCase.outcome);
+      const resolved = resolveLateralReachEngineHandoffInputs(
+        validInputs({ calibrationOutcome: testCase.outcome }),
+      );
+
+      if (testCase.expectedReason === null) {
+        assert.equal(classified.ready, true);
+        if (classified.ready) {
+          assert.equal(classified.result, READY_RESULT);
+        }
+        assert.equal(retain, true);
+        assert.equal(resolved.ok, true);
+        if (resolved.ok) {
+          assert.equal(resolved.readyResult, READY_RESULT);
+        }
+        return;
+      }
+
+      assert.equal(classified.ready, false);
+      if (!classified.ready) {
+        assert.equal(classified.reason, testCase.expectedReason);
+      }
+      assert.equal(retain, false);
+      assert.equal(resolved.ok, false);
+      if (!resolved.ok) {
+        assert.equal(resolved.reason, testCase.expectedReason);
+      }
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Terminal calibration acquisition policy
+// ---------------------------------------------------------------------------
+
+describe("terminal calibration acquisition policy", () => {
+  it("capture failed terminal result requires detector stop (does not retain acquisition)", () => {
+    const outcome = { kind: "result" as const, result: CAPTURE_FAILED_RESULT };
+    assert.equal(shouldRetainDetectorAcquisitionForTerminalCalibration(outcome), false);
+    assert.equal(classifyCalibrationHandoffReadiness(outcome).ready, false);
+  });
+
+  it("geometry not constructible terminal result requires detector stop", () => {
+    const outcome = { kind: "result" as const, result: NOT_CONSTRUCTIBLE_RESULT };
+    assert.equal(shouldRetainDetectorAcquisitionForTerminalCalibration(outcome), false);
+    assert.equal(classifyCalibrationHandoffReadiness(outcome).ready, false);
+  });
+
+  it("geometry ready handoff-ready result retains detector acquisition for Slice 20", () => {
+    assert.equal(shouldRetainDetectorAcquisitionForTerminalCalibration(READY_OUTCOME), true);
+    assert.equal(classifyCalibrationHandoffReadiness(READY_OUTCOME).ready, true);
+  });
+
+  it("outcome diagnostics remain preserved (policy is read-only on outcome)", () => {
+    const failedOutcome = {
+      kind: "result" as const,
+      result: {
+        ...CAPTURE_FAILED_RESULT,
+        failureReasons: ["start_timeout", "wrist_tracking_invalid", "insufficient_start_samples"],
+      },
+    };
+
+    assert.equal(shouldRetainDetectorAcquisitionForTerminalCalibration(failedOutcome), false);
+    assert.deepEqual(failedOutcome.result.failureReasons, [
+      "start_timeout",
+      "wrist_tracking_invalid",
+      "insufficient_start_samples",
+    ]);
   });
 });
 

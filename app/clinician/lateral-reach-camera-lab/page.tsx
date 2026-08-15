@@ -50,7 +50,15 @@ import {
 // Slice 19 — camera observation → calibration frame bridge
 import { submitLateralReachCalibrationObservation } from "./calibration-frame-bridge";
 // Slice 20 — calibration → engine handoff eligibility
-import { resolveLateralReachEngineHandoffInputs } from "./calibration-engine-handoff";
+import {
+  resolveLateralReachEngineHandoffInputs,
+  shouldRetainDetectorAcquisitionForTerminalCalibration,
+} from "./calibration-engine-handoff";
+// Runtime QA — error provenance helpers
+import {
+  isLegacyRetryEligible,
+  isLegacyStartSessionEligible,
+} from "./error-provenance";
 
 const CANVAS_WIDTH = 640;
 const CANVAS_HEIGHT = 480;
@@ -95,6 +103,12 @@ export default function LateralReachCameraLabPage() {
   const detectorRef = useRef<LateralReachCameraDetector | null>(null);
   const startInProgressRef = useRef(false);
 
+  // Runtime QA fix — explicit error provenance for safe Retry ownership.
+  // Tracks which start flow (if any) most recently attempted camera acquisition.
+  // Used to gate the legacy Retry button: only show when provenance is explicitly
+  // "legacy", never when "calibration" (even if lifecycle returned to idle on failure).
+  const lastStartIntentionRef = useRef<"legacy" | "calibration" | null>(null);
+
   // Slice 19 — bridge one acquisition observation into the active
   // controller. Reads ONLY refs (never React state) so this stays correct
   // across the lifetime of the detector instance it is attached to.
@@ -123,7 +137,9 @@ export default function LateralReachCameraLabPage() {
         setActiveController(null);
         setLastCalibrationOutcome(outcome);
         setCalibrationLifecycle("idle");
-        // DO NOT stop detector — must remain acquiring for Slice 20.
+        if (!shouldRetainDetectorAcquisitionForTerminalCalibration(outcome)) {
+          detectorRef.current?.stop();
+        }
       }
     },
     [],
@@ -147,6 +163,9 @@ export default function LateralReachCameraLabPage() {
 
       // Slice 19 — clear frozen attempt-specific config
       frozenMinWristVisibilityRef.current = null;
+
+      // Runtime QA fix — clear error provenance on unmount
+      lastStartIntentionRef.current = null;
 
       detector.stop();
       detectorRef.current = null;
@@ -175,6 +194,9 @@ export default function LateralReachCameraLabPage() {
       return;
     }
 
+    // Runtime QA fix — mark legacy start provenance before attempting acquisition
+    lastStartIntentionRef.current = "legacy";
+
     startInProgressRef.current = true;
 
     try {
@@ -193,6 +215,8 @@ export default function LateralReachCameraLabPage() {
       }
 
       await detector.start(video, canvas, configResult.config);
+      // Runtime QA fix — clear provenance on successful legacy start
+      lastStartIntentionRef.current = null;
     } catch (err) {
       console.error("Failed to start camera:", err);
     } finally {
@@ -226,6 +250,9 @@ export default function LateralReachCameraLabPage() {
   }, []);
 
   const handleStop = useCallback(() => {
+    // Runtime QA fix — clear error provenance on explicit stop
+    lastStartIntentionRef.current = null;
+
     // Slice 18 — lifecycle-aware stop
     if (calibrationLifecycle === "starting") {
       handleStopDuringStarting();
@@ -262,6 +289,9 @@ export default function LateralReachCameraLabPage() {
       setStartupError(eligibility.reason ?? "start_blocked");
       return;
     }
+
+    // Runtime QA fix — mark calibration start provenance before attempting acquisition
+    lastStartIntentionRef.current = "calibration";
 
     // Try to begin startup
     const generation = tryBeginCalibrationStartup(runtimeGateRef.current);
@@ -321,6 +351,8 @@ export default function LateralReachCameraLabPage() {
       activeControllerRef.current.current = result.capturingController;
       setActiveController(result.capturingController);
       setCalibrationLifecycle("active");
+      // Runtime QA fix — clear provenance on successful calibration activation
+      lastStartIntentionRef.current = null;
     } catch (err) {
       // Configuration or unexpected error before acquisition
       console.error("Calibration startup error:", err);
@@ -517,7 +549,7 @@ export default function LateralReachCameraLabPage() {
         {snapshot?.error && (
           <div className="mt-4 rounded-[8px] border border-rose-400/25 bg-rose-400/10 px-4 py-3 text-xs text-rose-200">
             <p>{snapshot.error}</p>
-            {snapshot.status === "error" && (
+            {isLegacyRetryEligible(snapshot.status, lastStartIntentionRef.current) && (
               <button
                 type="button"
                 onClick={handleStart}
@@ -526,6 +558,17 @@ export default function LateralReachCameraLabPage() {
               >
                 Retry
               </button>
+            )}
+            {snapshot.status === "error" && lastStartIntentionRef.current === "calibration" && (
+              <p className="mt-3 text-[10px] text-[#9CA3AF]">
+                Camera error during calibration startup. Click Reset Camera Error below, verify
+                camera permissions, then try Start Calibration again.
+              </p>
+            )}
+            {snapshot.status === "error" && lastStartIntentionRef.current === null && (
+              <p className="mt-3 text-[10px] text-[#9CA3AF]">
+                Camera error from unknown source. Click Reset Camera Error below to clear.
+              </p>
             )}
           </div>
         )}
@@ -779,10 +822,45 @@ export default function LateralReachCameraLabPage() {
                 </p>
               )}
               {lastCalibrationOutcome && (
-                <p className="mt-1 text-xs text-[#9CA3AF]">
-                  Last Outcome:{" "}
-                  <span className="font-mono text-[#F9FAFB]">{lastCalibrationOutcome.kind}</span>
-                </p>
+                <div className="mt-2 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-3">
+                  <div className="text-xs font-semibold text-[#9CA3AF]">
+                    Last Calibration Outcome (Lab Diagnostic)
+                  </div>
+                  <div className="mt-2 space-y-1 font-mono text-[10px] text-[#F9FAFB]">
+                    <div>kind: {lastCalibrationOutcome.kind}</div>
+                    {lastCalibrationOutcome.kind === "result" && (
+                      <>
+                        <div>captureOutcome: {lastCalibrationOutcome.result.captureOutcome}</div>
+                        <div>geometryOutcome: {lastCalibrationOutcome.result.geometryOutcome}</div>
+                        {lastCalibrationOutcome.result.captureOutcome === "failed" &&
+                          lastCalibrationOutcome.result.geometryOutcome === "not_applicable" && (
+                            <div>
+                              failureReasons:{" "}
+                              {JSON.stringify(lastCalibrationOutcome.result.failureReasons)}
+                            </div>
+                          )}
+                        {lastCalibrationOutcome.result.geometryOutcome === "not_constructible" && (
+                          <div>
+                            geometryBlockers:{" "}
+                            {JSON.stringify(lastCalibrationOutcome.result.geometryBlockers)}
+                          </div>
+                        )}
+                        {lastCalibrationOutcome.result.observations?.startWrist && (
+                          <div>
+                            startWrist:{" "}
+                            {JSON.stringify(lastCalibrationOutcome.result.observations.startWrist, null, 2)}
+                          </div>
+                        )}
+                        {lastCalibrationOutcome.result.observations?.heldEndpoint && (
+                          <div>
+                            heldEndpoint:{" "}
+                            {JSON.stringify(lastCalibrationOutcome.result.observations.heldEndpoint, null, 2)}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
 
@@ -856,22 +934,37 @@ export default function LateralReachCameraLabPage() {
           {/* Slice 20 QA fix — "acquiring" is a calibration-owned detector
               state (Slice 18); the legacy Start Session control does not
               apply here and would only be safely rejected if clicked, so it
-              is not rendered during this status. */}
+              is not rendered during this status.
+              Runtime QA fix — error state is gated by explicit provenance:
+              calibration/unknown errors show Reset Camera Error instead. */}
           {snapshot?.status === "acquiring" ? null : snapshot?.status !== "running" ? (
-            <button
-              type="button"
-              disabled={snapshot?.status === "initializing" || startInProgressRef.current}
-              onClick={handleStart}
-              className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#179165] disabled:opacity-50"
-            >
-              {snapshot?.status === "initializing"
-                ? snapshot.initPhase === "import"
-                  ? "Loading pose library..."
-                  : snapshot.initPhase === "model"
-                    ? "Loading pose model..."
-                    : "Starting camera..."
-                : "Start Session"}
-            </button>
+            isLegacyStartSessionEligible(
+              snapshot?.status ?? "idle",
+              lastStartIntentionRef.current,
+            ) ? (
+              <button
+                type="button"
+                disabled={snapshot?.status === "initializing" || startInProgressRef.current}
+                onClick={handleStart}
+                className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#179165] disabled:opacity-50"
+              >
+                {snapshot?.status === "initializing"
+                  ? snapshot.initPhase === "import"
+                    ? "Loading pose library..."
+                    : snapshot.initPhase === "model"
+                      ? "Loading pose model..."
+                      : "Starting camera..."
+                  : "Start Session"}
+              </button>
+            ) : snapshot?.status === "error" ? (
+              <button
+                type="button"
+                onClick={handleStop}
+                className="rounded-[7px] border border-rose-400/30 bg-rose-400/10 px-4 py-2.5 text-sm font-semibold text-rose-100 transition hover:bg-rose-400/20"
+              >
+                Reset Camera Error
+              </button>
+            ) : null
           ) : (
             <div className="flex gap-3">
               {canArmReadiness && (
