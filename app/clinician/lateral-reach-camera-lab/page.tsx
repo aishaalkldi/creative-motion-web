@@ -50,7 +50,10 @@ import {
 // Slice 19 — camera observation → calibration frame bridge
 import { submitLateralReachCalibrationObservation } from "./calibration-frame-bridge";
 // Slice 20 — calibration → engine handoff eligibility
-import { resolveLateralReachEngineHandoffInputs } from "./calibration-engine-handoff";
+import {
+  resolveLateralReachEngineHandoffInputs,
+  shouldRetainDetectorAcquisitionForTerminalCalibration,
+} from "./calibration-engine-handoff";
 // Runtime QA — error provenance helpers
 import {
   isLegacyRetryEligible,
@@ -134,7 +137,9 @@ export default function LateralReachCameraLabPage() {
         setActiveController(null);
         setLastCalibrationOutcome(outcome);
         setCalibrationLifecycle("idle");
-        // DO NOT stop detector — must remain acquiring for Slice 20.
+        if (!shouldRetainDetectorAcquisitionForTerminalCalibration(outcome)) {
+          detectorRef.current?.stop();
+        }
       }
     },
     [],

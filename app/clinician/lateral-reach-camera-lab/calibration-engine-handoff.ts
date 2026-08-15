@@ -55,6 +55,58 @@ export type LateralReachEngineHandoffResolution =
       readonly reason: LateralReachEngineHandoffBlockReason;
     };
 
+export type CalibrationHandoffOutcomeBlockReason =
+  | "no_calibration_outcome"
+  | "calibration_cancelled"
+  | "capture_failed"
+  | "geometry_not_constructible";
+
+export type CalibrationHandoffReadiness =
+  | { readonly ready: true; readonly result: LateralReachCalibrationGeometryReadyResult }
+  | {
+      readonly ready: false;
+      readonly reason: CalibrationHandoffOutcomeBlockReason;
+    };
+
+/**
+ * Single source of truth for calibration-outcome handoff readiness.
+ * Classifies terminal Slice 18/19 outcomes into ready geometry or a
+ * fail-closed block reason reused by engine handoff and acquisition policy.
+ */
+export function classifyCalibrationHandoffReadiness(
+  outcome: LateralReachCalibrationControllerOutcome | null,
+): CalibrationHandoffReadiness {
+  if (outcome === null) {
+    return { ready: false, reason: "no_calibration_outcome" };
+  }
+
+  if (outcome.kind === "cancelled") {
+    return { ready: false, reason: "calibration_cancelled" };
+  }
+
+  const { result } = outcome;
+
+  if (result.captureOutcome === "failed") {
+    return { ready: false, reason: "capture_failed" };
+  }
+
+  if (result.geometryOutcome === "not_constructible") {
+    return { ready: false, reason: "geometry_not_constructible" };
+  }
+
+  return { ready: true, result };
+}
+
+/**
+ * Whether a terminal calibration result should retain detector acquisition
+ * for explicit Slice 20 engine handoff. Non-handoff-ready terminals must stop.
+ */
+export function shouldRetainDetectorAcquisitionForTerminalCalibration(
+  outcome: LateralReachCalibrationControllerOutcome | null,
+): boolean {
+  return classifyCalibrationHandoffReadiness(outcome).ready;
+}
+
 /**
  * Resolve whether a Slice 7 engine handoff is eligible right now, and if so,
  * return the exact ready-geometry result plus locked tracking/timing to pass
@@ -71,22 +123,9 @@ export function resolveLateralReachEngineHandoffInputs(
     return { ok: false, reason: "engine_already_active" };
   }
 
-  if (inputs.calibrationOutcome === null) {
-    return { ok: false, reason: "no_calibration_outcome" };
-  }
-
-  if (inputs.calibrationOutcome.kind === "cancelled") {
-    return { ok: false, reason: "calibration_cancelled" };
-  }
-
-  const { result } = inputs.calibrationOutcome;
-
-  if (result.captureOutcome === "failed") {
-    return { ok: false, reason: "capture_failed" };
-  }
-
-  if (result.geometryOutcome === "not_constructible") {
-    return { ok: false, reason: "geometry_not_constructible" };
+  const readiness = classifyCalibrationHandoffReadiness(inputs.calibrationOutcome);
+  if (!readiness.ready) {
+    return { ok: false, reason: readiness.reason };
   }
 
   if (inputs.configLock === null) {
@@ -99,7 +138,7 @@ export function resolveLateralReachEngineHandoffInputs(
 
   return {
     ok: true,
-    readyResult: result,
+    readyResult: readiness.result,
     tracking: inputs.configLock.lockedConfig.tracking,
     timing: inputs.configLock.lockedConfig.timing,
   };
