@@ -891,3 +891,35 @@ describe("Slice 15 — acquisition-only CASE B/C and stop/epoch", () => {
     }
   });
 });
+describe("Terminal outcome bridge", () => {
+  it("finalizes an active attempt window and exposes the terminal result", async () => {
+    const detector = new LateralReachCameraDetector({
+      onSnapshot: () => {},
+    });
+
+    stubAcquireWithPhaseEmits(detector, () => ({
+      detectForVideo: () => ({ landmarks: [validWristLandmarks()] }),
+    }));
+
+    const raf = installRafCapture();
+
+    try {
+      await detector.startAcquisition(fakeVideo(), fakeCanvas());
+      detector.startEngine(buildConfig());
+
+      detector.endAttemptWindow();
+
+      const snapshot = detector.getSnapshot();
+
+      assert.equal(snapshot.lastCommandType, "attemptWindowEnded");
+      assert.equal(snapshot.lastCommandStatus, "applied");
+      assert.equal(snapshot.engineSnapshot?.terminal, true);
+
+      assert.ok(snapshot.finalResult);
+      assert.equal(snapshot.finalResult.completionState, "not_started");
+    } finally {
+      detector.stop();
+      raf.restore();
+    }
+  });
+});

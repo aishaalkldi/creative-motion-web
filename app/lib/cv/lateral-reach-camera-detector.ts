@@ -26,7 +26,10 @@ import {
   type LateralReachConfig,
   type LateralReachRuntimeSnapshot,
 } from "@/app/lib/upper-limb-motor-screen/lateral-reach-engine";
-import type { UpperLimbSide } from "@/app/lib/upper-limb-motor-screen/types";
+import type {
+  UpperLimbMovementAttemptResult,
+  UpperLimbSide,
+} from "@/app/lib/upper-limb-motor-screen/types";
 import {
   releaseMediaStream,
   waitForDecodedVideoFrames,
@@ -149,6 +152,9 @@ export type LateralReachCameraSnapshot = {
   // Armed readiness
   readinessArmed: boolean;
   readinessArmedTimeRemaining: number | null; // milliseconds remaining in armed window
+
+  // Terminal outcome — set once the attempt window has been explicitly ended.
+  finalResult: UpperLimbMovementAttemptResult | null;
 };
 
 type PoseLandmarkerInstance = {
@@ -278,6 +284,9 @@ export class LateralReachCameraDetector {
   private readinessStableSinceMs: number | null = null;
   private readinessAlreadySent = false;
 
+  // Terminal outcome
+  private finalResult: UpperLimbMovementAttemptResult | null = null;
+
   constructor(
     callbacks: LateralReachCameraDetectorCallbacks,
     config: LateralReachCameraConfig = {},
@@ -324,6 +333,7 @@ export class LateralReachCameraDetector {
         this.readinessArmed && this.readinessArmedUntilMs
           ? Math.max(0, this.readinessArmedUntilMs - performance.now())
           : null,
+      finalResult: this.finalResult,
     };
   }
 
@@ -365,6 +375,7 @@ export class LateralReachCameraDetector {
     this.readinessArmedUntilMs = null;
     this.readinessStableSinceMs = null;
     this.readinessAlreadySent = false;
+    this.finalResult = null;
     this.emit();
     return epoch;
   }
@@ -1297,6 +1308,40 @@ export class LateralReachCameraDetector {
       this.engineState = result.state;
       // Update general command clock
       this.lastCommandNowMs = nowMs;
+    }
+
+    // Always emit - UI needs feedback for both success and rejection
+    this.emit();
+  }
+
+  /**
+   * End the attempt window — explicit terminal action. Sends attemptWindowEnded
+   * through the engine and exposes the resulting terminal result via
+   * getSnapshot().finalResult.
+   */
+  endAttemptWindow(): void {
+    if (!this.engineState || this.status !== "running") {
+      return;
+    }
+
+    // Normalize timestamp for command clock consistency
+    const nowMs = this.normalizeCommandTimestamp(performance.now(), false);
+
+    const result = applyLateralReachCommand(this.engineState, {
+      type: "attemptWindowEnded",
+      nowMs,
+    });
+
+    // Store command outcome for UI feedback
+    this.lastCommandType = "attemptWindowEnded";
+    this.lastCommandStatus = result.status;
+    this.lastCommandRejectionReason = result.status === "rejected" ? result.reason : null;
+
+    if (result.status === "applied") {
+      this.engineState = result.state;
+      // Update general command clock
+      this.lastCommandNowMs = nowMs;
+      this.finalResult = result.attemptResult;
     }
 
     // Always emit - UI needs feedback for both success and rejection
