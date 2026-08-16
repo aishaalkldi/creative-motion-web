@@ -67,6 +67,7 @@ import {
   resolveCalibrationEndpointDiagnosticsAfterObservation,
   type CalibrationEndpointDiagnostic,
 } from "./calibration-endpoint-diagnostics";
+import { resolveCvQualityDiagnostic } from "./cv-quality-diagnostics";
 
 const CANVAS_WIDTH = 640;
 const CANVAS_HEIGHT = 480;
@@ -530,6 +531,15 @@ export default function LateralReachCameraLabPage() {
     snapshot?.status === "running" &&
     snapshot?.engineSnapshot?.hasActivePause &&
     !snapshot?.engineSnapshot?.terminal;
+
+  const cvQualityDiagnostic =
+    snapshot === null
+      ? null
+      : resolveCvQualityDiagnostic(
+          snapshot,
+          videoRef.current?.videoWidth ?? 0,
+          videoRef.current?.videoHeight ?? 0,
+        );
 
   return (
     <main className="min-h-screen bg-[#0B1220] px-6 py-8 text-[#F9FAFB]">
@@ -1203,6 +1213,72 @@ export default function LateralReachCameraLabPage() {
             transform: "scaleX(-1)", // Visual mirror only
           }}
         />
+
+        {/* CV Quality Diagnostic (Lab) */}
+        {cvQualityDiagnostic && (
+          <div className="mt-6 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-4">
+            <p className="text-sm font-semibold text-[#F9FAFB]">
+              CV Quality Diagnostic (Lab)
+            </p>
+            <p className="mt-1 text-xs text-[#6B7280]">
+              Read-only camera and pose evidence from the live detector snapshot. Does not
+              gate calibration or engine behavior.
+            </p>
+            <div className="mt-4 space-y-1 font-mono text-[10px] text-[#F9FAFB]">
+              <div>
+                cameraResolution:{" "}
+                {cvQualityDiagnostic.cameraResolution
+                  ? `${cvQualityDiagnostic.cameraResolution.width} × ${cvQualityDiagnostic.cameraResolution.height}`
+                  : "—"}
+              </div>
+              <div>detectorStatus: {cvQualityDiagnostic.detectorStatus}</div>
+              <div>
+                Wrist landmark evidence available:{" "}
+                {cvQualityDiagnostic.wristLandmarkDataAvailable ? "yes" : "no"}
+              </div>
+              <div>
+                rightWristVisibility:{" "}
+                {cvQualityDiagnostic.rightWristVisibility !== null
+                  ? cvQualityDiagnostic.rightWristVisibility.toFixed(3)
+                  : "—"}
+              </div>
+              <div>
+                leftWristVisibility:{" "}
+                {cvQualityDiagnostic.leftWristVisibility !== null
+                  ? cvQualityDiagnostic.leftWristVisibility.toFixed(3)
+                  : "—"}
+              </div>
+              <div>
+                rightWristCoords:{" "}
+                {cvQualityDiagnostic.rightWristCoords
+                  ? `(${cvQualityDiagnostic.rightWristCoords.x.toFixed(3)}, ${cvQualityDiagnostic.rightWristCoords.y.toFixed(3)})`
+                  : "—"}
+              </div>
+              <div>
+                leftWristCoords:{" "}
+                {cvQualityDiagnostic.leftWristCoords
+                  ? `(${cvQualityDiagnostic.leftWristCoords.x.toFixed(3)}, ${cvQualityDiagnostic.leftWristCoords.y.toFixed(3)})`
+                  : "—"}
+              </div>
+              <div>
+                rightEstimatedWristCoordsInFrame:{" "}
+                {cvQualityDiagnostic.rightEstimatedWristCoordsInFrame.coordsInFrame === null
+                  ? "—"
+                  : cvQualityDiagnostic.rightEstimatedWristCoordsInFrame.coordsInFrame
+                    ? "yes"
+                    : "no"}
+              </div>
+              <div>
+                leftEstimatedWristCoordsInFrame:{" "}
+                {cvQualityDiagnostic.leftEstimatedWristCoordsInFrame.coordsInFrame === null
+                  ? "—"
+                  : cvQualityDiagnostic.leftEstimatedWristCoordsInFrame.coordsInFrame
+                    ? "yes"
+                    : "no"}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Laterality Diagnostics */}
         {snapshot?.status === "running" && (
