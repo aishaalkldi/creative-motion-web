@@ -63,6 +63,10 @@ import {
   resolveCalibrationAcquisitionDiagnostics,
   type CalibrationAcquisitionDiagnostic,
 } from "./calibration-acquisition-diagnostics";
+import {
+  resolveCalibrationEndpointDiagnosticsAfterObservation,
+  type CalibrationEndpointDiagnostic,
+} from "./calibration-endpoint-diagnostics";
 
 const CANVAS_WIDTH = 640;
 const CANVAS_HEIGHT = 480;
@@ -98,6 +102,8 @@ export default function LateralReachCameraLabPage() {
     useState<LateralReachCalibrationControllerOutcome | null>(null);
   const [lastCalibrationAcquisitionDiagnostic, setLastCalibrationAcquisitionDiagnostic] =
     useState<CalibrationAcquisitionDiagnostic | null>(null);
+  const [lastCalibrationEndpointDiagnostic, setLastCalibrationEndpointDiagnostic] =
+    useState<CalibrationEndpointDiagnostic | null>(null);
   // Slice 19 — frozen once per active attempt from configLock; no defaults.
   const frozenMinWristVisibilityRef = useRef<number | null>(null);
 
@@ -150,6 +156,15 @@ export default function LateralReachCameraLabPage() {
         minWristVisibility,
       );
       if (disposition === "ignored_terminal") return;
+
+      const endpointDiagnostic = resolveCalibrationEndpointDiagnosticsAfterObservation({
+        controllerBeforeSubmit: controller,
+        controllerAfterSubmit: state,
+        capturedAtMs: observation.capturedAtMs,
+      });
+      if (endpointDiagnostic !== null) {
+        setLastCalibrationEndpointDiagnostic(endpointDiagnostic);
+      }
 
       activeControllerRef.current.current = state;
       setActiveController(state);
@@ -343,6 +358,7 @@ export default function LateralReachCameraLabPage() {
       setStartupError(null);
       setLastCalibrationOutcome(null);
       setLastCalibrationAcquisitionDiagnostic(null);
+      setLastCalibrationEndpointDiagnostic(null);
       setEngineHandoffError(null);
 
       // Execute async startup transaction
@@ -962,6 +978,65 @@ export default function LateralReachCameraLabPage() {
                     </div>
                     <div className="text-[#6B7280]">
                       capturedAtMs: {lastCalibrationAcquisitionDiagnostic.capturedAtMs.toFixed(1)}
+                    </div>
+                  </div>
+                </div>
+              )}
+              {lastCalibrationEndpointDiagnostic && (
+                <div className="mt-2 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-3">
+                  <div className="text-xs font-semibold text-[#9CA3AF]">
+                    Last Calibration Endpoint Diagnostic (Lab)
+                  </div>
+                  <div className="mt-2 space-y-1 font-mono text-[10px] text-[#F9FAFB]">
+                    <div>
+                      maxDisplacementFromStartSeen:{" "}
+                      {lastCalibrationEndpointDiagnostic.maxDisplacementFromStartSeen.toFixed(4)}
+                    </div>
+                    <div>
+                      currentStableSampleCount:{" "}
+                      {lastCalibrationEndpointDiagnostic.currentStableSampleCount}
+                    </div>
+                    <div>
+                      maxStableSampleCountSeen:{" "}
+                      {lastCalibrationEndpointDiagnostic.maxStableSampleCountSeen}
+                    </div>
+                    <div>
+                      endpointElapsedMs:{" "}
+                      {lastCalibrationEndpointDiagnostic.endpointElapsedMs.toFixed(1)}
+                    </div>
+                    <div>
+                      minDisplacementFromStart:{" "}
+                      {lastCalibrationEndpointDiagnostic.minDisplacementFromStart.toFixed(4)}
+                    </div>
+                    <div>
+                      maxJitterRadius:{" "}
+                      {lastCalibrationEndpointDiagnostic.maxJitterRadius.toFixed(4)}
+                    </div>
+                    <div>
+                      minStableDurationMs:{" "}
+                      {lastCalibrationEndpointDiagnostic.minStableDurationMs}
+                    </div>
+                    <div>
+                      minStableSampleCount:{" "}
+                      {lastCalibrationEndpointDiagnostic.minStableSampleCount}
+                    </div>
+                    <div>
+                      totalTimeoutMs: {lastCalibrationEndpointDiagnostic.totalTimeoutMs}
+                    </div>
+                    <div>
+                      sawSpatialReset:{" "}
+                      {lastCalibrationEndpointDiagnostic.sawSpatialReset ? "yes" : "no"}
+                    </div>
+                    <div>
+                      sawTrackingInvalid:{" "}
+                      {lastCalibrationEndpointDiagnostic.sawTrackingInvalid ? "yes" : "no"}
+                    </div>
+                    <div>
+                      sawFramingInvalid:{" "}
+                      {lastCalibrationEndpointDiagnostic.sawFramingInvalid ? "yes" : "no"}
+                    </div>
+                    <div className="text-[#6B7280]">
+                      capturedAtMs: {lastCalibrationEndpointDiagnostic.capturedAtMs.toFixed(1)}
                     </div>
                   </div>
                 </div>
