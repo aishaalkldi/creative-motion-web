@@ -131,9 +131,9 @@ const OUTCOME_LABELS: Record<OutcomeKey, { abbr: string; full: string }> = {
 };
 
 const STATUS_CLS: Record<CvRowStatus, string> = {
-  not_started: "border-white/15 bg-white/[0.06] text-white/40",
-  in_progress:  "border-amber-300/25 bg-amber-400/10 text-amber-300",
-  completed:    "border-lime-300/25 bg-lime-400/12 text-lime-300",
+  not_started: "border-[var(--border)] bg-[var(--surface-alt)] text-[var(--muted)]",
+  in_progress:  "border-amber-400/30 bg-amber-400/10 text-amber-700 dark:text-amber-300",
+  completed:    "border-lime-400/30 bg-lime-400/12 text-lime-700 dark:text-lime-300",
 };
 
 const STATUS_LABEL: Record<CvRowStatus, string> = {
@@ -229,9 +229,9 @@ function StatusChip({ status }: { status: CvRowStatus }) {
 
 function InfoTile({ label, value, accent }: { label: string; value: ReactNode; accent?: string }) {
   return (
-    <div className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30">{label}</p>
-      <p className={`mt-1.5 text-sm font-semibold ${accent ?? "text-white"}`}>{value || "—"}</p>
+    <div className="rounded-[10px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-soft)]">{label}</p>
+      <p className={`mt-1.5 text-sm font-semibold ${accent ?? "text-[var(--foreground)]"}`}>{value || "—"}</p>
     </div>
   );
 }
@@ -239,23 +239,23 @@ function InfoTile({ label, value, accent }: { label: string; value: ReactNode; a
 function TextBlock({ label, value }: { label: string; value: string }) {
   if (!value.trim()) return null;
   return (
-    <div className="border-b border-white/8 py-3.5 last:border-0">
-      <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">{label}</p>
-      <p className="text-sm leading-6 text-white/80 whitespace-pre-wrap">{value}</p>
+    <div className="border-b border-[var(--border)] py-3.5 last:border-0">
+      <p className="mb-1 text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-soft)]">{label}</p>
+      <p className="text-sm leading-6 text-[var(--foreground)] whitespace-pre-wrap">{value}</p>
     </div>
   );
 }
 
 function EmptyFieldNote({ text = "Not recorded" }: { text?: string }) {
-  return <span className="text-xs italic text-white/30">{text}</span>;
+  return <span className="text-xs italic text-[var(--muted-soft)]">{text}</span>;
 }
 
 function SoapCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] p-4">
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#5DCAA5]/60">{label}</p>
+    <div className="rounded-[10px] border border-[var(--border)] bg-[var(--surface-alt)] p-4">
+      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[var(--brand)]">{label}</p>
       {value.trim() ? (
-        <p className="text-sm leading-6 text-white/80 whitespace-pre-wrap">{value}</p>
+        <p className="text-sm leading-6 text-[var(--foreground)] whitespace-pre-wrap">{value}</p>
       ) : (
         <EmptyFieldNote />
       )}
@@ -285,20 +285,20 @@ function EditableSoapSection({
 
   return (
     <div>
-      <p className="mb-4 text-xs text-white/45 print:hidden">
+      <p className="mb-4 text-xs text-[var(--muted)] print:hidden">
         Edit SOAP notes below. Changes are saved to this assessment record.
       </p>
       <div className="grid gap-3 sm:grid-cols-2">
         {fields.map(({ key, label }) => (
-          <div key={key} className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] p-4">
-            <label className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-[#5DCAA5]/60">
+          <div key={key} className="rounded-[10px] border border-[var(--border)] bg-[var(--surface-alt)] p-4">
+            <label className="mb-2 block text-[10px] font-bold uppercase tracking-widest text-[var(--brand)]">
               {label}
             </label>
             <textarea
               value={draft.soap[key]}
               onChange={(e) => onChange({ ...draft.soap, [key]: e.target.value })}
               rows={key === "assessment" || key === "plan" ? 4 : 5}
-              className="w-full resize-y rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-sm leading-6 text-white/85 outline-none focus:border-[#1D9E75]/40 print:border-transparent print:bg-white print:text-black"
+              className="w-full resize-y rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm leading-6 text-[var(--foreground)] outline-none focus:border-[var(--brand)]/50 print:border-transparent print:bg-white print:text-black"
             />
           </div>
         ))}
@@ -308,12 +308,12 @@ function EditableSoapSection({
           type="button"
           onClick={onSave}
           disabled={saving}
-          className="rounded-[7px] bg-[#1D9E75] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#179165] disabled:opacity-50"
+          className="rounded-[10px] bg-[var(--brand)] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[var(--brand-dark)] disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save SOAP"}
         </button>
         {saveMessage && (
-          <span className={`text-xs ${saveMessage.startsWith("Saved") ? "text-[#5DCAA5]" : "text-rose-300"}`}>
+          <span className={`text-xs ${saveMessage.startsWith("Saved") ? "text-[var(--brand)]" : "text-[var(--danger)]"}`}>
             {saveMessage}
           </span>
         )}
@@ -340,13 +340,13 @@ function StructuredAssessmentReport({ data, notes }: { data: AssessmentData; not
         </div>
       </ReportSection>
       <ReportSection id="patient-reported" title={SECTION_PATIENT_REPORTED_SUMMARY} defaultOpen icon={DOC_ICON}>
-        <p className="mb-4 text-xs text-white/40">
+        <p className="mb-4 text-xs text-[var(--muted)]">
           Values below are clinician-entered during structured assessment. Labelled as patient-reported where they reflect patient history.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <InfoTile label={patientReportedLabel("Body region")} value={data.bodyRegion} />
-          <InfoTile label={patientReportedLabel("Pain at rest")} value={`${data.painAtRest}/10`} accent="text-rose-300" />
-          <InfoTile label={patientReportedLabel("Pain on movement")} value={`${data.painOnMovement}/10`} accent="text-rose-300" />
+          <InfoTile label={patientReportedLabel("Pain at rest")} value={`${data.painAtRest}/10`} accent="text-[var(--danger)]" />
+          <InfoTile label={patientReportedLabel("Pain on movement")} value={`${data.painOnMovement}/10`} accent="text-[var(--danger)]" />
           <InfoTile label={patientReportedLabel("Pain location")} value={data.painLocation || "—"} />
           <InfoTile label={patientReportedLabel("Onset")} value={data.onset} />
           <InfoTile label="Rehabilitation phase (clinician-entered)" value={data.rehabilitationPhase} />
@@ -377,15 +377,15 @@ function StructuredAssessmentReport({ data, notes }: { data: AssessmentData; not
         )}
       </ReportSection>
       <ReportSection id="safety" title={SECTION_SAFETY_INDICATORS} icon={DOC_ICON}>
-        <p className="text-sm text-white/70">{SAFETY_NONE_DOCUMENTED}</p>
+        <p className="text-sm text-[var(--muted)]">{SAFETY_NONE_DOCUMENTED}</p>
       </ReportSection>
       {data.rom?.measurements?.length > 0 && (
         <ReportSection id="objective" title="Range of Motion (clinician-entered)" defaultOpen icon={DOC_ICON}>
           <div className="space-y-2">
             {data.rom.measurements.map((m) => (
-              <div key={m.label} className="flex justify-between border-b border-white/8 py-2 text-sm">
-                <span className="text-white/70">{m.label}</span>
-                <span className="font-semibold text-[#5DCAA5]">
+              <div key={m.label} className="flex justify-between border-b border-[var(--border)] py-2 text-sm">
+                <span className="text-[var(--muted)]">{m.label}</span>
+                <span className="font-semibold text-[var(--brand)]">
                   {m.value}{m.unit ?? "°"}
                 </span>
               </div>
@@ -396,10 +396,10 @@ function StructuredAssessmentReport({ data, notes }: { data: AssessmentData; not
       {data.functionalTests?.length > 0 && (
         <ReportSection id="functional" title="Functional Tests" icon={DOC_ICON}>
           {data.functionalTests.map((t) => (
-            <div key={t.testName} className="border-b border-white/8 py-3 last:border-0">
-              <p className="text-sm font-semibold text-white">{t.testName}</p>
-              <p className="text-xs text-white/50">Result: {t.result}</p>
-              {t.notes && <p className="mt-1 text-sm text-white/70">{t.notes}</p>}
+            <div key={t.testName} className="border-b border-[var(--border)] py-3 last:border-0">
+              <p className="text-sm font-semibold text-[var(--foreground)]">{t.testName}</p>
+              <p className="text-xs text-[var(--muted-soft)]">Result: {t.result}</p>
+              {t.notes && <p className="mt-1 text-sm text-[var(--muted)]">{t.notes}</p>}
             </div>
           ))}
         </ReportSection>
@@ -437,19 +437,19 @@ function ReportSection({
   return (
     <section
       id={id}
-      className={`print-section overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] ${screenOnly ? "screen-only" : ""} ${emptyPrintClass}`}
+      className={`print-section overflow-hidden rounded-[16px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-card)] ${screenOnly ? "screen-only" : ""} ${emptyPrintClass}`}
     >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="screen-only flex w-full items-center gap-3 px-6 py-4 text-left transition hover:bg-[#0B1220]/50"
+        className="screen-only flex w-full items-center gap-3 px-6 py-4 text-left transition hover:bg-[var(--surface-alt)]"
       >
-        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] border ${accent ?? "border-[#1E2D42] bg-[#0B1220] text-white/40"}`}>
+        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-[10px] border ${accent ?? "border-[var(--border)] bg-[var(--surface-alt)] text-[var(--muted)]"}`}>
           {icon}
         </div>
-        <h2 className="flex-1 text-base font-bold text-white">{title}</h2>
+        <h2 className="flex-1 text-base font-bold text-[var(--foreground)]">{title}</h2>
         <svg
-          className={`h-4 w-4 text-white/30 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`h-4 w-4 text-[var(--muted-soft)] transition-transform ${open ? "rotate-180" : ""}`}
           fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -457,7 +457,7 @@ function ReportSection({
       </button>
       <h2 className="print-section-title hidden print:block">{title}</h2>
       <div
-        className={`print-section-body border-t border-[#1E2D42] px-6 pb-6 pt-5 print:border-0 print:px-0 print:pb-0 print:pt-3 ${
+        className={`print-section-body border-t border-[var(--border)] px-6 pb-6 pt-5 print:border-0 print:px-0 print:pb-0 print:pt-3 ${
           open ? "" : "hidden print:!block"
         }`}
       >
@@ -470,12 +470,12 @@ function ReportSection({
 function ClinicalDisclaimerBlock({ className = "" }: { className?: string }) {
   return (
     <div
-      className={`flex items-start gap-3 rounded-[7px] border border-amber-400/20 bg-amber-400/[0.07] px-4 py-3 ${className}`}
+      className={`flex items-start gap-3 rounded-[10px] border border-[var(--warning)]/30 bg-[var(--warning-soft)] px-4 py-3 ${className}`}
     >
-      <svg className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <svg className="mt-0.5 h-4 w-4 shrink-0 text-[var(--warning)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
       </svg>
-      <p className="text-xs leading-5 text-amber-200/90">{CLINICAL_DISCLAIMER_FULL}</p>
+      <p className="text-xs leading-5 text-[var(--foreground)]">{CLINICAL_DISCLAIMER_FULL}</p>
     </div>
   );
 }
@@ -496,27 +496,27 @@ function ReportScreenHeader({
   hasRiskFlags?: boolean;
 }) {
   return (
-    <section className="screen-only border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.07),transparent_38%),linear-gradient(135deg,#071a2f_0%,#0d1f3c_55%,#0f1f45_100%)]">
+    <section className="screen-only border-b border-[var(--border)] bg-[var(--surface-alt)]">
       <div className="mx-auto max-w-4xl px-6 py-10">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{CLINICAL_REPORT_TITLE}</p>
-        <p className="mt-1 text-xs text-white/50">{CLINICAL_REPORT_SUBTITLE}</p>
-        <p className="mt-2 text-xs text-white/45">{CLINICAL_REPORT_INTRO}</p>
-        <h1 className="mt-4 text-3xl font-bold text-white">{patientName}</h1>
-        <p className="mt-1.5 text-sm text-white/55">Assessment date: {formatDate(displayDate)}</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted)]">{CLINICAL_REPORT_TITLE}</p>
+        <p className="mt-1 text-xs text-[var(--muted)]">{CLINICAL_REPORT_SUBTITLE}</p>
+        <p className="mt-2 text-xs text-[var(--muted)]">{CLINICAL_REPORT_INTRO}</p>
+        <h1 className="mt-4 text-3xl font-bold text-[var(--foreground)]">{patientName}</h1>
+        <p className="mt-1.5 text-sm text-[var(--muted)]">Assessment date: {formatDate(displayDate)}</p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <span className="rounded-full border border-white/15 bg-white/[0.06] px-3 py-0.5 text-[11px] font-semibold text-white/50">
+          <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-0.5 text-[11px] font-semibold text-[var(--muted)]">
             {assessmentTypeLabel}
           </span>
-          <span className="rounded-full border border-white/15 bg-white/[0.06] px-3 py-0.5 text-[11px] font-semibold text-white/50">
+          <span className="rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-0.5 text-[11px] font-semibold text-[var(--muted)]">
             Source: {sourceLabel}
           </span>
           {languageLabel ? (
-            <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-3 py-0.5 text-[11px] font-semibold text-amber-200">
+            <span className="rounded-full border border-[var(--warning)]/30 bg-[var(--warning-soft)] px-3 py-0.5 text-[11px] font-semibold text-[var(--warning)]">
               Language: {languageLabel}
             </span>
           ) : null}
           {hasRiskFlags ? (
-            <span className="rounded-full border border-rose-400/30 bg-rose-400/15 px-3 py-0.5 text-[11px] font-semibold text-rose-300">
+            <span className="rounded-full border border-[var(--danger)]/30 bg-[var(--danger-soft)] px-3 py-0.5 text-[11px] font-semibold text-[var(--danger)]">
               Clinician review required
             </span>
           ) : null}
@@ -584,10 +584,10 @@ function PatientSubmittedPrintSection({ draft }: { draft: GeneralAssessmentDraft
       hasPrintContent={hasPatientSubmittedContent(draft)}
       icon={DOC_ICON}
     >
-      <p className="mb-3 text-xs text-white/40 print:text-gray-600">
+      <p className="mb-3 text-xs text-[var(--muted-soft)] print:text-gray-600">
         Patient-reported information only. Not objective examination findings.
       </p>
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-1">
+      <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface-alt)] px-5 py-1">
         <TextBlock label={patientReportedLabel("Main complaint")} value={draft.subjective.chiefComplaint} />
         <TextBlock label={patientReportedLabel("Pain score (NPRS)")} value={draft.subjective.nprs} />
         <TextBlock label={patientReportedLabel("Pain location")} value={draft.subjective.painLocation} />
@@ -611,33 +611,33 @@ function SafetyIndicatorsSection({ draft }: { draft: GeneralAssessmentDraft }) {
       id="safety"
       title={SECTION_SAFETY_INDICATORS}
       defaultOpen={hasFlags}
-      accent={hasFlags ? "border-rose-400/30 bg-rose-400/10 text-rose-300" : "border-lime-300/25 bg-lime-400/10 text-lime-300"}
+      accent={hasFlags ? "border-[var(--danger)]/30 bg-[var(--danger-soft)] text-[var(--danger)]" : "border-[var(--success)]/30 bg-[var(--success-soft)] text-[var(--success)]"}
       icon={DOC_ICON}
     >
       {hasFlags ? (
         <>
-          <p className="mb-4 text-sm font-semibold text-rose-200">{SAFETY_REVIEW_REQUIRED}</p>
+          <p className="mb-4 text-sm font-semibold text-[var(--danger)]">{SAFETY_REVIEW_REQUIRED}</p>
           <div className="space-y-3">
             {draft.subjective.redFlags.trim() && (
-              <div className="rounded-[8px] border border-rose-400/25 bg-rose-400/10 p-4">
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-rose-300/80">
+              <div className="rounded-[10px] border border-[var(--danger)]/30 bg-[var(--danger-soft)] p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[var(--danger)]">
                   {patientReportedLabel("Red flags reported")}
                 </p>
-                <p className="text-sm leading-6 text-white/85 whitespace-pre-wrap">{draft.subjective.redFlags}</p>
+                <p className="text-sm leading-6 text-[var(--foreground)] whitespace-pre-wrap">{draft.subjective.redFlags}</p>
               </div>
             )}
             {draft.ai.safetyNotes.trim() && (
-              <div className="rounded-[8px] border border-amber-400/25 bg-amber-400/10 p-4">
-                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-amber-300/80">
+              <div className="rounded-[10px] border border-[var(--warning)]/30 bg-[var(--warning-soft)] p-4">
+                <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[var(--warning)]">
                   {therapistEnteredLabel("Safety notes (draft for review)")}
                 </p>
-                <p className="text-sm leading-6 text-white/85 whitespace-pre-wrap">{draft.ai.safetyNotes}</p>
+                <p className="text-sm leading-6 text-[var(--foreground)] whitespace-pre-wrap">{draft.ai.safetyNotes}</p>
               </div>
             )}
           </div>
         </>
       ) : (
-        <p className="text-sm text-white/70">{SAFETY_NONE_DOCUMENTED}</p>
+        <p className="text-sm text-[var(--muted)]">{SAFETY_NONE_DOCUMENTED}</p>
       )}
     </ReportSection>
   );
@@ -690,23 +690,23 @@ function AssessmentFocusContextSection({
       id="focus-context"
       title={FOCUS_SECTION_TITLE}
       defaultOpen
-      accent="border-cyan-300/25 bg-cyan-400/10 text-cyan-300"
+      accent="border-[var(--info)]/30 bg-[var(--info-soft)] text-[var(--info)]"
       icon={FOCUS_ICON}
     >
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-        <p className="max-w-2xl text-xs leading-relaxed text-white/50">{FOCUS_SECTION_SUBTITLE}</p>
-        <span className="shrink-0 rounded-full border border-cyan-300/25 bg-cyan-400/10 px-2.5 py-0.5 text-[10px] font-semibold text-cyan-300">
+        <p className="max-w-2xl text-xs leading-relaxed text-[var(--muted)]">{FOCUS_SECTION_SUBTITLE}</p>
+        <span className="shrink-0 rounded-full border border-[var(--info)]/30 bg-[var(--info-soft)] px-2.5 py-0.5 text-[10px] font-semibold text-[var(--info)]">
           {FOCUS_BADGE_THERAPIST_REVIEW}
         </span>
       </div>
-      <p className="mb-4 text-[10px] text-white/35">{dataSourceNote}</p>
+      <p className="mb-4 text-[10px] text-[var(--muted-soft)]">{dataSourceNote}</p>
       <div className="grid gap-3 sm:grid-cols-2">
         <InfoTile label={FOCUS_AREA_LABEL} value={labels.focusArea} />
         <InfoTile label={FOCUS_CATEGORY_LABEL} value={labels.clinicalCategory} />
         <InfoTile label={FOCUS_PHASE_LABEL} value={labels.phaseContext} />
         <InfoTile label={FOCUS_DIRECTION_LABEL} value={FOCUS_DIRECTION_VALUE} />
       </div>
-      <p className="mt-4 text-xs leading-relaxed text-white/45">{FOCUS_CONFIRMATION_TEXT}</p>
+      <p className="mt-4 text-xs leading-relaxed text-[var(--muted)]">{FOCUS_CONFIRMATION_TEXT}</p>
     </ReportSection>
   );
 }
@@ -750,55 +750,55 @@ function ProgramDirectionForReviewSection({
       id="program-direction"
       title={PROGRAM_DIRECTION_SECTION_TITLE}
       defaultOpen
-      accent="border-violet-300/25 bg-violet-400/10 text-violet-300"
+      accent="border-violet-400/30 bg-violet-400/10 text-violet-700 dark:text-violet-300"
       icon={PROGRAM_DIRECTION_ICON}
     >
-      <p className="mb-4 max-w-2xl text-xs leading-relaxed text-white/50">
+      <p className="mb-4 max-w-2xl text-xs leading-relaxed text-[var(--muted)]">
         {PROGRAM_DIRECTION_INTRO}
       </p>
 
       <div className="mb-4 grid gap-2 sm:grid-cols-2">
-        <p className="text-xs text-white/55">
-          <span className="font-semibold text-white/70">{PROGRAM_DIRECTION_FOCUS_LINE}</span>{" "}
+        <p className="text-xs text-[var(--muted)]">
+          <span className="font-semibold text-[var(--foreground)]">{PROGRAM_DIRECTION_FOCUS_LINE}</span>{" "}
           {labels.focusArea}
         </p>
-        <p className="text-xs text-white/55">
-          <span className="font-semibold text-white/70">{PROGRAM_DIRECTION_CATEGORY_LINE}</span>{" "}
+        <p className="text-xs text-[var(--muted)]">
+          <span className="font-semibold text-[var(--foreground)]">{PROGRAM_DIRECTION_CATEGORY_LINE}</span>{" "}
           {labels.clinicalCategory}
         </p>
       </div>
 
       {hasRedFlag && (
-        <div className="mb-4 rounded-xl border border-amber-300/25 bg-amber-400/10 px-4 py-3">
-          <p className="text-xs leading-relaxed text-amber-200">{PROGRAM_DIRECTION_RED_FLAG}</p>
+        <div className="mb-4 rounded-xl border border-[var(--warning)]/30 bg-[var(--warning-soft)] px-4 py-3">
+          <p className="text-xs leading-relaxed text-[var(--foreground)]">{PROGRAM_DIRECTION_RED_FLAG}</p>
         </div>
       )}
 
       {labels.confidence === "low" && options.length > 0 && (
-        <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
-          <p className="text-xs leading-relaxed text-white/50">{PROGRAM_DIRECTION_LOW_CONFIDENCE}</p>
+        <div className="mb-4 rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
+          <p className="text-xs leading-relaxed text-[var(--muted)]">{PROGRAM_DIRECTION_LOW_CONFIDENCE}</p>
         </div>
       )}
 
       {options.length === 0 ? (
-        <p className="text-sm leading-relaxed text-white/50">{PROGRAM_DIRECTION_NO_OPTIONS}</p>
+        <p className="text-sm leading-relaxed text-[var(--muted)]">{PROGRAM_DIRECTION_NO_OPTIONS}</p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-3">
           {options.map((option) => (
             <div
               key={option.templateId}
-              className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+              className="rounded-[14px] border border-[var(--border)] bg-[var(--surface-alt)] p-4"
             >
               <div className="mb-3 flex items-start justify-between gap-2">
-                <h3 className="text-sm font-bold text-white">{option.title}</h3>
-                <span className="shrink-0 rounded-full border border-violet-300/25 bg-violet-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-violet-300">
+                <h3 className="text-sm font-bold text-[var(--foreground)]">{option.title}</h3>
+                <span className="shrink-0 rounded-full border border-violet-400/30 bg-violet-400/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-300">
                   {PROGRAM_DIRECTION_CARD_BADGE}
                 </span>
               </div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-white/35">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-soft)]">
                 {option.conditionArea} · {option.level}
               </p>
-              <p className="mt-2 text-[11px] leading-relaxed text-white/45">{option.displayNote}</p>
+              <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">{option.displayNote}</p>
             </div>
           ))}
         </div>
@@ -807,13 +807,13 @@ function ProgramDirectionForReviewSection({
       <div className="mt-5 flex flex-wrap items-center gap-3">
         <Link
           href={planBuilderHref}
-          className="inline-flex rounded-xl border border-violet-300/30 bg-violet-400/10 px-4 py-2.5 text-xs font-semibold text-violet-200 transition hover:bg-violet-400/15"
+          className="inline-flex rounded-xl border border-violet-400/40 bg-violet-400/10 px-4 py-2.5 text-xs font-semibold text-violet-700 transition hover:bg-violet-400/15 dark:text-violet-200"
         >
           {PROGRAM_DIRECTION_CTA} →
         </Link>
       </div>
 
-      <p className="mt-4 text-xs leading-relaxed text-white/40">{PROGRAM_DIRECTION_FOOTER}</p>
+      <p className="mt-4 text-xs leading-relaxed text-[var(--muted-soft)]">{PROGRAM_DIRECTION_FOOTER}</p>
     </ReportSection>
   );
 }
@@ -838,33 +838,33 @@ function ProgramRecommendationSection({
       id="programs"
       title={SECTION_SUGGESTED_DIRECTION}
       defaultOpen
-      accent="border-violet-300/25 bg-violet-400/10 text-violet-300"
+      accent="border-violet-400/30 bg-violet-400/10 text-violet-700 dark:text-violet-300"
       icon={
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M11.35 3.836c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m8.9-4.414c.376.023.75.05 1.124.08 1.131.094 1.976 1.057 1.976 2.192V16.5A2.25 2.25 0 0118 18.75h-2.25m-7.5-10.5H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V18.75m-7.5-10.5h6.375c.621 0 1.125.504 1.125 1.125v9.375m-8.25-3l1.5 1.5 3-3.75" />
         </svg>
       }
     >
-      <p className="mb-4 text-xs leading-relaxed text-white/50">{SUGGESTED_DIRECTION_INTRO}</p>
+      <p className="mb-4 text-xs leading-relaxed text-[var(--muted)]">{SUGGESTED_DIRECTION_INTRO}</p>
       {!isMatched && (
-        <p className="mb-4 text-xs text-white/40 italic">{SUGGESTED_DIRECTION_NO_MATCH}</p>
+        <p className="mb-4 text-xs text-[var(--muted-soft)] italic">{SUGGESTED_DIRECTION_NO_MATCH}</p>
       )}
       {isMatched && (
-        <p className="mb-4 text-xs text-cyan-300/70">{SUGGESTED_DIRECTION_MATCH_NOTE}</p>
+        <p className="mb-4 text-xs text-[var(--info)]">{SUGGESTED_DIRECTION_MATCH_NOTE}</p>
       )}
 
       <div className="space-y-4">
         {allPrograms.map((prog) => (
-          <div key={prog.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <div key={prog.id} className="rounded-[14px] border border-[var(--border)] bg-[var(--surface-alt)] p-4">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div>
-                <span className="text-[10px] font-semibold uppercase tracking-widest text-white/40">
+                <span className="text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-soft)]">
                   Program option · {prog.category}
                 </span>
-                <h3 className="mt-0.5 text-sm font-bold text-white">{prog.name}</h3>
+                <h3 className="mt-0.5 text-sm font-bold text-[var(--foreground)]">{prog.name}</h3>
               </div>
               {isMatched && (
-                <span className="shrink-0 rounded-full border border-violet-300/25 bg-violet-400/10 px-2.5 py-0.5 text-[10px] font-semibold text-violet-300">
+                <span className="shrink-0 rounded-full border border-violet-400/30 bg-violet-400/10 px-2.5 py-0.5 text-[10px] font-semibold text-violet-700 dark:text-violet-300">
                   {BADGE_FOR_THERAPIST_REVIEW}
                 </span>
               )}
@@ -875,18 +875,18 @@ function ProgramRecommendationSection({
                   key={ph.id}
                   className={`flex items-start gap-3 rounded-xl border px-3 py-2 ${
                     i === 0
-                      ? "border-cyan-300/20 bg-cyan-400/[0.06]"
-                      : "border-white/8 bg-white/[0.02]"
+                      ? "border-[var(--info)]/30 bg-[var(--info-soft)]"
+                      : "border-[var(--border)] bg-[var(--surface)]"
                   }`}
                 >
-                  <span className={`mt-0.5 h-4 w-4 shrink-0 text-center text-[10px] font-bold leading-4 ${i === 0 ? "text-cyan-300" : "text-white/30"}`}>
+                  <span className={`mt-0.5 h-4 w-4 shrink-0 text-center text-[10px] font-bold leading-4 ${i === 0 ? "text-[var(--info)]" : "text-[var(--muted-soft)]"}`}>
                     P{i + 1}
                   </span>
                   <div className="min-w-0">
-                    <p className={`text-xs font-semibold ${i === 0 ? "text-cyan-200" : "text-white/50"}`}>
+                    <p className={`text-xs font-semibold ${i === 0 ? "text-[var(--info)]" : "text-[var(--muted)]"}`}>
                       Phase {i + 1}: {ph.name}
                     </p>
-                    <p className="mt-0.5 text-[11px] text-white/40">{ph.durationHint} · {ph.defaultSessions} sessions</p>
+                    <p className="mt-0.5 text-[11px] text-[var(--muted-soft)]">{ph.durationHint} · {ph.defaultSessions} sessions</p>
                   </div>
                 </div>
               ))}
@@ -912,32 +912,32 @@ function ReportNextStepsFooter({
   const profilePlanHref = `${profileHref}#rehabilitation-plan`;
 
   return (
-    <section className="screen-only overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-      <h2 className="text-base font-bold text-white">Next steps</h2>
-      <ul className="mt-3 list-inside list-disc space-y-1 text-sm text-white/55">
+    <section className="screen-only overflow-hidden rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
+      <h2 className="text-base font-bold text-[var(--foreground)]">Next steps</h2>
+      <ul className="mt-3 list-inside list-disc space-y-1 text-sm text-[var(--muted)]">
         {REPORT_NEXT_STEPS.map((step) => (
           <li key={step}>{step}</li>
         ))}
       </ul>
-      <p className="mt-4 text-sm text-white/45">
+      <p className="mt-4 text-sm text-[var(--muted)]">
         Select or adapt a rehabilitation plan after reviewing this report. All clinical decisions remain with the treating physiotherapist.
       </p>
       <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <Link
           href={planHref}
-          className="inline-flex items-center justify-center rounded-[7px] bg-[#1D9E75] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]"
+          className="inline-flex items-center justify-center rounded-[10px] bg-[var(--brand)] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--brand-dark)]"
         >
           {existingPlan ? "Update treatment plan →" : "Build treatment plan →"}
         </Link>
         <Link
           href={existingPlan ? profilePlanHref : profileHref}
-          className="inline-flex items-center justify-center rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-5 py-2.5 text-sm font-semibold text-white/70 transition hover:text-white"
+          className="inline-flex items-center justify-center rounded-[10px] border border-[var(--border)] bg-[var(--surface-alt)] px-5 py-2.5 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--brand)]/40"
         >
           View patient chart →
         </Link>
         <Link
           href="/clinician/results"
-          className="inline-flex items-center justify-center rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-5 py-2.5 text-sm font-semibold text-white/70 transition hover:text-white"
+          className="inline-flex items-center justify-center rounded-[10px] border border-[var(--border)] bg-[var(--surface-alt)] px-5 py-2.5 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--brand)]/40"
         >
           Open Results →
         </Link>
@@ -964,7 +964,7 @@ function AssignPlanSection({
       title="Rehabilitation Plan Assignment"
       defaultOpen
       screenOnly
-      accent="border-cyan-300/25 bg-cyan-400/10 text-cyan-300"
+      accent="border-cyan-400/30 bg-cyan-400/10 text-cyan-700 dark:text-cyan-300"
       icon={
         <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -972,20 +972,20 @@ function AssignPlanSection({
       }
     >
       {existingPlan ? (
-        <div className="mb-5 rounded-2xl border border-lime-300/20 bg-lime-400/[0.06] p-4">
-          <p className="text-[10px] font-semibold uppercase tracking-widest text-lime-300/80">
+        <div className="mb-5 rounded-[14px] border border-[var(--success)]/30 bg-[var(--success-soft)] p-4">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--success)]">
             Treatment plan already assigned
           </p>
-          <p className="mt-1 text-sm font-semibold text-white">{existingPlan.programName}</p>
-          <p className="mt-0.5 text-xs text-white/55">{existingPlan.phaseName}</p>
-          <p className="mt-1 text-xs text-white/40">
+          <p className="mt-1 text-sm font-semibold text-[var(--foreground)]">{existingPlan.programName}</p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">{existingPlan.phaseName}</p>
+          <p className="mt-1 text-xs text-[var(--muted-soft)]">
             {existingPlan.totalSessions} sessions · {existingPlan.sessionsPerWeek}× per week · Assigned {formatDate(existingPlan.assignedAt)}
           </p>
         </div>
       ) : (
-        <div className="mb-5 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-          <p className="text-sm text-white/60">No treatment plan has been assigned to this patient yet.</p>
-          <p className="mt-1 text-xs text-white/35">
+        <div className="mb-5 rounded-[14px] border border-[var(--border)] bg-[var(--surface-alt)] p-4">
+          <p className="text-sm text-[var(--muted)]">No treatment plan has been assigned to this patient yet.</p>
+          <p className="mt-1 text-xs text-[var(--muted-soft)]">
             Select a programme template, adjust dose, and share the patient portal link.
           </p>
         </div>
@@ -994,7 +994,7 @@ function AssignPlanSection({
       <div className="flex flex-col gap-3 sm:flex-row">
         <Link
           href={planHref}
-          className="flex items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-6 py-3 text-sm font-semibold text-slate-950 transition hover:bg-cyan-300"
+          className="flex items-center justify-center gap-2 rounded-[14px] bg-[var(--brand)] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[var(--brand-dark)]"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -1003,7 +1003,7 @@ function AssignPlanSection({
         </Link>
         <Link
           href={`${profileHref}#rehabilitation-plan`}
-          className="flex items-center justify-center rounded-2xl border border-white/12 bg-white/5 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+          className="flex items-center justify-center rounded-[14px] border border-[var(--border)] bg-[var(--surface-alt)] px-6 py-3 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--brand)]/40"
         >
           View plan on patient chart →
         </Link>
@@ -1264,38 +1264,38 @@ export function AssessmentReportClient() {
   const therapistDecisionLabel = useMemo(() => {
     if (!draft?.therapist.decision) return null;
     return draft.therapist.decision === "approve"
-      ? { label: "Approved", cls: "text-lime-300" }
+      ? { label: "Approved", cls: "text-lime-700 dark:text-lime-300" }
       : draft.therapist.decision === "edit"
-      ? { label: "Needs Edit", cls: "text-amber-300" }
-      : { label: "Rejected", cls: "text-rose-300" };
+      ? { label: "Needs Edit", cls: "text-amber-700 dark:text-amber-300" }
+      : { label: "Rejected", cls: "text-rose-700 dark:text-rose-300" };
   }, [draft]);
 
   // ── Loading / empty states ──────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[#0B1220]">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1E2D42] border-t-[#1D9E75]" />
-        <p className="text-sm text-white/40">Loading assessment report…</p>
+      <main className="flex min-h-screen flex-col items-center justify-center gap-3 bg-[var(--background)]">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--brand)]" />
+        <p className="text-sm text-[var(--muted)]">Loading assessment report…</p>
       </main>
     );
   }
 
   if (!patientId && !assessmentId) {
     return (
-      <main className="min-h-screen bg-[#0B1220] text-white">
+      <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
         <div className="mx-auto max-w-2xl px-6 py-20 text-center">
-          <h1 className="text-2xl font-bold text-white">No report selected</h1>
-          <p className="mt-3 text-sm text-white/45">
+          <h1 className="text-2xl font-bold text-[var(--foreground)]">No report selected</h1>
+          <p className="mt-3 text-sm text-[var(--muted)]">
             Open this report from the patient chart or the Results page.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link href="/clinician/patients"
-              className="inline-flex items-center rounded-[7px] bg-[#1D9E75] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]">
+              className="inline-flex items-center rounded-[10px] bg-[var(--brand)] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--brand-dark)]">
               Patient charts
             </Link>
             <Link href="/clinician/results"
-              className="inline-flex items-center rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-6 py-2.5 text-sm font-semibold text-white transition hover:text-white/80">
+              className="inline-flex items-center rounded-[10px] border border-[var(--border)] bg-[var(--surface-alt)] px-6 py-2.5 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--brand)]/40">
               Results
             </Link>
           </div>
@@ -1306,13 +1306,13 @@ export function AssessmentReportClient() {
 
   if (loadError) {
     return (
-      <main className="min-h-screen bg-[#0B1220] text-white">
+      <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
         <div className="mx-auto max-w-2xl px-6 py-20 text-center">
-          <h1 className="text-xl font-bold text-white">Could not load report</h1>
-          <p className="mt-2 text-sm text-rose-300">{loadError}</p>
+          <h1 className="text-xl font-bold text-[var(--foreground)]">Could not load report</h1>
+          <p className="mt-2 text-sm text-[var(--danger)]">{loadError}</p>
           {patientId && (
             <Link href={`/clinician/patients/${patientId}`}
-              className="mt-7 inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-6 py-2.5 text-sm font-semibold text-white">
+              className="mt-7 inline-flex rounded-[10px] border border-[var(--border)] bg-[var(--surface-alt)] px-6 py-2.5 text-sm font-semibold text-[var(--foreground)]">
               ← Patient profile
             </Link>
           )}
@@ -1335,7 +1335,7 @@ export function AssessmentReportClient() {
     const backHref = patientId ? `/clinician/patients/${patientId}` : "/clinician/patients";
 
     return (
-      <main className="assessment-report-root print-report min-h-screen bg-[#0B1220] text-white">
+      <main className="assessment-report-root print-report min-h-screen bg-[var(--background)] text-[var(--foreground)]">
         {printSummary ? (
           <div className="print-only">
             <RemoteQuestionnairePrintReport
@@ -1392,18 +1392,18 @@ export function AssessmentReportClient() {
             title={SECTION_SAFETY_INDICATORS}
             defaultOpen={hasRedFlag}
             icon={DOC_ICON}
-            accent={hasRedFlag ? "border-rose-400/30 bg-rose-400/10 text-rose-300" : "border-lime-300/25 bg-lime-400/10 text-lime-300"}
+            accent={hasRedFlag ? "border-[var(--danger)]/30 bg-[var(--danger-soft)] text-[var(--danger)]" : "border-[var(--success)]/30 bg-[var(--success-soft)] text-[var(--success)]"}
           >
             {hasRedFlag ? (
               <>
-                <p className="text-sm font-semibold text-rose-200">{RED_FLAG_PATIENT_REPORTED}</p>
-                <p className="mt-2 text-sm text-rose-200/80">{SAFETY_REVIEW_REQUIRED}</p>
+                <p className="text-sm font-semibold text-[var(--danger)]">{RED_FLAG_PATIENT_REPORTED}</p>
+                <p className="mt-2 text-sm text-[var(--danger)]">{SAFETY_REVIEW_REQUIRED}</p>
               </>
             ) : (
-              <p className="text-sm text-white/70">{SAFETY_NONE_DOCUMENTED}</p>
+              <p className="text-sm text-[var(--muted)]">{SAFETY_NONE_DOCUMENTED}</p>
             )}
           </ReportSection>
-          <section className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+          <section className="overflow-hidden rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
             <div>
               <PatientSubmittedAnswersReview
                 patientDraft={remoteQuestionnaireDraft}
@@ -1417,9 +1417,9 @@ export function AssessmentReportClient() {
           </section>
           <AssessmentInterpretationDraftSection draft={interpretationDraft} />
           {serverNotes?.trim() ? (
-            <section className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <h2 className="text-base font-bold text-white">Therapist-entered clinical note</h2>
-              <p className="mt-3 text-sm leading-relaxed text-white/80 whitespace-pre-wrap">
+            <section className="overflow-hidden rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
+              <h2 className="text-base font-bold text-[var(--foreground)]">Therapist-entered clinical note</h2>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--foreground)] whitespace-pre-wrap">
                 {serverNotes.trim()}
               </p>
             </section>
@@ -1448,7 +1448,7 @@ export function AssessmentReportClient() {
 
   if (reportKind === "structured" && structuredData) {
     return (
-      <main className="assessment-report-root print-report min-h-screen bg-[#0B1220] text-white">
+      <main className="assessment-report-root print-report min-h-screen bg-[var(--background)] text-[var(--foreground)]">
         <RasqPrintHeader
           patientName={patient?.full_name ?? "Patient"}
           patientId={patientId}
@@ -1457,18 +1457,18 @@ export function AssessmentReportClient() {
           assessmentTypeLabel="Structured assessment"
           sourceLabel="Mixed — clinician-entered"
         />
-        <header className="screen-only sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220]">
+        <header className="screen-only sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--surface)]">
           <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
             <Link href={patientId ? `/clinician/patients/${patientId}` : "/clinician/patients"}
-              className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white">
+              className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-xs font-semibold text-[var(--foreground)]">
               ← Patient
             </Link>
             <div className="flex flex-col items-end gap-1">
               <button type="button" onClick={() => window.print()}
-                className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white">
+                className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-xs font-semibold text-[var(--muted)] hover:text-[var(--foreground)]">
                 Export Clinical Report (PDF)
               </button>
-              <p className="max-w-[220px] text-right text-[10px] leading-snug text-white/35">
+              <p className="max-w-[220px] text-right text-[10px] leading-snug text-[var(--muted-soft)]">
                 Use &ldquo;Save as PDF&rdquo; in your browser&apos;s print dialog.
               </p>
             </div>
@@ -1500,27 +1500,27 @@ export function AssessmentReportClient() {
 
   if (!draft) {
     return (
-      <main className="min-h-screen bg-[#0B1220] text-white">
+      <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
         <div className="mx-auto max-w-2xl px-6 py-20 text-center">
-          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-[10px] border border-[#1E2D42] bg-[#0F1825]">
-            <svg className="h-6 w-6 text-white/35" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-[14px] border border-[var(--border)] bg-[var(--surface-alt)]">
+            <svg className="h-6 w-6 text-[var(--muted-soft)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
             </svg>
           </div>
-          <h1 className="text-xl font-bold text-white">No report available</h1>
-          <p className="mt-2 text-sm text-white/45">
+          <h1 className="text-xl font-bold text-[var(--foreground)]">No report available</h1>
+          <p className="mt-2 text-sm text-[var(--muted)]">
             {assessmentId
               ? "This assessment does not have a printable report yet."
               : "Complete an assessment first, then open the report from the patient chart."}
           </p>
           {patientId ? (
             <Link href={`/clinician/patients/${patientId}`}
-              className="mt-7 inline-flex items-center rounded-[7px] bg-[#1D9E75] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]">
+              className="mt-7 inline-flex items-center rounded-[10px] bg-[var(--brand)] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--brand-dark)]">
               Open patient chart
             </Link>
           ) : (
             <Link href="/clinician/patients"
-              className="mt-7 inline-flex items-center rounded-[7px] bg-[#1D9E75] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]">
+              className="mt-7 inline-flex items-center rounded-[10px] bg-[var(--brand)] px-6 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--brand-dark)]">
               Patient charts
             </Link>
           )}
@@ -1534,7 +1534,7 @@ export function AssessmentReportClient() {
   const displayDate = reportDate || draft.updatedAt;
 
   return (
-    <main className="assessment-report-root print-report min-h-screen bg-[#0B1220] text-white">
+    <main className="assessment-report-root print-report min-h-screen bg-[var(--background)] text-[var(--foreground)]">
 
       <RasqPrintHeader
         patientName={patient?.full_name ?? `Patient #${patientId}`}
@@ -1546,15 +1546,15 @@ export function AssessmentReportClient() {
       />
 
       {/* ── Sticky top bar ── */}
-      <header className="screen-only sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220]">
+      <header className="screen-only sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--surface)]">
         <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
           <div className="flex items-center gap-2">
             <Link href={`/clinician/patients/${patientId}`}
-              className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white transition hover:text-white/80">
+              className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition hover:border-[var(--brand)]/40">
               ← Patient
             </Link>
             <Link href={`/clinician/assessment?patientId=${patientId}`}
-              className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 transition hover:text-white">
+              className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-xs font-semibold text-[var(--muted)] transition hover:text-[var(--foreground)]">
               Edit Assessment
             </Link>
           </div>
@@ -1564,22 +1564,22 @@ export function AssessmentReportClient() {
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 transition hover:text-white"
+                className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-xs font-semibold text-[var(--muted)] transition hover:text-[var(--foreground)]"
               >
                 Export Clinical Report (PDF)
               </button>
-              <p className="max-w-[220px] text-right text-[10px] leading-snug text-white/35">
+              <p className="max-w-[220px] text-right text-[10px] leading-snug text-[var(--muted-soft)]">
                 Use &ldquo;Save as PDF&rdquo; in your browser&apos;s print dialog.
               </p>
             </div>
             {serverBacked && (
-              <span className="rounded-[5px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-2 py-1 text-[10px] font-semibold text-[#5DCAA5]">
+              <span className="rounded-full border border-[var(--brand)]/25 bg-[var(--brand-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--brand)]">
                 Saved to patient record
               </span>
             )}
             <Link
               href={`/clinician/plans/new?patientId=${encodeURIComponent(patientId)}`}
-              className="rounded-xl bg-cyan-400 px-4 py-2 text-xs font-semibold text-slate-950 transition hover:bg-cyan-300"
+              className="rounded-xl bg-cyan-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-cyan-600"
             >
               Build treatment plan →
             </Link>
@@ -1597,7 +1597,7 @@ export function AssessmentReportClient() {
       />
 
       {/* ── Section jump nav ── */}
-      <div className="screen-only sticky top-[53px] z-20 border-b border-white/[0.06] bg-[#071a2f]/90 backdrop-blur-md">
+      <div className="screen-only sticky top-[53px] z-20 border-b border-[var(--border)] bg-[var(--surface)]/95 backdrop-blur-md">
         <div className="mx-auto max-w-4xl overflow-x-auto px-6 py-2">
           <div className="flex min-w-max gap-1">
             {[
@@ -1618,8 +1618,8 @@ export function AssessmentReportClient() {
                 href={`#${item.id}`}
                 className={`shrink-0 rounded-xl px-3 py-1.5 text-[11px] font-semibold transition ${
                   item.id === "safety"
-                    ? "text-rose-300 hover:bg-rose-400/10"
-                    : "text-white/50 hover:bg-white/8 hover:text-white"
+                    ? "text-[var(--danger)] hover:bg-[var(--danger-soft)]"
+                    : "text-[var(--muted)] hover:bg-[var(--surface-alt)] hover:text-[var(--foreground)]"
                 }`}
               >
                 {item.label}
@@ -1637,7 +1637,7 @@ export function AssessmentReportClient() {
           title={SECTION_OVERVIEW}
           defaultOpen
           icon={DOC_ICON}
-          accent="border-cyan-300/25 bg-cyan-400/10 text-cyan-300"
+          accent="border-cyan-400/30 bg-cyan-400/10 text-cyan-700 dark:text-cyan-300"
         >
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <InfoTile label="Patient reference" value={patient?.full_name ?? `#${patientId}`} />
@@ -1653,7 +1653,7 @@ export function AssessmentReportClient() {
             <InfoTile
               label="Therapist decision status"
               value={therapistDecisionLabel?.label ?? "Pending clinician review"}
-              accent={therapistDecisionLabel?.cls ?? "text-white/40"}
+              accent={therapistDecisionLabel?.cls ?? "text-[var(--muted-soft)]"}
             />
           </div>
         </ReportSection>
@@ -1663,10 +1663,10 @@ export function AssessmentReportClient() {
           title={SECTION_PATIENT_REPORTED_SUMMARY}
           defaultOpen
           icon={DOC_ICON}
-          accent="border-amber-300/25 bg-amber-400/10 text-amber-200"
+          accent="border-amber-400/30 bg-amber-400/10 text-amber-700 dark:text-amber-200"
         >
-          <p className="mb-4 text-xs text-white/45">{PATIENT_REPORTED_INTRO}</p>
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-1">
+          <p className="mb-4 text-xs text-[var(--muted)]">{PATIENT_REPORTED_INTRO}</p>
+          <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface-alt)] px-5 py-1">
             <TextBlock label={patientReportedLabel("Chief complaint")} value={draft.subjective.chiefComplaint} />
             <TextBlock label={patientReportedLabel("Pain location / body region")} value={draft.subjective.painLocation} />
             <TextBlock label={patientReportedLabel("NPRS pain score")} value={draft.subjective.nprs} />
@@ -1675,7 +1675,7 @@ export function AssessmentReportClient() {
             <TextBlock label={patientReportedLabel("Functional limitations")} value={draft.subjective.functionalLimitations} />
             <TextBlock label={patientReportedLabel("Patient goals")} value={draft.subjective.goals} />
             {!draft.subjective.chiefComplaint && !draft.subjective.nprs && (
-              <p className="py-3 text-sm text-white/30 italic">No patient-reported subjective data recorded.</p>
+              <p className="py-3 text-sm text-[var(--muted-soft)] italic">No patient-reported subjective data recorded.</p>
             )}
           </div>
         </ReportSection>
@@ -1691,18 +1691,18 @@ export function AssessmentReportClient() {
           title={SECTION_CLINICAL_FINDINGS}
           defaultOpen
           icon={DOC_ICON}
-          accent="border-violet-300/25 bg-violet-400/10 text-violet-300"
+          accent="border-violet-400/30 bg-violet-400/10 text-violet-700 dark:text-violet-300"
         >
           <TextBlock
             label={LABEL_THERAPIST_CLINICAL_IMPRESSION}
             value={draft.therapist.finalDiagnosis}
           />
           {draft.therapist.finalDiagnosis?.trim() && (
-            <p className="mb-4 text-xs text-white/40 italic">{LEGACY_IMPRESSION_NOTE}</p>
+            <p className="mb-4 text-xs text-[var(--muted-soft)] italic">{LEGACY_IMPRESSION_NOTE}</p>
           )}
           <TextBlock label="Therapist-entered treatment priorities" value={draft.therapist.treatmentPriorities} />
           {!draft.therapist.finalDiagnosis?.trim() && !draft.therapist.treatmentPriorities?.trim() && (
-            <p className="text-sm text-white/30 italic">No therapist-entered clinical impression recorded.</p>
+            <p className="text-sm text-[var(--muted-soft)] italic">No therapist-entered clinical impression recorded.</p>
           )}
         </ReportSection>
 
@@ -1712,7 +1712,7 @@ export function AssessmentReportClient() {
           title="Objective Findings"
           defaultOpen
           screenOnly
-          accent="border-violet-300/25 bg-violet-400/10 text-violet-300"
+          accent="border-violet-400/30 bg-violet-400/10 text-violet-700 dark:text-violet-300"
           icon={
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5m.75-9l3-3 2.148 2.148A12.061 12.061 0 0116.5 7.605" />
@@ -1723,12 +1723,12 @@ export function AssessmentReportClient() {
             {objectiveKeys.map((k) => {
               const row = draft.objective[k];
               return (
-                <div key={k} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div key={k} className="rounded-[14px] border border-[var(--border)] bg-[var(--surface-alt)] p-4">
                   <div className="mb-3 flex items-center justify-between gap-2">
-                    <h3 className="text-sm font-semibold text-cyan-100">{OBJECTIVE_LABELS[k]}</h3>
+                    <h3 className="text-sm font-semibold text-[var(--foreground)]">{OBJECTIVE_LABELS[k]}</h3>
                     <div className="flex items-center gap-2">
                       {row.cameraCv && (
-                        <span className="rounded-full border border-cyan-300/20 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-300">
+                        <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-2 py-0.5 text-[10px] font-semibold text-cyan-700 dark:text-cyan-300">
                           CV
                         </span>
                       )}
@@ -1736,12 +1736,12 @@ export function AssessmentReportClient() {
                     </div>
                   </div>
                   {row.result.trim() ? (
-                    <p className="mb-2 text-sm text-white/75 whitespace-pre-wrap">{row.result}</p>
+                    <p className="mb-2 text-sm text-[var(--foreground)] whitespace-pre-wrap">{row.result}</p>
                   ) : (
-                    <p className="mb-2 text-xs italic text-white/30">No result recorded</p>
+                    <p className="mb-2 text-xs italic text-[var(--muted-soft)]">No result recorded</p>
                   )}
                   {row.notes.trim() && (
-                    <p className="border-t border-white/8 pt-2 text-xs text-white/50">{row.notes}</p>
+                    <p className="border-t border-[var(--border)] pt-2 text-xs text-[var(--muted)]">{row.notes}</p>
                   )}
                 </div>
               );
@@ -1756,10 +1756,10 @@ export function AssessmentReportClient() {
           const hasAny = testedItems.length > 0;
 
           const RESULT_STYLES: Record<SpecialTestResult, string> = {
-            not_tested:   "border-white/12 bg-white/[0.05] text-white/40",
-            negative:     "border-lime-300/30 bg-lime-400/10 text-lime-300",
-            positive:     "border-rose-300/30 bg-rose-400/10 text-rose-200",
-            inconclusive: "border-amber-300/30 bg-amber-400/10 text-amber-200",
+            not_tested:   "border-[var(--border)] bg-[var(--surface-alt)] text-[var(--muted)]",
+            negative:     "border-lime-400/30 bg-lime-400/10 text-lime-700 dark:text-lime-300",
+            positive:     "border-rose-400/30 bg-rose-400/10 text-rose-700 dark:text-rose-200",
+            inconclusive: "border-amber-400/30 bg-amber-400/10 text-amber-700 dark:text-amber-200",
           };
 
           return (
@@ -1768,7 +1768,7 @@ export function AssessmentReportClient() {
               title="Special Tests"
               defaultOpen={hasAny}
               screenOnly
-              accent="border-[#1D9E75]/25 bg-[#1D9E75]/10 text-[#5DCAA5]"
+              accent="border-[var(--brand)]/30 bg-[var(--brand-soft)] text-[var(--brand)]"
               icon={
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
@@ -1776,18 +1776,18 @@ export function AssessmentReportClient() {
               }
             >
               {/* Disclaimer */}
-              <div className="mb-4 flex items-start gap-3 rounded-[7px] border border-amber-300/20 bg-amber-400/[0.07] px-4 py-3">
-                <svg className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <div className="mb-4 flex items-start gap-3 rounded-[10px] border border-amber-400/30 bg-amber-400/[0.08] px-4 py-3">
+                <svg className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                 </svg>
-                <p className="text-xs leading-5 text-amber-200/90">
+                <p className="text-xs leading-5 text-amber-800 dark:text-amber-200/90">
                   Special tests are therapist-entered clinical findings. Results support clinician review and do not
                   constitute a medical diagnosis or treatment prescription.
                 </p>
               </div>
 
               {!hasAny ? (
-                <p className="py-2 text-sm italic text-white/30">No special tests recorded in this assessment.</p>
+                <p className="py-2 text-sm italic text-[var(--muted-soft)]">No special tests recorded in this assessment.</p>
               ) : (
                 <div className="space-y-4">
                   {REGION_ORDER.map((region) => {
@@ -1798,40 +1798,40 @@ export function AssessmentReportClient() {
                       .filter((t) => t.entry && t.entry.result !== "not_tested");
                     if (testedInRegion.length === 0) return null;
                     return (
-                      <div key={region} className="overflow-hidden rounded-[8px] border border-[#1E2D42]">
+                      <div key={region} className="overflow-hidden rounded-[10px] border border-[var(--border)]">
                         {/* Region header */}
-                        <div className="flex items-center justify-between border-b border-[#1E2D42] bg-[#0B1220] px-4 py-3">
-                          <p className="text-sm font-bold text-white">{REGION_LABELS[region as SpecialTestRegion]}</p>
+                        <div className="flex items-center justify-between border-b border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
+                          <p className="text-sm font-bold text-[var(--foreground)]">{REGION_LABELS[region as SpecialTestRegion]}</p>
                           <div className="flex items-center gap-2">
                             {counts.positive > 0 && (
-                              <span className="rounded-[4px] border border-rose-300/25 bg-rose-400/10 px-2 py-0.5 text-[10px] font-semibold text-rose-300">
+                              <span className="rounded-[6px] border border-rose-400/30 bg-rose-400/10 px-2 py-0.5 text-[10px] font-semibold text-rose-700 dark:text-rose-300">
                                 {counts.positive} positive
                               </span>
                             )}
                             {counts.inconclusive > 0 && (
-                              <span className="rounded-[4px] border border-amber-300/25 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+                              <span className="rounded-[6px] border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-300">
                                 {counts.inconclusive} inconclusive
                               </span>
                             )}
                             {counts.negative > 0 && (
-                              <span className="rounded-[4px] border border-lime-300/20 bg-lime-400/8 px-2 py-0.5 text-[10px] font-semibold text-lime-400/80">
+                              <span className="rounded-[6px] border border-lime-400/30 bg-lime-400/8 px-2 py-0.5 text-[10px] font-semibold text-lime-700 dark:text-lime-400/80">
                                 {counts.negative} negative
                               </span>
                             )}
                           </div>
                         </div>
                         {/* Test rows */}
-                        <div className="divide-y divide-white/[0.06]">
+                        <div className="divide-y divide-[var(--border)]">
                           {testedInRegion.map(({ def, entry }) => (
                             <div key={def.id} className="flex flex-wrap items-start gap-3 px-4 py-3">
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-semibold text-white/90">{def.name}</p>
-                                <p className="text-xs text-white/40">{def.hint}</p>
+                                <p className="text-sm font-semibold text-[var(--foreground)]">{def.name}</p>
+                                <p className="text-xs text-[var(--muted-soft)]">{def.hint}</p>
                                 {entry?.notes.trim() && (
-                                  <p className="mt-1.5 text-xs text-white/60 italic">{entry.notes}</p>
+                                  <p className="mt-1.5 text-xs text-[var(--muted)] italic">{entry.notes}</p>
                                 )}
                               </div>
-                              <span className={`shrink-0 rounded-[5px] border px-2.5 py-1 text-xs font-semibold ${RESULT_STYLES[entry?.result ?? "not_tested"]}`}>
+                              <span className={`shrink-0 rounded-[6px] border px-2.5 py-1 text-xs font-semibold ${RESULT_STYLES[entry?.result ?? "not_tested"]}`}>
                                 {entry?.result === "positive"     ? "Positive" :
                                  entry?.result === "negative"     ? "Negative" :
                                  entry?.result === "inconclusive" ? "Inconclusive" : "Not tested"}
@@ -1860,20 +1860,20 @@ export function AssessmentReportClient() {
             </svg>
           }
         >
-          <div className="overflow-hidden rounded-2xl border border-white/10">
+          <div className="overflow-hidden rounded-[14px] border border-[var(--border)]">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-white/10 bg-white/[0.04]">
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-white/40">
+                <tr className="border-b border-[var(--border)] bg-[var(--surface-alt)]">
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-[var(--muted)]">
                     Test
                   </th>
-                  <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-widest text-white/40">
+                  <th className="px-4 py-3 text-center text-[11px] font-semibold uppercase tracking-widest text-[var(--muted)]">
                     Status
                   </th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-white/40">
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-[var(--muted)]">
                     Result
                   </th>
-                  <th className="hidden px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-white/40 sm:table-cell">
+                  <th className="hidden px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-[var(--muted)] sm:table-cell">
                     Notes
                   </th>
                 </tr>
@@ -1884,16 +1884,16 @@ export function AssessmentReportClient() {
                   return (
                     <tr
                       key={k}
-                      className={`border-b border-white/[0.06] last:border-0 ${i % 2 === 0 ? "bg-transparent" : "bg-white/[0.02]"}`}
+                      className={`border-b border-[var(--border)] last:border-0 ${i % 2 === 0 ? "bg-transparent" : "bg-[var(--surface-alt)]"}`}
                     >
-                      <td className="px-4 py-3 font-medium text-white/80">{FUNCTIONAL_LABELS[k]}</td>
+                      <td className="px-4 py-3 font-medium text-[var(--foreground)]">{FUNCTIONAL_LABELS[k]}</td>
                       <td className="px-4 py-3 text-center">
                         <StatusChip status={row.status} />
                       </td>
-                      <td className="px-4 py-3 text-white/60">
+                      <td className="px-4 py-3 text-[var(--muted)]">
                         {row.result.trim() || <EmptyFieldNote />}
                       </td>
-                      <td className="hidden px-4 py-3 text-xs text-white/40 sm:table-cell">
+                      <td className="hidden px-4 py-3 text-xs text-[var(--muted-soft)] sm:table-cell">
                         {row.notes.trim() || "—"}
                       </td>
                     </tr>
@@ -1916,16 +1916,16 @@ export function AssessmentReportClient() {
             </svg>
           }
         >
-          <p className="mb-4 text-xs text-white/40">
+          <p className="mb-4 text-xs text-[var(--muted-soft)]">
             No auto-scoring — raw entries and clinician-documented values only.
           </p>
-          <div className="overflow-hidden rounded-[8px] border border-[#1E2D42]">
+          <div className="overflow-hidden rounded-[10px] border border-[var(--border)]">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-[#1E2D42] bg-[#0B1220]">
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-white/40">Scale</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-white/40">Raw notes</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-white/40">Documented score</th>
+                <tr className="border-b border-[var(--border)] bg-[var(--surface-alt)]">
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-[var(--muted)]">Scale</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-[var(--muted)]">Raw notes</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-widest text-[var(--muted)]">Documented score</th>
                 </tr>
               </thead>
               <tbody>
@@ -1935,16 +1935,16 @@ export function AssessmentReportClient() {
                   return (
                     <tr
                       key={k}
-                      className={`border-b border-white/[0.06] last:border-0 ${i % 2 === 0 ? "bg-transparent" : "bg-white/[0.02]"}`}
+                      className={`border-b border-[var(--border)] last:border-0 ${i % 2 === 0 ? "bg-transparent" : "bg-[var(--surface-alt)]"}`}
                     >
                       <td className="px-4 py-3">
-                        <span className="font-semibold text-white/80">{meta.abbr}</span>
-                        <span className="ml-2 text-xs text-white/35">{meta.full}</span>
+                        <span className="font-semibold text-[var(--foreground)]">{meta.abbr}</span>
+                        <span className="ml-2 text-xs text-[var(--muted-soft)]">{meta.full}</span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-white/60">
+                      <td className="px-4 py-3 text-xs text-[var(--muted)]">
                         {row.rawNotes.trim() || <EmptyFieldNote />}
                       </td>
-                      <td className="px-4 py-3 text-xs text-white/60">
+                      <td className="px-4 py-3 text-xs text-[var(--muted)]">
                         {row.clinicianDocumented.trim() || <EmptyFieldNote />}
                       </td>
                     </tr>
@@ -1962,14 +1962,14 @@ export function AssessmentReportClient() {
           defaultOpen
           hideWhenEmptyPrint
           hasPrintContent={hasClinicalInterpretation(draft)}
-          accent="border-amber-300/25 bg-amber-400/10 text-amber-300"
+          accent="border-amber-400/30 bg-amber-400/10 text-amber-700 dark:text-amber-300"
           icon={
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
             </svg>
           }
         >
-          <p className="mb-4 text-xs text-white/45">
+          <p className="mb-4 text-xs text-[var(--muted)]">
             Draft documentation for clinician review. Not generated by RASQ as a medical diagnosis.
           </p>
 
@@ -1980,10 +1980,10 @@ export function AssessmentReportClient() {
               { label: therapistEnteredLabel("Missing tests / gaps"), value: draft.ai.missingTests },
               { label: therapistEnteredLabel("Confidence level (draft)"), value: draft.ai.confidenceLevel },
             ].map(({ label, value }) => (
-              <div key={label} className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] p-4">
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-amber-300/60">{label}</p>
+              <div key={label} className="rounded-[10px] border border-[var(--border)] bg-[var(--surface-alt)] p-4">
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-amber-700 dark:text-amber-300/60">{label}</p>
                 {value.trim() ? (
-                  <p className="text-sm leading-6 text-white/80 whitespace-pre-wrap">{value}</p>
+                  <p className="text-sm leading-6 text-[var(--foreground)] whitespace-pre-wrap">{value}</p>
                 ) : (
                   <EmptyFieldNote text="Not documented" />
                 )}
@@ -1999,7 +1999,7 @@ export function AssessmentReportClient() {
           defaultOpen
           hideWhenEmptyPrint
           hasPrintContent={hasSoapContent(draft)}
-          accent="border-white/20 bg-white/[0.08] text-white/70"
+          accent="border-[var(--border-strong)] bg-[var(--surface-alt)] text-[var(--muted)]"
           icon={
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L6.832 19.82a4.5 4.5 0 01-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 011.13-1.897L16.863 4.487zm0 0L19.5 7.125" />
@@ -2023,7 +2023,7 @@ export function AssessmentReportClient() {
             </div>
           )}
           {!hasSoapContent(draft) && (
-            <p className="text-sm text-white/30 italic">Requires clinician completion.</p>
+            <p className="text-sm text-[var(--muted-soft)] italic">Requires clinician completion.</p>
           )}
         </ReportSection>
 
@@ -2071,7 +2071,7 @@ export function AssessmentReportClient() {
             />
           </div>
           <ClinicalDisclaimerBlock className="print:border-gray-300 print:bg-gray-50" />
-          <p className="mt-3 text-center text-[10px] text-white/25 print:text-gray-500">
+          <p className="mt-3 text-center text-[10px] text-[var(--muted-soft)] print:text-gray-500">
             {serverBacked ? "Server-backed assessment" : "Local draft (not yet finalized)"} · {formatDate(displayDate)} · Patient #{patientId}
           </p>
         </div>

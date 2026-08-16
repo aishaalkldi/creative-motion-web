@@ -1,7 +1,23 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Inter, IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
 import { GlobalLanguageProvider } from "@/app/components/GlobalLanguageProvider";
+import { ThemeProvider } from "@/app/components/ThemeProvider";
 import "./globals.css";
+
+/* Runs before hydration to set the .dark class synchronously — avoids a flash of the wrong theme. */
+const NO_FLASH_THEME_SCRIPT = `
+(function () {
+  try {
+    var stored = localStorage.getItem('rasq-theme');
+    var resolved = stored === 'light' || stored === 'dark'
+      ? stored
+      : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    if (resolved === 'dark') document.documentElement.classList.add('dark');
+    document.documentElement.style.colorScheme = resolved;
+  } catch (e) {}
+})();
+`;
 
 /* ── Fonts ────────────────────────────────────────────────────────────────── */
 
@@ -53,12 +69,19 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`h-full antialiased ${inter.variable} ${ibmPlexMono.variable} ${spaceGrotesk.variable}`}
     >
+      <head>
+        <Script id="rasq-no-flash-theme" strategy="beforeInteractive">
+          {NO_FLASH_THEME_SCRIPT}
+        </Script>
+      </head>
       <body
         suppressHydrationWarning
-        className="min-h-full flex flex-col bg-[#080E14] text-[#e8edf2]"
+        className="min-h-full flex flex-col bg-[var(--background)] text-[var(--foreground)]"
         style={{ fontFamily: "var(--font-inter, ui-sans-serif, system-ui, sans-serif)" }}
       >
-        <GlobalLanguageProvider>{children}</GlobalLanguageProvider>
+        <ThemeProvider>
+          <GlobalLanguageProvider>{children}</GlobalLanguageProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

@@ -105,11 +105,11 @@ function statusBadgeClass(tone: AssessmentCard["statusTone"]): string {
 
   if (tone === "foundation") {
 
-    return "border-[#1D9E75]/30 bg-[#1D9E75]/10 text-[#5DCAA5]";
+    return "border-[var(--brand)]/30 bg-[var(--brand-soft)] text-[var(--brand)]";
 
   }
 
-  return "border-[#1E2D42] bg-[#0B1220] text-white/45";
+  return "border-[var(--border)] bg-[var(--surface-alt)] text-[var(--muted)]";
 
 }
 
@@ -122,19 +122,19 @@ export default function AssessmentCenterPage() {
 
   return (
 
-    <div className="min-h-screen bg-[#0B1220] px-6 py-8 text-white" dir={isArabic ? "rtl" : "ltr"}>
+    <div className="min-h-screen bg-[var(--background)] px-4 py-6 text-[var(--foreground)] md:px-6 md:py-8" dir={isArabic ? "rtl" : "ltr"}>
 
       <div className="mx-auto max-w-5xl">
 
-        <p className="text-[10px] font-bold uppercase tracking-widest text-[#1D9E75]">
+        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--brand)]">
 
           {isArabic ? "RASQ · تقييمات الحركة" : "RASQ · Movement assessments"}
 
         </p>
 
-        <h1 className="mt-2 text-2xl font-bold text-white">{isArabic ? "مركز التقييم" : "Assessment Center"}</h1>
+        <h1 className="mt-2 text-[28px] font-bold tracking-[-0.02em] text-[var(--foreground)]">{isArabic ? "مركز التقييم" : "Assessment Center"}</h1>
 
-        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/45">
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">
           {isArabic
             ? "خطط ومراجعة تقييمات الحركة المنظمة. ستوفر كل وحدة ملاحظات بمساعدة الكاميرا ومقاييس مساعدة لدعم مراجعة الطبيب."
             : "Plan and review structured movement assessments. Each module will provide camera-assisted observations and assistive metrics to support therapist review."}
@@ -142,15 +142,15 @@ export default function AssessmentCenterPage() {
 
 
 
-        <div className="mt-5 rounded-[10px] border border-amber-400/20 bg-amber-400/5 px-4 py-3.5">
+        <div className="mt-5 rounded-[14px] border border-[var(--warning)]/30 bg-[var(--warning-soft)] px-4 py-3.5">
 
-          <p className="text-[11px] font-bold uppercase tracking-wider text-amber-200/90">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--warning)]">
 
             {isArabic ? "مطلوب مراجعة الطبيب" : "Therapist review required"}
 
           </p>
 
-          <p className="mt-2 text-sm leading-relaxed text-white/55">
+          <p className="mt-2 text-sm leading-relaxed text-[var(--foreground)]">
             {isArabic
               ? "توفر تقييمات الحركة بمساعدة الكاميرا ملاحظات عن الحركة لدعم مراجعة الطبيب. وهي ليست تشخيصية ولا تعوض الفحص السريري."
               : "Camera-assisted assessments provide movement observations to support therapist review. They are not diagnostic and do not replace clinical examination."}
@@ -162,9 +162,9 @@ export default function AssessmentCenterPage() {
 
         <section className="mt-6">
 
-          <h2 className="text-sm font-bold text-white">{isArabic ? "وحدات التقييم" : "Assessment modules"}</h2>
+          <h2 className="text-lg font-bold text-[var(--foreground)]">{isArabic ? "وحدات التقييم" : "Assessment modules"}</h2>
 
-          <p className="mt-1 text-xs text-white/35">
+          <p className="mt-1 text-xs text-[var(--muted)]">
             {isArabic
               ? "وحدات أدلة الحركة للتجربة التجريبية. ستصل تدفقات الالتقاط الكاملة في الإصدارات القادمة."
               : "Movement evidence modules for pilot rollout. Full capture workflows arrive in upcoming releases."}
@@ -182,11 +182,11 @@ export default function AssessmentCenterPage() {
 
                   <div className="flex flex-wrap items-start justify-between gap-2">
 
-                    <h3 className="text-[15px] font-semibold text-white">{card.title}</h3>
+                    <h3 className="text-[15px] font-semibold text-[var(--foreground)]">{card.title}</h3>
 
                     <span
 
-                      className={`shrink-0 rounded-[5px] border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${statusBadgeClass(card.statusTone)}`}
+                      className={`shrink-0 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${statusBadgeClass(card.statusTone)}`}
 
                     >
 
@@ -196,17 +196,17 @@ export default function AssessmentCenterPage() {
 
                   </div>
 
-                  <p className="mt-3 text-sm leading-relaxed text-white/45">{card.description}</p>
+                  <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">{card.description}</p>
 
                   {card.footnote ? (
 
-                    <p className="mt-3 text-[11px] text-white/30">{card.footnote}</p>
+                    <p className="mt-3 text-[11px] text-[var(--muted-soft)]">{card.footnote}</p>
 
                   ) : null}
 
                   {card.cta ? (
 
-                    <p className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-[#5DCAA5]">
+                    <p className="mt-4 inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--brand)]">
 
                       {card.cta}
 
@@ -236,7 +236,7 @@ export default function AssessmentCenterPage() {
 
                       href={card.href}
 
-                      className="group block rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5 transition hover:border-[#1D9E75]/30 hover:bg-[#0d1f18]"
+                      className="group block rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-card)] transition hover:-translate-y-0.5 hover:border-[var(--brand)]/40 hover:shadow-[var(--shadow-card-hover)]"
 
                     >
 
@@ -258,7 +258,7 @@ export default function AssessmentCenterPage() {
 
                   key={card.title}
 
-                  className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5"
+                  className="rounded-[16px] border border-[var(--border)] bg-[var(--surface-alt)] p-5"
 
                 >
 
@@ -276,7 +276,7 @@ export default function AssessmentCenterPage() {
 
 
 
-        <p className="mt-8 text-[11px] leading-relaxed text-white/25">
+        <p className="mt-8 text-[11px] leading-relaxed text-[var(--muted-soft)]">
           {isArabic
             ? "يظل الاستبيان عن بُعد والتوثيق داخل العيادة متاحًا من اللوحة الرئيسية وملف المريض. سينمو هذا المركز مع تدفقات تقييم الحركة بمساعدة الكاميرا."
             : "Remote questionnaire and in-clinic documentation remain available from the dashboard and patient profile. This center will expand with camera-assisted assessment workflows."}

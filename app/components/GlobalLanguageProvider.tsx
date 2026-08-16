@@ -65,7 +65,7 @@ function GlobalLanguageToggle() {
     <button
       type="button"
       onClick={() => setLanguage(isArabic ? "en" : "ar")}
-      className="fixed right-4 top-4 z-[60] rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-1.5 text-[11px] font-semibold text-white shadow-lg transition hover:border-[#1D9E75]/40 hover:text-[#5DCAA5]"
+      className="fixed bottom-4 right-4 z-[60] rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[11px] font-semibold text-[var(--foreground)] shadow-[var(--shadow-card)] transition hover:border-[var(--brand)] hover:text-[var(--brand)]"
       aria-label={isArabic ? "Switch to English" : "Switch to Arabic"}
       dir="ltr"
       suppressHydrationWarning

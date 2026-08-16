@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "./tokens.css";
 
+/* Enable class-based dark mode (toggled via .dark on <html>) instead of only prefers-color-scheme */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* ═══════════════════════════════════════════════════════════
    RASQ DESIGN SYSTEM — Global tokens
    Rehabilitation, precisely.
@@ -42,10 +45,63 @@
   --font-display: var(--font-geist), var(--font-inter), ui-sans-serif, sans-serif;
 }
 
-/* ── Base resets ── */
+/* ── RASQ theme tokens — light (default) ──────────────────────────────────
+   Semantic variables consumed via bg-[var(--x)] / text-[var(--x)] utilities,
+   so both themes stay in sync from one source of truth. */
 :root {
-  --background: #080E14;
-  --foreground: #e8edf2;
+  --background: #f6f8fb;
+  --background-elevated: #f8fafc;
+  --foreground: #172033;
+  --surface: #ffffff;
+  --surface-alt: #f0f4f8;
+  --surface-soft: #eafbf6;
+  --border: #e3e8ef;
+  --border-strong: #cbd5e1;
+  --muted: #64748b;
+  --muted-soft: #8491a3;
+  --brand: #10a987;
+  --brand-dark: #07886f;
+  --brand-soft: #eafbf6;
+  --brand-glow: rgba(16, 169, 135, 0.18);
+  --success: #10a987;
+  --success-soft: #eafbf6;
+  --warning: #b45309;
+  --warning-soft: #fef3c7;
+  --danger: #dc2626;
+  --danger-soft: #fee2e2;
+  --info: #2563eb;
+  --info-soft: #dbeafe;
+  --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 20px rgba(15, 23, 42, 0.05);
+  --shadow-card-hover: 0 4px 10px rgba(15, 23, 42, 0.06), 0 16px 32px rgba(15, 23, 42, 0.08);
+  color-scheme: light;
+}
+
+/* ── RASQ theme tokens — dark (intentional, not an inverted light theme) ── */
+.dark {
+  --background: #0b111b;
+  --background-elevated: #101827;
+  --foreground: #f8fafc;
+  --surface: #121c2b;
+  --surface-alt: #172233;
+  --surface-soft: rgba(40, 201, 164, 0.09);
+  --border: #263346;
+  --border-strong: #324258;
+  --muted: #94a3b8;
+  --muted-soft: #6b7d95;
+  --brand: #28c9a4;
+  --brand-dark: #3fe3bd;
+  --brand-soft: rgba(40, 201, 164, 0.14);
+  --brand-glow: rgba(40, 201, 164, 0.22);
+  --success: #28c9a4;
+  --success-soft: rgba(40, 201, 164, 0.14);
+  --warning: #f0b429;
+  --warning-soft: rgba(240, 180, 41, 0.14);
+  --danger: #f87171;
+  --danger-soft: rgba(248, 113, 113, 0.14);
+  --info: #60a5fa;
+  --info-soft: rgba(96, 165, 250, 0.14);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.24), 0 8px 20px rgba(0, 0, 0, 0.28);
+  --shadow-card-hover: 0 4px 12px rgba(0, 0, 0, 0.3), 0 20px 36px rgba(0, 0, 0, 0.32);
   color-scheme: dark;
 }
 
@@ -58,9 +114,35 @@ html {
 }
 
 body {
-  background: var(--background);
+  min-height: 100%;
+  background: linear-gradient(180deg, var(--background) 0%, var(--background-elevated) 100%);
   color: var(--foreground);
   font-family: var(--font-sans);
+}
+
+/* ── Smooth, subtle theme transition — respects reduced-motion ── */
+html.theme-ready,
+html.theme-ready *,
+html.theme-ready *::before,
+html.theme-ready *::after {
+  transition:
+    background-color 200ms ease,
+    border-color 200ms ease,
+    color 200ms ease,
+    box-shadow 200ms ease,
+    fill 200ms ease,
+    stroke 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.theme-ready,
+  html.theme-ready *,
+  html.theme-ready *::before,
+  html.theme-ready *::after {
+    transition: none !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
 
 /* ── Disable glassmorphism globally (RASQ: flat surfaces only) ── */

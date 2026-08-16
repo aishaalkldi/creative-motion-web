@@ -79,7 +79,15 @@ import {
   formatSessionsCompletedLine,
   OPERATIONAL_STATUS_ONLY,
 } from "@/app/lib/clinician/adherence-display";
-import type { PatientProgressSummary, PatientTimelineBundle } from "../../../api/clinician/patient-progress/route";
+import type {
+  PatientProgressSummary,
+  PatientTimelineBundle,
+  PatientTimelineSessionLog,
+} from "../../../api/clinician/patient-progress/route";
+import {
+  PatientProgressChart,
+  type ProgressChartPoint,
+} from "../../../components/clinician/PatientProgressChart";
 import { buildPatientTimeline } from "../../../lib/clinician/patient-timeline";
 import {
   buildRemoteQuestionnaireSummary,
@@ -683,10 +691,10 @@ export default function PatientProfilePage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0B1220]">
+      <div className="flex min-h-screen items-center justify-center bg-[var(--surface-alt)]">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-[#1E2D42] border-t-[#1D9E75]" />
-          <p className="text-sm text-white/35">Loading patient record…</p>
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--brand)]" />
+          <p className="text-sm text-[var(--muted-soft)]">Loading patient record…</p>
         </div>
       </div>
     );
@@ -694,13 +702,13 @@ export default function PatientProfilePage() {
 
   if (!patient) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#0B1220] text-white">
-        <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-8 text-center max-w-sm">
-          <p className="text-base font-bold text-white">Patient not found</p>
-          <p className="mt-2 text-sm text-white/40">No record exists for this ID, or the backend is unavailable.</p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[var(--surface-alt)] text-[var(--foreground)]">
+        <div className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-8 text-center max-w-sm">
+          <p className="text-base font-bold text-[var(--foreground)]">Patient not found</p>
+          <p className="mt-2 text-sm text-[var(--muted-soft)]">No record exists for this ID, or the backend is unavailable.</p>
           <Link
             href="/clinician/patients"
-            className="mt-5 inline-block rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-5 py-2.5 text-sm font-semibold text-white/60 transition hover:text-white"
+            className="mt-5 inline-block rounded-[7px] border border-[var(--border)] bg-[var(--surface-alt)] px-5 py-2.5 text-sm font-semibold text-[var(--muted)] transition hover:text-[var(--foreground)]"
           >
             ← Back to Patients
           </Link>
@@ -767,7 +775,7 @@ export default function PatientProfilePage() {
       />
     )}
 
-    <main className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
+    <main className="min-h-screen bg-[var(--surface-alt)] px-6 py-8 text-[var(--foreground)]">
       <div className="mx-auto max-w-7xl">
         <DemoOfflineBanner
           visible={demoMode || cvDemoMode}
@@ -776,46 +784,46 @@ export default function PatientProfilePage() {
         {/* Header */}
         <div className="mb-7 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <Link href="/clinician/patients" className="flex items-center gap-1.5 text-sm text-white/35 transition hover:text-white/65 mb-3">
+            <Link href="/clinician/patients" className="flex items-center gap-1.5 text-sm text-[var(--muted-soft)] transition hover:text-[var(--foreground)]/65 mb-3">
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
               </svg>
               Patients
             </Link>
-            <h1 className="mt-1.5 text-2xl font-bold text-white">{patient.full_name}</h1>
-            <p className="mt-1 text-xs font-semibold text-white/45">
+            <h1 className="mt-1.5 text-2xl font-bold text-[var(--foreground)]">{patient.full_name}</h1>
+            <p className="mt-1 text-xs font-semibold text-[var(--muted)]">
               {displayPatientFileHeader(patient.file_number, patient.id)}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {patient.phone && (
                 <>
-                  <span className="text-xs text-white/35">{patient.phone}</span>
-                  <span className="text-xs text-white/20">·</span>
+                  <span className="text-xs text-[var(--muted-soft)]">{patient.phone}</span>
+                  <span className="text-xs text-[var(--muted-soft)]">·</span>
                 </>
               )}
-              <span className="text-xs text-white/35">{patient.diagnosis || "No primary complaint recorded"}</span>
-              <span className="text-xs text-white/20">·</span>
-              <span className={`text-xs font-semibold ${patient.status?.toLowerCase() === "active" ? "text-[#5DCAA5]" : "text-amber-300"}`}>
+              <span className="text-xs text-[var(--muted-soft)]">{patient.diagnosis || "No primary complaint recorded"}</span>
+              <span className="text-xs text-[var(--muted-soft)]">·</span>
+              <span className={`text-xs font-semibold ${patient.status?.toLowerCase() === "active" ? "text-[var(--brand)]" : "text-amber-700 dark:text-amber-300"}`}>
                 {patient.status}
               </span>
             </div>
             <div className="mt-3 flex flex-wrap gap-2 text-xs">
-              <a href="#clinical-assessment-summary" className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
+              <a href="#clinical-assessment-summary" className="rounded-[5px] border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-1 font-semibold text-[var(--muted)] transition hover:border-[var(--brand)]/25 hover:text-[var(--brand)]">
                 Assessment
               </a>
-              <a href="#rehabilitation-plan" className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
+              <a href="#rehabilitation-plan" className="rounded-[5px] border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-1 font-semibold text-[var(--muted)] transition hover:border-[var(--brand)]/25 hover:text-[var(--brand)]">
                 Treatment plan
               </a>
-              <a href="#progress-snapshot" className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
+              <a href="#progress-snapshot" className="rounded-[5px] border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-1 font-semibold text-[var(--muted)] transition hover:border-[var(--brand)]/25 hover:text-[var(--brand)]">
                 Progress
               </a>
-              <Link href={`/clinician/patients/${patient.id}/outcomes`} className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
+              <Link href={`/clinician/patients/${patient.id}/outcomes`} className="rounded-[5px] border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-1 font-semibold text-[var(--muted)] transition hover:border-[var(--brand)]/25 hover:text-[var(--brand)]">
                 Outcomes
               </Link>
-              <a href="#movement-tracking-sessions" className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
+              <a href="#movement-tracking-sessions" className="rounded-[5px] border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-1 font-semibold text-[var(--muted)] transition hover:border-[var(--brand)]/25 hover:text-[var(--brand)]">
                 Movement tracking
               </a>
-              <Link href="/clinician/results" className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
+              <Link href="/clinician/results" className="rounded-[5px] border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-1 font-semibold text-[var(--muted)] transition hover:border-[var(--brand)]/25 hover:text-[var(--brand)]">
                 Results
               </Link>
             </div>
@@ -823,14 +831,14 @@ export default function PatientProfilePage() {
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href={`/clinician/assessment/new?patientId=${patient.id}`}
-              className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]"
+              className="rounded-[7px] bg-[var(--brand)] px-4 py-2.5 text-sm font-bold text-[var(--foreground)]-KEEP transition hover:bg-[var(--brand-dark)]"
             >
               + New Assessment
             </Link>
             <button
               type="button"
               onClick={() => { setEditForm(patient); setEditOpen((o) => !o); setSaveError(""); }}
-              className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-4 py-2.5 text-sm font-semibold text-white/60 transition hover:border-[#1D9E75]/25 hover:text-white"
+              className="rounded-[7px] border border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 text-sm font-semibold text-[var(--muted)] transition hover:border-[var(--brand)]/25 hover:text-[var(--foreground)]"
             >
               {editOpen ? "Cancel" : "Edit Patient"}
             </button>
@@ -838,7 +846,7 @@ export default function PatientProfilePage() {
               type="button"
               disabled={deleting}
               onClick={() => setDeleteModalOpen(true)}
-              className="rounded-[7px] border border-rose-400/20 bg-[#0F1825] px-4 py-2.5 text-sm font-semibold text-rose-400/60 transition hover:border-rose-400/40 hover:text-rose-300 disabled:opacity-40"
+              className="rounded-[7px] border border-rose-400/20 bg-[var(--surface)] px-4 py-2.5 text-sm font-semibold text-rose-400/60 transition hover:border-rose-400/40 hover:text-rose-700 dark:text-rose-300 disabled:opacity-40"
             >
               {deleting ? "Deleting…" : "Delete"}
             </button>
@@ -848,10 +856,10 @@ export default function PatientProfilePage() {
         {/* ── Pending remote assessment reminder ── */}
         {pendingRemote.length > 0 && submittedRemote.length === 0 && (
           <div className="mb-6 flex items-center gap-4 rounded-[10px] border border-amber-400/20 bg-amber-400/[0.05] px-5 py-3">
-            <svg className="h-4 w-4 shrink-0 text-amber-400/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <svg className="h-4 w-4 shrink-0 text-amber-700 dark:text-amber-400/70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <p className="flex-1 text-xs text-amber-200/80">
+            <p className="flex-1 text-xs text-amber-800 dark:text-amber-800 dark:text-amber-200/80">
               {pendingRemote.length} remote assessment link{pendingRemote.length > 1 ? "s" : ""} awaiting patient completion.
             </p>
           </div>
@@ -859,9 +867,9 @@ export default function PatientProfilePage() {
 
         {/* Edit Form */}
         {editOpen && (
-          <section className="mb-6 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-            <h2 className="text-base font-bold text-white">Edit Patient</h2>
-            <p className="mt-1 text-sm text-white/40">Changes are saved to the database.</p>
+          <section className="mb-6 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-6">
+            <h2 className="text-base font-bold text-[var(--foreground)]">Edit Patient</h2>
+            <p className="mt-1 text-sm text-[var(--muted-soft)]">Changes are saved to the database.</p>
             <form onSubmit={handleSaveEdit} className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               <Field label="Full Name" required>
                 <input
@@ -927,18 +935,18 @@ export default function PatientProfilePage() {
                 </select>
               </Field>
               <div className="col-span-full flex flex-wrap items-center gap-3 pt-2">
-                {saveError && <p className="text-sm text-rose-300">{saveError}</p>}
+                {saveError && <p className="text-sm text-rose-700 dark:text-rose-300">{saveError}</p>}
                 <button
                   type="submit"
                   disabled={saving}
-                  className="rounded-[7px] bg-[#1D9E75] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165] disabled:opacity-50"
+                  className="rounded-[7px] bg-[var(--brand)] px-5 py-2.5 text-sm font-bold text-[var(--foreground)]-KEEP transition hover:bg-[var(--brand-dark)] disabled:opacity-50"
                 >
                   {saving ? "Saving…" : "Save Changes"}
                 </button>
                 <button
                   type="button"
                   onClick={() => setEditOpen(false)}
-                  className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-2.5 text-sm font-semibold text-white/50 transition hover:text-white"
+                  className="rounded-[7px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-2.5 text-sm font-semibold text-[var(--muted)] transition hover:text-[var(--foreground)]"
                 >
                   Cancel
                 </button>
@@ -950,9 +958,9 @@ export default function PatientProfilePage() {
         <section className="grid gap-6 xl:grid-cols-[1.35fr_0.85fr]">
           <div className="space-y-6">
             {/* Clinical Overview */}
-            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <h2 className="text-lg font-bold text-white">Clinical Overview</h2>
-              <p className="mt-1 mb-5 text-xs text-white/35">Quick read on where this patient is in rehab.</p>
+            <section className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-6">
+              <h2 className="text-lg font-bold text-[var(--foreground)]">Clinical Overview</h2>
+              <p className="mt-1 mb-5 text-xs text-[var(--muted-soft)]">Quick read on where this patient is in rehab.</p>
               <div className="grid gap-3 sm:grid-cols-2">
                 <InfoCard label="Clinical Status" value={patient.status} />
                 <InfoCard label="Latest Assessment" value={overviewLatestAssessment} />
@@ -960,39 +968,39 @@ export default function PatientProfilePage() {
                 <InfoCard label="Progress Snapshot" value={overviewProgressSnapshot} />
               </div>
               {showAdherenceQuickSummary && adherenceSessionsLine && adherenceLastSessionLine && (
-                <div className="mt-4 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3.5">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+                <div className="mt-4 rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3.5">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-soft)]">
                     Session activity
                   </p>
-                  <p className="mt-2 text-sm text-white/75">{adherenceSessionsLine}</p>
-                  <p className="mt-1 text-sm text-white/60">{adherenceLastSessionLine}</p>
-                  <p className="mt-2 text-[10px] italic text-white/30">{OPERATIONAL_STATUS_ONLY}</p>
+                  <p className="mt-2 text-sm text-[var(--foreground)]">{adherenceSessionsLine}</p>
+                  <p className="mt-1 text-sm text-[var(--muted)]">{adherenceLastSessionLine}</p>
+                  <p className="mt-2 text-[10px] italic text-[var(--muted-soft)]">{OPERATIONAL_STATUS_ONLY}</p>
                 </div>
               )}
             </section>
 
             {/* Quick actions */}
-            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
-              <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
+            <section className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-5">
+              <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[var(--muted-soft)]">
                 Quick actions
               </p>
               <div className="flex flex-wrap gap-2">
                 <Link
                   href={`/clinician/plans/new?patientId=${patient.id}`}
-                  className="rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3.5 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/14"
+                  className="rounded-[7px] border border-[var(--brand)]/25 bg-[var(--brand)]/8 px-3.5 py-2 text-xs font-semibold text-[var(--brand)] transition hover:bg-[var(--brand)]/14"
                 >
                   Create structured treatment plan
                 </Link>
                 <Link
                   href="/clinician/results"
-                  className="rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3.5 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/14"
+                  className="rounded-[7px] border border-[var(--brand)]/25 bg-[var(--brand)]/8 px-3.5 py-2 text-xs font-semibold text-[var(--brand)] transition hover:bg-[var(--brand)]/14"
                 >
                   View Results
                 </Link>
                 <button
                   type="button"
                   onClick={() => setSendModalOpen(true)}
-                  className="flex items-center gap-1.5 rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-2 text-xs font-semibold text-white/50 transition hover:border-[#1D9E75]/20 hover:text-white"
+                  className="flex items-center gap-1.5 rounded-[7px] border border-[var(--border)] bg-[var(--surface-alt)] px-3.5 py-2 text-xs font-semibold text-[var(--muted)] transition hover:border-[var(--brand)]/20 hover:text-[var(--foreground)]"
                 >
                   Send Remote Assessment
                 </button>
@@ -1000,34 +1008,34 @@ export default function PatientProfilePage() {
                   type="button"
                   onClick={handleCopyLatestLink}
                   disabled={!latestRemoteAssessment}
-                  className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-2 text-xs font-semibold text-white/50 transition hover:border-[#1D9E75]/20 hover:text-white disabled:cursor-not-allowed disabled:opacity-30"
+                  className="rounded-[7px] border border-[var(--border)] bg-[var(--surface-alt)] px-3.5 py-2 text-xs font-semibold text-[var(--muted)] transition hover:border-[var(--brand)]/20 hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-30"
                 >
                   Copy assessment link
                 </button>
                 <Link
                   href={`/therapy?patientId=${patient.id}`}
-                  className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-2 text-xs font-semibold text-white/50 transition hover:border-[#1D9E75]/20 hover:text-white"
+                  className="rounded-[7px] border border-[var(--border)] bg-[var(--surface-alt)] px-3.5 py-2 text-xs font-semibold text-[var(--muted)] transition hover:border-[var(--brand)]/20 hover:text-[var(--foreground)]"
                 >
                   Therapy session
                 </Link>
               </div>
               {copyFeedback === "success" && (
-                <p className="mt-2.5 text-xs text-[#5DCAA5]">Assessment link copied to clipboard.</p>
+                <p className="mt-2.5 text-xs text-[var(--brand)]">Assessment link copied to clipboard.</p>
               )}
               {copyFeedback === "error" && (
-                <p className="mt-2.5 text-xs text-rose-300">Could not copy link.</p>
+                <p className="mt-2.5 text-xs text-rose-700 dark:text-rose-300">Could not copy link.</p>
               )}
             </section>
 
             {/* Assessment saved banner */}
             {showAssessmentBanner && (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-[#1D9E75]/30 bg-[#1D9E75]/8 px-4 py-3">
-                <p className="text-sm text-[#5DCAA5]">Assessment saved successfully.</p>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-[8px] border border-[var(--brand)]/30 bg-[var(--brand)]/8 px-4 py-3">
+                <p className="text-sm text-[var(--brand)]">Assessment saved successfully.</p>
                 <div className="flex items-center gap-2">
                   {clinicalSummaryAssessmentId && (
                     <Link
                       href={primaryReportHref}
-                      className="rounded-[6px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-3 py-1.5 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
+                      className="rounded-[6px] border border-[var(--brand)]/25 bg-[var(--brand)]/10 px-3 py-1.5 text-xs font-semibold text-[var(--brand)] transition hover:bg-[var(--brand)]/15"
                     >
                       Review assessment report →
                     </Link>
@@ -1035,7 +1043,7 @@ export default function PatientProfilePage() {
                   <button
                     type="button"
                     onClick={() => setShowAssessmentBanner(false)}
-                    className="shrink-0 text-xs text-white/25 transition hover:text-white/60"
+                    className="shrink-0 text-xs text-[var(--muted-soft)] transition hover:text-[var(--foreground)]/60"
                   >
                     ✕
                   </button>
@@ -1045,12 +1053,12 @@ export default function PatientProfilePage() {
 
             {/* Plan assigned banner */}
             {showPlanAssignedBanner && (
-              <div className="flex items-start justify-between gap-3 rounded-[8px] border border-[#1D9E75]/30 bg-[#1D9E75]/8 px-4 py-3">
-                <p className="text-sm text-[#5DCAA5]">Treatment plan assigned successfully.</p>
+              <div className="flex items-start justify-between gap-3 rounded-[8px] border border-[var(--brand)]/30 bg-[var(--brand)]/8 px-4 py-3">
+                <p className="text-sm text-[var(--brand)]">Treatment plan assigned successfully.</p>
                 <button
                   type="button"
                   onClick={() => setShowPlanAssignedBanner(false)}
-                  className="mt-0.5 shrink-0 text-xs text-white/25 transition hover:text-white/60"
+                  className="mt-0.5 shrink-0 text-xs text-[var(--muted-soft)] transition hover:text-[var(--foreground)]/60"
                 >
                   ✕
                 </button>
@@ -1058,25 +1066,25 @@ export default function PatientProfilePage() {
             )}
 
             {/* Clinical Assessment Summary */}
-            <section id="clinical-assessment-summary" className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 scroll-mt-6">
-              <h2 className="text-lg font-bold text-white">Clinical Assessment Summary</h2>
-              <p className="mt-1 mb-5 text-xs text-white/35">
+            <section id="clinical-assessment-summary" className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-6 scroll-mt-6">
+              <h2 className="text-lg font-bold text-[var(--foreground)]">Clinical Assessment Summary</h2>
+              <p className="mt-1 mb-5 text-xs text-[var(--muted-soft)]">
                 Remote and in-clinic assessments appear here. Session progress and review flags are on Results.
               </p>
 
               {clinicalSummary ? (
                 <div className="space-y-5">
-                  <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4">
+                  <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-white">{clinicalSummary.title}</p>
-                        <p className="mt-1 text-xs text-white/45">
+                        <p className="text-sm font-semibold text-[var(--foreground)]">{clinicalSummary.title}</p>
+                        <p className="mt-1 text-xs text-[var(--muted)]">
                           Submitted {new Date(clinicalSummary.submittedAt).toLocaleString()}
                         </p>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         {clinicalSummaryDetail?.type === "remote_questionnaire" && (
-                          <span className="rounded-[5px] border border-[#1E2D42] bg-[#0F1825] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white/45">
+                          <span className="rounded-[5px] border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--muted)]">
                             Remote
                           </span>
                         )}
@@ -1088,7 +1096,7 @@ export default function PatientProfilePage() {
 
                     {clinicalSummary.hasRedFlag && (
                       <div className="mt-4 rounded-[7px] border border-amber-300/25 bg-amber-400/10 px-3 py-2.5">
-                        <p className="text-xs font-semibold text-amber-200">
+                        <p className="text-xs font-semibold text-amber-800 dark:text-amber-200">
                           Patient reported a possible red flag — review before proceeding.
                         </p>
                       </div>
@@ -1096,7 +1104,7 @@ export default function PatientProfilePage() {
 
                     {clinicalSummaryArabicNotice && (
                       <div className="mt-4 rounded-[7px] border border-amber-300/25 bg-amber-400/10 px-3 py-2.5">
-                        <p className="text-xs leading-relaxed text-amber-100/90">
+                        <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-100/90">
                           {ARABIC_READABILITY_NOTICE}
                         </p>
                       </div>
@@ -1104,34 +1112,34 @@ export default function PatientProfilePage() {
 
                     {clinicalFocusLabels && (
                       <div className="mt-4 rounded-[8px] border border-cyan-400/20 bg-cyan-400/5 px-4 py-4">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-300/80">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-700 dark:text-cyan-300/80">
                           {FOCUS_SECTION_TITLE}
                         </p>
-                        <p className="mt-2 text-xs leading-relaxed text-white/45">
+                        <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">
                           {FOCUS_PROFILE_DISCLAIMER}
                         </p>
                         <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                          <div className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+                          <div className="rounded-[7px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-soft)]">
                               {FOCUS_AREA_LABEL}
                             </p>
-                            <p className="mt-1 text-sm font-semibold text-white">
+                            <p className="mt-1 text-sm font-semibold text-[var(--foreground)]">
                               {clinicalFocusLabels.focusArea}
                             </p>
                           </div>
-                          <div className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+                          <div className="rounded-[7px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-soft)]">
                               {FOCUS_CATEGORY_LABEL}
                             </p>
-                            <p className="mt-1 text-sm font-semibold text-white">
+                            <p className="mt-1 text-sm font-semibold text-[var(--foreground)]">
                               {clinicalFocusLabels.clinicalCategory}
                             </p>
                           </div>
-                          <div className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+                          <div className="rounded-[7px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-soft)]">
                               {FOCUS_DIRECTION_LABEL}
                             </p>
-                            <p className="mt-1 text-sm font-semibold text-white">
+                            <p className="mt-1 text-sm font-semibold text-[var(--foreground)]">
                               {FOCUS_DIRECTION_VALUE}
                             </p>
                           </div>
@@ -1141,19 +1149,19 @@ export default function PatientProfilePage() {
 
                     {clinicalFocusLabels && (
                       <div className="mt-4 rounded-[8px] border border-violet-400/20 bg-violet-400/5 px-4 py-4">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-violet-300/80">
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-violet-700 dark:text-violet-700 dark:text-violet-300/80">
                           {PROGRAM_DIRECTION_PROFILE_TITLE}
                         </p>
-                        <p className="mt-2 text-xs leading-relaxed text-white/45">
+                        <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">
                           {PROGRAM_DIRECTION_PROFILE_INTRO}
                         </p>
                         {clinicalSummary?.hasRedFlag && (
-                          <p className="mt-3 text-xs leading-relaxed text-amber-200/90">
+                          <p className="mt-3 text-xs leading-relaxed text-amber-800 dark:text-amber-800 dark:text-amber-200/90">
                             {PROGRAM_DIRECTION_RED_FLAG}
                           </p>
                         )}
                         {programDirectionOptions.length === 0 ? (
-                          <p className="mt-3 text-sm leading-relaxed text-white/50">
+                          <p className="mt-3 text-sm leading-relaxed text-[var(--muted)]">
                             {PROGRAM_DIRECTION_NO_OPTIONS}
                           </p>
                         ) : (
@@ -1161,10 +1169,10 @@ export default function PatientProfilePage() {
                             {programDirectionOptions.map((option) => (
                               <li
                                 key={option.templateId}
-                                className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5"
+                                className="rounded-[7px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"
                               >
-                                <p className="text-sm font-semibold text-white">{option.title}</p>
-                                <p className="mt-0.5 text-[11px] text-white/40">
+                                <p className="text-sm font-semibold text-[var(--foreground)]">{option.title}</p>
+                                <p className="mt-0.5 text-[11px] text-[var(--muted-soft)]">
                                   {option.conditionArea} · {option.level}
                                 </p>
                               </li>
@@ -1173,11 +1181,11 @@ export default function PatientProfilePage() {
                         )}
                         <Link
                           href={`/clinician/plans/new?patientId=${encodeURIComponent(patient.id)}`}
-                          className="mt-3 inline-flex text-xs font-semibold text-violet-300 transition hover:text-violet-200"
+                          className="mt-3 inline-flex text-xs font-semibold text-violet-700 dark:text-violet-300 transition hover:text-violet-200"
                         >
                           {PROGRAM_DIRECTION_CTA} →
                         </Link>
-                        <p className="mt-3 text-[11px] leading-relaxed text-white/35">
+                        <p className="mt-3 text-[11px] leading-relaxed text-[var(--muted-soft)]">
                           {PROGRAM_DIRECTION_FOOTER}
                         </p>
                       </div>
@@ -1188,14 +1196,14 @@ export default function PatientProfilePage() {
                         {clinicalSummary.metrics.map((metric) => (
                           <div
                             key={metric.label}
-                            className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5"
+                            className="rounded-[7px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5"
                           >
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-soft)]">
                               {metric.label}
                             </p>
                             <p
                               dir={valueTextDirection(metric.value)}
-                              className="mt-1 text-sm font-semibold text-white"
+                              className="mt-1 text-sm font-semibold text-[var(--foreground)]"
                             >
                               {metric.value}
                             </p>
@@ -1205,15 +1213,15 @@ export default function PatientProfilePage() {
                     )}
 
                     {clinicalSummary.rows.length > 0 && (
-                      <dl className="mt-4 divide-y divide-[#1E2D42] rounded-[7px] border border-[#1E2D42]">
+                      <dl className="mt-4 divide-y divide-[var(--border)] rounded-[7px] border border-[var(--border)]">
                         {clinicalSummary.rows.map((row) => (
                           <div key={row.label} className="px-3 py-2.5">
-                            <dt className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
+                            <dt className="text-[10px] font-semibold uppercase tracking-wider text-[var(--muted-soft)]">
                               {row.label}
                             </dt>
                             <dd
                               dir={valueTextDirection(row.value)}
-                              className="mt-0.5 text-sm leading-relaxed text-white/80 whitespace-pre-wrap"
+                              className="mt-0.5 text-sm leading-relaxed text-[var(--foreground)] whitespace-pre-wrap"
                             >
                               {row.value}
                             </dd>
@@ -1227,7 +1235,7 @@ export default function PatientProfilePage() {
                   {clinicalSummaryAssessmentId && (
                     <Link
                       href={primaryReportHref}
-                      className="inline-flex rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-4 py-2.5 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
+                      className="inline-flex rounded-[7px] border border-[var(--brand)]/25 bg-[var(--brand)]/10 px-4 py-2.5 text-xs font-semibold text-[var(--brand)] transition hover:bg-[var(--brand)]/15"
                     >
                       Review assessment report →
                     </Link>
@@ -1235,21 +1243,21 @@ export default function PatientProfilePage() {
 
                 </div>
               ) : (
-                <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4">
-                  <p className="text-sm leading-relaxed text-white/50">
+                <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-4">
+                  <p className="text-sm leading-relaxed text-[var(--muted)]">
                     No submitted assessment yet. Send a remote link or document an in-clinic assessment to begin.
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
                     <button
                       type="button"
                       onClick={() => setSendModalOpen(true)}
-                      className="rounded-[7px] bg-[#1D9E75] px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-[#179165]"
+                      className="rounded-[7px] bg-[var(--brand)] px-3.5 py-2 text-xs font-semibold text-[var(--foreground)]-KEEP transition hover:bg-[var(--brand-dark)]"
                     >
                       Send remote assessment
                     </button>
                     <Link
                       href={`/clinician/assessment/new?patientId=${patient.id}`}
-                      className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/60 transition hover:text-white"
+                      className="rounded-[7px] border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2 text-xs font-semibold text-[var(--muted)] transition hover:text-[var(--foreground)]"
                     >
                       Document in clinic
                     </Link>
@@ -1273,6 +1281,7 @@ export default function PatientProfilePage() {
               plan={treatmentPlan}
               planProgress={planProgress}
               adherence={adherence}
+              sessionLogs={timelineBundle?.timelineSessionLogs ?? []}
               onReviewAcknowledged={(reviewedAt) => {
                 setPlanProgress((prev) =>
                   prev
@@ -1313,13 +1322,13 @@ export default function PatientProfilePage() {
 
             {/* Patient access link */}
             {treatmentPlan?.patientToken && (
-              <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-[#6B7280]">
+              <section className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted)]">
                   Patient access
                 </p>
-                <div className="mt-3 flex items-center gap-3 rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3">
+                <div className="mt-3 flex items-center gap-3 rounded-[7px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
                   <p
-                    className="flex-1 truncate text-[13px] text-[#5DCAA5]"
+                    className="flex-1 truncate text-[13px] text-[var(--brand)]"
                     style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
                   >
                     {typeof window !== "undefined" ? window.location.origin : ""}/patient/{treatmentPlan.patientToken}
@@ -1333,25 +1342,25 @@ export default function PatientProfilePage() {
                         setTimeout(() => setCopyFeedback("idle"), 2000);
                       }).catch(() => setCopyFeedback("error"));
                     }}
-                    className="shrink-0 rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-1.5 text-[11px] font-semibold text-white/50 transition hover:border-[#1D9E75]/30 hover:text-white"
+                    className="shrink-0 rounded-[6px] border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[11px] font-semibold text-[var(--muted)] transition hover:border-[var(--brand)]/30 hover:text-[var(--foreground)]"
                   >
                     {copyFeedback === "success" ? "Copied!" : "Copy"}
                   </button>
                 </div>
-                <p className="mt-2 text-[11px] text-white/25">
+                <p className="mt-2 text-[11px] text-[var(--muted-soft)]">
                   Share this link with the patient. No login required.
                 </p>
               </section>
             )}
 
             {/* Clinical Documentation */}
-            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <h2 className="text-lg font-bold text-white">Clinical Documentation</h2>
-              <p className="mt-1 mb-6 text-xs text-white/35">SOAP notes and assessment archive.</p>
+            <section className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-6">
+              <h2 className="text-lg font-bold text-[var(--foreground)]">Clinical Documentation</h2>
+              <p className="mt-1 mb-6 text-xs text-[var(--muted-soft)]">SOAP notes and assessment archive.</p>
 
               <div className="mb-6">
-                <h3 className="text-sm font-bold text-white">SOAP Documentation</h3>
-                <p className="text-xs text-white/45">Structured SOAP templates will be available in a future release.</p>
+                <h3 className="text-sm font-bold text-[var(--foreground)]">SOAP Documentation</h3>
+                <p className="text-xs text-[var(--muted)]">Structured SOAP templates will be available in a future release.</p>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <SoapPlaceholderCard title="Subjective" />
                   <SoapPlaceholderCard title="Objective" />
@@ -1361,10 +1370,10 @@ export default function PatientProfilePage() {
               </div>
 
               {(backendAssessmentHistory.length > 0 || assessments.length > 0) && (
-                <div className="space-y-5 border-t border-[#1E2D42] pt-6">
+                <div className="space-y-5 border-t border-[var(--border)] pt-6">
                   {backendAssessmentHistory.length > 0 && (
                     <div id="assessment-timeline">
-                      <h3 className="text-sm font-bold text-white">Assessment archive</h3>
+                      <h3 className="text-sm font-bold text-[var(--foreground)]">Assessment archive</h3>
                       <div className="mt-3 space-y-3">
                         {backendAssessmentHistory.map((row) => {
                           const matchedLocal = assessments.find((a) => a.id === String(row.id));
@@ -1375,12 +1384,12 @@ export default function PatientProfilePage() {
                           return (
                             <div
                               key={`backend-${row.id}`}
-                              className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4"
+                              className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] p-4"
                             >
                               <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div className="min-w-0 flex-1">
-                                  <p className="text-sm font-semibold text-white">{row.type || "Assessment"}</p>
-                                  <p className="mt-0.5 text-xs text-white/50">
+                                  <p className="text-sm font-semibold text-[var(--foreground)]">{row.type || "Assessment"}</p>
+                                  <p className="mt-0.5 text-xs text-[var(--muted)]">
                                     {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
                                   </p>
                                 </div>
@@ -1388,7 +1397,7 @@ export default function PatientProfilePage() {
                               </div>
                               <Link
                                 href={`/clinician/assessment/report?patientId=${patient.id}&assessmentId=${row.id}`}
-                                className="mt-3 inline-flex text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
+                                className="mt-3 inline-flex text-[11px] font-semibold text-[var(--brand)] hover:text-[var(--brand)]"
                               >
                                 View report →
                               </Link>
@@ -1401,20 +1410,20 @@ export default function PatientProfilePage() {
 
                   {assessments.length > 0 && (
                     <div>
-                      <h3 className="text-sm font-bold text-white">Local session archive</h3>
+                      <h3 className="text-sm font-bold text-[var(--foreground)]">Local session archive</h3>
                       <div className="mt-3 space-y-3">
                         {assessments.map((item) => (
-                          <div key={item.id} className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
-                            <p className="text-sm font-semibold text-white">
+                          <div key={item.id} className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] p-4">
+                            <p className="text-sm font-semibold text-[var(--foreground)]">
                               {item.sessionLabel?.trim() ||
                                 (item.mode === "remote" ? "Remote Assessment" : "In-Clinic Assessment")}
                             </p>
-                            <p className="mt-0.5 text-xs text-white/50">
+                            <p className="mt-0.5 text-xs text-[var(--muted)]">
                               {new Date(item.createdAt).toLocaleString()}
                             </p>
                             <Link
                               href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
-                              className="mt-3 inline-flex text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
+                              className="mt-3 inline-flex text-[11px] font-semibold text-[var(--brand)] hover:text-[var(--brand)]"
                             >
                               Open session record →
                             </Link>
@@ -1427,21 +1436,21 @@ export default function PatientProfilePage() {
               )}
             </section>
 
-            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <h2 className="text-lg font-bold text-white">Therapy Session Results</h2>
-                <p className="mt-1 text-sm text-white/50">
+            <section className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-6">
+              <h2 className="text-lg font-bold text-[var(--foreground)]">Therapy Session Results</h2>
+                <p className="mt-1 text-sm text-[var(--muted)]">
                   Optional in-browser therapy sessions for this patient.
                 </p>
 
               <div className="mt-6">
-                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[var(--muted-soft)]">
                   Care flow
                 </p>
                 <TherapyProgressFlow nextActionLine={flowNextAction} />
               </div>
 
               <div className="mt-6">
-                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
+                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[var(--muted-soft)]">
                   Therapy trends
                 </p>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1483,7 +1492,7 @@ export default function PatientProfilePage() {
               </div>
 
               {therapyLoading && (
-                <div className="mt-5 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4 text-sm text-white/40">
+                <div className="mt-5 rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] p-4 text-sm text-[var(--muted-soft)]">
                   Loading therapy reports…
                 </div>
               )}
@@ -1494,7 +1503,7 @@ export default function PatientProfilePage() {
                     <TherapySessionHistoryEntry key={t.id} t={t} />
                   ))
                 ) : !therapyLoading ? (
-                  <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-5 text-sm text-white/40">
+                  <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] p-5 text-sm text-[var(--muted-soft)]">
                     No therapy sessions logged yet.
                   </div>
                 ) : null}
@@ -1505,16 +1514,16 @@ export default function PatientProfilePage() {
           {/* Sidebar */}
           <aside className="space-y-6">
             {/* ── Remote Assessments panel ── */}
-            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
+            <section className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-5">
               <div className="mb-4 flex items-center justify-between gap-2">
                 <div>
-                  <h2 className="text-base font-bold text-white">Remote assessments</h2>
-                  <p className="mt-0.5 text-xs text-white/35">Links sent to this patient.</p>
+                  <h2 className="text-base font-bold text-[var(--foreground)]">Remote assessments</h2>
+                  <p className="mt-0.5 text-xs text-[var(--muted-soft)]">Links sent to this patient.</p>
                 </div>
                 <button
                   type="button"
                   onClick={() => setSendModalOpen(true)}
-                  className="flex items-center gap-1.5 rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-3 py-1.5 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
+                  className="flex items-center gap-1.5 rounded-[7px] border border-[var(--brand)]/20 bg-[var(--brand)]/8 px-3 py-1.5 text-xs font-semibold text-[var(--brand)] transition hover:bg-[var(--brand)]/15"
                 >
                   <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
@@ -1524,12 +1533,12 @@ export default function PatientProfilePage() {
               </div>
 
               {remoteAssessments.length === 0 ? (
-                <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-5 text-center">
-                  <p className="text-xs text-[#6B7280]">No remote assessments sent yet.</p>
+                <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-5 text-center">
+                  <p className="text-xs text-[var(--muted)]">No remote assessments sent yet.</p>
                   <button
                     type="button"
                     onClick={() => setSendModalOpen(true)}
-                    className="mt-2 text-xs font-semibold text-[#5DCAA5] transition hover:text-[#1D9E75]"
+                    className="mt-2 text-xs font-semibold text-[var(--brand)] transition hover:text-[var(--brand)]"
                   >
                     Send first assessment →
                   </button>
@@ -1544,50 +1553,50 @@ export default function PatientProfilePage() {
                       <div
                         key={ra.id}
                         className={`overflow-hidden rounded-[8px] border ${
-                          isSubmitted ? "border-[#1D9E75]/20 bg-[#1D9E75]/[0.04]" :
-                          isPending   ? "border-[#1E2D42] bg-[#0B1220]" :
+                          isSubmitted ? "border-[var(--brand)]/20 bg-[var(--brand)]/[0.04]" :
+                          isPending   ? "border-[var(--border)] bg-[var(--surface-alt)]" :
                           "border-amber-400/15 bg-amber-400/[0.03]"
                         }`}
                       >
                         <div className="px-4 py-3">
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1 min-w-0">
-                              <p className="truncate text-xs font-semibold text-white/80">
+                              <p className="truncate text-xs font-semibold text-[var(--foreground)]">
                                 {ASSESSMENT_TYPE_LABELS[ra.assessmentType]}
                               </p>
-                              <p className="mt-0.5 text-[11px] text-white/40">
+                              <p className="mt-0.5 text-[11px] text-[var(--muted-soft)]">
                                 {new Date(ra.createdAt).toLocaleDateString()} ·{" "}
                                 {ra.includedSections.length} sections
                               </p>
                             </div>
                             <span className={`shrink-0 rounded-[4px] border px-2 py-0.5 text-[10px] font-bold ${
-                              isSubmitted ? "border-[#1D9E75]/30 bg-[#1D9E75]/10 text-[#5DCAA5]" :
-                              isPending   ? "border-[#1E2D42] bg-[#0B1220] text-white/40" :
-                              "border-amber-400/25 bg-amber-400/10 text-amber-300"
+                              isSubmitted ? "border-[var(--brand)]/30 bg-[var(--brand)]/10 text-[var(--brand)]" :
+                              isPending   ? "border-[var(--border)] bg-[var(--surface-alt)] text-[var(--muted-soft)]" :
+                              "border-amber-400/25 bg-amber-400/10 text-amber-700 dark:text-amber-300"
                             }`}>
                               {isSubmitted ? "Submitted" : isPending ? "Awaiting Completion" : "In Progress"}
                             </span>
                           </div>
 
                           {!isSubmitted && (
-                            <p className="mt-1 text-[11px] text-white/30">
+                            <p className="mt-1 text-[11px] text-[var(--muted-soft)]">
                               Expires in {daysUntilExpiry(ra)} days
                             </p>
                           )}
                           {isSubmitted && (
-                            <p className="mt-2 text-[11px] text-[#5DCAA5]/80">Ready for review in Clinical Assessment Summary.</p>
+                            <p className="mt-2 text-[11px] text-[var(--brand)]/80">Ready for review in Clinical Assessment Summary.</p>
                           )}
                         </div>
 
                         {/* Actions */}
-                        <div className="flex gap-px border-t border-[#1E2D42]">
+                        <div className="flex gap-px border-t border-[var(--border)]">
                           {!isSubmitted && (
                             <button
                               type="button"
                               onClick={async () => {
                                 try { await navigator.clipboard.writeText(link); } catch { /* ignore */ }
                               }}
-                              className="flex-1 px-3 py-2.5 text-center text-[11px] font-semibold text-white/40 transition hover:bg-[#0B1220] hover:text-white/70"
+                              className="flex-1 px-3 py-2.5 text-center text-[11px] font-semibold text-[var(--muted-soft)] transition hover:bg-[var(--surface-alt)] hover:text-[var(--foreground)]/70"
                             >
                               Copy Link
                             </button>
@@ -1602,18 +1611,18 @@ export default function PatientProfilePage() {
 
             {/* Recent Results (local) */}
             {recentAssessments.length > 0 && (
-              <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
-                <h2 className="text-base font-bold text-white">Recent sessions</h2>
+              <section className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-5">
+                <h2 className="text-base font-bold text-[var(--foreground)]">Recent sessions</h2>
                 <div className="mt-4 space-y-3">
                   {recentAssessments.map((item) => (
-                    <div key={`${item.id}-recent`} className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
-                      <p className="text-xs text-white/50">{new Date(item.createdAt).toLocaleDateString()}</p>
-                      <p className="mt-1 text-sm font-semibold text-white">
+                    <div key={`${item.id}-recent`} className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] p-4">
+                      <p className="text-xs text-[var(--muted)]">{new Date(item.createdAt).toLocaleDateString()}</p>
+                      <p className="mt-1 text-sm font-semibold text-[var(--foreground)]">
                         {item.mode === "remote" ? "Remote" : "In-clinic"} session
                       </p>
                       <Link
                         href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
-                        className="mt-3 inline-flex text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
+                        className="mt-3 inline-flex text-[11px] font-semibold text-[var(--brand)] hover:text-[var(--brand)]"
                       >
                         Open session record →
                       </Link>
@@ -1659,15 +1668,15 @@ function TherapyProgressFlow({ nextActionLine }: { nextActionLine: string }) {
       <div className="flex min-w-[720px] items-stretch gap-1 md:gap-2">
         {steps.map((s, i) => (
           <Fragment key={s.label}>
-            <div className="min-w-0 flex-1 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-3 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">
+            <div className="min-w-0 flex-1 rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-soft)]">
                 {s.label}
               </p>
-              <p className="mt-1.5 text-xs leading-snug text-white/70">{s.detail}</p>
+              <p className="mt-1.5 text-xs leading-snug text-[var(--foreground)]">{s.detail}</p>
             </div>
             {i < steps.length - 1 ? (
               <span
-                className="flex shrink-0 items-center px-0.5 text-lg font-light text-white/20"
+                className="flex shrink-0 items-center px-0.5 text-lg font-light text-[var(--muted-soft)]"
                 aria-hidden
               >
                 →
@@ -1682,9 +1691,9 @@ function TherapyProgressFlow({ nextActionLine }: { nextActionLine: string }) {
 
 function SoapPlaceholderCard({ title }: { title: string }) {
   return (
-    <div className="rounded-[8px] border border-dashed border-[#1E2D42] bg-[#0B1220] p-4">
-      <p className="text-xs font-semibold text-white/70">{title}</p>
-      <p className="mt-2 text-[11px] leading-relaxed text-white/45">Not recorded yet.</p>
+    <div className="rounded-[8px] border border-dashed border-[var(--border)] bg-[var(--surface-alt)] p-4">
+      <p className="text-xs font-semibold text-[var(--foreground)]">{title}</p>
+      <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">Not recorded yet.</p>
     </div>
   );
 }
@@ -1705,16 +1714,16 @@ function TherapySessionHistoryEntry({ t }: { t: TherapySessionLog }) {
 
   return (
     <article
-      className={`rounded-[10px] border bg-[#0B1220] p-5 ${
-        t.assessmentId?.trim() ? "border-[#1D9E75]/20" : "border-[#1E2D42]"
+      className={`rounded-[10px] border bg-[var(--surface-alt)] p-5 ${
+        t.assessmentId?.trim() ? "border-[var(--brand)]/20" : "border-[var(--border)]"
       }`}
     >
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-white/8 pb-4">
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-[var(--border)] pb-4">
         <div>
-          <p className="text-lg font-semibold text-white">
+          <p className="text-lg font-semibold text-[var(--foreground)]">
             {t.exerciseName?.trim() || t.programLabel || "Therapy session"}
           </p>
-          <p className="mt-1 text-sm text-white/55">
+          <p className="mt-1 text-sm text-[var(--muted)]">
             {t.recordedAt ? new Date(t.recordedAt).toLocaleString() : "—"}
           </p>
         </div>
@@ -1729,7 +1738,7 @@ function TherapySessionHistoryEntry({ t }: { t: TherapySessionLog }) {
         <InfoCard label="Session type" value={formatSessionTypeLabel(sessionType)} />
       </div>
 
-      <p className="mb-2 mt-5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
+      <p className="mb-2 mt-5 text-[10px] font-semibold uppercase tracking-widest text-[var(--muted-soft)]">
         Session metrics
       </p>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1751,57 +1760,57 @@ function TherapySessionHistoryEntry({ t }: { t: TherapySessionLog }) {
       </div>
 
       {rec ? (
-        <div className="mt-5 rounded-[8px] border border-[#1D9E75]/20 bg-[#1D9E75]/[0.05] p-4">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">
+        <div className="mt-5 rounded-[8px] border border-[var(--brand)]/20 bg-[var(--brand)]/[0.05] p-4">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted-soft)]">
             Clinical interpretation &amp; therapy guidance
           </p>
-          <p className="mt-1 text-[10px] text-white/45">
+          <p className="mt-1 text-[10px] text-[var(--muted)]">
             Rule-based decision support captured at save time — not a medical diagnosis.
           </p>
           {rec.interpretation.length > 0 ? (
-            <div className="mt-3 border-t border-white/10 pt-3">
-              <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-slate-400">
+            <div className="mt-3 border-t border-[var(--border)] pt-3">
+              <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-[var(--muted)]">
                 Interpretation
               </p>
-              <ul className="list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-white/70">
+              <ul className="list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-[var(--foreground)]">
                 {rec.interpretation.map((line, i) => (
                   <li key={i}>{line}</li>
                 ))}
               </ul>
             </div>
           ) : (
-            <p className="mt-3 text-xs text-white/50">Interpretation: Not recorded.</p>
+            <p className="mt-3 text-xs text-[var(--muted)]">Interpretation: Not recorded.</p>
           )}
-          <div className="mt-4 space-y-2 border-t border-white/10 pt-3 text-xs">
-            <p className="text-white/65">
-              <span className="font-semibold text-white/80">Recommendation — progression: </span>
+          <div className="mt-4 space-y-2 border-t border-[var(--border)] pt-3 text-xs">
+            <p className="text-[var(--muted)]">
+              <span className="font-semibold text-[var(--foreground)]">Recommendation — progression: </span>
               {rec.progressionStatus}
             </p>
-            <p className="text-white/65">
-              <span className="font-semibold text-white/80">Recommendation — next action: </span>
+            <p className="text-[var(--muted)]">
+              <span className="font-semibold text-[var(--foreground)]">Recommendation — next action: </span>
               {rec.nextAction}
             </p>
-            <p className="text-[11px] leading-relaxed text-white/60">
-              <span className="font-semibold text-white/75">Safety / intensity: </span>
+            <p className="text-[11px] leading-relaxed text-[var(--muted)]">
+              <span className="font-semibold text-[var(--foreground)]">Safety / intensity: </span>
               {rec.intensityNote}
             </p>
           </div>
         </div>
       ) : (
-        <div className="mt-5 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4 text-xs text-white/40">
-          <span className="font-semibold text-white/55">Clinical interpretation: </span>
+        <div className="mt-5 rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] p-4 text-xs text-[var(--muted-soft)]">
+          <span className="font-semibold text-[var(--muted)]">Clinical interpretation: </span>
           Not recorded for this session.
         </div>
       )}
 
       {t.therapyContextReason ? (
-        <p className="mt-4 text-xs leading-relaxed text-white/55">
-          <span className="font-medium text-white/65">Therapy context: </span>
+        <p className="mt-4 text-xs leading-relaxed text-[var(--muted)]">
+          <span className="font-medium text-[var(--muted)]">Therapy context: </span>
           {t.therapyContextReason}
         </p>
       ) : null}
 
-      <p className="mt-4 border-t border-white/8 pt-3 text-[10px] leading-relaxed text-slate-500">
+      <p className="mt-4 border-t border-[var(--border)] pt-3 text-[10px] leading-relaxed text-[var(--muted-soft)]">
         Safety note: All metrics and guidance above are decision-support only and require qualified clinical judgment.
         They do not constitute a diagnosis or treatment plan.
       </p>
@@ -1816,6 +1825,7 @@ interface ProgressSnapshotSectionProps {
   plan: TreatmentPlan | null;
   planProgress: PatientProgressSummary | null;
   adherence: Adherence | null;
+  sessionLogs: PatientTimelineSessionLog[];
   onReviewAcknowledged?: (reviewedAt: string) => void;
 }
 
@@ -1824,30 +1834,45 @@ function ProgressSnapshotSection({
   plan,
   planProgress,
   adherence,
+  sessionLogs,
   onReviewAcknowledged,
 }: ProgressSnapshotSectionProps) {
   const sessionsDone = planProgress?.sessionsCompleted ?? adherence?.sessionsCompleted ?? 0;
 
+  const chartPoints = useMemo<ProgressChartPoint[]>(
+    () =>
+      [...sessionLogs]
+        .sort((a, b) => new Date(a.completed_at).getTime() - new Date(b.completed_at).getTime())
+        .map((log) => ({
+          sessionLogId: log.id,
+          sessionNumber: log.session_number,
+          completedAt: log.completed_at,
+          painScore: log.pain_score,
+          effortScore: log.effort_score,
+        })),
+    [sessionLogs],
+  );
+
   return (
-    <section id="progress-snapshot" className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 scroll-mt-6">
+    <section id="progress-snapshot" className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-6 scroll-mt-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-bold text-white">Progress Snapshot</h2>
+        <h2 className="text-lg font-bold text-[var(--foreground)]">Progress Snapshot</h2>
         {planProgress?.needsReview && planProgress.clinicalAction && (
-          <span className="rounded-[5px] border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-300">
+          <span className="rounded-[5px] border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
             {planProgress.clinicalAction.title}
           </span>
         )}
       </div>
       <div className="mt-4">
-        {!plan ? (
-          <p className="mt-3 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
+        {!plan && chartPoints.length === 0 ? (
+          <p className="mt-3 rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-4 text-sm leading-relaxed text-[var(--muted)]">
             No progress recorded yet. Progress appears after the patient completes a session.
           </p>
-        ) : sessionsDone === 0 ? (
-          <p className="mt-3 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
+        ) : sessionsDone === 0 && chartPoints.length === 0 ? (
+          <p className="mt-3 rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-4 text-sm leading-relaxed text-[var(--muted)]">
             No progress recorded yet. Progress appears after the patient completes a session.
           </p>
-        ) : (
+        ) : plan && sessionsDone > 0 ? (
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {[
               {
@@ -1877,16 +1902,25 @@ function ProgressSnapshotSection({
                 value: planProgress?.latestPainResponse ?? "—",
               },
             ].map(({ label, value }) => (
-              <div key={label} className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-3">
-                <p className="text-[10px] text-white/35">{label}</p>
+              <div key={label} className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] p-3">
+                <p className="text-[10px] text-[var(--muted-soft)]">{label}</p>
                 <p
-                  className="mt-0.5 text-sm font-bold text-[#5DCAA5]"
+                  className="mt-0.5 text-sm font-bold text-[var(--brand)]"
                   style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
                 >
                   {value}
                 </p>
               </div>
             ))}
+          </div>
+        ) : null}
+
+        {chartPoints.length > 0 && (
+          <div className="mt-4 rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] p-4">
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[var(--muted-soft)]">
+              Progress chart
+            </p>
+            <PatientProgressChart points={chartPoints} />
           </div>
         )}
 
@@ -1914,7 +1948,7 @@ function ProgressSnapshotSection({
 
         {planProgress?.safetyConcernReported && (
           <div className="mt-3 rounded-[8px] border border-amber-400/25 bg-amber-400/10 px-4 py-3">
-            <p className="text-xs leading-relaxed text-amber-200">
+            <p className="text-xs leading-relaxed text-amber-800 dark:text-amber-200">
               Patient reported sharp pain, dizziness, or unusual symptoms before their latest session.
               Review before next session guidance.
             </p>
@@ -1922,19 +1956,19 @@ function ProgressSnapshotSection({
         )}
 
         {planProgress?.latestPatientNote && !planProgress.clinicalAction && (
-          <div className="mt-3 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">
+          <div className="mt-3 rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted-soft)]">
               Patient note from last session
             </p>
-            <p className="mt-1.5 text-sm leading-relaxed text-white/75 whitespace-pre-wrap">
+            <p className="mt-1.5 text-sm leading-relaxed text-[var(--foreground)] whitespace-pre-wrap">
               {planProgress.latestPatientNote}
             </p>
           </div>
         )}
 
         {adherence && plan && sessionsDone > 0 && (
-          <div className="mt-4 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
+          <div className="mt-4 rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] p-4">
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[var(--muted-soft)]">
               Session adherence
             </p>
             <div className="flex items-end gap-1.5">
@@ -1942,13 +1976,13 @@ function ProgressSnapshotSection({
                 const fillPct = w.target > 0 ? Math.round((w.completed / w.target) * 100) : 0;
                 return (
                   <div key={w.week} className="flex flex-1 flex-col items-center gap-1">
-                    <div className="relative h-12 w-full overflow-hidden rounded-[3px] bg-[#1E2D42]">
+                    <div className="relative h-12 w-full overflow-hidden rounded-[3px] bg-[var(--border)]">
                       <div
-                        className="absolute bottom-0 left-0 right-0 rounded-[3px] bg-[#1D9E75]/70 transition-all"
+                        className="absolute bottom-0 left-0 right-0 rounded-[3px] bg-[var(--brand)]/70 transition-all"
                         style={{ height: `${fillPct}%` }}
                       />
                     </div>
-                    <span className="text-[9px] text-white/30">{w.week}</span>
+                    <span className="text-[9px] text-[var(--muted-soft)]">{w.week}</span>
                   </div>
                 );
               })}
@@ -1958,7 +1992,7 @@ function ProgressSnapshotSection({
 
         <Link
           href="/clinician/results"
-          className="mt-4 inline-flex rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3.5 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/14"
+          className="mt-4 inline-flex rounded-[7px] border border-[var(--brand)]/25 bg-[var(--brand)]/8 px-3.5 py-2 text-xs font-semibold text-[var(--brand)] transition hover:bg-[var(--brand)]/14"
         >
           Review Results
         </Link>
@@ -2000,37 +2034,37 @@ function TreatmentPlanSection({
 
   if (loading) {
     return (
-      <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-        <p className="text-sm text-white/40">Loading rehabilitation plan…</p>
+      <section className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-6">
+        <p className="text-sm text-[var(--muted-soft)]">Loading rehabilitation plan…</p>
       </section>
     );
   }
 
   return (
-    <section id="rehabilitation-plan" className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 scroll-mt-6">
-      <h2 className="text-lg font-bold text-white">Rehabilitation Plan</h2>
+    <section id="rehabilitation-plan" className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-6 scroll-mt-6">
+      <h2 className="text-lg font-bold text-[var(--foreground)]">Rehabilitation Plan</h2>
       <div className="mt-4 mb-5 flex items-start justify-between gap-4">
         <div>
-          <h3 className="text-base font-bold text-white">
+          <h3 className="text-base font-bold text-[var(--foreground)]">
             {plan ? plan.programName : "No plan assigned"}
           </h3>
           {plan && (
             <>
-              <p className="mt-0.5 text-sm text-white/40">{plan.phaseName}</p>
-              <p className="mt-1 text-xs text-white/35 capitalize">Status: {plan.status}</p>
+              <p className="mt-0.5 text-sm text-[var(--muted-soft)]">{plan.phaseName}</p>
+              <p className="mt-1 text-xs text-[var(--muted-soft)] capitalize">Status: {plan.status}</p>
             </>
           )}
         </div>
         <Link
           href={structuredPlanHref}
-          className="shrink-0 rounded-[7px] bg-[#1D9E75] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#179165]"
+          className="shrink-0 rounded-[7px] bg-[var(--brand)] px-4 py-2 text-xs font-semibold text-[var(--foreground)]-KEEP transition hover:bg-[var(--brand-dark)]"
         >
           {plan ? "Assign updated plan" : "Build treatment plan"}
         </Link>
       </div>
 
       {!plan && (
-        <p className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4 text-sm leading-relaxed text-[#6B7280]">
+        <p className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-4 text-sm leading-relaxed text-[var(--muted)]">
           No rehabilitation plan assigned yet. Use the structured plan builder to select exercises from
           the library, set dose, and share the patient portal link.
         </p>
@@ -2039,22 +2073,22 @@ function TreatmentPlanSection({
       {/* Current plan summary */}
       {plan && (
         <div className="space-y-3">
-          <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-white/25">Goal</p>
-            <p className="text-sm text-white/70">{plan.phaseGoal}</p>
+          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] p-4">
+            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[var(--muted-soft)]">Goal</p>
+            <p className="text-sm text-[var(--foreground)]">{plan.phaseGoal}</p>
           </div>
 
           {plan.clinicianNotes && (
-            <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3">
-              <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-white/25">
+            <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-[var(--muted-soft)]">
                 Clinician Notes
               </p>
-              <p className="text-sm text-white/60">{plan.clinicianNotes}</p>
+              <p className="text-sm text-[var(--muted)]">{plan.clinicianNotes}</p>
             </div>
           )}
 
-          <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
+          <div className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] p-4">
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[var(--muted-soft)]">
               Session schedule ({plan.sessions.filter((s) => s.status !== "completed").length} remaining)
             </p>
             <SessionScheduleView
@@ -2072,7 +2106,7 @@ function TreatmentPlanSection({
               getDisplayStatus={clinicianSessionDisplayStatus}
               cvMetricsByPlanSessionId={cvMetricsByPlanSessionId}
             />
-            <p className="mt-3 text-[10px] leading-relaxed text-white/30">
+            <p className="mt-3 text-[10px] leading-relaxed text-[var(--muted-soft)]">
               Camera status uses saved assistive metrics per session. Therapist review only · not
               clinically validated · reps are assistive only.
             </p>
@@ -2084,13 +2118,13 @@ function TreatmentPlanSection({
 }
 
 const inputCls =
-  "w-full rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3 text-white outline-none placeholder:text-white/25 focus:border-[#1D9E75]/40";
+  "w-full rounded-[7px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3 text-[var(--foreground)] outline-none placeholder:text-[var(--muted-soft)] focus:border-[var(--brand)]/40";
 
 function Field({ label, children, required }: { label: string; children: React.ReactNode; required?: boolean }) {
   return (
     <label className="block">
-      <span className="mb-2 block text-sm text-white/70">
-        {label}{required && <span className="ml-1 text-rose-300">*</span>}
+      <span className="mb-2 block text-sm text-[var(--foreground)]">
+        {label}{required && <span className="ml-1 text-rose-700 dark:text-rose-300">*</span>}
       </span>
       {children}
     </label>
@@ -2115,23 +2149,23 @@ function formatStatusLabel(status: string) {
 
 function ResultPill({ label, tone }: { label: string; tone: "score" | "good" | "neutral" }) {
   const cls = tone === "good"
-    ? "border-[#1D9E75]/30 bg-[#1D9E75]/10 text-[#5DCAA5]"
+    ? "border-[var(--brand)]/30 bg-[var(--brand)]/10 text-[var(--brand)]"
     : tone === "score"
-      ? "border-[#1D9E75]/20 bg-[#1D9E75]/8 text-[#5DCAA5]"
-      : "border-[#1E2D42] bg-[#0B1220] text-white/70";
+      ? "border-[var(--brand)]/20 bg-[var(--brand)]/8 text-[var(--brand)]"
+      : "border-[var(--border)] bg-[var(--surface-alt)] text-[var(--foreground)]";
   return <span className={`rounded-[5px] border px-2.5 py-1 text-[11px] font-medium ${cls}`}>{label}</span>;
 }
 
 function Badge({ text }: { text: string }) {
-  return <span className="rounded-[5px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-2.5 py-1 text-[11px] font-medium text-[#5DCAA5]">{text}</span>;
+  return <span className="rounded-[5px] border border-[var(--brand)]/20 bg-[var(--brand)]/8 px-2.5 py-1 text-[11px] font-medium text-[var(--brand)]">{text}</span>;
 }
 
 function InfoCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[10px] border border-[#1E2D42] bg-[#0B1220] p-4">
-      <p className="text-xs text-white/40">{label}</p>
+    <div className="rounded-[10px] border border-[var(--border)] bg-[var(--surface-alt)] p-4">
+      <p className="text-xs text-[var(--muted-soft)]">{label}</p>
       <p
-        className="mt-1.5 text-sm font-semibold text-white"
+        className="mt-1.5 text-sm font-semibold text-[var(--foreground)]"
         style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
       >
         {value}

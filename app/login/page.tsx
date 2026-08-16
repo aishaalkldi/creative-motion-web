@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useGlobalLanguage } from "@/app/components/GlobalLanguageProvider";
+import { ThemeToggle } from "@/app/components/ThemeToggle";
 import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { TrustFooter } from "../components/trust/TrustFooter";
@@ -75,6 +76,7 @@ function LoginForm() {
   const [role, setRole]         = useState<Role>(urlRole);
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError]       = useState("");
   const [loading, setLoading]   = useState(false);
 
@@ -148,39 +150,45 @@ function LoginForm() {
   }
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center bg-[#080E14] px-6 py-16 text-white">
-      {/* Subtle teal ambient — single, soft, not glowy */}
-      <div className="pointer-events-none absolute inset-0" style={{ background: "radial-gradient(ellipse 60% 40% at 50% 0%, rgba(29,158,117,0.06) 0%, transparent 70%)" }} />
+    <main className="relative flex min-h-screen items-center justify-center bg-[var(--background)] px-6 py-16 text-[var(--foreground)]">
+      {/* Subtle brand ambient */}
+      <div
+        className="pointer-events-none absolute inset-0"
+        style={{ background: "radial-gradient(ellipse 60% 40% at 50% 0%, var(--brand-glow) 0%, transparent 70%)" }}
+      />
 
       <div className="relative w-full max-w-sm">
 
         {/* Back to home */}
         <div className="mb-8 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-1.5 text-sm font-medium text-white/35 transition hover:text-white/65">
+          <Link href="/" className="flex items-center gap-1.5 text-sm font-medium text-[var(--muted)] transition hover:text-[var(--foreground)]">
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
             </svg>
             <span className="font-bold tracking-[-0.03em]">RASQ</span>
           </Link>
-          <span className="rounded-[5px] border border-[#1E2D42] bg-[#0F1825] px-2.5 py-1 text-[11px] font-semibold text-white/40">
-            {cfg.badge}
-          </span>
+          <div className="flex items-center gap-2">
+            <ThemeToggle isArabic={isArabic} />
+            <span className="rounded-full border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-1 text-[11px] font-semibold text-[var(--muted)]">
+              {cfg.badge}
+            </span>
+          </div>
         </div>
 
-        {/* Card — flat, no blur */}
-        <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-7">
+        {/* Card */}
+        <div className="rounded-[18px] border border-[var(--border)] bg-[var(--surface)] p-7 shadow-[var(--shadow-card)]">
 
           {/* Role switcher */}
-          <div className="mb-7 flex rounded-[7px] border border-[#1E2D42] bg-[#0B1220] p-0.5">
+          <div className="mb-7 flex rounded-[11px] border border-[var(--border)] bg-[var(--surface-alt)] p-0.5">
             {(["clinician", "admin"] as Role[]).map((r) => (
               <button
                 key={r}
                 type="button"
                 onClick={() => setRole(r)}
-                className={`flex-1 rounded-[6px] py-2.5 text-sm font-bold transition ${
+                className={`flex-1 rounded-[9px] py-2.5 text-sm font-bold transition ${
                   role === r
-                    ? "bg-[#1D9E75] text-white"
-                    : "text-white/35 hover:text-white/60"
+                    ? "bg-[var(--brand)] text-white shadow-sm"
+                    : "text-[var(--muted)] hover:text-[var(--foreground)]"
                 }`}
               >
                 {r === "clinician" ? (isArabic ? "مقدم الخدمة" : "Provider") : (isArabic ? "الإدارة" : "Admin")}
@@ -190,8 +198,8 @@ function LoginForm() {
 
           {/* Header */}
           <div className="mb-7">
-            <h1 className="text-xl font-bold text-white">{cfg.title}</h1>
-            <p className="mt-1.5 text-sm leading-6 text-white/45">{cfg.subtitle}</p>
+            <h1 className="text-2xl font-bold tracking-[-0.02em] text-[var(--foreground)]">{cfg.title}</h1>
+            <p className="mt-1.5 text-sm leading-6 text-[var(--muted)]">{cfg.subtitle}</p>
           </div>
 
           {/* Fields */}
@@ -200,7 +208,7 @@ function LoginForm() {
             onKeyDown={(e) => { if (e.key === "Enter") void handleLogin(); }}
           >
             <div>
-              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-white/35">
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">
                 {isArabic ? "البريد الإلكتروني" : "Email"}
               </label>
               <input
@@ -209,27 +217,46 @@ function LoginForm() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder={isArabic ? "you@clinic.com" : "you@clinic.com"}
                 autoComplete="email"
-                className="w-full rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-[#1D9E75]/40 focus:bg-[#0d1c14]"
+                className="w-full rounded-[11px] border border-[var(--border)] bg-[var(--surface-alt)] px-3.5 py-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted-soft)] focus:border-[var(--brand)]/50 focus:bg-[var(--surface)] focus:ring-2 focus:ring-[var(--brand)]/15"
               />
             </div>
 
             <div>
-              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-white/35">
+              <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-[var(--muted)]">
                 {isArabic ? "كلمة المرور" : "Password"}
               </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={isArabic ? "أدخل كلمة المرور" : "Enter password"}
-                autoComplete="current-password"
-                className="w-full rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-3 text-sm text-white outline-none placeholder:text-white/20 focus:border-[#1D9E75]/40 focus:bg-[#0d1c14]"
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={isArabic ? "أدخل كلمة المرور" : "Enter password"}
+                  autoComplete="current-password"
+                  className="w-full rounded-[11px] border border-[var(--border)] bg-[var(--surface-alt)] px-3.5 py-3 pe-11 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted-soft)] focus:border-[var(--brand)]/50 focus:bg-[var(--surface)] focus:ring-2 focus:ring-[var(--brand)]/15"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? (isArabic ? "إخفاء كلمة المرور" : "Hide password") : (isArabic ? "إظهار كلمة المرور" : "Show password")}
+                  className="absolute end-2.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-[8px] text-[var(--muted)] transition hover:text-[var(--foreground)]"
+                >
+                  {showPassword ? (
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.774 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                    </svg>
+                  ) : (
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  )}
+                </button>
+              </div>
               {SUPABASE_CONFIGURED && (
-                <div className="mt-1.5 text-right">
+                <div className="mt-1.5 text-end">
                   <Link
                     href="/reset-password"
-                    className="text-[11px] text-[#6B7280] transition hover:text-[#9CA3AF]"
+                    className="text-[11px] text-[var(--muted)] transition hover:text-[var(--brand)]"
                   >
                     {isArabic ? "هل نسيت كلمة المرور؟" : "Forgot your password?"}
                   </Link>
@@ -238,7 +265,7 @@ function LoginForm() {
             </div>
 
             {error && (
-              <div className="rounded-[7px] border border-rose-400/20 bg-rose-400/8 px-3.5 py-3 text-sm text-rose-300">
+              <div className="rounded-[11px] border border-[var(--danger)]/25 bg-[var(--danger-soft)] px-3.5 py-3 text-sm text-[var(--danger)]">
                 {error}
               </div>
             )}
@@ -248,7 +275,7 @@ function LoginForm() {
               type="button"
               onClick={() => void handleLogin()}
               disabled={loading}
-              className="w-full rounded-[7px] bg-[#1D9E75] py-3.5 text-sm font-bold text-white transition hover:bg-[#179165] disabled:cursor-not-allowed disabled:opacity-50"
+              className="w-full rounded-[11px] bg-[var(--brand)] py-3.5 text-sm font-bold text-white shadow-sm transition hover:bg-[var(--brand-dark)] disabled:cursor-not-allowed disabled:opacity-50"
             >
               {loading
                 ? (isArabic ? "جارٍ تسجيل الدخول…" : "Signing in…")
@@ -260,32 +287,32 @@ function LoginForm() {
               <button
                 type="button"
                 onClick={handleDevBypass}
-                className="w-full rounded-[7px] border border-amber-400/20 bg-amber-400/6 py-3 text-sm font-semibold text-amber-300/80 transition hover:border-amber-400/30 hover:text-amber-300"
+                className="w-full rounded-[11px] border border-[var(--warning)]/30 bg-[var(--warning-soft)] py-3 text-sm font-semibold text-[var(--warning)] transition hover:border-[var(--warning)]/50"
               >
-                {isArabic ? "تجاوز التطوير →" : "Dev bypass →"} {redirectDest}
+                {isArabic ? "تجاوز التطوير (وضع التطوير فقط) →" : "Dev bypass (development only) →"} {redirectDest}
               </button>
             )}
 
-            <p className="pt-1 text-center text-sm text-white/30">
+            <p className="pt-1 text-center text-sm text-[var(--muted)]">
               {isArabic ? "ليس لديك حساب؟" : "Don&apos;t have an account?"}{" "}
-              <Link href="/signup" className="font-semibold text-white/55 transition hover:text-white">
+              <Link href="/signup" className="font-semibold text-[var(--foreground)] transition hover:text-[var(--brand)]">
                 {isArabic ? "إنشاء حساب" : "Sign up"}
               </Link>
             </p>
 
             {process.env.NODE_ENV === "development" && (
-              <p className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5 text-center text-[11px] leading-5 text-white/20">
-                {isArabic ? "التطوير المحلي: API على" : "Local dev: API on"} <code className="text-white/35">:8000</code> · {isArabic ? " PostgreSQL في" : "PostgreSQL in"}{" "}
-                <code className="text-white/35">backend/.env</code>
+              <p className="rounded-[11px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2.5 text-center text-[11px] leading-5 text-[var(--muted-soft)]">
+                {isArabic ? "التطوير المحلي: API على" : "Local dev: API on"} <code className="text-[var(--muted)]">:8000</code> · {isArabic ? " PostgreSQL في" : "PostgreSQL in"}{" "}
+                <code className="text-[var(--muted)]">backend/.env</code>
               </p>
             )}
           </div>
         </div>
 
-        <p className="mt-4 text-center text-xs text-white/15">
+        <p className="mt-4 text-center text-xs text-[var(--muted-soft)]">
           {isArabic ? "RASQ من Creative Motion Lab · آمن · مصمم لسير العمل السريري" : "RASQ by Creative Motion Lab · Secure · Built for clinical workflows"}
         </p>
-        <TrustFooter variant="dark" className="mt-2 border-none" />
+        <TrustFooter variant="auto" className="mt-2 border-none" />
       </div>
     </main>
   );
@@ -297,8 +324,8 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center bg-[#080E14]">
-          <p className="text-sm text-white/30">Loading…</p>
+        <div className="flex min-h-screen items-center justify-center bg-[var(--background)]">
+          <p className="text-sm text-[var(--muted)]">Loading…</p>
         </div>
       }
     >

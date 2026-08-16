@@ -24,10 +24,10 @@ export function DemoOfflineBanner({ visible, notice }: DemoOfflineBannerProps) {
     <div
       role="status"
       aria-live="polite"
-      className="mb-4 rounded-[8px] border border-amber-400/30 bg-amber-400/10 px-4 py-3 text-sm text-amber-100"
+      className="mb-4 rounded-[12px] border border-[var(--warning)]/30 bg-[var(--warning-soft)] px-4 py-3 text-sm text-[var(--foreground)] shadow-[var(--shadow-card)]"
     >
-      <p className="font-semibold text-amber-50">{isArabic ? "وضع المعاينة التجريبية" : "Demo preview mode"}</p>
-      <p className="mt-1 text-amber-100/90">{bannerNotice}</p>
+      <p className="font-semibold text-[var(--warning)]">{isArabic ? "وضع المعاينة التجريبية" : "Demo preview mode"}</p>
+      <p className="mt-1 text-[var(--muted)]">{bannerNotice}</p>
     </div>
   );
 }

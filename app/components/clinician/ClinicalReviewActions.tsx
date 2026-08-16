@@ -46,7 +46,7 @@ export function ClinicalReviewActions({
 
   if (acknowledged) {
     return (
-      <p className={`text-[#5DCAA5] ${compact ? "mt-3 text-[11px]" : "mt-4 text-xs"}`}>
+      <p className={`text-[var(--brand)] ${compact ? "mt-3 text-[11px]" : "mt-4 text-xs"}`}>
         Marked as reviewed
         {acknowledgedAt
           ? ` · ${new Date(acknowledgedAt).toLocaleString()}`
@@ -100,18 +100,18 @@ export function ClinicalReviewActions({
           onChange={(e) => setNote(e.target.value)}
           placeholder="Optional review note for your records…"
           rows={2}
-          className="mb-2 w-full rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2 text-xs text-white placeholder:text-white/30 focus:border-[#1D9E75]/40 focus:outline-none"
+          className="mb-2 w-full rounded-[10px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-xs text-[var(--foreground)] placeholder:text-[var(--muted-soft)] focus:border-[var(--brand)]/50 focus:outline-none"
         />
       )}
       {error && (
-        <p className="mb-2 text-[11px] text-rose-300">{error}</p>
+        <p className="mb-2 text-[11px] text-[var(--danger)]">{error}</p>
       )}
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => void handleMarkReviewed()}
           disabled={saving}
-          className="inline-flex rounded-[7px] border border-[#1D9E75]/30 bg-[#1D9E75]/10 px-3 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/20 disabled:opacity-50"
+          className="inline-flex rounded-[10px] border border-[var(--brand)]/30 bg-[var(--brand-soft)] px-3 py-2 text-xs font-semibold text-[var(--brand)] transition hover:border-[var(--brand)]/50 disabled:opacity-50"
         >
           {saving ? "Saving…" : "Mark as reviewed"}
         </button>
@@ -119,7 +119,7 @@ export function ClinicalReviewActions({
           <button
             type="button"
             onClick={() => setShowNote(true)}
-            className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2 text-xs font-semibold text-white/55 transition hover:text-white/75"
+            className="inline-flex rounded-[10px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-xs font-semibold text-[var(--muted)] transition hover:text-[var(--foreground)]"
           >
             Add note
           </button>

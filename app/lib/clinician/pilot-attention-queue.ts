@@ -44,7 +44,7 @@ const PRIORITY_RANK: Record<PilotAttentionPriority, number> = {
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const RECENT_ACTIVITY_DAYS = 14;
 
-function patientNameById(patients: PatientRow[], patientId: string, language: PilotAttentionLanguage): string {
+function patientNameById(patients: PatientRow[], patientId: string, language: PilotAttentionLanguage = "en"): string {
   const fallback = language === "ar" ? "مريض" : "Patient";
   return patients.find((p) => p.id === patientId)?.full_name?.trim() || fallback;
 }

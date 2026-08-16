@@ -45,8 +45,8 @@ type CvReviewSummaryProps = {
 function MetricRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-      <dt className="text-[10px] uppercase tracking-[0.06em] text-[#6B7280]">{label}</dt>
-      <dd className="text-xs text-[#F9FAFB] sm:text-right">{value}</dd>
+      <dt className="text-[10px] uppercase tracking-[0.06em] text-[var(--muted)]">{label}</dt>
+      <dd className="text-xs text-[var(--foreground)] sm:text-right">{value}</dd>
     </div>
   );
 }
@@ -58,8 +58,8 @@ function SourceBadge({ source }: { source: string }) {
     <span
       className={`rounded-[5px] border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
         isPatientSession
-          ? "border-[#1D9E75]/35 bg-[#1D9E75]/12 text-[#5DCAA5]"
-          : "border-[#1E2D42] bg-[#0F1825] text-[#9CA3AF]"
+          ? "border-[var(--brand)]/35 bg-[var(--brand)]/12 text-[var(--brand)]"
+          : "border-[var(--border)] bg-[var(--surface)] text-[var(--muted)]"
       }`}
     >
       {label}
@@ -69,7 +69,7 @@ function SourceBadge({ source }: { source: string }) {
 
 function PrototypeLabel({ version }: { version: string | null | undefined }) {
   return (
-    <span className="rounded-[4px] border border-[#1E2D42] bg-[#0B1220] px-2 py-0.5 text-[10px] text-[#6B7280]">
+    <span className="rounded-[4px] border border-[var(--border)] bg-[var(--surface-alt)] px-2 py-0.5 text-[10px] text-[var(--muted)]">
       {formatCvPrototypeLabel(version)}
     </span>
   );
@@ -99,8 +99,8 @@ function SessionReviewCard({
 
   return (
     <article
-      className={`rounded-[8px] border bg-[#0B1220] p-4 ${
-        highlightPatient ? "border-[#1D9E75]/30" : "border-[#1E2D42]"
+      className={`rounded-[8px] border bg-[var(--surface-alt)] p-4 ${
+        highlightPatient ? "border-[var(--brand)]/30" : "border-[var(--border)]"
       }`}
       style={{ borderWidth: "0.5px" }}
     >
@@ -109,7 +109,7 @@ function SessionReviewCard({
           <SourceBadge source={row.source} />
           <PrototypeLabel version={row.prototypeVersion} />
           {highlightPatient ? (
-            <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[#5DCAA5]">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--brand)]">
               Portal capture
             </span>
           ) : null}
@@ -160,7 +160,7 @@ function SessionReviewCard({
       {showPatientLink && row.patientId ? (
         <Link
           href={`/clinician/patients/${row.patientId}`}
-          className="mt-3 inline-flex text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
+          className="mt-3 inline-flex text-[11px] font-semibold text-[var(--brand)] hover:text-[var(--brand)]"
         >
           Open patient profile →
         </Link>
@@ -190,12 +190,12 @@ function PatientProfileSummaryCard({ metrics }: { metrics: CvSessionMetricPublic
       ].map(({ label, value }) => (
         <div
           key={label}
-          className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5"
+          className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2.5"
           style={{ borderWidth: "0.5px" }}
         >
-          <p className="text-[10px] uppercase tracking-[0.06em] text-[#6B7280]">{label}</p>
+          <p className="text-[10px] uppercase tracking-[0.06em] text-[var(--muted)]">{label}</p>
           <p
-            className="mt-1 text-sm font-semibold text-[#F9FAFB]"
+            className="mt-1 text-sm font-semibold text-[var(--foreground)]"
             style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
           >
             {value}
@@ -218,30 +218,30 @@ function LabCvReviewSummary({
 
   return (
     <section className="mt-8">
-      <p className="text-[10px] uppercase tracking-[0.06em] text-[#9CA3AF]">CV Review Summary</p>
-      <p className="mb-2 mt-1 text-[11px] font-medium text-[#9CA3AF]">For clinician review</p>
+      <p className="text-[10px] uppercase tracking-[0.06em] text-[var(--muted)]">CV Review Summary</p>
+      <p className="mb-2 mt-1 text-[11px] font-medium text-[var(--muted)]">For clinician review</p>
 
       <div
-        className="mb-4 rounded-[8px] border border-[#1E2D42] bg-[#0F1825] px-4 py-3"
+        className="mb-4 rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-4 py-3"
         style={{ borderWidth: "0.5px" }}
       >
-        <ul className="list-disc space-y-1 pl-4 text-[11px] leading-relaxed text-[#6B7280]">
+        <ul className="list-disc space-y-1 pl-4 text-[11px] leading-relaxed text-[var(--muted)]">
           <li>Derived movement metrics only</li>
           <li>Not clinically validated</li>
           <li>No video or body coordinates stored</li>
         </ul>
-        <p className="mt-2 text-[10px] italic text-[#EF9F27]">
+        <p className="mt-2 text-[10px] italic text-amber-700 dark:text-amber-400">
           Displayed values are recorded outputs from the CV prototype. They are not a clinical
           assessment and must not be used alone for treatment decisions.
         </p>
       </div>
 
       {loading ? (
-        <p className="text-xs text-[#6B7280]">Loading review summary…</p>
+        <p className="text-xs text-[var(--muted)]">Loading review summary…</p>
       ) : error ? (
-        <p className="text-xs text-rose-300">Could not load CV review summary.</p>
+        <p className="text-xs text-rose-700 dark:text-rose-300">Could not load CV review summary.</p>
       ) : reviewMetrics.length === 0 ? (
-        <p className="rounded-[8px] border border-[#1E2D42] bg-[#0F1825] px-4 py-6 text-center text-xs text-[#6B7280]">
+        <p className="rounded-[8px] border border-[var(--border)] bg-[var(--surface)] px-4 py-6 text-center text-xs text-[var(--muted)]">
           No saved CV sessions yet. Complete a session above to review derived metrics here.
         </p>
       ) : (
@@ -249,7 +249,7 @@ function LabCvReviewSummary({
           {reviewMetrics.map((row, index) => (
             <div key={row.id}>
               {index === 0 ? (
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.06em] text-[#1D9E75]">
+                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--brand)]">
                   Latest session
                 </p>
               ) : null}
@@ -262,7 +262,7 @@ function LabCvReviewSummary({
             </div>
           ))}
           {metrics.length > (maxSessions ?? 5) ? (
-            <p className="text-[11px] text-[#6B7280]">
+            <p className="text-[11px] text-[var(--muted)]">
               Showing {maxSessions ?? 5} of {metrics.length} recent sessions. See the table below for
               the full list.
             </p>
@@ -290,24 +290,24 @@ function PatientProfileCvReview({
   return (
     <section
       id="movement-tracking-sessions"
-      className="scroll-mt-6 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6"
+      className="scroll-mt-6 rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-6"
     >
-      <h2 className="text-lg font-bold text-white">Movement tracking sessions</h2>
-      <p className="mt-2 text-[11px] leading-relaxed text-[#9CA3AF]">{CV_CLINICIAN_DISCLAIMER}</p>
-      <p className="mt-1.5 text-[11px] leading-relaxed text-[#6B7280]">
+      <h2 className="text-lg font-bold text-[var(--foreground)]">Movement tracking sessions</h2>
+      <p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">{CV_CLINICIAN_DISCLAIMER}</p>
+      <p className="mt-1.5 text-[11px] leading-relaxed text-[var(--muted)]">
         {CV_CAMERA_VISIBILITY_HELPER}
       </p>
 
       <PatientProfileSummaryCard metrics={metrics} />
 
       {hasPatientSessions ? (
-        <p className="mb-3 text-[11px] font-medium text-[#5DCAA5]">
+        <p className="mb-3 text-[11px] font-medium text-[var(--brand)]">
           {patientSessionRows.length} patient portal session
           {patientSessionRows.length === 1 ? "" : "s"} listed first for review.
         </p>
       ) : null}
 
-      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
+      <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-[var(--muted-soft)]">
         Recent sessions
       </p>
 
@@ -315,7 +315,7 @@ function PatientProfileCvReview({
         {displayMetrics.map((row, index) => (
           <div key={row.id}>
             {index === 0 ? (
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.06em] text-[#1D9E75]">
+              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.06em] text-[var(--brand)]">
                 Latest in list
               </p>
             ) : null}
@@ -330,12 +330,12 @@ function PatientProfileCvReview({
       </div>
 
       {metrics.length > maxSessions ? (
-        <p className="mt-3 text-[11px] text-[#6B7280]">
+        <p className="mt-3 text-[11px] text-[var(--muted)]">
           Showing {maxSessions} of {metrics.length} saved sessions for this patient.
         </p>
       ) : null}
 
-      <p className="mt-4 border-t border-[#1E2D42] pt-3 text-[11px] leading-relaxed text-[#6B7280]">
+      <p className="mt-4 border-t border-[var(--border)] pt-3 text-[11px] leading-relaxed text-[var(--muted)]">
         {CV_REP_COUNT_FOOTER}
       </p>
     </section>

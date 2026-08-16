@@ -267,13 +267,13 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
   }
 
   return (
-    <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
+    <section className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted-soft)]">
             AI clinical summary v2 — clinician review required
           </p>
-          <p className="mt-1 text-xs leading-relaxed text-white/45">
+          <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">
             {AI_CLINICIAN_SUMMARY_DISCLAIMER}
           </p>
         </div>
@@ -288,9 +288,9 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
 
       {fallbackNotice && (
         <div className="mt-3 rounded-[6px] border border-amber-400/25 bg-amber-400/5 px-3 py-2">
-          <p className="text-xs text-amber-200">{fallbackNotice}</p>
+          <p className="text-xs text-amber-800 dark:text-amber-200">{fallbackNotice}</p>
           {cardState === "idle" ? (
-            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-amber-300/80">
+            <p className="mt-1 text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300/80">
               Rules-based fallback · clinician review required
             </p>
           ) : null}
@@ -302,29 +302,29 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
           value={editedSummary ?? draftSummary ?? ""}
           onChange={(e) => setEditedSummary(e.target.value)}
           rows={5}
-          className="mt-4 w-full rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5 text-sm leading-relaxed text-white/80 outline-none focus:border-[#1D9E75]/40"
+          className="mt-4 w-full rounded-[7px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2.5 text-sm leading-relaxed text-[var(--foreground)] outline-none focus:border-[var(--brand)]/40"
         />
       ) : sections && !isEditing ? (
         <div className="mt-4 space-y-3">
           {AI_CLINICIAN_SUMMARY_V2_SECTION_KEYS.map((key) => (
-              <div key={key} className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+              <div key={key} className="rounded-[7px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2.5">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-[var(--muted-soft)]">
                   {AI_CLINICIAN_SUMMARY_V2_SECTION_LABELS[key]}
                 </p>
-                <p className="mt-1 text-sm leading-relaxed text-white/75 whitespace-pre-wrap">
+                <p className="mt-1 text-sm leading-relaxed text-[var(--foreground)] whitespace-pre-wrap">
                   {sections[key]}
                 </p>
               </div>
           ))}
         </div>
       ) : displayText ? (
-        <p className="mt-4 text-sm leading-relaxed text-white/75 whitespace-pre-wrap">
+        <p className="mt-4 text-sm leading-relaxed text-[var(--foreground)] whitespace-pre-wrap">
           {displayText}
         </p>
       ) : null}
 
       {generatedAt && displayText && (
-        <p className="mt-2 text-[11px] text-white/25">
+        <p className="mt-2 text-[11px] text-[var(--muted-soft)]">
           Generated {new Date(generatedAt).toLocaleString()}
         </p>
       )}
@@ -334,7 +334,7 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
           type="button"
           onClick={() => void generateSummary()}
           disabled={cardState === "loading" || isHydrating || isApproving}
-          className="rounded-[7px] border border-[#1D9E75]/30 bg-[#1D9E75]/10 px-3.5 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15 disabled:opacity-50"
+          className="rounded-[7px] border border-[var(--brand)]/30 bg-[var(--brand)]/10 px-3.5 py-2 text-xs font-semibold text-[var(--brand)] transition hover:bg-[var(--brand)]/15 disabled:opacity-50"
         >
           {cardState === "loading"
             ? "Generating…"
@@ -349,7 +349,7 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
               type="button"
               onClick={() => void handleApprove()}
               disabled={isApproving || isHydrating || !summaryId}
-              className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/70 transition hover:text-white disabled:opacity-50"
+              className="rounded-[7px] border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2 text-xs font-semibold text-[var(--foreground)] transition hover:text-[var(--foreground)] disabled:opacity-50"
             >
               {isApproving ? "Approving…" : "Approve"}
             </button>
@@ -362,7 +362,7 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
                 }
               }}
               disabled={isApproving}
-              className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/70 transition hover:text-white disabled:opacity-50"
+              className="rounded-[7px] border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2 text-xs font-semibold text-[var(--foreground)] transition hover:text-[var(--foreground)] disabled:opacity-50"
             >
               {isEditing ? "Done editing" : "Edit"}
             </button>
@@ -374,7 +374,7 @@ export function AiClinicianSummaryCard({ patientId, planId }: AiClinicianSummary
             type="button"
             onClick={handleDismiss}
             disabled={isApproving}
-            className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/50 transition hover:text-white/70 disabled:opacity-50"
+            className="rounded-[7px] border border-[var(--border)] bg-[var(--surface)] px-3.5 py-2 text-xs font-semibold text-[var(--muted)] transition hover:text-[var(--foreground)]/70 disabled:opacity-50"
           >
             Dismiss
           </button>

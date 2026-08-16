@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useGlobalLanguage } from "@/app/components/GlobalLanguageProvider";
+import { ThemeToggle } from "@/app/components/ThemeToggle";
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Hooks
@@ -46,15 +47,12 @@ type UiLanguage = "en" | "ar";
 const uiCopy = {
   en: {
     nav: {
-      assess: "Assess",
-      treat: "Treat",
-      track: "Track",
-      providers: "Providers",
-      patients: "Patients",
+      how: "How it works",
+      providers: "For Providers",
+      patients: "For Patients",
       login: "Login",
     },
     hero: {
-      eyebrow: "CLINIC-LED REMOTE REHABILITATION PLATFORM",
       headline: "Clinic-led remote rehabilitation",
       headlineAccent: "from assessment to progress tracking.",
       tagline: "Rehabilitation, precisely.",
@@ -68,9 +66,6 @@ const uiCopy = {
       rehab: "Specialty rehab",
       panelPatient: "Patient",
       panelWeek: "Week 4 / 8",
-      patientName: "Sarah Al-Ahmad",
-      patientMeta: "ACL Rehabilitation · Phase 2",
-      active: "Active",
       recovery: "Recovery Progress",
       knee: "Knee Bend",
       balance: "Leg Balance",
@@ -158,15 +153,12 @@ const uiCopy = {
   },
   ar: {
     nav: {
-      assess: "التقييم",
-      treat: "العلاج",
-      track: "المتابعة",
-      providers: "مقدمو الرعاية",
-      patients: "المرضى",
+      how: "كيف تعمل",
+      providers: "لمقدمي الرعاية",
+      patients: "للمرضى",
       login: "تسجيل الدخول",
     },
     hero: {
-      eyebrow: "منصة إعادة التأهيل عن بُعد بقيادة العيادة",
       headline: "إعادة تأهيل عن بُعد بقيادة العيادة",
       headlineAccent: "من التقييم إلى متابعة التقدم.",
       tagline: "إعادة التأهيل بدقة.",
@@ -180,9 +172,6 @@ const uiCopy = {
       rehab: "إعادة التأهيل المتخصصة",
       panelPatient: "المريض",
       panelWeek: "الأسبوع 4 / 8",
-      patientName: "سارة الأحمد",
-      patientMeta: "إعادة تأهيل الرباط الصليبي · المرحلة 2",
-      active: "نشط",
       recovery: "تقدم التعافي",
       knee: "انثناء الركبة",
       balance: "توازن الساق",
@@ -286,14 +275,15 @@ function ArcMark({ size = 20, animate = false }: { size?: number; animate?: bool
     >
       <path
         d="M10 2C5.582 2 2 5.582 2 10s3.582 8 8 8"
-        stroke="var(--rasq-teal, #1D9E75)"
+        stroke="var(--brand)"
         strokeWidth="2.2"
         strokeLinecap="round"
         className={animate ? "rasq-arc-outer" : ""}
       />
       <path
         d="M10 5.5C7.515 5.5 5.5 7.515 5.5 10S7.515 14.5 10 14.5"
-        stroke="var(--rasq-mint, #5DCAA5)"
+        stroke="var(--brand)"
+        strokeOpacity="0.55"
         strokeWidth="1.8"
         strokeLinecap="round"
         className={animate ? "rasq-arc-inner" : ""}
@@ -302,7 +292,7 @@ function ArcMark({ size = 20, animate = false }: { size?: number; animate?: bool
         cx="10"
         cy="10"
         r="1.5"
-        fill="var(--rasq-teal, #1D9E75)"
+        fill="var(--brand)"
         className={animate ? "rasq-arc-dot" : ""}
       />
     </svg>
@@ -310,36 +300,35 @@ function ArcMark({ size = 20, animate = false }: { size?: number; animate?: bool
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   Section 1 — Navbar (52px sticky)
+   Section 1 — Navbar (60px sticky)
    ═══════════════════════════════════════════════════════════════════════════ */
 
 function Navbar({ language }: { language: UiLanguage }) {
   const copy = uiCopy[language];
+  const isArabic = language === "ar";
 
   return (
     <header
-      className="sticky top-0 z-50 border-b border-[#1E2D42] bg-[#080E14]"
-      style={{ height: "52px" }}
+      className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur"
+      style={{ height: "60px" }}
     >
       <div className="mx-auto flex h-full max-w-6xl items-center justify-between gap-3 px-6">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
-          <ArcMark size={20} animate />
+          <ArcMark size={22} animate />
           <span
-            className="text-[15px] font-bold tracking-[-0.03em] text-white"
+            className="text-[16px] font-bold tracking-[-0.03em] text-[var(--foreground)]"
             style={{ fontFamily: "var(--rasq-font-display)" }}
           >
             RASQ
           </span>
         </Link>
 
-        {/* Primary nav — action-oriented, no Solutions, no Support */}
+        {/* Primary nav — simplified: How it works / Providers / Patients */}
         <nav className="hidden items-center gap-0.5 md:flex">
           {(
             [
-              [copy.nav.assess, "#platform"],
-              [copy.nav.treat, "#platform"],
-              [copy.nav.track, "#platform"],
+              [copy.nav.how, "#platform"],
               [copy.nav.providers, "#providers"],
               [copy.nav.patients, "#patients"],
             ] as [string, string][]
@@ -347,17 +336,18 @@ function Navbar({ language }: { language: UiLanguage }) {
             <a
               key={label}
               href={href}
-              className="rounded-[7px] px-3.5 py-2 text-sm text-white/40 transition-colors hover:bg-[#0F1825] hover:text-white"
+              className="rounded-[9px] px-3.5 py-2 text-sm font-medium text-[var(--muted)] transition-colors hover:bg-[var(--surface-alt)] hover:text-[var(--foreground)]"
             >
               {label}
             </a>
           ))}
         </nav>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
+          <ThemeToggle isArabic={isArabic} />
           <Link
             href="/login"
-            className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-5 py-2 text-sm font-semibold text-white transition hover:border-[#1D9E75]/40 hover:text-[#5DCAA5]"
+            className="rounded-[10px] border border-[var(--border)] bg-[var(--surface-alt)] px-5 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--brand)]/40 hover:text-[var(--brand)]"
           >
             {copy.nav.login}
           </Link>
@@ -380,15 +370,15 @@ function HeroSection({ language }: { language: UiLanguage }) {
 
   return (
     <section
-      className="relative overflow-hidden bg-[#080E14]"
+      className="relative overflow-hidden bg-[var(--background)]"
       id="hero"
     >
       {/* Subtle ambient glow — behind left copy only */}
       <div
-        className="pointer-events-none absolute left-0 top-0 h-[520px] w-[520px] opacity-[0.06]"
+        className="pointer-events-none absolute left-0 top-0 h-[520px] w-[520px]"
         style={{
           background:
-            "radial-gradient(ellipse at 30% 40%, var(--rasq-teal) 0%, transparent 68%)",
+            "radial-gradient(ellipse at 30% 40%, var(--brand-glow) 0%, transparent 68%)",
         }}
       />
 
@@ -398,39 +388,22 @@ function HeroSection({ language }: { language: UiLanguage }) {
           {/* ── Left: Copy ── */}
           <div className="flex flex-col">
 
-            {/* Eyebrow */}
-            <div
-              className="rasq-stagger-item inline-flex w-fit items-center gap-2 rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-1.5"
-              style={{ animationDelay: "0ms" }}
-            >
-              <span
-                className="h-1.5 w-1.5 rounded-full bg-[#1D9E75]"
-                style={{ boxShadow: "0 0 6px #1D9E75" }}
-              />
-              <span
-                className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#5DCAA5]/80"
-                style={{ fontFamily: "var(--rasq-font-mono)" }}
-              >
-                {copy.hero.eyebrow}
-              </span>
-            </div>
-
             {/* Headline */}
             <h1
-              className="rasq-stagger-item mt-6 text-[2.4rem] font-bold leading-[1.08] tracking-[-0.025em] text-white lg:text-[2.85rem]"
+              className="rasq-stagger-item text-[2.4rem] font-bold leading-[1.08] tracking-[-0.025em] text-[var(--foreground)] lg:text-[2.85rem]"
               style={{
-                animationDelay: "40ms",
+                animationDelay: "0ms",
                 fontFamily: "var(--rasq-font-display)",
               }}
             >
               {copy.hero.headline}
               <br />
-              <span className="text-white/55">{copy.hero.headlineAccent}</span>
+              <span className="text-[var(--muted)]">{copy.hero.headlineAccent}</span>
             </h1>
 
             {/* Tagline — muted, below headline, not competing */}
             <p
-              className="rasq-stagger-item mt-4 text-sm font-semibold uppercase tracking-[0.12em] text-white/30"
+              className="rasq-stagger-item mt-4 text-sm font-semibold uppercase tracking-[0.12em] text-[var(--muted-soft)]"
               style={{ animationDelay: "80ms" }}
             >
               {copy.hero.tagline}
@@ -438,7 +411,7 @@ function HeroSection({ language }: { language: UiLanguage }) {
 
             {/* Subheadline */}
             <p
-              className="rasq-stagger-item mt-4 max-w-xl text-base leading-7 text-white/45"
+              className="rasq-stagger-item mt-4 max-w-xl text-base leading-7 text-[var(--muted)]"
               style={{ animationDelay: "120ms" }}
             >
               {copy.hero.subheadline}
@@ -451,13 +424,13 @@ function HeroSection({ language }: { language: UiLanguage }) {
             >
               <Link
                 href="/login?role=clinician"
-                className="rounded-[7px] bg-[#1D9E75] px-6 py-2.5 text-sm font-semibold text-white transition hover:bg-[#179165]"
+                className="rounded-[11px] bg-[var(--brand)] px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--brand-dark)]"
               >
                 {copy.hero.providers}
               </Link>
               <a
                 href="#patients"
-                className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-6 py-2.5 text-sm font-semibold text-white/70 transition hover:border-[#1D9E75]/30 hover:text-white"
+                className="rounded-[11px] border border-[var(--border)] bg-[var(--surface-alt)] px-6 py-2.5 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--brand)]/40 hover:text-[var(--brand)]"
               >
                 {copy.hero.patients}
               </a>
@@ -465,14 +438,14 @@ function HeroSection({ language }: { language: UiLanguage }) {
 
             {/* Stats */}
             <p
-              className="rasq-stagger-item mt-10 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-white/25"
+              className="rasq-stagger-item mt-10 text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--muted-soft)]"
               style={{ animationDelay: "200ms" }}
             >
               {copy.hero.statsLabel}
             </p>
             <div
               ref={statsRef as React.RefObject<HTMLDivElement>}
-              className="rasq-stagger-item mt-2 grid grid-cols-3 divide-x divide-[#1E2D42] border border-[#1E2D42] rounded-[10px] overflow-hidden"
+              className="rasq-stagger-item mt-2 grid grid-cols-3 divide-x divide-[var(--border)] border border-[var(--border)] rounded-[14px] overflow-hidden"
               style={{ animationDelay: "200ms" }}
             >
               {[
@@ -480,15 +453,15 @@ function HeroSection({ language }: { language: UiLanguage }) {
                 { val: c2, suffix: "+", label: copy.hero.templates },
                 { val: c3, suffix: language === "ar" ? " مسارات" : " pathways", label: copy.hero.rehab },
               ].map(({ val, suffix, label }) => (
-                <div key={label} className="flex flex-col items-center px-4 py-4 bg-[#0F1825]">
+                <div key={label} className="flex flex-col items-center px-4 py-4 bg-[var(--surface-alt)]">
                   <span
-                    className="text-2xl font-bold text-white"
+                    className="text-2xl font-bold text-[var(--foreground)]"
                     style={{ fontFamily: "var(--rasq-font-mono)" }}
                   >
                     {val}
-                    <span className="text-sm text-[#5DCAA5]">{suffix}</span>
+                    <span className="text-sm text-[var(--brand)]">{suffix}</span>
                   </span>
-                  <span className="mt-1 text-[11px] text-white/35 text-center leading-4">{label}</span>
+                  <span className="mt-1 text-[11px] text-[var(--muted)] text-center leading-4">{label}</span>
                 </div>
               ))}
             </div>
@@ -496,71 +469,48 @@ function HeroSection({ language }: { language: UiLanguage }) {
 
           {/* ── Right: Live product UI cards — in a styled viewport wrapper ── */}
           <div
-            className="rasq-stagger-item rounded-[10px] p-8 flex flex-col gap-3"
-            style={{
-              animationDelay: "100ms",
-              background: "#0B1220",
-              border: "0.5px solid #1E2D42",
-            }}
+            className="rasq-stagger-item rounded-[16px] border border-[var(--border)] bg-[var(--surface-alt)] p-8 flex flex-col gap-3 shadow-[var(--shadow-card)]"
+            style={{ animationDelay: "100ms" }}
           >
             {/* Card 1 — Patient recovery card */}
-            <div
-              className="rounded-[10px] p-5"
-              style={{
-                background: "var(--rasq-card)",
-                border: "0.5px solid var(--rasq-border)",
-              }}
-            >
+            <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
               {/* Card header */}
               <div className="flex items-center justify-between">
                 <span
-                  className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/30"
+                  className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--muted-soft)]"
                   style={{ fontFamily: "var(--rasq-font-mono)" }}
                 >
                   {copy.hero.panelPatient}
                 </span>
                 <span
-                  className="text-[10px] font-semibold text-[#5DCAA5]"
+                  className="text-[10px] font-semibold text-[var(--brand)]"
                   style={{ fontFamily: "var(--rasq-font-mono)" }}
                 >
                   {copy.hero.panelWeek}
                 </span>
               </div>
 
-              {/* Patient info */}
-              <div className="mt-3 flex items-start justify-between gap-2">
-                <div>
-                  <p className="text-sm font-semibold text-white">{copy.hero.patientName}</p>
-                  <p className="mt-0.5 text-xs text-white/40">
-                    {copy.hero.patientMeta}
-                  </p>
-                </div>
-                <span className="mt-0.5 rounded-[5px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-2 py-0.5 text-[10px] font-semibold text-[#5DCAA5]">
-                  {copy.hero.active}
-                </span>
-              </div>
-
               {/* Progress bar */}
               <div className="mt-4">
                 <div className="mb-1.5 flex items-center justify-between">
-                  <span className="text-[11px] text-white/35">{copy.hero.recovery}</span>
+                  <span className="text-[11px] text-[var(--muted)]">{copy.hero.recovery}</span>
                   <span
-                    className="text-[11px] font-semibold text-[#5DCAA5]"
+                    className="text-[11px] font-semibold text-[var(--brand)]"
                     style={{ fontFamily: "var(--rasq-font-mono)" }}
                   >
                     67%
                   </span>
                 </div>
-                <div className="h-1.5 w-full rounded-full bg-[#1E2D42]">
+                <div className="h-1.5 w-full rounded-full bg-[var(--border)]">
                   <div
-                    className="h-full rounded-full bg-[#1D9E75]"
+                    className="h-full rounded-full bg-[var(--brand)]"
                     style={{ width: "67%" }}
                   />
                 </div>
               </div>
 
               {/* Metrics row */}
-              <div className="mt-4 grid grid-cols-3 divide-x divide-[#1E2D42] rounded-[8px] border border-[#1E2D42] overflow-hidden">
+              <div className="mt-4 grid grid-cols-3 divide-x divide-[var(--border)] rounded-[10px] border border-[var(--border)] overflow-hidden">
                 {[
                   { label: copy.hero.knee, val: "108°" },
                   { label: copy.hero.balance, val: "74%" },
@@ -568,12 +518,12 @@ function HeroSection({ language }: { language: UiLanguage }) {
                 ].map(({ label, val }) => (
                   <div key={label} className="flex flex-col items-center px-2 py-2.5">
                     <span
-                      className="text-sm font-bold text-white"
+                      className="text-sm font-bold text-[var(--foreground)]"
                       style={{ fontFamily: "var(--rasq-font-mono)" }}
                     >
                       {val}
                     </span>
-                    <span className="mt-0.5 text-[10px] text-white/30 text-center leading-3">
+                    <span className="mt-0.5 text-[10px] text-[var(--muted-soft)] text-center leading-3">
                       {label}
                     </span>
                   </div>
@@ -582,21 +532,15 @@ function HeroSection({ language }: { language: UiLanguage }) {
             </div>
 
             {/* Card 2 — RASQ Intelligence */}
-            <div
-              className="rounded-[10px] p-5"
-              style={{
-                background: "var(--rasq-card)",
-                border: "0.5px solid var(--rasq-border)",
-              }}
-            >
+            <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface)] p-5">
               <div className="flex items-center justify-between">
                 <span
-                  className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/30"
+                  className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[var(--muted-soft)]"
                   style={{ fontFamily: "var(--rasq-font-mono)" }}
                 >
                   {copy.hero.intelligence}
                 </span>
-                <span className="rounded-[5px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-[#5DCAA5]/70">
+                <span className="rounded-full border border-[var(--brand)]/25 bg-[var(--brand-soft)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-[var(--brand)]">
                   {copy.hero.aiDraft}
                 </span>
               </div>
@@ -605,15 +549,15 @@ function HeroSection({ language }: { language: UiLanguage }) {
                 {[copy.hero.aiBlurb1, copy.hero.aiBlurb2].map((item) => (
                   <li key={item} className="flex gap-2.5">
                     <span
-                      className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#1D9E75]"
+                      className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--brand)]"
                       style={{ marginTop: "5px" }}
                     />
-                    <span className="text-xs leading-5 text-white/55">{item}</span>
+                    <span className="text-xs leading-5 text-[var(--muted)]">{item}</span>
                   </li>
                 ))}
               </ul>
 
-              <p className="mt-4 border-t border-[#1E2D42] pt-3 text-[10px] text-white/20">
+              <p className="mt-4 border-t border-[var(--border)] pt-3 text-[10px] text-[var(--muted-soft)]">
                 {copy.hero.decisionSupport}
               </p>
             </div>
@@ -635,12 +579,12 @@ function TrustBar({ language }: { language: UiLanguage }) {
   return (
     <section
       ref={ref as React.RefObject<HTMLElement>}
-      className={`border-y border-[#1E2D42] bg-[#0B1220] rasq-reveal ${revealed ? "is-revealed" : ""}`}
+      className={`border-y border-[var(--border)] bg-[var(--surface-alt)] rasq-reveal ${revealed ? "is-revealed" : ""}`}
     >
-      <div className="mx-auto grid max-w-6xl grid-cols-1 divide-y divide-[#1E2D42] px-6 py-0 md:grid-cols-3 md:divide-x md:divide-y-0">
+      <div className="mx-auto grid max-w-6xl grid-cols-1 divide-y divide-[var(--border)] px-6 py-0 md:grid-cols-3 md:divide-x md:divide-y-0">
         {items.map((text) => (
           <div key={text} className="px-6 py-5">
-            <span className="text-sm leading-5 text-white/45">{text}</span>
+            <span className="text-sm leading-5 text-[var(--muted)]">{text}</span>
           </div>
         ))}
       </div>
@@ -660,19 +604,19 @@ function WorkflowSection({ language }: { language: UiLanguage }) {
     <section
       id="platform"
       ref={ref as React.RefObject<HTMLElement>}
-      className="bg-[#080E14] py-20 lg:py-28"
+      className="bg-[var(--background)] py-20 lg:py-28"
     >
       <div className="mx-auto max-w-6xl px-6">
         {/* Header */}
         <div className={`rasq-reveal ${revealed ? "is-revealed" : ""}`}>
           <p
-            className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]"
+            className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--brand)]"
             style={{ fontFamily: "var(--rasq-font-mono)" }}
           >
             {copy.label}
           </p>
           <h2
-            className="mt-2 text-2xl font-bold tracking-tight text-white lg:text-3xl"
+            className="mt-2 text-2xl font-bold tracking-tight text-[var(--foreground)] lg:text-3xl"
             style={{ fontFamily: "var(--rasq-font-display)" }}
           >
             {copy.title}
@@ -688,21 +632,21 @@ function WorkflowSection({ language }: { language: UiLanguage }) {
               {/* Connector — rendered as sibling overlay, not inside the step */}
               {i < copy.steps.length - 1 && (
                 <div
-                  className={`rasq-connector absolute left-[calc(100%+0px)] top-[22px] hidden h-px w-full bg-[#1E2D42] sm:block ${revealed ? "is-revealed" : ""}`}
+                  className={`rasq-connector absolute left-[calc(100%+0px)] top-[22px] hidden h-px w-full bg-[var(--border)] sm:block ${revealed ? "is-revealed" : ""}`}
                   style={{ width: "calc(100% - 44px)", left: "calc(50% + 22px)" }}
                 />
               )}
               {/* Step badge */}
-              <div className="flex h-11 w-11 items-center justify-center rounded-[8px] border border-[#1E2D42] bg-[#0F1825]">
+              <div className="flex h-11 w-11 items-center justify-center rounded-[12px] border border-[var(--border)] bg-[var(--surface-alt)]">
                 <span
-                  className="text-xs font-bold text-[#5DCAA5]"
+                  className="text-xs font-bold text-[var(--brand)]"
                   style={{ fontFamily: "var(--rasq-font-mono)" }}
                 >
                   {step.num}
                 </span>
               </div>
-              <p className="mt-3 text-sm font-semibold text-white">{step.label}</p>
-              <p className="mt-1.5 text-xs leading-5 text-white/35">{step.desc}</p>
+              <p className="mt-3 text-sm font-semibold text-[var(--foreground)]">{step.label}</p>
+              <p className="mt-1.5 text-xs leading-5 text-[var(--muted)]">{step.desc}</p>
             </div>
           ))}
         </div>
@@ -717,17 +661,17 @@ function WorkflowSection({ language }: { language: UiLanguage }) {
 
 const RECOVERY_TIMELINE = {
   en: [
-    { week: "Week 1", title: "Initial Assessment", detail: "Pain 6/10 · ROM 72° · Phase 1 initiated" },
-    { week: "Week 3", title: "Progress Check", detail: "Pain 3/10 · ROM 88° · Movement quality improving" },
-    { week: "Week 6", title: "Phase Transition", detail: "Phase 1 complete · Cleared for Phase 2 exercises" },
-    { week: "Week 8", title: "Strength Review", detail: "Load symmetry 74% · Dynamic control exercises added" },
+    { week: "Week 1", title: "Initial Assessment", detail: "Pain 6/10 · ROM 72° · Phase 1 initiated", pending: false },
+    { week: "Week 3", title: "Progress Check", detail: "Pain 3/10 · ROM 88° · Movement quality improving", pending: false },
+    { week: "Week 6", title: "Phase Transition", detail: "Phase 1 complete · Cleared for Phase 2 exercises", pending: false },
+    { week: "Week 8", title: "Strength Review", detail: "Load symmetry 74% · Dynamic control exercises added", pending: false },
     { week: "Week 10", title: "Return Assessment", detail: "Return to sport evaluation — scheduled", pending: true },
   ],
   ar: [
-    { week: "الأسبوع 1", title: "التقييم الأولي", detail: "الألم 6/10 · المدى 72° · بدأت المرحلة 1" },
-    { week: "الأسبوع 3", title: "فحص التقدم", detail: "الألم 3/10 · المدى 88° · جودة الحركة تتحسن" },
-    { week: "الأسبوع 6", title: "انتقال المرحلة", detail: "اكتملت المرحلة 1 · تم السماح بتمارين المرحلة 2" },
-    { week: "الأسبوع 8", title: "مراجعة القوة", detail: "تناسق الحمل 74% · تم إضافة تمارين التحكم الديناميكي" },
+    { week: "الأسبوع 1", title: "التقييم الأولي", detail: "الألم 6/10 · المدى 72° · بدأت المرحلة 1", pending: false },
+    { week: "الأسبوع 3", title: "فحص التقدم", detail: "الألم 3/10 · المدى 88° · جودة الحركة تتحسن", pending: false },
+    { week: "الأسبوع 6", title: "انتقال المرحلة", detail: "اكتملت المرحلة 1 · تم السماح بتمارين المرحلة 2", pending: false },
+    { week: "الأسبوع 8", title: "مراجعة القوة", detail: "تناسق الحمل 74% · تم إضافة تمارين التحكم الديناميكي", pending: false },
     { week: "الأسبوع 10", title: "تقييم العودة", detail: "تقييم العودة إلى الرياضة — مجدول", pending: true },
   ],
 } as const;
@@ -753,62 +697,62 @@ function IntelligenceSection({ language }: { language: UiLanguage }) {
   return (
     <section
       ref={ref as React.RefObject<HTMLElement>}
-      className="bg-[#0B1220] py-20 lg:py-28"
+      className="bg-[var(--surface-alt)] py-20 lg:py-28"
     >
       <div className="mx-auto max-w-6xl px-6">
         <div className={`rasq-reveal ${revealed ? "is-revealed" : ""}`}>
           <p
-            className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]"
+            className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--brand)]"
             style={{ fontFamily: "var(--rasq-font-mono)" }}
           >
             {copy.label}
           </p>
           <h2
-            className="mt-2 text-2xl font-bold tracking-tight text-white lg:text-3xl"
+            className="mt-2 text-2xl font-bold tracking-tight text-[var(--foreground)] lg:text-3xl"
             style={{ fontFamily: "var(--rasq-font-display)" }}
           >
             {copy.title}
           </h2>
-          <p className="mt-3 max-w-lg text-sm leading-6 text-white/40">
+          <p className="mt-3 max-w-lg text-sm leading-6 text-[var(--muted)]">
             {copy.intro}
           </p>
         </div>
 
         <div className="mt-12 grid items-start gap-10 lg:grid-cols-2">
           {/* Recovery timeline */}
-          <div className={`rasq-reveal ${revealed ? "is-revealed" : ""}`} style={{ transitionDelay: "80ms" }}>
-            <p className="mb-5 text-xs font-semibold uppercase tracking-[0.1em] text-white/30">
+          <div className={`rasq-reveal rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)] ${revealed ? "is-revealed" : ""}`} style={{ transitionDelay: "80ms" }}>
+            <p className="mb-5 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--muted-soft)]">
               {copy.patientJourney}
             </p>
             <div className="relative space-y-0">
               {/* Vertical connector line */}
-              <div className="absolute left-[11px] top-3 bottom-3 w-px bg-[#1E2D42]" />
+              <div className="absolute left-[11px] top-3 bottom-3 w-px bg-[var(--border)]" />
               {recoveryItems.map((item) => (
                 <div key={item.week} className="relative flex gap-5 pb-6 last:pb-0">
                   <div
                     className={`relative z-10 mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border ${
                       item.pending
-                        ? "border-[#1E2D42] bg-[#0B1220]"
-                        : "border-[#1D9E75]/40 bg-[#0B1220]"
+                        ? "border-[var(--border)] bg-[var(--surface-alt)]"
+                        : "border-[var(--brand)]/40 bg-[var(--surface-alt)]"
                     }`}
                   >
                     {item.pending ? (
-                      <span className="h-2 w-2 rounded-full border border-[#1E2D42]" />
+                      <span className="h-2 w-2 rounded-full border border-[var(--border)]" />
                     ) : (
-                      <span className="h-2 w-2 rounded-full bg-[#1D9E75]" />
+                      <span className="h-2 w-2 rounded-full bg-[var(--brand)]" />
                     )}
                   </div>
                   <div className="flex-1 pt-0.5">
                     <div className="flex items-center gap-2.5">
                       <span
-                        className="text-[10px] font-bold text-[#5DCAA5]"
+                        className="text-[10px] font-bold text-[var(--brand)]"
                         style={{ fontFamily: "var(--rasq-font-mono)" }}
                       >
                         {item.week}
                       </span>
-                      <span className="text-sm font-semibold text-white">{item.title}</span>
+                      <span className="text-sm font-semibold text-[var(--foreground)]">{item.title}</span>
                     </div>
-                    <p className="mt-0.5 text-xs text-white/35">{item.detail}</p>
+                    <p className="mt-0.5 text-xs text-[var(--muted)]">{item.detail}</p>
                   </div>
                 </div>
               ))}
@@ -817,52 +761,48 @@ function IntelligenceSection({ language }: { language: UiLanguage }) {
 
           {/* RASQ Intelligence panel */}
           <div
-            className={`rasq-reveal rounded-[10px] ${revealed ? "is-revealed" : ""}`}
-            style={{
-              background: "var(--rasq-card)",
-              border: "0.5px solid var(--rasq-border)",
-              transitionDelay: "140ms",
-            }}
+            className={`rasq-reveal rounded-[16px] border border-[var(--border)] bg-[var(--surface)] shadow-[var(--shadow-card)] ${revealed ? "is-revealed" : ""}`}
+            style={{ transitionDelay: "140ms" }}
           >
-            <div className="flex items-center justify-between border-b border-[#1E2D42] px-5 py-4">
+            <div className="flex items-center justify-between border-b border-[var(--border)] px-5 py-4">
               <div className="flex items-center gap-2">
                 <ArcMark size={14} />
                 <span
-                  className="text-xs font-bold text-white"
+                  className="text-xs font-bold text-[var(--foreground)]"
                   style={{ fontFamily: "var(--rasq-font-mono)" }}
                 >
                   {copy.label === "Intelligence proof" ? "RASQ Intelligence" : "ذكاء RASQ"}
                 </span>
               </div>
-              <span className="rounded-[5px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-[#5DCAA5]/70">
+              <span className="rounded-full border border-[var(--brand)]/25 bg-[var(--brand-soft)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.08em] text-[var(--brand)]">
                 {copy.draft}
               </span>
             </div>
 
-            <div className="divide-y divide-[#1E2D42]">
+            <div className="divide-y divide-[var(--border)]">
               {INTELLIGENCE_ITEMS[language].map((item) => (
                 <div key={item.signal} className="px-5 py-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-white/55">{item.signal}</span>
+                    <span className="text-xs font-semibold text-[var(--muted)]">{item.signal}</span>
                     <div className="flex items-center gap-2">
                       <span
-                        className="text-sm font-bold text-white"
+                        className="text-sm font-bold text-[var(--foreground)]"
                         style={{ fontFamily: "var(--rasq-font-mono)" }}
                       >
                         {item.value}
                       </span>
-                      <span className="rounded-[5px] bg-[#1D9E75]/10 px-2 py-0.5 text-[10px] font-semibold text-[#5DCAA5]">
+                      <span className="rounded-full bg-[var(--brand-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--brand)]">
                         {item.status}
                       </span>
                     </div>
                   </div>
-                  <p className="mt-1 text-[11px] leading-4 text-white/30">{item.note}</p>
+                  <p className="mt-1 text-[11px] leading-4 text-[var(--muted-soft)]">{item.note}</p>
                 </div>
               ))}
             </div>
 
-            <div className="border-t border-[#1E2D42] px-5 py-3">
-              <p className="text-[10px] text-white/20">
+            <div className="border-t border-[var(--border)] px-5 py-3">
+              <p className="text-[10px] text-[var(--muted-soft)]">
                 {language === "ar"
                   ? "دعم القرار السريري · ليس تشخيصًا · يلزم مراجعة الطبيب"
                   : "Clinical decision support · Not a diagnosis · Therapist review required"}
@@ -887,84 +827,84 @@ function DualPathwaySection({ language }: { language: UiLanguage }) {
     <section
       id="providers"
       ref={ref as React.RefObject<HTMLElement>}
-      className={`rasq-reveal overflow-hidden ${revealed ? "is-revealed" : ""}`}
+      className={`rasq-reveal overflow-hidden bg-[var(--background)] ${revealed ? "is-revealed" : ""}`}
     >
       <div className="mx-auto max-w-6xl px-6 py-20 lg:py-28">
         <div className={`rasq-reveal ${revealed ? "is-revealed" : ""}`}>
           <p
-            className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]"
+            className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--brand)]"
             style={{ fontFamily: "var(--rasq-font-mono)" }}
           >
             {copy.label}
           </p>
           <h2
-            className="mt-2 text-2xl font-bold tracking-tight text-white lg:text-3xl"
+            className="mt-2 text-2xl font-bold tracking-tight text-[var(--foreground)] lg:text-3xl"
             style={{ fontFamily: "var(--rasq-font-display)" }}
           >
             {copy.title}
           </h2>
         </div>
 
-        <div className="mt-10 grid grid-cols-1 overflow-hidden rounded-[12px] border border-[#1E2D42] lg:grid-cols-2">
+        <div className="mt-10 grid grid-cols-1 overflow-hidden rounded-[18px] border border-[var(--border)] shadow-[var(--shadow-card)] lg:grid-cols-2">
 
-          {/* Provider — dark */}
+          {/* Provider */}
           <div
-            className={`rasq-reveal flex flex-col p-8 ${revealed ? "is-revealed" : ""}`}
-            style={{ background: "var(--rasq-base)", transitionDelay: "80ms" }}
+            className={`rasq-reveal flex flex-col bg-[var(--surface)] p-8 ${revealed ? "is-revealed" : ""}`}
+            style={{ transitionDelay: "80ms" }}
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-[8px] border border-[#1E2D42] bg-[#0F1825] text-[#5DCAA5]">
+            <div className="flex h-11 w-11 items-center justify-center rounded-[12px] border border-[var(--brand)]/25 bg-[var(--brand-soft)] text-[var(--brand)]">
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" />
               </svg>
             </div>
-            <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.14em] text-white/25">
+            <p className="mt-5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--muted-soft)]">
               {copy.provider}
             </p>
             <h3
-              className="mt-1.5 text-xl font-bold text-white"
+              className="mt-1.5 text-xl font-bold text-[var(--foreground)]"
               style={{ fontFamily: "var(--rasq-font-display)" }}
             >
               {copy.providerTitle}
             </h3>
-            <p className="mt-2.5 text-sm leading-6 text-white/40">
+            <p className="mt-2.5 text-sm leading-6 text-[var(--muted)]">
               {copy.providerDesc}
             </p>
             <div className="mt-6 space-y-2">
               <Link
                 href="/login?role=clinician"
-                className="flex items-center justify-between rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-4 py-3 transition hover:bg-[#1D9E75]/16 group"
+                className="group flex items-center justify-between rounded-[11px] border border-[var(--brand)]/25 bg-[var(--brand-soft)] px-4 py-3 transition hover:border-[var(--brand)]/50"
               >
                 <div>
-                  <p className="text-sm font-semibold text-white">{copy.clinicianWorkspace}</p>
-                  <p className="text-xs text-white/35">{copy.clinicianSub}</p>
+                  <p className="text-sm font-semibold text-[var(--foreground)]">{copy.clinicianWorkspace}</p>
+                  <p className="text-xs text-[var(--muted)]">{copy.clinicianSub}</p>
                 </div>
-                <svg className="h-4 w-4 text-white/20 transition group-hover:text-[#5DCAA5]/60" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="h-4 w-4 text-[var(--brand)] transition group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                 </svg>
               </Link>
               <Link
                 href="/login?role=admin"
-                className="flex items-center justify-between rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-4 py-3 transition hover:border-[#1D9E75]/20 group"
+                className="group flex items-center justify-between rounded-[11px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3 transition hover:border-[var(--brand)]/30"
               >
                 <div>
-                  <p className="text-sm font-semibold text-white/70">{copy.adminWorkspace}</p>
-                  <p className="text-xs text-white/25">{copy.adminSub}</p>
+                  <p className="text-sm font-semibold text-[var(--foreground)]">{copy.adminWorkspace}</p>
+                  <p className="text-xs text-[var(--muted-soft)]">{copy.adminSub}</p>
                 </div>
-                <svg className="h-4 w-4 text-white/15 transition group-hover:text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="h-4 w-4 text-[var(--muted-soft)] transition group-hover:text-[var(--muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                 </svg>
               </Link>
             </div>
           </div>
 
-          {/* Patient — light warm surface, all explicit hex values */}
+          {/* Patient — distinct warm light accent panel (brand differentiation, intentional across themes) */}
           <div
             id="patients"
-            className={`rasq-reveal flex flex-col border-t border-[#1E2D42] p-8 lg:border-l lg:border-t-0 ${revealed ? "is-revealed" : ""}`}
+            className={`rasq-reveal flex flex-col border-t border-[var(--border)] p-8 lg:border-l lg:border-t-0 ${revealed ? "is-revealed" : ""}`}
             style={{ background: "#F4F6F5", transitionDelay: "140ms" }}
           >
             <div
-              className="flex h-10 w-10 items-center justify-center rounded-[8px] border border-[#d1dbd6] bg-white text-[#1D9E75]"
+              className="flex h-11 w-11 items-center justify-center rounded-[12px] border border-[#d1dbd6] bg-white text-[#1D9E75]"
             >
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
@@ -984,7 +924,7 @@ function DualPathwaySection({ language }: { language: UiLanguage }) {
             </p>
             <div className="mt-6 space-y-2">
               <div
-                className="rounded-[7px] border border-[#d1dbd6] bg-white px-4 py-3 text-[#0f2e22]"
+                className="rounded-[11px] border border-[#d1dbd6] bg-white px-4 py-3 text-[#0f2e22]"
                 role="note"
               >
                 <p className="text-sm font-semibold">{copy.patientNote}</p>
@@ -994,7 +934,7 @@ function DualPathwaySection({ language }: { language: UiLanguage }) {
               </div>
               <Link
                 href="/assessment-access"
-                className="group flex items-center justify-between rounded-[7px] border border-[#d1dbd6] bg-white px-4 py-3 text-[#0f2e22] transition hover:border-[#1D9E75]/40"
+                className="group flex items-center justify-between rounded-[11px] border border-[#d1dbd6] bg-white px-4 py-3 text-[#0f2e22] transition hover:border-[#1D9E75]/40"
               >
                 <div>
                   <p className="text-sm font-semibold">{copy.assessmentLink}</p>
@@ -1042,23 +982,23 @@ function FutureVisionSection({ language }: { language: UiLanguage }) {
   return (
     <section
       ref={ref as React.RefObject<HTMLElement>}
-      className="bg-[#080E14] py-20 lg:py-28"
+      className="bg-[var(--background)] py-20 lg:py-28"
     >
       <div className="mx-auto max-w-6xl px-6">
         <div className={`rasq-reveal ${revealed ? "is-revealed" : ""}`}>
           <p
-            className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]"
+            className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--brand)]"
             style={{ fontFamily: "var(--rasq-font-mono)" }}
           >
             {copy.label}
           </p>
           <h2
-            className="mt-2 text-2xl font-bold tracking-tight text-white lg:text-3xl"
+            className="mt-2 text-2xl font-bold tracking-tight text-[var(--foreground)] lg:text-3xl"
             style={{ fontFamily: "var(--rasq-font-display)" }}
           >
             {copy.title}
           </h2>
-          <p className="mt-3 max-w-lg text-sm leading-6 text-white/40">
+          <p className="mt-3 max-w-lg text-sm leading-6 text-[var(--muted)]">
             {copy.intro}
           </p>
         </div>
@@ -1069,22 +1009,18 @@ function FutureVisionSection({ language }: { language: UiLanguage }) {
           {cards.map((card) => (
             <div
               key={card.id}
-              className="relative flex flex-col rounded-[10px] p-6"
-              style={{
-                background: "var(--rasq-card)",
-                border: "0.5px solid var(--rasq-border)",
-              }}
+              className="relative flex flex-col rounded-[16px] border border-[var(--border)] bg-[var(--surface-alt)] p-6 shadow-[var(--shadow-card)]"
             >
               {/* Coming soon badge */}
               <span
-                className="absolute right-4 top-4 rounded-[5px] border border-[#1E2D42] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-white/25"
+                className="absolute right-4 top-4 rounded-full border border-[var(--border)] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-[var(--muted-soft)]"
                 style={{ fontFamily: "var(--rasq-font-mono)" }}
               >
                 {copy.coming}
               </span>
 
               {/* Icon */}
-              <div className="flex h-10 w-10 items-center justify-center rounded-[8px] border border-[#1E2D42] bg-[#0B1220] text-[#5DCAA5]">
+              <div className="flex h-11 w-11 items-center justify-center rounded-[12px] border border-[var(--border)] bg-[var(--surface)] text-[var(--brand)]">
                 {card.id === "sense" ? (
                   <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.651a3.75 3.75 0 010-5.303m5.304-.002a3.75 3.75 0 010 5.304m-7.425 2.122a6.75 6.75 0 010-9.546m9.546 0a6.75 6.75 0 010 9.546M5.106 18.894c-3.808-3.808-3.808-9.98 0-13.789m13.788 0c3.808 3.808 3.808 9.981 0 13.79M12 12h.008v.007H12V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
@@ -1097,23 +1033,23 @@ function FutureVisionSection({ language }: { language: UiLanguage }) {
               </div>
 
               <p
-                className="mt-5 text-xs font-semibold uppercase tracking-[0.1em] text-[#5DCAA5]/60"
+                className="mt-5 text-xs font-semibold uppercase tracking-[0.1em] text-[var(--brand)]"
                 style={{ fontFamily: "var(--rasq-font-mono)" }}
               >
                 {card.tagline}
               </p>
               <h3
-                className="mt-1 text-lg font-bold text-white"
+                className="mt-1 text-lg font-bold text-[var(--foreground)]"
                 style={{ fontFamily: "var(--rasq-font-display)" }}
               >
                 {card.name}
               </h3>
-              <p className="mt-3 text-sm leading-6 text-white/40">{card.desc}</p>
+              <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{card.desc}</p>
 
               <ul className="mt-5 space-y-1.5">
                 {card.specs.map((spec) => (
-                  <li key={spec} className="flex items-center gap-2 text-xs text-white/30">
-                    <span className="h-1 w-1 rounded-full bg-[#1D9E75]/50" />
+                  <li key={spec} className="flex items-center gap-2 text-xs text-[var(--muted-soft)]">
+                    <span className="h-1 w-1 rounded-full bg-[var(--brand)]/60" />
                     {spec}
                   </li>
                 ))}
@@ -1133,7 +1069,7 @@ function FutureVisionSection({ language }: { language: UiLanguage }) {
 function Footer({ language }: { language: UiLanguage }) {
   const copy = uiCopy[language].footer;
   return (
-    <footer className="border-t border-[#1E2D42] bg-[#080E14]">
+    <footer className="border-t border-[var(--border)] bg-[var(--surface-alt)]">
       <div className="mx-auto max-w-6xl px-6 py-12">
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-[1fr_auto_auto_auto]">
           {/* Brand */}
@@ -1141,23 +1077,23 @@ function Footer({ language }: { language: UiLanguage }) {
             <div className="flex items-center gap-2">
               <ArcMark size={18} />
               <span
-                className="text-[15px] font-bold tracking-[-0.03em] text-white"
+                className="text-[15px] font-bold tracking-[-0.03em] text-[var(--foreground)]"
                 style={{ fontFamily: "var(--rasq-font-display)" }}
               >
                 RASQ
               </span>
             </div>
-            <p className="mt-2.5 text-xs leading-5 text-white/30">
+            <p className="mt-2.5 text-xs leading-5 text-[var(--muted)]">
               {language === "ar" ? "إعادة التأهيل بدقة." : "Rehabilitation, precisely."}
             </p>
-            <p className="mt-4 text-[11px] text-white/20">
+            <p className="mt-4 text-[11px] text-[var(--muted-soft)]">
               {language === "ar" ? "RASQ من Creative Motion Lab" : "RASQ by Creative Motion Lab"}
             </p>
           </div>
 
           {/* Platform */}
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/25">{copy.platform}</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--muted-soft)]">{copy.platform}</p>
             <ul className="mt-3 space-y-2.5">
               {[
                 [language === "ar" ? "مساحة الطبيب" : "Clinician Workspace", "/login?role=clinician"],
@@ -1166,7 +1102,7 @@ function Footer({ language }: { language: UiLanguage }) {
                 [language === "ar" ? "التقييم عن بُعد" : "Remote Assessment", "/assessment-access"],
               ].map(([l, h]) => (
                 <li key={h}>
-                  <Link href={h} className="text-xs text-white/35 transition hover:text-white">{l}</Link>
+                  <Link href={h} className="text-xs text-[var(--muted)] transition hover:text-[var(--foreground)]">{l}</Link>
                 </li>
               ))}
             </ul>
@@ -1174,7 +1110,7 @@ function Footer({ language }: { language: UiLanguage }) {
 
           {/* Product */}
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/25">{copy.product}</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--muted-soft)]">{copy.product}</p>
             <ul className="mt-3 space-y-2.5">
               {[
                 [language === "ar" ? "التقييمات" : "Assessments", "#platform"],
@@ -1184,7 +1120,7 @@ function Footer({ language }: { language: UiLanguage }) {
                 ["RASQ Motion", "#"],
               ].map(([l, h]) => (
                 <li key={l}>
-                  <a href={h} className="text-xs text-white/35 transition hover:text-white">{l}</a>
+                  <a href={h} className="text-xs text-[var(--muted)] transition hover:text-[var(--foreground)]">{l}</a>
                 </li>
               ))}
             </ul>
@@ -1192,21 +1128,21 @@ function Footer({ language }: { language: UiLanguage }) {
 
           {/* Security */}
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-white/25">{copy.trust}</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-[var(--muted-soft)]">{copy.trust}</p>
             <ul className="mt-3 space-y-2.5">
               {[copy.privacy, copy.secure, copy.reports, copy.ux].map((l) => (
-                <li key={l} className="text-xs text-white/35">{l}</li>
+                <li key={l} className="text-xs text-[var(--muted)]">{l}</li>
               ))}
             </ul>
           </div>
         </div>
 
-        <div className="mt-10 flex flex-col items-start justify-between gap-4 border-t border-[#1E2D42] pt-8 sm:flex-row sm:items-center">
-          <p className="text-[11px] text-white/20">
+        <div className="mt-10 flex flex-col items-start justify-between gap-4 border-t border-[var(--border)] pt-8 sm:flex-row sm:items-center">
+          <p className="text-[11px] text-[var(--muted-soft)]">
             {copy.copyright}
           </p>
           <p
-            className="text-[11px] text-white/15"
+            className="text-[11px] text-[var(--muted-soft)]"
             style={{ fontFamily: "var(--rasq-font-mono)" }}
           >
             {copy.secureText}
@@ -1226,7 +1162,7 @@ export default function HomePage() {
 
   return (
     <div
-      className="min-h-screen bg-[#080E14] text-white"
+      className="min-h-screen bg-[var(--background)] text-[var(--foreground)]"
       style={{ fontFamily: "var(--rasq-font-body)" }}
       dir={language === "ar" ? "rtl" : "ltr"}
       lang={language}
@@ -1234,9 +1170,9 @@ export default function HomePage() {
       <Navbar language={language} />
       <HeroSection language={language} />
       <TrustBar language={language} />
+      <DualPathwaySection language={language} />
       <WorkflowSection language={language} />
       <IntelligenceSection language={language} />
-      <DualPathwaySection language={language} />
       <FutureVisionSection language={language} />
       <Footer language={language} />
     </div>

@@ -28,6 +28,14 @@ import {
   resolveClinicalReviewState,
   type ClinicalReviewAckRow,
 } from "../../../lib/clinical-review";
+import {
+  demoFallbackResponse,
+  isLocalDemoFallbackEnabled,
+} from "../../../lib/api/demo-fallback-server";
+import {
+  getDemoPatientProgressSummary,
+  getDemoPatientTimelineBundle,
+} from "../../../lib/demo/local-demo-fallback";
 
 export type PatientTimelineSessionLog = {
   id: string;
@@ -177,7 +185,18 @@ async function buildClients() {
 
 export async function GET(req: NextRequest) {
   const clients = await buildClients();
+  const patientIdForDemo = new URL(req.url).searchParams.get("patientId")?.trim() ?? "";
+  const timelineOnlyForDemo = new URL(req.url).searchParams.get("timelineOnly") === "1";
   if (!clients) {
+    if (isLocalDemoFallbackEnabled()) {
+      if (timelineOnlyForDemo) {
+        const demoTimeline = getDemoPatientTimelineBundle(patientIdForDemo);
+        if (demoTimeline) return demoFallbackResponse(demoTimeline);
+      } else {
+        const demoSummary = getDemoPatientProgressSummary(patientIdForDemo);
+        if (demoSummary) return demoFallbackResponse(demoSummary);
+      }
+    }
     return serviceUnavailableResponse();
   }
   const { sessionClient, adminClient } = clients;
