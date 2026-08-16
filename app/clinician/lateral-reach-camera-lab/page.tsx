@@ -68,6 +68,7 @@ import {
   type CalibrationEndpointDiagnostic,
 } from "./calibration-endpoint-diagnostics";
 import { resolveCvQualityDiagnostic } from "./cv-quality-diagnostics";
+import { canEndAttemptWindow } from "./terminal-attempt-control";
 
 const CANVAS_WIDTH = 640;
 const CANVAS_HEIGHT = 480;
@@ -465,6 +466,11 @@ export default function LateralReachCameraLabPage() {
     detectorRef.current?.resumeAfterPause("clinician");
   }, []);
 
+  // Terminal Result UI — explicit lab-only "End Attempt" bridge.
+  const handleEndAttemptWindow = useCallback(() => {
+    detectorRef.current?.endAttemptWindow();
+  }, []);
+
   const handleLockAttemptPlan = useCallback(() => {
     const result = tryLockLateralReachLabAttemptPlan(
       screenHorizontalDirection,
@@ -531,6 +537,12 @@ export default function LateralReachCameraLabPage() {
     snapshot?.status === "running" &&
     snapshot?.engineSnapshot?.hasActivePause &&
     !snapshot?.engineSnapshot?.terminal;
+
+  // Terminal Result UI — explicit lab-only "End Attempt" bridge (no auto-finalization).
+  const canEndAttempt = canEndAttemptWindow(
+    snapshot?.status ?? "idle",
+    snapshot?.engineSnapshot?.terminal ?? null,
+  );
 
   const cvQualityDiagnostic =
     snapshot === null
@@ -1183,6 +1195,15 @@ export default function LateralReachCameraLabPage() {
                   Resume After Pause
                 </button>
               )}
+              {canEndAttempt && (
+                <button
+                  type="button"
+                  onClick={handleEndAttemptWindow}
+                  className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-2.5 text-sm font-semibold text-[#F9FAFB] transition hover:border-[#1D9E75]"
+                >
+                  End Attempt
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleStop}
@@ -1571,6 +1592,69 @@ export default function LateralReachCameraLabPage() {
                 <span className="text-[#9CA3AF]">Protective Pause Count:</span>{" "}
                 <span className="font-mono text-[#F9FAFB]">
                   {snapshot.engineSnapshot.protectivePauseCount}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Terminal Result UI — lab-only diagnostic, no clinical interpretation */}
+        {snapshot?.finalResult && (
+          <div className="mt-6 rounded-[10px] border border-[#1D9E75]/40 bg-[#0F1825] p-4">
+            <p className="text-sm font-semibold text-[#1D9E75]">
+              Terminal Result (Lab Diagnostic)
+            </p>
+            <p className="mt-1 text-xs text-[#6B7280]">
+              Raw engine attemptResult from endAttemptWindow(). Engineering wiring check only —
+              not a clinical outcome and not persisted.
+            </p>
+            <div className="mt-3 space-y-2 text-xs">
+              <div>
+                <span className="text-[#9CA3AF]">Completion State:</span>{" "}
+                <span className="font-mono font-semibold text-[#F9FAFB]">
+                  {snapshot.finalResult.completionState}
+                </span>
+              </div>
+              <div>
+                <span className="text-[#9CA3AF]">Target Reached:</span>{" "}
+                <span className="font-mono text-[#F9FAFB]">
+                  {snapshot.finalResult.targetReached === null
+                    ? "—"
+                    : snapshot.finalResult.targetReached
+                      ? "Yes"
+                      : "No"}
+                </span>
+              </div>
+              <div>
+                <span className="text-[#9CA3AF]">Dwell Confirmed:</span>{" "}
+                <span className="font-mono text-[#F9FAFB]">
+                  {snapshot.finalResult.dwellConfirmed === null
+                    ? "—"
+                    : snapshot.finalResult.dwellConfirmed
+                      ? "Yes"
+                      : "No"}
+                </span>
+              </div>
+              <div>
+                <span className="text-[#9CA3AF]">Return Completed:</span>{" "}
+                <span className="font-mono text-[#F9FAFB]">
+                  {snapshot.finalResult.returnToStartCompleted === null
+                    ? "—"
+                    : snapshot.finalResult.returnToStartCompleted
+                      ? "Yes"
+                      : "No"}
+                </span>
+              </div>
+              <div>
+                <span className="text-[#9CA3AF]">Tracking Quality:</span>{" "}
+                <span className="font-mono text-[#F9FAFB]">
+                  {snapshot.finalResult.trackingQualitySummary}
+                </span>
+              </div>
+              <div>
+                <span className="text-[#9CA3AF]">Protective Pause Count:</span>{" "}
+                <span className="font-mono text-[#F9FAFB]">
+                  {snapshot.finalResult.protectivePauseCount}
                 </span>
               </div>
             </div>
