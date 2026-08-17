@@ -58,6 +58,24 @@
  * removed — the same hand-maintained `Tables<T>` shorthand and Row
  * aliases from the prior regeneration are unchanged, and no new Row
  * alias was needed since TreatmentPlansRow already existed.
+ * Upper-limb persistence API prep: full regeneration via
+ * `npx supabase gen types typescript --project-id <staging-ref>` was
+ * attempted against Staging (000–020 applied) but rejected after
+ * inspection — Staging now also has an out-of-band
+ * upper_limb_motor_screen_clinician_reviews table and a
+ * rehab_catalog_program_status_for_session function that neither this
+ * repo's migrations nor any prior task created, and the full
+ * regenerated file replaces the entire Database body wholesale
+ * (2500+ line diff) rather than a scoped addition. Both are unrelated
+ * to migrations 019/020 and out of scope here, so per the hand-sync
+ * fallback only upper_limb_motor_screen_assignments and
+ * upper_limb_motor_screen_session_results were added below, hand-typed
+ * from the same live Staging introspection output (which also
+ * confirms migration 020 applied to Staging exactly as written: both
+ * tables' shapes match 019/020 exactly, including the nullable
+ * legacy-only assignment columns and the required, no-default id on
+ * both tables). No existing table, relationship, helper, or alias was
+ * changed.
  */
 
 export type Json =
@@ -1138,6 +1156,125 @@ export type Database = {
           },
         ]
       }
+      upper_limb_motor_screen_assignments: {
+        Row: {
+          affected_side: string | null
+          assigned_at: string | null
+          assignment_payload: Json
+          created_at: string
+          delivery_mode: string | null
+          id: string
+          patient_id: string
+          provider_id: string
+          schema_version: string
+          screen_definition_id: string | null
+          status: string
+          token_expires_at: string | null
+          token_hash: string | null
+          updated_at: string
+        }
+        Insert: {
+          affected_side?: string | null
+          assigned_at?: string | null
+          assignment_payload: Json
+          created_at?: string
+          delivery_mode?: string | null
+          id: string
+          patient_id: string
+          provider_id: string
+          schema_version: string
+          screen_definition_id?: string | null
+          status: string
+          token_expires_at?: string | null
+          token_hash?: string | null
+          updated_at?: string
+        }
+        Update: {
+          affected_side?: string | null
+          assigned_at?: string | null
+          assignment_payload?: Json
+          created_at?: string
+          delivery_mode?: string | null
+          id?: string
+          patient_id?: string
+          provider_id?: string
+          schema_version?: string
+          screen_definition_id?: string | null
+          status?: string
+          token_expires_at?: string | null
+          token_hash?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "upper_limb_motor_screen_assignments_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "upper_limb_motor_screen_assignments_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      upper_limb_motor_screen_session_results: {
+        Row: {
+          assignment_id: string
+          created_at: string
+          id: string
+          overall_quality: string
+          patient_id: string
+          protective_pause_count: number
+          protective_pause_duration_ms_total: number
+          provider_id: string
+          result_payload: Json
+          schema_version: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          assignment_id: string
+          created_at?: string
+          id: string
+          overall_quality: string
+          patient_id: string
+          protective_pause_count: number
+          protective_pause_duration_ms_total: number
+          provider_id: string
+          result_payload: Json
+          schema_version: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          assignment_id?: string
+          created_at?: string
+          id?: string
+          overall_quality?: string
+          patient_id?: string
+          protective_pause_count?: number
+          protective_pause_duration_ms_total?: number
+          provider_id?: string
+          result_payload?: Json
+          schema_version?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ulmssr_assignment_ownership_fkey"
+            columns: ["assignment_id", "provider_id", "patient_id"]
+            isOneToOne: false
+            referencedRelation: "upper_limb_motor_screen_assignments"
+            referencedColumns: ["id", "provider_id", "patient_id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1182,3 +1319,7 @@ export type SpeechTranscriptionSessionsRow = Tables<"speech_transcription_sessio
 export type TreatmentProgramsRow = Tables<"treatment_programs">;
 export type ProgramSessionsRow = Tables<"program_sessions">;
 export type ProgramSessionBlocksRow = Tables<"program_session_blocks">;
+
+/** Upper-limb motor screen persistence rows (migrations 019–020). */
+export type UpperLimbMotorScreenAssignmentsRow = Tables<"upper_limb_motor_screen_assignments">;
+export type UpperLimbMotorScreenSessionResultsRow = Tables<"upper_limb_motor_screen_session_results">;
