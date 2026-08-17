@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import ConfirmModal from "@/app/components/ConfirmModal";
 import {
   memo,
   useCallback,
@@ -633,6 +634,7 @@ export function PatientCvCapture({
   // Visual only — does not affect the detector, camera resolution, or MediaPipe input.
   const [videoAspectRatio, setVideoAspectRatio] = useState<number | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const handleVideoLoadedMetadata = useCallback(() => {
     const video = videoRef.current;
     if (!video || !video.videoWidth || !video.videoHeight) return;
@@ -1734,6 +1736,19 @@ export function PatientCvCapture({
   const showSessionStats =
     trackingConfirmed && cameraLive && (previewActive || trackingStopped);
 
+  // Once the camera has been live or tracking has started, bailing out discards
+  // real progress — require confirmation instead of silently discarding it.
+  const hasActiveCaptureProgress =
+    (cameraLive || previewActive || trackingConfirmed) && !trackingStopped;
+
+  const handleCancelRequest = useCallback(() => {
+    if (hasActiveCaptureProgress) {
+      setCancelModalOpen(true);
+      return;
+    }
+    skipCameraWithoutSave();
+  }, [hasActiveCaptureProgress, skipCameraWithoutSave]);
+
   const showCameraHud =
     trackingConfirmed && previewActive && !trackingStopped && cameraLive;
 
@@ -2159,11 +2174,31 @@ export function PatientCvCapture({
 
       <button
         type="button"
-        onClick={() => skipCameraWithoutSave()}
+        onClick={handleCancelRequest}
         className="mt-4 flex min-h-[44px] w-full items-center justify-center rounded-[7px] border border-[#E2E8E5] bg-[#F9FAFB] text-[14px] font-semibold text-[#374151] transition hover:border-[#1D9E75]/40"
       >
-        {copy.continueWithoutCamera}
+        {hasActiveCaptureProgress
+          ? textDir === "rtl"
+            ? "إلغاء التقييم"
+            : "Cancel assessment"
+          : copy.continueWithoutCamera}
       </button>
+
+      <ConfirmModal
+        open={cancelModalOpen}
+        title={textDir === "rtl" ? "إلغاء هذا التقييم؟" : "Cancel this assessment?"}
+        message={
+          textDir === "rtl"
+            ? "سيؤدي هذا إلى إيقاف الكاميرا وتجاهل كل ما تم تسجيله حتى الآن. لن يتم حفظ الملاحظة."
+            : "This will stop the camera and discard everything captured so far. The observation will not be saved."
+        }
+        confirmLabel={textDir === "rtl" ? "إلغاء التقييم" : "Cancel assessment"}
+        onConfirm={() => {
+          setCancelModalOpen(false);
+          skipCameraWithoutSave();
+        }}
+        onCancel={() => setCancelModalOpen(false)}
+      />
     </div>
   );
 }

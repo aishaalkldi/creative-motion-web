@@ -142,16 +142,16 @@ export default function ConfirmModal({
         aria-labelledby={titleId}
         aria-describedby={messageId}
         tabIndex={-1}
-        className="w-full max-w-sm rounded-[28px] border border-rose-400/20 bg-[#0d1f3c] p-7 shadow-[0_20px_60px_rgba(0,0,0,0.5)]"
+        className="w-full max-w-sm rounded-[28px] border border-rose-400/30 bg-[var(--surface)] p-7 shadow-[var(--shadow-card-hover)]"
       >
-        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-rose-400/25 bg-rose-400/10">
-          <svg className="h-6 w-6 text-rose-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full border border-rose-400/30 bg-rose-400/10">
+          <svg className="h-6 w-6 text-rose-700 dark:text-rose-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
         </div>
 
-        <h2 id={titleId} className="text-xl font-bold text-white">{title}</h2>
-        <p id={messageId} className="mt-2 text-sm leading-6 text-white/65">{message}</p>
+        <h2 id={titleId} className="text-xl font-bold text-[var(--foreground)]">{title}</h2>
+        <p id={messageId} className="mt-2 text-sm leading-6 text-[var(--muted)]">{message}</p>
 
         <div className="mt-6 flex gap-3">
           <button
@@ -167,7 +167,7 @@ export default function ConfirmModal({
             type="button"
             disabled={loading}
             onClick={onCancel}
-            className="flex-1 rounded-2xl border border-white/15 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10 disabled:opacity-50"
+            className="flex-1 rounded-2xl border border-[var(--border)] bg-[var(--surface-alt)] px-5 py-3 text-sm font-semibold text-[var(--foreground)] transition hover:bg-[var(--border)] disabled:opacity-50"
           >
             Cancel
           </button>
