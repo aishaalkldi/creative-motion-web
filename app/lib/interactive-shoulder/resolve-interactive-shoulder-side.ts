@@ -1,5 +1,5 @@
 import type { ShoulderAbductionReachSide } from "@/app/lib/shoulder-rehabilitation";
-import type { MovementBlockSide } from "@/app/lib/session-orchestrator/types";
+import type { MovementBlock, MovementBlockSide } from "@/app/lib/session-orchestrator/types";
 
 /**
  * Temporary product fallback when neither a prescribed exercise side nor a
@@ -30,9 +30,20 @@ function normalizeUnilateralSide(
  * Priority:
  * 1. `prescribedSide` when it is a supported left/right value (future-safe —
  *    callers may pass an existing session field when one becomes available).
- * 2. `blockSide` from the interactive SessionDefinition movement block.
+ * 2. First valid unilateral `side` on any movement block in the session
+ *    (see `resolveBlockSideFromSessionDefinition`).
  * 3. `INTERACTIVE_SHOULDER_DEFAULT_SIDE` (documented temporary limitation).
  */
+export function resolveBlockSideFromSessionDefinition(
+  blocks: readonly Pick<MovementBlock, "side">[],
+): ShoulderAbductionReachSide | null {
+  for (const block of blocks) {
+    const side = normalizeUnilateralSide(block.side);
+    if (side) return side;
+  }
+  return null;
+}
+
 export function resolveInteractiveShoulderSide(input: {
   prescribedSide?: string | null;
   blockSide?: MovementBlockSide | null;

@@ -71,6 +71,7 @@ import type { TargetAttemptTickConfig } from "@/app/lib/interactive-shoulder/orc
 import type { TherapeuticTarget } from "@/app/lib/interactive-shoulder/types";
 import { INTERACTIVE_SHOULDER_CV_EXERCISE_ID } from "@/app/lib/interactive-shoulder/interactive-shoulder-exercise-ids";
 import {
+  resolveBlockSideFromSessionDefinition,
   resolveInteractiveShoulderSide,
   type ResolvedInteractiveShoulderSide,
 } from "@/app/lib/interactive-shoulder/resolve-interactive-shoulder-side";
@@ -175,7 +176,7 @@ export function OrchestratorCvSessionCore({
   const interactiveBlock = sessionDefinition.blocks[0];
   const resolvedTherapeuticSide: ResolvedInteractiveShoulderSide = resolveInteractiveShoulderSide({
     prescribedSide,
-    blockSide: interactiveBlock?.side,
+    blockSide: resolveBlockSideFromSessionDefinition(sessionDefinition.blocks),
   });
 
   const videoRef = useRef<HTMLVideoElement>(null);
