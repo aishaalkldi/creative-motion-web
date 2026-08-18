@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ForwardReachCameraDetector,
+  FORWARD_REACH_NEXT_ACTION_LABELS,
+  nextForwardReachAction,
   type ForwardReachCameraSnapshot,
 } from "@/app/lib/cv/forward-reach-camera-detector";
 import { validateForwardReachConfig } from "@/app/lib/upper-limb-motor-screen/forward-reach-engine";
@@ -71,6 +73,10 @@ export default function ForwardReachCameraLabPage() {
     detectorRef.current?.stop();
   }, []);
 
+  const handleCalibrateStartingPosition = useCallback(() => {
+    detectorRef.current?.calibrateStartingPosition();
+  }, []);
+
   const handleArmReadiness = useCallback(() => {
     detectorRef.current?.armReadiness();
   }, []);
@@ -84,12 +90,18 @@ export default function ForwardReachCameraLabPage() {
   }, []);
 
   const showVideo = snapshot?.status === "running" || snapshot?.initPhase === "camera";
+  const canCalibrateStartingPosition =
+    snapshot?.status === "running" &&
+    snapshot?.engineSnapshot &&
+    (snapshot.engineSnapshot.phase === "idle" || snapshot.engineSnapshot.phase === "awaiting_readiness") &&
+    (snapshot.calibration.status === "not_started" || snapshot.calibration.status === "failed");
   const canArmReadiness =
     snapshot?.status === "running" &&
     snapshot?.engineSnapshot &&
     (snapshot.engineSnapshot.phase === "idle" || snapshot.engineSnapshot.phase === "awaiting_readiness") &&
     !snapshot.engineSnapshot.terminal &&
-    !snapshot.readinessArmed;
+    !snapshot.readinessArmed &&
+    snapshot.calibration.status === "captured";
   const canResume =
     snapshot?.status === "running" &&
     snapshot?.engineSnapshot?.hasActivePause &&
@@ -218,6 +230,17 @@ export default function ForwardReachCameraLabPage() {
             </button>
           ) : (
             <div className="flex gap-3">
+              {canCalibrateStartingPosition && (
+                <button
+                  type="button"
+                  onClick={handleCalibrateStartingPosition}
+                  className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#179165]"
+                >
+                  {snapshot?.calibration.status === "failed"
+                    ? "Retry Starting-Position Capture"
+                    : "Calibrate Starting Position"}
+                </button>
+              )}
               {canArmReadiness && (
                 <button
                   type="button"
@@ -370,6 +393,33 @@ export default function ForwardReachCameraLabPage() {
           </div>
         )}
 
+        {/* Starting-Position Calibration Status */}
+        {snapshot?.status === "running" && snapshot.calibration.status !== "not_started" && (
+          <div className="mt-6 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-4">
+            <p className="text-sm font-semibold text-[#F9FAFB]">Starting-Position Calibration</p>
+            <div className="mt-3 space-y-2 text-xs">
+              <div>
+                <span className="text-[#9CA3AF]">Status:</span>{" "}
+                <span className="font-mono text-[#F9FAFB]">{snapshot.calibration.status}</span>
+              </div>
+              {snapshot.calibration.status === "captured" && snapshot.calibration.capturedPoint && (
+                <div>
+                  <span className="text-[#9CA3AF]">Captured point:</span>{" "}
+                  <span className="font-mono text-[#F9FAFB]">
+                    ({snapshot.calibration.capturedPoint.x.toFixed(3)}, {snapshot.calibration.capturedPoint.y.toFixed(3)})
+                  </span>
+                </div>
+              )}
+              {snapshot.calibration.status === "failed" && snapshot.calibration.failureReasons && (
+                <div>
+                  <span className="text-[#9CA3AF]">Failure reasons:</span>{" "}
+                  <span className="font-mono text-[#F9FAFB]">{snapshot.calibration.failureReasons.join(", ")}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Armed Readiness Status */}
         {snapshot?.readinessArmed && (
           <div className="mt-6 rounded-[10px] border border-[#EF9F27] bg-[#0F1825] p-4">
@@ -515,6 +565,16 @@ export default function ForwardReachCameraLabPage() {
               Forward Reach Engine State
             </p>
             <div className="mt-3 space-y-2 text-xs">
+              <div>
+                <span className="text-[#9CA3AF]">Next:</span>{" "}
+                <span className="font-mono font-semibold text-[#1D9E75]">
+                  {
+                    FORWARD_REACH_NEXT_ACTION_LABELS[
+                      nextForwardReachAction(snapshot.engineSnapshot.phase, snapshot.engineSnapshot.hasActivePause)
+                    ]
+                  }
+                </span>
+              </div>
               <div>
                 <span className="text-[#9CA3AF]">Phase:</span>{" "}
                 <span className="font-mono text-[#F9FAFB]">

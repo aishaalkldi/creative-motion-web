@@ -136,6 +136,39 @@ export async function insertUpperLimbMotorScreenSessionResult(
   return { ok: true, row: data as UpperLimbMotorScreenSessionResultsRow };
 }
 
+export type FindLatestSessionResultResult =
+  | { ok: true; row: UpperLimbMotorScreenSessionResultsRow | null }
+  | { ok: false; httpStatus: 500; message: string };
+
+/**
+ * Finds the most recently created session result for a given assignment
+ * — the read side of the resume/duplicate-prevention contract (GET
+ * /api/upper-limb-motor-screen/session-results). Assignment ownership
+ * must already be verified by the caller (fetchAssignmentForSessionResultOwnership)
+ * before this is called — this function does not re-check provider
+ * ownership itself, matching the "verify assignment ownership first"
+ * contract exactly.
+ */
+export async function findLatestUpperLimbMotorScreenSessionResult(
+  adminClient: SupabaseClient,
+  input: { assignmentId: string },
+): Promise<FindLatestSessionResultResult> {
+  const { data, error } = await adminClient
+    .from("upper_limb_motor_screen_session_results")
+    .select("*")
+    .eq("assignment_id", input.assignmentId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[findLatestUpperLimbMotorScreenSessionResult] query failed:", error.message);
+    return { ok: false, httpStatus: 500, message: "Unable to complete request." };
+  }
+
+  return { ok: true, row: (data as UpperLimbMotorScreenSessionResultsRow | null) ?? null };
+}
+
 // ── Finalize ─────────────────────────────────────────────────────────────
 
 export type FinalizeAccessResult =

@@ -26,6 +26,25 @@
  * is built from its own independent copy pass so it never shares object
  * identity with attempts[*].protectivePauseEvents even for the same
  * logical event.
+ *
+ * Integer-millisecond normalization (mechanical, not policy): every
+ * elapsed-millisecond field this module touches or derives —
+ * reachTimeMs, returnTimeMs, totalMovementTimeMs, and
+ * protectivePauseDurationMs on each copied attempt, plus the derived
+ * protectivePauseDurationMsTotal — is rounded to the nearest whole
+ * millisecond here, once, before the result is returned. Upstream
+ * engines compute these from raw performance.now()-sourced timestamp
+ * subtraction, which carries sub-millisecond floating-point noise with
+ * no clinical meaning; protectivePauseDurationMsTotal in particular is
+ * both a typed INTEGER DB column and independently CHECK-constrained
+ * against the identical value embedded in result_payload (migration
+ * 019), so a fractional value here fails persistence outright. This is
+ * the single normalization boundary for every caller of this assembler
+ * — the DB layer only ever sees values already rounded here.
+ * longestPauseGapMs remains untouched, per its explicit opaque-passthrough
+ * status above — its own rounding, where relevant, is owned by whichever
+ * integration layer defines its semantics (e.g.
+ * forward-reach-pause-duration.ts), not this module.
  */
 
 import {
@@ -81,9 +100,29 @@ function copyProtectivePauseEvent(event: ProtectivePauseEvent): ProtectivePauseE
   };
 }
 
+/**
+ * Rounds a nullable elapsed-millisecond measurement to the nearest whole
+ * millisecond, preserving null (a genuinely-unavailable measurement)
+ * rather than coercing it to 0. Math.round, not floor/ceil: these values
+ * come from subtracting two performance.now()-sourced timestamps, which
+ * carry sub-millisecond floating-point noise with no clinical meaning —
+ * rounding to nearest is the unbiased choice (floor/ceil would
+ * systematically under/over-report every duration), and matches this
+ * codebase's existing convention that every other "Ms" quantity
+ * (onsetConfirmationMs, dwellDurationMs, maxAllowedGapMs, etc.) is
+ * always a whole number.
+ */
+function roundNullableMs(value: number | null): number | null {
+  return value === null ? null : Math.round(value);
+}
+
 function copyAttempt(attempt: UpperLimbMovementAttemptResult): UpperLimbMovementAttemptResult {
   return {
     ...attempt,
+    reachTimeMs: roundNullableMs(attempt.reachTimeMs),
+    returnTimeMs: roundNullableMs(attempt.returnTimeMs),
+    totalMovementTimeMs: roundNullableMs(attempt.totalMovementTimeMs),
+    protectivePauseDurationMs: Math.round(attempt.protectivePauseDurationMs),
     protectivePauseEvents: attempt.protectivePauseEvents.map(copyProtectivePauseEvent),
     factualNotes: [...attempt.factualNotes],
   };
@@ -122,11 +161,20 @@ export function assembleUpperLimbMotorScreenSessionResult(
   );
 
   let protectivePauseCount = 0;
-  let protectivePauseDurationMsTotal = 0;
+  let protectivePauseDurationMsTotalRaw = 0;
   for (const attempt of input.attempts) {
     protectivePauseCount += attempt.protectivePauseCount;
-    protectivePauseDurationMsTotal += attempt.protectivePauseDurationMs;
+    protectivePauseDurationMsTotalRaw += attempt.protectivePauseDurationMs;
   }
+  // Sum-then-round, once, from the raw (pre-copyAttempt) per-attempt
+  // values — not the sum of already-rounded per-attempt copies, which
+  // would compound rounding bias across multiple attempts. This total is
+  // both a typed INTEGER DB column and independently CHECK-constrained
+  // against the identical value embedded in result_payload (migration
+  // 019: ulmssr_payload_pause_duration_chk), so it must be an exact
+  // integer here — this is the sole place that value is derived, which
+  // makes both projections consistent by construction.
+  const protectivePauseDurationMsTotal = Math.round(protectivePauseDurationMsTotalRaw);
 
   const result: UpperLimbMotorScreenSessionResult = {
     id: input.id,

@@ -21,17 +21,79 @@ import {
   validateForwardReachConfig,
   type ForwardReachAttemptState,
   type ForwardReachConfig,
+  type ForwardReachPhase,
   type ForwardReachRuntimeSnapshot,
 } from "@/app/lib/upper-limb-motor-screen/forward-reach-engine";
-import type { UpperLimbSide } from "@/app/lib/upper-limb-motor-screen/types";
+import type {
+  ClinicalStopEvent,
+  UpperLimbMovementAttemptResult,
+  UpperLimbSide,
+} from "@/app/lib/upper-limb-motor-screen/types";
 import {
   releaseMediaStream,
   waitForDecodedVideoFrames,
   waitForVideoElementLayout,
 } from "@/app/lib/cv/patient-camera-stream";
+// Starting-zone calibration reuses the Lateral Reach interaction-calibration
+// domain's stable-point capture reducer as-is: it has no lateral-reach-specific
+// semantics (it's a generic "N samples within a jitter radius held for a
+// duration" accumulator, imported directly rather than reimplemented — see
+// FORWARD_REACH_START_CAPTURE_CONFIG below and this file's calibration
+// section for how it's wired in).
+import {
+  createLateralReachStartCaptureState,
+  updateLateralReachStartCapture,
+  type LateralReachStartCaptureConfig,
+  type LateralReachStartCaptureSample,
+  type LateralReachStartCaptureState,
+} from "@/app/lib/interaction-calibration/lateral-reach/start-capture";
+import type { LateralReachCaptureFailureReason } from "@/app/lib/interaction-calibration/lateral-reach/types";
+import { resolveLateralReachCalibrationSampleFromFrame } from "@/app/lib/upper-limb-motor-screen/lateral-reach-calibration-camera-sample-adapter";
 
 export type ForwardReachCameraStatus = "idle" | "initializing" | "running" | "error";
 export type ForwardReachCameraInitPhase = null | "import" | "model" | "camera";
+
+// ---------------------------------------------------------------------------
+// Starting-zone calibration
+// ---------------------------------------------------------------------------
+
+export type ForwardReachStartingZoneCalibrationStatus = "not_started" | "capturing" | "captured" | "failed";
+
+/**
+ * Extends the reused Lateral Reach capture-failure vocabulary with exactly
+ * one Forward-Reach-specific outcome: the captured point was tracked and
+ * stable, but building a valid engine config from it failed (e.g. the
+ * captured point landed too close to the fixed target for
+ * validateForwardReachConfig's zone-overlap check). Every other reason
+ * comes straight from the reused reducer's own failure vocabulary — see
+ * start-capture.ts's deriveFailureReasons, which only ever produces the
+ * capture-stage subset (never the lateral-reach-only direction/endpoint
+ * reasons also present in this reused type).
+ */
+export type ForwardReachStartingZoneCalibrationFailureReason = LateralReachCaptureFailureReason | "geometry_invalid";
+
+export type ForwardReachStartingZoneCalibrationSnapshot = {
+  status: ForwardReachStartingZoneCalibrationStatus;
+  capturedPoint: { x: number; y: number } | null;
+  failureReasons: readonly ForwardReachStartingZoneCalibrationFailureReason[] | null;
+};
+
+/**
+ * Fixed capture parameters — NOT clinically validated numeric defaults,
+ * and not invented for this change: minStableDurationMs/totalTimeoutMs
+ * reuse the 750ms hold / 15-second window already established and
+ * reviewed elsewhere in this exact file for the readiness-arm mechanism;
+ * maxJitterRadius reuses the starting zone's own 0.05 acceptance radius
+ * (holding steady within the zone's own eventual size is a
+ * self-consistent bar, not a new number). minStableSampleCount is a
+ * small defensive floor against a single-frame accidental capture.
+ */
+export const FORWARD_REACH_START_CAPTURE_CONFIG: LateralReachStartCaptureConfig = {
+  minStableDurationMs: 750,
+  maxJitterRadius: 0.05,
+  minStableSampleCount: 5,
+  totalTimeoutMs: 15_000,
+};
 
 export type ForwardReachCameraSnapshot = {
   status: ForwardReachCameraStatus;
@@ -51,10 +113,271 @@ export type ForwardReachCameraSnapshot = {
   lastCommandStatus: "applied" | "rejected" | null;
   lastCommandRejectionReason: string | null;
 
+  // Starting-zone calibration — see calibrateStartingPosition().
+  calibration: ForwardReachStartingZoneCalibrationSnapshot;
+
   // Armed readiness
   readinessArmed: boolean;
   readinessArmedTimeRemaining: number | null; // milliseconds remaining in armed window
+
+  /**
+   * The engine's own terminal UpperLimbMovementAttemptResult, once
+   * produced — retained verbatim from applyForwardReachCommand's return
+   * value, never recomputed here. Null until the attempt reaches a
+   * terminal state.
+   */
+  attemptResult: UpperLimbMovementAttemptResult | null;
 };
+
+/**
+ * Pure, additive plumbing only: applyForwardReachCommand already returns
+ * `attemptResult` on every "applied" result (null until terminal). This
+ * function's only job is to retain that already-computed value once it
+ * appears, and to never lose it again if a later command's result
+ * doesn't carry one (e.g. an "applied" readiness/resume command has no
+ * attemptResult of its own, but a terminal result already captured
+ * earlier from a prior command must not be discarded). Nothing here
+ * recomputes, reinterprets, or derives any new engine value — it is a
+ * verbatim pass-through of the engine's own answer.
+ */
+export function deriveNextForwardReachAttemptResult(
+  engineResult: { status: "applied" | "rejected"; attemptResult?: UpperLimbMovementAttemptResult | null },
+  previousAttemptResult: UpperLimbMovementAttemptResult | null,
+): UpperLimbMovementAttemptResult | null {
+  if (engineResult.status === "applied" && engineResult.attemptResult) {
+    return engineResult.attemptResult;
+  }
+  return previousAttemptResult;
+}
+
+/**
+ * Decides whether the engine's current phase, combined with whether this
+ * attempt has already had its window auto-ended, means attemptWindowEnded
+ * should be dispatched now. "completed_pending_finalization" is the
+ * engine's own signal that return-to-start has been confirmed and no
+ * further frame data is expected — see forward-reach-engine.ts, which
+ * rejects every later frame/observationUnavailable command from that
+ * phase onward. Pure and DOM-free precisely so the once-only automatic
+ * finalization decision is testable without a browser (see this file's
+ * own header comment on why the class itself isn't unit-tested).
+ */
+export function shouldAutoDispatchForwardReachAttemptWindowEnd(
+  phase: ForwardReachPhase,
+  alreadyDispatched: boolean,
+): boolean {
+  return phase === "completed_pending_finalization" && !alreadyDispatched;
+}
+
+/**
+ * Decides whether an armReadiness() call should actually (re)arm the
+ * 15-second auto-readiness window. False whenever already armed: arming
+ * unconditionally resets readinessStableSinceMs to null, so a redundant
+ * call — e.g. a UI control that stays visible/clickable after readiness
+ * is already armed — would silently discard an in-progress continuous
+ * in-zone stability hold and restart it from zero, which can prevent the
+ * required stability duration from ever being reached in practice.
+ *
+ * Also requires calibrationStatus === "captured": readiness is measured
+ * against startingZone.point, which is a placeholder until the tested
+ * wrist's real starting position has been captured (see
+ * shouldStartForwardReachCalibration/calibrateStartingPosition) — arming
+ * against the placeholder would ask the patient to reach an arbitrary
+ * point that has nothing to do with where they were actually seated.
+ *
+ * Pure and DOM-free for the same reason as this file's other exported
+ * decision functions (see this file's header comment).
+ */
+export function shouldArmForwardReachReadiness(
+  status: ForwardReachCameraStatus,
+  phase: ForwardReachPhase,
+  alreadyArmed: boolean,
+  calibrationStatus: ForwardReachStartingZoneCalibrationStatus,
+): boolean {
+  return (
+    status === "running" &&
+    !alreadyArmed &&
+    calibrationStatus === "captured" &&
+    (phase === "idle" || phase === "awaiting_readiness")
+  );
+}
+
+/**
+ * Decides whether calibrateStartingPosition() should actually (re)start
+ * capturing the tested wrist's real starting position. One-shot per
+ * session once captured: calibration must not continue tracking the
+ * wrist and silently moving the zone after a successful capture (the
+ * zone is frozen at that point, per this session's product requirement).
+ * A retry is allowed from "failed" (e.g. the patient wasn't in frame in
+ * time) but never from "captured" or while already "capturing".
+ */
+export function shouldStartForwardReachCalibration(
+  status: ForwardReachCameraStatus,
+  phase: ForwardReachPhase,
+  calibrationStatus: ForwardReachStartingZoneCalibrationStatus,
+): boolean {
+  return (
+    status === "running" &&
+    (phase === "idle" || phase === "awaiting_readiness") &&
+    (calibrationStatus === "not_started" || calibrationStatus === "failed")
+  );
+}
+
+/**
+ * Builds a new ForwardReachConfig with startingZone.point replaced by the
+ * captured point, AND fixedTarget.point shifted by the exact same
+ * displacement — the base template's own start-to-target vector
+ * (direction + magnitude) is preserved verbatim, never reinvented, only
+ * re-anchored to wherever the patient's real starting position actually
+ * is. Without this, fixedTarget would stay at its old absolute screen
+ * coordinate — unrelated to a starting position that is now itself
+ * patient/session-specific, and in practice unreachable by any natural
+ * reach gesture from an arbitrary calibrated start.
+ *
+ * Radii and every other field (testedSide, tracking, timing) are
+ * preserved verbatim. Pure — the caller is responsible for
+ * re-validating the result via validateForwardReachConfig, since the
+ * shifted target could in principle land outside [0,1] or too close to
+ * the new starting zone.
+ */
+export function applyCapturedForwardReachStartingZonePoint(
+  baseConfig: ForwardReachConfig,
+  capturedPoint: { x: number; y: number },
+): ForwardReachConfig {
+  const deltaX = baseConfig.fixedTarget.point.x - baseConfig.startingZone.point.x;
+  const deltaY = baseConfig.fixedTarget.point.y - baseConfig.startingZone.point.y;
+  return {
+    ...baseConfig,
+    startingZone: {
+      point: { x: capturedPoint.x, y: capturedPoint.y },
+      radius: baseConfig.startingZone.radius,
+    },
+    fixedTarget: {
+      point: { x: capturedPoint.x + deltaX, y: capturedPoint.y + deltaY },
+      radius: baseConfig.fixedTarget.radius,
+    },
+  };
+}
+
+export type ForwardReachNextAction =
+  | "hold_starting_position"
+  | "reach_to_target"
+  | "hold_target"
+  | "return_to_start"
+  | "complete"
+  | "paused";
+
+/**
+ * Maps the engine's current phase (plus whether a protective pause is
+ * active) to the single next action the clinician/patient must take.
+ * A pause always wins regardless of phase — resuming is the only
+ * meaningful next step while one is active. Pure and exhaustive over
+ * FORWARD_REACH_PHASES (a compile error here means a new phase was
+ * added to the engine without updating this mapping).
+ */
+export function nextForwardReachAction(phase: ForwardReachPhase, hasActivePause: boolean): ForwardReachNextAction {
+  if (hasActivePause) return "paused";
+  switch (phase) {
+    case "idle":
+    case "awaiting_readiness":
+      return "hold_starting_position";
+    case "ready_confirmed_awaiting_onset":
+    case "outbound":
+      return "reach_to_target";
+    case "dwelling":
+      return "hold_target";
+    case "reach_confirmed":
+    case "returning":
+      return "return_to_start";
+    case "completed_pending_finalization":
+      return "complete";
+    default: {
+      const _exhaustive: never = phase;
+      return _exhaustive;
+    }
+  }
+}
+
+/** Human-readable label for each ForwardReachNextAction, shared by the
+ * canvas overlay and any React caller (see getSnapshot()/engineSnapshot
+ * consumers) that wants to show the same instruction text. */
+export const FORWARD_REACH_NEXT_ACTION_LABELS: Record<ForwardReachNextAction, string> = {
+  hold_starting_position: "Hold starting position",
+  reach_to_target: "Reach to target",
+  hold_target: "Hold target",
+  return_to_start: "Return to start",
+  complete: "Complete",
+  paused: "Paused — resume when ready",
+};
+
+/**
+ * Converts the starting-zone's normalized-space radius into pixel radii
+ * for canvas rendering. A circular tolerance in NORMALIZED [0,1] x/y
+ * space — what checkArmedReadiness, the engine, and this file's own
+ * "wristInZone" status text all compute distance in — is only a visual
+ * circle when the canvas is square. On a non-square canvas (e.g. this
+ * detector's 640x480 default), the true iso-distance contour of that
+ * tolerance is an ellipse in pixel space, since one pixel in x and one
+ * pixel in y represent different fractions of the same normalized unit.
+ * Drawing a single Math.min(width,height)-based circle therefore drew a
+ * visual zone that did not exactly match the region actually being
+ * checked. Returning distinct x/y radii lets the caller draw an ellipse
+ * instead, so the rendered zone is geometrically identical to the real
+ * acceptance region.
+ */
+export function computeForwardReachZoneRadiusPixels(
+  radiusNormalized: number,
+  canvasWidth: number,
+  canvasHeight: number,
+): { radiusXPixels: number; radiusYPixels: number } {
+  return {
+    radiusXPixels: radiusNormalized * canvasWidth,
+    radiusYPixels: radiusNormalized * canvasHeight,
+  };
+}
+
+export type ForwardReachStartingZoneGuidance =
+  | { status: "inside"; distance: number }
+  | {
+      status: "outside";
+      distance: number;
+      horizontal: "move_left_on_screen" | "move_right_on_screen" | null;
+      vertical: "move_up" | "move_down" | null;
+    };
+
+/**
+ * Directional guidance toward the starting zone from the tested wrist's
+ * current raw (un-mirrored) normalized position. "inside" uses the exact
+ * same <= comparison as isWristInsideTarget (target-hit.ts) and
+ * checkArmedReadiness, so it always agrees with the real gate.
+ *
+ * Horizontal guidance is deliberately inverted from raw dx: the canvas
+ * bitmap is drawn in raw (un-mirrored) coordinates and then the whole
+ * canvas element is CSS-mirrored (transform: scaleX(-1)) for display —
+ * a wrist at a LARGER raw x than the zone is therefore displayed at a
+ * SMALLER pixel x (further left on screen) than the zone, so telling
+ * the clinician to "move right on screen" is what actually closes the
+ * gap they can see. Verified against a worked numeric example in this
+ * module's test file. Vertical guidance needs no such inversion — the
+ * mirror is horizontal-only.
+ */
+export function computeForwardReachStartingZoneGuidance(
+  wrist: { x: number; y: number },
+  zone: { point: { x: number; y: number }; radius: number },
+): ForwardReachStartingZoneGuidance {
+  const dx = wrist.x - zone.point.x;
+  const dy = wrist.y - zone.point.y;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+
+  if (distance <= zone.radius) {
+    return { status: "inside", distance };
+  }
+
+  const EPSILON = 1e-6;
+  const horizontal = dx > EPSILON ? "move_right_on_screen" : dx < -EPSILON ? "move_left_on_screen" : null;
+  const vertical = dy > EPSILON ? "move_up" : dy < -EPSILON ? "move_down" : null;
+
+  return { status: "outside", distance, horizontal, vertical };
+}
 
 type PoseLandmarkerInstance = {
   detectForVideo: (
@@ -147,6 +470,20 @@ export class ForwardReachCameraDetector {
   // Engine state
   private engineConfig: ForwardReachConfig | null = null;
   private engineState: ForwardReachAttemptState | null = null;
+  private attemptResult: UpperLimbMovementAttemptResult | null = null;
+  private attemptWindowEndDispatched = false;
+
+  // Starting-zone calibration
+  /** Original template config passed to start() — startingZone.point in
+   * here is a placeholder; engineConfig is replaced with a calibrated
+   * copy of this once capture succeeds (see applyStartCaptureSample). */
+  private baseEngineConfig: ForwardReachConfig | null = null;
+  private startCaptureState: LateralReachStartCaptureState | null = null;
+  private startingZoneCalibration: ForwardReachStartingZoneCalibrationSnapshot = {
+    status: "not_started",
+    capturedPoint: null,
+    failureReasons: null,
+  };
 
   // Laterality diagnostics
   private lastRightWristVisibility: number | null = null;
@@ -187,11 +524,13 @@ export class ForwardReachCameraDetector {
       lastCommandType: this.lastCommandType,
       lastCommandStatus: this.lastCommandStatus,
       lastCommandRejectionReason: this.lastCommandRejectionReason,
+      calibration: this.startingZoneCalibration,
       readinessArmed: this.readinessArmed,
       readinessArmedTimeRemaining:
         this.readinessArmed && this.readinessArmedUntilMs
           ? Math.max(0, this.readinessArmedUntilMs - performance.now())
           : null,
+      attemptResult: this.attemptResult,
     };
   }
 
@@ -236,6 +575,11 @@ export class ForwardReachCameraDetector {
     this.lastCommandType = null;
     this.lastCommandStatus = null;
     this.lastCommandRejectionReason = null;
+    this.attemptResult = null;
+    this.attemptWindowEndDispatched = false;
+    this.baseEngineConfig = configResult.config;
+    this.startCaptureState = null;
+    this.startingZoneCalibration = { status: "not_started", capturedPoint: null, failureReasons: null };
     this.emit();
 
     try {
@@ -437,11 +781,17 @@ export class ForwardReachCameraDetector {
     const startingZone = this.engineConfig.startingZone;
     const centerX = startingZone.point.x * width;
     const centerY = startingZone.point.y * height;
-    const radiusPixels = startingZone.radius * Math.min(width, height);
+    const { radiusXPixels, radiusYPixels } = computeForwardReachZoneRadiusPixels(
+      startingZone.radius,
+      width,
+      height,
+    );
 
-    // Zone circle
+    // Zone ellipse — matches the real normalized-space circular tolerance
+    // exactly, including on non-square canvases (see
+    // computeForwardReachZoneRadiusPixels's doc comment).
     ctx.beginPath();
-    ctx.arc(centerX, centerY, radiusPixels, 0, Math.PI * 2);
+    ctx.ellipse(centerX, centerY, radiusXPixels, radiusYPixels, 0, 0, Math.PI * 2);
     ctx.strokeStyle = "rgba(239,159,39,0.8)";
     ctx.lineWidth = 2;
     ctx.setLineDash([5, 5]);
@@ -457,12 +807,53 @@ export class ForwardReachCameraDetector {
     // Zone label (readable despite CSS mirror)
     ctx.fillStyle = "rgba(239,159,39,0.9)";
     ctx.font = "12px monospace";
-    this.drawUnmirroredText(ctx, "Starting Zone", centerX + radiusPixels + 5, centerY, width);
+    this.drawUnmirroredText(ctx, "Starting Zone", centerX + radiusXPixels + 5, centerY, width);
+
+    // Draw target zone — visually distinct from Starting Zone: solid
+    // line (vs. dashed) and a different hue (magenta vs. amber) so the
+    // two are never confusable at a glance. Read from this.engineConfig
+    // — the exact same object the engine itself validates and checks
+    // distance against, so this is guaranteed to be the real target,
+    // never a separately-maintained value that could drift from it.
+    const fixedTarget = this.engineConfig.fixedTarget;
+    const targetCenterX = fixedTarget.point.x * width;
+    const targetCenterY = fixedTarget.point.y * height;
+    const targetRadiusPixels = computeForwardReachZoneRadiusPixels(fixedTarget.radius, width, height);
+
+    ctx.beginPath();
+    ctx.ellipse(
+      targetCenterX,
+      targetCenterY,
+      targetRadiusPixels.radiusXPixels,
+      targetRadiusPixels.radiusYPixels,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    ctx.strokeStyle = "rgba(217,70,239,0.9)";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(targetCenterX, targetCenterY, 4, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(217,70,239,0.95)";
+    ctx.fill();
+
+    ctx.fillStyle = "rgba(217,70,239,0.95)";
+    ctx.font = "bold 12px monospace";
+    this.drawUnmirroredText(
+      ctx,
+      "TARGET",
+      targetCenterX + targetRadiusPixels.radiusXPixels + 5,
+      targetCenterY,
+      width,
+    );
 
     // Readiness status text
     const minVisibility = this.engineConfig.tracking.minWristVisibility;
     let wristTracked = false;
-    let wristInZone = false;
+    let guidance: ForwardReachStartingZoneGuidance | null = null;
+    let trackedWristPoint: { x: number; y: number } | null = null;
 
     if (landmarks && landmarks.length > 0) {
       const testedWrist = landmarks[testedWristIndex];
@@ -470,16 +861,11 @@ export class ForwardReachCameraDetector {
       wristTracked = visibility >= minVisibility;
 
       if (wristTracked && testedWrist) {
-        const wx = testedWrist.x;
-        const wy = testedWrist.y;
-
-        // Check if wrist is in starting zone
-        const dx = wx - startingZone.point.x;
-        const dy = wy - startingZone.point.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        wristInZone = distance <= startingZone.radius;
+        trackedWristPoint = { x: testedWrist.x, y: testedWrist.y };
+        guidance = computeForwardReachStartingZoneGuidance(trackedWristPoint, startingZone);
       }
     }
+    const wristInZone = guidance?.status === "inside";
 
     // Status text at top - line 1: tracked status (readable despite CSS mirror)
     const trackedStatus = wristTracked ? "TRACKED" : "NOT TRACKED";
@@ -501,6 +887,19 @@ export class ForwardReachCameraDetector {
     const armedColor = this.readinessArmed ? "#ef9f27" : "#6b7280";
     ctx.fillStyle = armedColor;
     this.drawUnmirroredText(ctx, `Readiness: ${armedStatus}`, 10, 65, width);
+
+    // Line 4: NEXT ACTION — the single most important line on this
+    // overlay (UX requirement: the clinician/patient must always know
+    // the one next thing to do). Derived from the engine's own phase +
+    // pause state, never a separately-tracked UI flag.
+    if (this.engineState) {
+      const engineSnapshot = getForwardReachRuntimeSnapshot(this.engineState);
+      const action = nextForwardReachAction(engineSnapshot.phase, engineSnapshot.hasActivePause);
+      const actionLabel = FORWARD_REACH_NEXT_ACTION_LABELS[action];
+      ctx.fillStyle = action === "paused" ? "#ef4444" : "#a7f3d0";
+      ctx.font = "bold 16px monospace";
+      this.drawUnmirroredText(ctx, `NEXT: ${actionLabel}`, 10, 90, width);
+    }
 
     // Overlay label (readable despite CSS mirror)
     ctx.fillStyle = "rgba(255,255,255,0.7)";
@@ -575,6 +974,22 @@ export class ForwardReachCameraDetector {
           // Update laterality diagnostics
           this.updateLateralityDiagnostics(landmarks);
 
+          // Starting-position calibration feed — only while an explicit
+          // calibration is in progress (calibrateStartingPosition).
+          // Reuses the same already-normalized frame the engine itself
+          // consumes below, via the same Lateral Reach camera-sample
+          // adapter their own calibration flow uses.
+          if (this.startCaptureState !== null && this.baseEngineConfig) {
+            const captureSample = frame
+              ? resolveLateralReachCalibrationSampleFromFrame(
+                  frame,
+                  this.baseEngineConfig.testedSide,
+                  this.baseEngineConfig.tracking.minWristVisibility,
+                )
+              : { atMs: capturedAtMs, wrist: null, trackingValid: false };
+            this.applyStartCaptureSample(captureSample);
+          }
+
           // Feed engine
           if (frame) {
             // CASE A: Valid frame from adapter
@@ -587,6 +1002,7 @@ export class ForwardReachCameraDetector {
             if (engineResult.status === "applied") {
               this.engineState = engineResult.state;
             }
+            this.attemptResult = deriveNextForwardReachAttemptResult(engineResult, this.attemptResult);
           } else {
             // CASE C: MediaPipe returned landmarks but adapter returned null
             const engineResult = applyForwardReachCommand(this.engineState, {
@@ -597,9 +1013,14 @@ export class ForwardReachCameraDetector {
             if (engineResult.status === "applied") {
               this.engineState = engineResult.state;
             }
+            this.attemptResult = deriveNextForwardReachAttemptResult(engineResult, this.attemptResult);
           }
         } else {
           // CASE B: MediaPipe returned no pose landmarks
+          if (this.startCaptureState !== null) {
+            this.applyStartCaptureSample({ atMs: capturedAtMs, wrist: null, trackingValid: false });
+          }
+
           const engineResult = applyForwardReachCommand(this.engineState, {
             type: "observationUnavailable",
             nowMs: capturedAtMs,
@@ -608,12 +1029,27 @@ export class ForwardReachCameraDetector {
           if (engineResult.status === "applied") {
             this.engineState = engineResult.state;
           }
+          this.attemptResult = deriveNextForwardReachAttemptResult(engineResult, this.attemptResult);
 
           // Clear laterality diagnostics
           this.lastRightWristVisibility = null;
           this.lastLeftWristVisibility = null;
           this.lastRightWristCoords = null;
           this.lastLeftWristCoords = null;
+        }
+
+        // Automatic finalization: once the engine reports
+        // completed_pending_finalization (return-to-start confirmed),
+        // the attempt window is over. Dispatch attemptWindowEnded exactly
+        // once so the terminal attemptResult is produced without a
+        // manual "End attempt" control — see
+        // shouldAutoDispatchForwardReachAttemptWindowEnd's doc comment.
+        if (
+          this.engineState &&
+          shouldAutoDispatchForwardReachAttemptWindowEnd(this.engineState.phase, this.attemptWindowEndDispatched)
+        ) {
+          this.attemptWindowEndDispatched = true;
+          this.dispatchAttemptWindowEnded();
         }
 
         // Check armed readiness
@@ -714,6 +1150,11 @@ export class ForwardReachCameraDetector {
     this.detectTimestamp = 0;
     this.frameIndex = 0;
     this.engineState = null;
+    this.attemptResult = null;
+    this.attemptWindowEndDispatched = false;
+    this.baseEngineConfig = null;
+    this.startCaptureState = null;
+    this.startingZoneCalibration = { status: "not_started", capturedPoint: null, failureReasons: null };
     this.status = "idle";
     this.initPhase = null;
 
@@ -810,6 +1251,7 @@ export class ForwardReachCameraDetector {
       if (result.status === "applied") {
         this.engineState = result.state;
       }
+      this.attemptResult = deriveNextForwardReachAttemptResult(result, this.attemptResult);
 
       // Mark as sent and disarm
       this.readinessAlreadySent = true;
@@ -818,17 +1260,107 @@ export class ForwardReachCameraDetector {
   }
 
   /**
+   * Explicitly begin capturing the tested wrist's real, current resting
+   * position as this session's frozen Starting Zone. Replaces whatever
+   * placeholder point the config passed to start() shipped with. One-shot
+   * per session — see shouldStartForwardReachCalibration's doc comment
+   * for why this becomes a no-op once already "captured".
+   */
+  calibrateStartingPosition(): void {
+    if (!this.engineState || !this.baseEngineConfig) {
+      return;
+    }
+    if (
+      !shouldStartForwardReachCalibration(
+        this.status,
+        this.engineState.phase,
+        this.startingZoneCalibration.status,
+      )
+    ) {
+      return;
+    }
+
+    this.startCaptureState = createLateralReachStartCaptureState(
+      performance.now(),
+      FORWARD_REACH_START_CAPTURE_CONFIG,
+    );
+    this.startingZoneCalibration = { status: "capturing", capturedPoint: null, failureReasons: null };
+    this.emit();
+  }
+
+  /**
+   * Feeds one sample into the in-progress start-capture reducer and
+   * applies whatever outcome it produces. On "captured", rebuilds
+   * engineConfig/engineState from baseEngineConfig with startingZone.point
+   * replaced by the captured point — safe to discard the prior
+   * placeholder-based engineState here because armReadiness() (and
+   * confirmReadiness()) refuse to run before calibration is "captured",
+   * so nothing meaningful can have accumulated on it yet (idle /
+   * awaiting_readiness only track lastValidWristSample, which this
+   * intentionally drops along with the rest of the placeholder state).
+   */
+  private applyStartCaptureSample(sample: LateralReachStartCaptureSample): void {
+    if (this.startCaptureState === null || !this.baseEngineConfig) {
+      return;
+    }
+
+    const update = updateLateralReachStartCapture(this.startCaptureState, sample);
+
+    if (update.status === "collecting") {
+      this.startCaptureState = update.state;
+      return;
+    }
+
+    if (update.status === "failed") {
+      this.startCaptureState = null;
+      this.startingZoneCalibration = {
+        status: "failed",
+        capturedPoint: null,
+        failureReasons: update.failureReasons,
+      };
+      return;
+    }
+
+    // status === "captured"
+    this.startCaptureState = null;
+    const candidate = applyCapturedForwardReachStartingZonePoint(this.baseEngineConfig, update.startWrist);
+    const validated = validateForwardReachConfig(candidate);
+    if (!validated.ok) {
+      this.startingZoneCalibration = { status: "failed", capturedPoint: null, failureReasons: ["geometry_invalid"] };
+      return;
+    }
+
+    const initResult = createForwardReachAttemptState(validated.config, 0, performance.now());
+    if (!initResult.ok) {
+      this.startingZoneCalibration = { status: "failed", capturedPoint: null, failureReasons: ["geometry_invalid"] };
+      return;
+    }
+
+    this.engineConfig = validated.config;
+    this.engineState = initResult.state;
+    this.startingZoneCalibration = {
+      status: "captured",
+      capturedPoint: { x: update.startWrist.x, y: update.startWrist.y },
+      failureReasons: null,
+    };
+  }
+
+  /**
    * Arm readiness — opens a 15-second window for automatic readiness confirmation
    * when wrist is stable in starting zone.
    */
   armReadiness(): void {
-    if (!this.engineState || this.status !== "running") {
+    if (!this.engineState) {
       return;
     }
-
-    // Only arm if in correct phase
-    const phase = this.engineState.phase;
-    if (phase !== "idle" && phase !== "awaiting_readiness") {
+    if (
+      !shouldArmForwardReachReadiness(
+        this.status,
+        this.engineState.phase,
+        this.readinessArmed,
+        this.startingZoneCalibration.status,
+      )
+    ) {
       return;
     }
 
@@ -860,6 +1392,12 @@ export class ForwardReachCameraDetector {
     if (!this.engineState || this.status !== "running") {
       return;
     }
+    // Same calibration gate as armReadiness() — see
+    // shouldArmForwardReachReadiness's doc comment. Not currently wired
+    // to any UI, but kept consistent so this method can never bypass it.
+    if (this.startingZoneCalibration.status !== "captured") {
+      return;
+    }
 
     const result = applyForwardReachCommand(this.engineState, {
       type: "readinessConfirmed",
@@ -875,6 +1413,7 @@ export class ForwardReachCameraDetector {
     if (result.status === "applied") {
       this.engineState = result.state;
     }
+    this.attemptResult = deriveNextForwardReachAttemptResult(result, this.attemptResult);
 
     // Always emit - UI needs feedback for both success and rejection
     this.emit();
@@ -907,8 +1446,87 @@ export class ForwardReachCameraDetector {
     if (result.status === "applied") {
       this.engineState = result.state;
     }
+    this.attemptResult = deriveNextForwardReachAttemptResult(result, this.attemptResult);
 
     // Always emit - UI needs feedback for both success and rejection
+    this.emit();
+  }
+
+  /**
+   * Record an explicit clinician-initiated clinical stop — sends the
+   * engine's existing clinicalStopReceived command unchanged. No new
+   * clinical-stop policy or automatic safety decision is made here: the
+   * event (reason/recordedAt/recordedBy) is supplied by the caller in
+   * full: the engine alone decides how this finalizes the attempt.
+   */
+  recordClinicalStop(event: ClinicalStopEvent): void {
+    if (!this.engineState || this.status !== "running") {
+      return;
+    }
+
+    const result = applyForwardReachCommand(this.engineState, {
+      type: "clinicalStopReceived",
+      nowMs: performance.now(),
+      event,
+    });
+
+    // Store command outcome for UI feedback
+    this.lastCommandType = "clinicalStopReceived";
+    this.lastCommandStatus = result.status;
+    this.lastCommandRejectionReason = result.status === "rejected" ? result.reason : null;
+
+    if (result.status === "applied") {
+      this.engineState = result.state;
+    }
+    this.attemptResult = deriveNextForwardReachAttemptResult(result, this.attemptResult);
+
+    // Always emit - UI needs feedback for both success and rejection
+    this.emit();
+  }
+
+  /**
+   * Core attemptWindowEnded dispatch — no emit. Shared by the automatic
+   * per-frame trigger (startFrameLoop) and endAttemptWindow() so both
+   * paths update engineState/attemptResult identically; the caller
+   * decides when to emit.
+   */
+  private dispatchAttemptWindowEnded(): void {
+    if (!this.engineState) return;
+
+    const result = applyForwardReachCommand(this.engineState, {
+      type: "attemptWindowEnded",
+      nowMs: performance.now(),
+    });
+
+    this.lastCommandType = "attemptWindowEnded";
+    this.lastCommandStatus = result.status;
+    this.lastCommandRejectionReason = result.status === "rejected" ? result.reason : null;
+
+    if (result.status === "applied") {
+      this.engineState = result.state;
+    }
+    this.attemptResult = deriveNextForwardReachAttemptResult(result, this.attemptResult);
+  }
+
+  /**
+   * End the attempt window — explicit terminal action. Sends
+   * attemptWindowEnded through the engine and latches the resulting
+   * terminal attemptResult via getSnapshot().attemptResult. Mirrors
+   * LateralReachCameraDetector.endAttemptWindow()'s contract.
+   *
+   * In this one-attempt Forward Reach vertical slice this is invoked
+   * automatically from startFrameLoop once the engine reports
+   * completed_pending_finalization (see shouldAutoDispatchForwardReachAttemptWindowEnd)
+   * rather than from a manual UI control — kept as its own method,
+   * guarded the same way, so the dispatch is a single reusable,
+   * independently callable action rather than inline-only logic.
+   */
+  endAttemptWindow(): void {
+    if (!this.engineState || this.status !== "running" || this.attemptWindowEndDispatched) {
+      return;
+    }
+    this.attemptWindowEndDispatched = true;
+    this.dispatchAttemptWindowEnded();
     this.emit();
   }
 }

@@ -7,6 +7,13 @@
  * is verified before any write. assignment_payload is the exact,
  * validated domain object (validateUpperLimbMotorScreenAssignment,
  * unchanged) — never a client-shaped object written directly.
+ *
+ * GET /api/upper-limb-motor-screen/assignments?patientId=&screenDefinitionId=
+ *
+ * Read-only, additive. Returns the latest matching assignment for the
+ * authenticated provider's own patient, or null — never another
+ * provider's assignment. This is the resume/duplicate-prevention read
+ * path: the client checks here before ever POSTing a new assignment.
  */
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
@@ -17,6 +24,7 @@ import type { NextRequest } from "next/server";
 import { validateUpperLimbMotorScreenAssignment } from "@/app/lib/upper-limb-motor-screen/assignment-validation";
 import {
   buildUpperLimbMotorScreenAssignmentInsert,
+  findLatestUpperLimbMotorScreenAssignment,
   insertUpperLimbMotorScreenAssignment,
   toUpperLimbMotorScreenAssignmentPublic,
 } from "@/app/lib/upper-limb-motor-screen/assignment-persistence";
@@ -121,9 +129,57 @@ export function createUpperLimbAssignmentPostHandler(deps: UpperLimbAssignmentPo
   };
 }
 
+// ── GET dependency-injected handler ─────────────────────────────────────────────
+
+export type UpperLimbAssignmentGetDependencies = {
+  getAuthenticatedUser: () => Promise<{ id: string } | null>;
+  adminClient: SupabaseClient;
+};
+
+export function createUpperLimbAssignmentGetHandler(deps: UpperLimbAssignmentGetDependencies) {
+  return async function handleGet(req: NextRequest): Promise<NextResponse> {
+    const user = await deps.getAuthenticatedUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+    const { searchParams } = req.nextUrl;
+    const patientId = searchParams.get("patientId")?.trim() ?? "";
+    const screenDefinitionId = searchParams.get("screenDefinitionId")?.trim() ?? "";
+
+    if (!patientId) {
+      return NextResponse.json({ error: "patientId is required." }, { status: 400 });
+    }
+    if (!UUID_RE.test(patientId)) {
+      return NextResponse.json({ error: "patientId must be a valid UUID." }, { status: 400 });
+    }
+    if (!screenDefinitionId) {
+      return NextResponse.json({ error: "screenDefinitionId is required." }, { status: 400 });
+    }
+
+    const ownership = await validatePatientOwnership(deps.adminClient, patientId, user.id);
+    if (!ownership.ok) return ownershipErrorResponse(ownership);
+
+    const result = await findLatestUpperLimbMotorScreenAssignment(deps.adminClient, {
+      patientId,
+      providerId: user.id,
+      screenDefinitionId,
+    });
+    if (!result.ok) {
+      console.error("[GET /api/upper-limb-motor-screen/assignments]", result.message);
+      return NextResponse.json({ error: result.message }, { status: result.httpStatus });
+    }
+
+    return NextResponse.json({
+      assignment: result.row ? toUpperLimbMotorScreenAssignmentPublic(result.row) : null,
+    });
+  };
+}
+
 // ── Real production dependencies ───────────────────────────────────────────────
 
-async function buildRealDependencies(): Promise<UpperLimbAssignmentPostDependencies | null> {
+async function buildRealClients(): Promise<{
+  getAuthenticatedUser: () => Promise<{ id: string } | null>;
+  adminClient: SupabaseClient;
+} | null> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const svc = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -156,16 +212,26 @@ async function buildRealDependencies(): Promise<UpperLimbAssignmentPostDependenc
       return { id: user.id };
     },
     adminClient,
-    checkWriteLimit: checkClinicianWriteLimit,
-    generateId: () => crypto.randomUUID(),
-    now: () => new Date().toISOString(),
   };
 }
 
 // ── POST /api/upper-limb-motor-screen/assignments ──────────────────────────────
 
 export async function POST(req: NextRequest) {
-  const deps = await buildRealDependencies();
-  if (!deps) return serviceUnavailableResponse();
-  return createUpperLimbAssignmentPostHandler(deps)(req);
+  const clients = await buildRealClients();
+  if (!clients) return serviceUnavailableResponse();
+  return createUpperLimbAssignmentPostHandler({
+    ...clients,
+    checkWriteLimit: checkClinicianWriteLimit,
+    generateId: () => crypto.randomUUID(),
+    now: () => new Date().toISOString(),
+  })(req);
+}
+
+// ── GET /api/upper-limb-motor-screen/assignments ────────────────────────────────
+
+export async function GET(req: NextRequest) {
+  const clients = await buildRealClients();
+  if (!clients) return serviceUnavailableResponse();
+  return createUpperLimbAssignmentGetHandler(clients)(req);
 }

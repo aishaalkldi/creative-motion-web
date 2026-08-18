@@ -67,6 +67,7 @@ import { SessionScheduleView } from "../../../components/SessionScheduleView";
 import { ClinicalActionCard } from "../../../components/clinician/ClinicalActionCard";
 import { PatientJourneyTimeline } from "../../../components/clinician/PatientJourneyTimeline";
 import { CvPatientCvMetricsSection } from "../../../components/clinician/cv/CvPatientCvMetricsSection";
+import { ForwardReachMotorScreenSession } from "../../../components/clinician/upper-limb-motor-screen/ForwardReachMotorScreenSession";
 import { AiClinicianSummaryCard } from "../../../components/clinician/AiClinicianSummaryCard";
 import { XrSessionRecommendationsCard } from "@/app/components/clinician/XrSessionRecommendationsCard";
 import { getCvReadyExercises } from "@/app/lib/cv/cv-ready-exercises";
@@ -1293,6 +1294,8 @@ export default function PatientProfilePage() {
             />
 
             <CvPatientCvMetricsSection patientId={patient.id} />
+
+            <ForwardReachMotorScreenSession patientId={patient.id} />
 
             {(planProgress || adherence) && treatmentPlan ? (
               <PatientAdherenceSummary
