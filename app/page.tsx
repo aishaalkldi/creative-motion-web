@@ -310,25 +310,24 @@ function Navbar({ language }: { language: UiLanguage }) {
   return (
     <header
       className="sticky top-0 z-50 border-b border-[var(--border)] bg-[var(--surface)]/90 backdrop-blur"
-      style={{ height: "60px" }}
+      style={{ height: "72px" }}
     >
-      <div className="mx-auto flex h-full max-w-6xl items-center justify-between gap-3 px-6">
+      <div className="mx-auto flex h-full max-w-6xl items-center justify-between gap-4 px-6">
         {/* Logo */}
-        <Link href="/" className="flex items-center gap-2">
-          <ArcMark size={22} animate />
+        <Link href="/" className="flex items-center gap-3">
+          <ArcMark size={28} animate />
           <span
-            className="text-[16px] font-bold tracking-[-0.03em] text-[var(--foreground)]"
+            className="text-[20px] font-bold tracking-[-0.03em] text-[var(--foreground)]"
             style={{ fontFamily: "var(--rasq-font-display)" }}
           >
             RASQ
           </span>
         </Link>
 
-        {/* Primary nav — simplified: How it works / Providers / Patients */}
-        <nav className="hidden items-center gap-0.5 md:flex">
+        {/* Primary nav — simplified: only Providers / Patients visible on desktop */}
+        <nav className="hidden items-center gap-1 md:flex">
           {(
             [
-              [copy.nav.how, "#platform"],
               [copy.nav.providers, "#providers"],
               [copy.nav.patients, "#patients"],
             ] as [string, string][]
@@ -336,18 +335,19 @@ function Navbar({ language }: { language: UiLanguage }) {
             <a
               key={label}
               href={href}
-              className="rounded-[9px] px-3.5 py-2 text-sm font-medium text-[var(--muted)] transition-colors hover:bg-[var(--surface-alt)] hover:text-[var(--foreground)]"
+              className="rounded-[9px] px-4 py-3 text-base font-semibold text-[var(--muted)] transition-colors hover:bg-[var(--surface-alt)] hover:text-[var(--foreground)]"
             >
               {label}
             </a>
           ))}
         </nav>
 
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-3">
           <ThemeToggle isArabic={isArabic} />
           <Link
             href="/login"
-            className="rounded-[10px] border border-[var(--border)] bg-[var(--surface-alt)] px-5 py-2 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--brand)]/40 hover:text-[var(--brand)]"
+            className="rounded-[10px] bg-[var(--brand)] px-7 py-3 text-base font-bold text-white transition hover:bg-[var(--brand)]/90 active:scale-95"
+            style={{ minHeight: "48px", display: "inline-flex", alignItems: "center" }}
           >
             {copy.nav.login}
           </Link>
@@ -419,18 +419,20 @@ function HeroSection({ language }: { language: UiLanguage }) {
 
             {/* CTAs */}
             <div
-              className="rasq-stagger-item mt-8 flex flex-wrap items-center gap-3"
+              className="rasq-stagger-item mt-10 flex flex-col sm:flex-row items-stretch sm:items-center gap-4"
               style={{ animationDelay: "160ms" }}
             >
               <Link
                 href="/login?role=clinician"
-                className="rounded-[11px] bg-[var(--brand)] px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[var(--brand-dark)]"
+                className="rounded-[12px] bg-[var(--brand)] px-8 py-4 text-lg font-bold text-white shadow-md transition hover:bg-[var(--brand-dark)] active:scale-95"
+                style={{ minHeight: "52px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
               >
                 {copy.hero.providers}
               </Link>
               <a
                 href="#patients"
-                className="rounded-[11px] border border-[var(--border)] bg-[var(--surface-alt)] px-6 py-2.5 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--brand)]/40 hover:text-[var(--brand)]"
+                className="rounded-[12px] border-2 border-[var(--brand)] bg-white text-[var(--brand)] px-8 py-4 text-lg font-bold transition hover:bg-[var(--brand)]/5 active:scale-95"
+                style={{ minHeight: "52px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
               >
                 {copy.hero.patients}
               </a>
@@ -869,28 +871,28 @@ function DualPathwaySection({ language }: { language: UiLanguage }) {
             <p className="mt-2.5 text-sm leading-6 text-[var(--muted)]">
               {copy.providerDesc}
             </p>
-            <div className="mt-6 space-y-2">
+            <div className="mt-8 space-y-3">
               <Link
                 href="/login?role=clinician"
-                className="group flex items-center justify-between rounded-[11px] border border-[var(--brand)]/25 bg-[var(--brand-soft)] px-4 py-3 transition hover:border-[var(--brand)]/50"
+                className="group flex items-center justify-between rounded-[12px] border-2 border-[var(--brand)] bg-[var(--brand)] px-6 py-4 transition hover:bg-[var(--brand-dark)] active:scale-95"
               >
                 <div>
-                  <p className="text-sm font-semibold text-[var(--foreground)]">{copy.clinicianWorkspace}</p>
-                  <p className="text-xs text-[var(--muted)]">{copy.clinicianSub}</p>
+                  <p className="text-base font-bold text-white">{copy.clinicianWorkspace}</p>
+                  <p className="text-sm text-white/80">{copy.clinicianSub}</p>
                 </div>
-                <svg className="h-4 w-4 text-[var(--brand)] transition group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="h-5 w-5 text-white transition group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                 </svg>
               </Link>
               <Link
                 href="/login?role=admin"
-                className="group flex items-center justify-between rounded-[11px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3 transition hover:border-[var(--brand)]/30"
+                className="group flex items-center justify-between rounded-[12px] border-2 border-[var(--border)] bg-[var(--surface-alt)] px-6 py-4 transition hover:border-[var(--brand)]/30 active:scale-95"
               >
                 <div>
-                  <p className="text-sm font-semibold text-[var(--foreground)]">{copy.adminWorkspace}</p>
-                  <p className="text-xs text-[var(--muted-soft)]">{copy.adminSub}</p>
+                  <p className="text-base font-bold text-[var(--foreground)]">{copy.adminWorkspace}</p>
+                  <p className="text-sm text-[var(--muted-soft)]">{copy.adminSub}</p>
                 </div>
-                <svg className="h-4 w-4 text-[var(--muted-soft)] transition group-hover:text-[var(--muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="h-5 w-5 text-[var(--muted-soft)] transition group-hover:text-[var(--muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                 </svg>
               </Link>
@@ -922,27 +924,27 @@ function DualPathwaySection({ language }: { language: UiLanguage }) {
             <p className="mt-2.5 text-sm leading-6 text-[#4a7060]">
               {copy.patientDesc}
             </p>
-            <div className="mt-6 space-y-2">
+            <div className="mt-8 space-y-3">
               <div
-                className="rounded-[11px] border border-[#d1dbd6] bg-white px-4 py-3 text-[#0f2e22]"
+                className="rounded-[12px] border-2 border-[#1D9E75] bg-white px-6 py-4 text-[#0f2e22]"
                 role="note"
               >
-                <p className="text-sm font-semibold">{copy.patientNote}</p>
-                <p className="mt-0.5 text-xs text-[#4a7060]">
+                <p className="text-base font-bold">{copy.patientNote}</p>
+                <p className="mt-1 text-sm text-[#4a7060]">
                   {copy.patientNoteSub}
                 </p>
               </div>
               <Link
                 href="/assessment-access"
-                className="group flex items-center justify-between rounded-[11px] border border-[#d1dbd6] bg-white px-4 py-3 text-[#0f2e22] transition hover:border-[#1D9E75]/40"
+                className="group flex items-center justify-between rounded-[12px] border-2 border-[#1D9E75] bg-[#1D9E75] px-6 py-4 text-white transition hover:bg-[#1a8f6a] active:scale-95"
               >
                 <div>
-                  <p className="text-sm font-semibold">{copy.assessmentLink}</p>
-                  <p className="text-xs text-[#4a7060]">
+                  <p className="text-base font-bold">{copy.assessmentLink}</p>
+                  <p className="text-sm text-white/80">
                     {copy.assessmentLinkSub}
                   </p>
                 </div>
-                <svg className="h-4 w-4 text-[#0f2e22] opacity-25 transition group-hover:opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="h-5 w-5 text-white transition group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                 </svg>
               </Link>
