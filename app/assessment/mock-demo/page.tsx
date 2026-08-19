@@ -66,6 +66,46 @@ const MOCK_ASSESSMENTS = [
 export default function MockAssessmentPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [completed, setCompleted] = useState<boolean[]>([false, false, false, false]);
+  const [restTimeRemaining, setRestTimeRemaining] = useState(0);
+
+  // Check if we should show rest page (after 2 assessments)
+  const completedCount = completed.filter((c) => c).length;
+  const showRestPage = completedCount === 2 && !completed[2];
+
+  // Initialize rest timer when entering rest page
+  useEffect(() => {
+    if (showRestPage && restTimeRemaining === 0) {
+      setRestTimeRemaining(120); // 2 minutes in seconds
+    }
+  }, [showRestPage]);
+
+  // Rest timer effect
+  useEffect(() => {
+    if (!showRestPage || restTimeRemaining <= 0) return;
+
+    const timer = setInterval(() => {
+      setRestTimeRemaining((prev) => {
+        if (prev <= 1) {
+          clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [showRestPage, restTimeRemaining]);
+
+  // Auto-continue when rest time expires
+  useEffect(() => {
+    if (showRestPage && restTimeRemaining === 0 && completedCount === 2) {
+      const timer = setTimeout(() => {
+        setCurrentIndex(2); // Move to 3rd assessment
+        setRestTimeRemaining(0);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [restTimeRemaining, showRestPage, completedCount]);
 
   const currentAssessment = MOCK_ASSESSMENTS[currentIndex];
   const progress = Math.round(((currentIndex + (completed[currentIndex] ? 1 : 0)) / MOCK_ASSESSMENTS.length) * 100);
@@ -75,11 +115,22 @@ export default function MockAssessmentPage() {
     newCompleted[currentIndex] = true;
     setCompleted(newCompleted);
 
+    // Check if this is the 2nd completed assessment
+    if (newCompleted.filter((c) => c).length === 2) {
+      // Don't auto-advance, show rest page instead
+      return;
+    }
+
     if (currentIndex < MOCK_ASSESSMENTS.length - 1) {
       setTimeout(() => {
         setCurrentIndex(currentIndex + 1);
       }, 500);
     }
+  };
+
+  const handleContinueAfterRest = () => {
+    setRestTimeRemaining(0);
+    setCurrentIndex(2); // Move to 3rd assessment
   };
 
   const handleNext = () => {
@@ -95,6 +146,12 @@ export default function MockAssessmentPage() {
   };
 
   const allCompleted = completed.every((c) => c);
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-[#F4F6F5] to-white">
@@ -147,6 +204,55 @@ export default function MockAssessmentPage() {
             >
               Back to Home
             </Link>
+          </div>
+        ) : showRestPage ? (
+          /* Rest Page */
+          <div className="flex flex-col items-center justify-center rounded-[16px] border-2 border-[#1D9E75] bg-gradient-to-b from-[#f0f7f4] to-[#e8f3ef] p-12 text-center min-h-96">
+            <div className="mb-6 text-7xl">😊</div>
+            <h2 className="text-4xl font-bold text-[#0f2e22] mb-2">Great Progress!</h2>
+            <p className="text-lg text-[#6b9080] mb-8">You've completed 2 assessments. Take a moment to rest.</p>
+            
+            {/* Rest Timer */}
+            <div className="mb-8">
+              <div className="text-7xl font-bold text-[#1D9E75] font-mono tracking-wider">
+                {formatTime(restTimeRemaining)}
+              </div>
+              <p className="mt-4 text-sm text-[#6b9080]">Rest time remaining</p>
+            </div>
+
+            {/* Rest Guidance */}
+            <div className="mb-8 max-w-md rounded-[12px] border border-[#d1dbd6] bg-white p-6">
+              <h3 className="font-bold text-[#0f2e22] mb-3">While you rest:</h3>
+              <ul className="space-y-2 text-left text-sm text-[#6b9080]">
+                <li className="flex gap-2">
+                  <span>💧</span>
+                  <span>Take a few sips of water</span>
+                </li>
+                <li className="flex gap-2">
+                  <span>🫁</span>
+                  <span>Do some deep breathing</span>
+                </li>
+                <li className="flex gap-2">
+                  <span>🧘</span>
+                  <span>Stretch gently if comfortable</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Manual Continue Button (if timer expires) */}
+            {restTimeRemaining === 0 && (
+              <button
+                onClick={handleContinueAfterRest}
+                className="rounded-[12px] bg-[#1D9E75] px-8 py-4 font-bold text-white transition hover:bg-[#1a8f6a] active:scale-95"
+              >
+                Continue to Next Assessment
+              </button>
+            )}
+
+            {/* Auto-continue message */}
+            {restTimeRemaining > 0 && (
+              <p className="text-xs text-[#6b9080]">You'll automatically continue after the rest period</p>
+            )}
           </div>
         ) : (
           /* Assessment Card */
