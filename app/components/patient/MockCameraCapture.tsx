@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect, useState, useCallback } from "react";
 
 interface MockCameraCaptureProps {
   isActive: boolean;
@@ -9,126 +9,195 @@ interface MockCameraCaptureProps {
 export default function MockCameraCapture({ isActive }: MockCameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [cameraPermission, setCameraPermission] = useState<"idle" | "granted" | "denied" | "mock">("idle");
-  const [isLoading, setIsLoading] = useState(false);
+  const poseLandmarkerRef = useRef<unknown>(null);
+  const animFrameRef = useRef<number | null>(null);
+  const lastVideoTimeRef = useRef<number>(-1);
+  const [cameraPermission, setCameraPermission] = useState<"idle" | "loading" | "granted" | "denied">("idle");
+  const [poseLoading, setPoseLoading] = useState(false);
   const [stream, setStream] = useState<MediaStream | null>(null);
 
+  // Start camera
   useEffect(() => {
     if (!isActive) {
-      // Stop stream when not active
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
       if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
+        stream.getTracks().forEach((t) => t.stop());
         setStream(null);
       }
+      setCameraPermission("idle");
       return;
     }
 
     const startCamera = async () => {
+      setCameraPermission("loading");
       try {
-        setIsLoading(true);
         const mediaStream = await navigator.mediaDevices.getUserMedia({
           video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: "user" },
           audio: false,
         });
         setStream(mediaStream);
-        if (videoRef.current) {
-          videoRef.current.srcObject = mediaStream;
-        }
+        // videoRef may not be mounted yet; srcObject is set in a separate effect
         setCameraPermission("granted");
-      } catch (error) {
-        console.error("Camera error:", error);
-        // Fall back to mock camera display
-        setCameraPermission("mock");
-        drawMockCamera();
-      } finally {
-        setIsLoading(false);
+      } catch {
+        setCameraPermission("denied");
       }
     };
 
     startCamera();
 
     return () => {
-      if (stream) {
-        stream.getTracks().forEach((track) => track.stop());
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isActive]);
+
+  // Attach stream to video element as soon as both are ready
+  useEffect(() => {
+    if (stream && videoRef.current && videoRef.current.srcObject !== stream) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  // Load MediaPipe PoseLandmarker
+  useEffect(() => {
+    if (cameraPermission !== "granted") return;
+
+    const loadPose = async () => {
+      setPoseLoading(true);
+      try {
+        const { FilesetResolver: FSR, PoseLandmarker: PL } = await import("@mediapipe/tasks-vision");
+        const vision = await FSR.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.34/wasm"
+        );
+        const landmarker = await PL.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath:
+              "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+            delegate: "CPU",
+          },
+          runningMode: "VIDEO",
+          numPoses: 1,
+        });
+        poseLandmarkerRef.current = landmarker;
+      } catch (e) {
+        console.error("Pose model load error:", e);
+      } finally {
+        setPoseLoading(false);
       }
     };
-  }, [isActive, stream]);
 
-  const drawMockCamera = () => {
+    loadPose();
+  }, [cameraPermission]);
+
+  // Draw skeleton on canvas overlay
+  const drawSkeleton = useCallback(() => {
+    const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const landmarker = poseLandmarkerRef.current as any;
+    if (!video || !canvas || video.readyState < 2) return;
 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Draw dark background (like camera feed)
-    ctx.fillStyle = "#1a1a1a";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Draw a grid pattern (simulating motion capture grid)
-    ctx.strokeStyle = "#1D9E75";
-    ctx.lineWidth = 1;
-    ctx.globalAlpha = 0.2;
-
-    const gridSize = 40;
-    for (let i = 0; i < canvas.width; i += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(i, 0);
-      ctx.lineTo(i, canvas.height);
-      ctx.stroke();
-    }
-    for (let i = 0; i < canvas.height; i += gridSize) {
-      ctx.beginPath();
-      ctx.moveTo(0, i);
-      ctx.lineTo(canvas.width, i);
-      ctx.stroke();
+    // Match canvas to actual video dimensions
+    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+      canvas.width = video.videoWidth || 1280;
+      canvas.height = video.videoHeight || 720;
     }
 
-    ctx.globalAlpha = 1;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw center circle (simulating pose detection)
-    ctx.strokeStyle = "#1D9E75";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(canvas.width / 2, canvas.height / 2, 60, 0, Math.PI * 2);
-    ctx.stroke();
+    if (landmarker && video.currentTime !== lastVideoTimeRef.current) {
+      lastVideoTimeRef.current = video.currentTime;
+      const results = landmarker.detectForVideo(video, performance.now());
 
-    // Draw some joint markers
-    const joints = [
-      { x: canvas.width / 2, y: canvas.height / 2 - 80, label: "Head" },
-      { x: canvas.width / 2 - 70, y: canvas.height / 2 - 20, label: "L-Shoulder" },
-      { x: canvas.width / 2 + 70, y: canvas.height / 2 - 20, label: "R-Shoulder" },
-      { x: canvas.width / 2 - 50, y: canvas.height / 2 + 100, label: "L-Knee" },
-      { x: canvas.width / 2 + 50, y: canvas.height / 2 + 100, label: "R-Knee" },
-    ];
+      if (results?.landmarks?.length > 0) {
+        const landmarks = results.landmarks[0];
+        const W = canvas.width;
+        const H = canvas.height;
 
-    joints.forEach((joint) => {
-      ctx.fillStyle = "#1D9E75";
-      ctx.beginPath();
-      ctx.arc(joint.x, joint.y, 6, 0, Math.PI * 2);
-      ctx.fill();
-    });
+        // Draw connections (skeleton lines)
+        const connections: [number, number][] = [
+          [0, 1], [1, 2], [2, 3], [3, 7],
+          [0, 4], [4, 5], [5, 6], [6, 8],
+          [9, 10],
+          [11, 12],
+          [11, 13], [13, 15],
+          [12, 14], [14, 16],
+          [15, 17], [15, 19], [15, 21],
+          [16, 18], [16, 20], [16, 22],
+          [11, 23], [12, 24],
+          [23, 24],
+          [23, 25], [25, 27], [27, 29], [27, 31],
+          [24, 26], [26, 28], [28, 30], [28, 32],
+        ];
 
-    // Draw connecting lines
-    ctx.strokeStyle = "#1D9E75";
-    ctx.lineWidth = 2;
-    ctx.globalAlpha = 0.6;
-    ctx.beginPath();
-    ctx.moveTo(joints[0].x, joints[0].y);
-    ctx.lineTo(joints[1].x, joints[1].y);
-    ctx.lineTo(joints[3].x, joints[3].y);
-    ctx.stroke();
+        ctx.strokeStyle = "#1D9E75";
+        ctx.lineWidth = 3;
+        ctx.globalAlpha = 0.85;
+        for (const [a, b] of connections) {
+          const lA = landmarks[a];
+          const lB = landmarks[b];
+          if (lA && lB && lA.visibility > 0.4 && lB.visibility > 0.4) {
+            ctx.beginPath();
+            ctx.moveTo((1 - lA.x) * W, lA.y * H); // mirror horizontally
+            ctx.lineTo((1 - lB.x) * W, lB.y * H);
+            ctx.stroke();
+          }
+        }
 
-    ctx.beginPath();
-    ctx.moveTo(joints[0].x, joints[0].y);
-    ctx.lineTo(joints[2].x, joints[2].y);
-    ctx.lineTo(joints[4].x, joints[4].y);
-    ctx.stroke();
-  };
+        // Draw joint circles
+        ctx.globalAlpha = 1;
+        for (const lm of landmarks) {
+          if (lm.visibility > 0.4) {
+            const x = (1 - lm.x) * W;
+            const y = lm.y * H;
+
+            // Outer glow ring
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(x, y, 8, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Inner filled circle
+            ctx.fillStyle = "#1D9E75";
+            ctx.beginPath();
+            ctx.arc(x, y, 5, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    animFrameRef.current = requestAnimationFrame(drawSkeleton);
+  }, []);
+
+  // Start render loop once camera is ready
+  useEffect(() => {
+    if (cameraPermission !== "granted") return;
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    const onPlay = () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      drawSkeleton();
+    };
+
+    video.addEventListener("play", onPlay);
+    if (!video.paused) onPlay();
+
+    return () => {
+      video.removeEventListener("play", onPlay);
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [cameraPermission, drawSkeleton]);
 
   if (cameraPermission === "denied") {
     return (
-      <div className="flex h-64 flex-col items-center justify-center rounded-[12px] border-2 border-amber-200 bg-amber-50">
+      <div className="flex h-72 flex-col items-center justify-center rounded-[12px] border-2 border-amber-200 bg-amber-50">
         <div className="text-4xl mb-3">📷</div>
         <p className="font-semibold text-amber-900">Camera Permission Denied</p>
         <p className="mt-1 text-xs text-amber-800">Please enable camera access in your browser settings to continue</p>
@@ -136,60 +205,62 @@ export default function MockCameraCapture({ isActive }: MockCameraCaptureProps) 
     );
   }
 
-  if (isLoading && cameraPermission === "idle") {
-    return (
-      <div className="flex h-64 flex-col items-center justify-center rounded-[12px] border-2 border-[#d1dbd6] bg-[#f4f6f5]">
-        <div className="mb-3 h-8 w-8 animate-spin rounded-full border-4 border-[#d1dbd6] border-t-[#1D9E75]"></div>
-        <p className="font-semibold text-[#0f2e22]">Starting camera...</p>
-        <p className="mt-1 text-xs text-[#6b9080]">Please allow camera access when prompted</p>
-      </div>
-    );
-  }
-
   return (
-    <div className="relative rounded-[12px] border-2 border-[#d1dbd6] bg-black overflow-hidden">
-      {cameraPermission === "granted" ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          className="h-64 w-full object-cover"
-        />
-      ) : (
-        <canvas
-          ref={canvasRef}
-          width={1280}
-          height={720}
-          className="h-64 w-full bg-black"
-        />
+    <div className="relative rounded-[12px] border-2 border-[#1D9E75] bg-black overflow-hidden h-72">
+      {/* Loading overlay — shown until camera starts */}
+      {(cameraPermission === "idle" || cameraPermission === "loading") && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#0f1a15]">
+          <div className="mb-3 h-8 w-8 animate-spin rounded-full border-4 border-[#1D9E75]/30 border-t-[#1D9E75]" />
+          <p className="font-semibold text-white">Starting camera…</p>
+          <p className="mt-1 text-xs text-[#6b9080]">Please allow camera access when prompted</p>
+        </div>
       )}
 
-      {/* Camera HUD Overlay */}
+      {/* Live video — always in DOM so ref attaches immediately */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        style={{ transform: "scaleX(-1)" }}
+        className="h-full w-full object-cover"
+      />
+
+      {/* Skeleton canvas — sits on top of video */}
+      <canvas
+        ref={canvasRef}
+        className="absolute inset-0 h-full w-full"
+        style={{ pointerEvents: "none", transform: "none" }}
+      />
+
+      {/* HUD overlay */}
       <div className="absolute inset-0 pointer-events-none">
         {/* Corner markers */}
-        <div className="absolute top-4 left-4 w-6 h-6 border-2 border-[#1D9E75]" />
-        <div className="absolute top-4 right-4 w-6 h-6 border-2 border-[#1D9E75]" />
-        <div className="absolute bottom-4 left-4 w-6 h-6 border-2 border-[#1D9E75]" />
-        <div className="absolute bottom-4 right-4 w-6 h-6 border-2 border-[#1D9E75]" />
+        <div className="absolute top-3 left-3 w-5 h-5 border-l-2 border-t-2 border-[#1D9E75]" />
+        <div className="absolute top-3 right-3 w-5 h-5 border-r-2 border-t-2 border-[#1D9E75]" />
+        <div className="absolute bottom-3 left-3 w-5 h-5 border-l-2 border-b-2 border-[#1D9E75]" />
+        <div className="absolute bottom-3 right-3 w-5 h-5 border-r-2 border-b-2 border-[#1D9E75]" />
 
-        {/* Center crosshair */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-          <div className="w-12 h-12 border-2 border-[#1D9E75] rounded-full opacity-50" />
-          <div className="w-0.5 h-6 bg-[#1D9E75] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-50" />
-          <div className="w-6 h-0.5 bg-[#1D9E75] absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-50" />
-        </div>
-
-        {/* Recording indicator */}
-        <div className="absolute top-4 right-4 flex items-center gap-2 bg-black/50 px-3 py-1 rounded-full">
+        {/* Recording badge */}
+        <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-2 bg-black/60 px-3 py-1 rounded-full">
           <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-          <span className="text-xs font-bold text-white">REC</span>
+          <span className="text-xs font-bold text-white tracking-widest">REC</span>
         </div>
 
-        {/* Mock camera indicator */}
-        {cameraPermission === "mock" && (
-          <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-black/50 px-3 py-1 rounded-full">
-            <span className="text-xs font-bold text-[#1D9E75]">MOTION DETECTION</span>
+        {/* Pose status bottom-left */}
+        {cameraPermission === "granted" && (
+          <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-black/60 px-3 py-1 rounded-full">
+            {poseLoading ? (
+              <>
+                <div className="h-2 w-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                <span className="text-xs font-bold text-white">Loading AI…</span>
+              </>
+            ) : (
+              <>
+                <div className="w-2 h-2 bg-[#1D9E75] rounded-full animate-pulse" />
+                <span className="text-xs font-bold text-[#1D9E75]">POSE TRACKING</span>
+              </>
+            )}
           </div>
         )}
       </div>
