@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
+import MockCameraCapture from "@/app/components/patient/MockCameraCapture";
 
 const MOCK_ASSESSMENTS = [
   {
@@ -150,6 +151,9 @@ export default function MockAssessmentPage() {
         ) : (
           /* Assessment Card */
           <div className="space-y-8">
+            {/* Camera Feed */}
+            <MockCameraCapture isActive={!allCompleted} />
+
             {/* Assessment Info */}
             <div className="rounded-[16px] border border-[#d1dbd6] bg-white p-8">
               <div className="mb-6 flex items-start justify-between">
