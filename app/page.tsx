@@ -948,6 +948,20 @@ function DualPathwaySection({ language }: { language: UiLanguage }) {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
                 </svg>
               </Link>
+              <Link
+                href="/assessment/mock-demo"
+                className="group flex items-center justify-between rounded-[12px] border-2 border-[#1D9E75] bg-white px-6 py-4 text-[#1D9E75] transition hover:bg-[#f0f7f4] active:scale-95"
+              >
+                <div>
+                  <p className="text-base font-bold">Try Mock Assessment</p>
+                  <p className="text-sm text-[#4a7060]">
+                    See how a real assessment works
+                  </p>
+                </div>
+                <svg className="h-5 w-5 transition group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                </svg>
+              </Link>
             </div>
           </div>
         </div>

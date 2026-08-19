@@ -94,6 +94,24 @@ export default function AssessmentAccessPage() {
             >
               {loading ? "Opening…" : "Open Assessment"}
             </button>
+
+            {/* Divider */}
+            <div className="relative my-5">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-[#d8e4de]"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="bg-white px-2 text-[#9db0a3]">or</span>
+              </div>
+            </div>
+
+            {/* Mock Assessment Button */}
+            <Link
+              href="/assessment/mock-demo"
+              className="block w-full rounded-[8px] border-2 border-[#1D9E75] bg-white py-3 text-center text-sm font-bold text-[#1D9E75] transition hover:bg-[#f0f7f4]"
+            >
+              Try Mock Assessment
+            </Link>
           </div>
         </div>
 
@@ -101,6 +119,9 @@ export default function AssessmentAccessPage() {
         <div className="mt-6 text-center">
           <p className="text-xs text-[#9db0a3]">
             Assessment links are sent by your clinic and expire after a set period.
+          </p>
+          <p className="mt-2 text-xs text-[#9db0a3]">
+            New? Try our mock assessment to see how it works.
           </p>
           <Link href="/" className="mt-3 inline-block text-xs font-semibold text-[#1D9E75] hover:text-[#0D6B4F]">
             ← Back to RASQ home
