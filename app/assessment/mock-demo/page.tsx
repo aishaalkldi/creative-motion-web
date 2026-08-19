@@ -3,6 +3,11 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import MockCameraCapture from "@/app/components/patient/MockCameraCapture";
+import {
+  RadarChart, Radar, PolarGrid, PolarAngleAxis,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Cell,
+} from "recharts";
 
 const MOCK_ASSESSMENTS = [
   {
@@ -18,6 +23,14 @@ const MOCK_ASSESSMENTS = [
     ],
     icon: "🪑",
     difficulty: "Easy",
+    // Mock scores that will be shown in the report
+    scoreLabel: "Reps Completed",
+    scoreValue: 5,
+    scoreMax: 5,
+    scoreUnit: "reps",
+    benchmark: "5 reps (normal)",
+    status: "Normal",
+    tip: "You completed all 5 repetitions. Keep practising to improve your speed.",
   },
   {
     id: "single-leg-stance",
@@ -32,6 +45,13 @@ const MOCK_ASSESSMENTS = [
     ],
     icon: "🧍",
     difficulty: "Medium",
+    scoreLabel: "Balance Duration",
+    scoreValue: 18,
+    scoreMax: 30,
+    scoreUnit: "sec",
+    benchmark: "≥ 20 sec (normal)",
+    status: "Below Normal",
+    tip: "Balance duration is slightly below the target. Daily balance exercises will help improve this.",
   },
   {
     id: "functional-reach",
@@ -46,6 +66,13 @@ const MOCK_ASSESSMENTS = [
     ],
     icon: "🙌",
     difficulty: "Medium",
+    scoreLabel: "Reach Distance",
+    scoreValue: 28,
+    scoreMax: 35,
+    scoreUnit: "cm",
+    benchmark: "≥ 25 cm (normal)",
+    status: "Normal",
+    tip: "Good reach distance. Core strengthening exercises can help you reach even further.",
   },
   {
     id: "timed-up-and-go",
@@ -60,6 +87,13 @@ const MOCK_ASSESSMENTS = [
     ],
     icon: "🚶",
     difficulty: "Medium",
+    scoreLabel: "Completion Time",
+    scoreValue: 11,
+    scoreMax: 20,
+    scoreUnit: "sec",
+    benchmark: "< 12 sec (normal)",
+    status: "Normal",
+    tip: "Excellent time! You are within the normal range for mobility and fall risk.",
   },
 ];
 
@@ -67,10 +101,11 @@ export default function MockAssessmentPage() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [completed, setCompleted] = useState<boolean[]>([false, false, false, false]);
   const [restTimeRemaining, setRestTimeRemaining] = useState(0);
+  const [restDone, setRestDone] = useState(false);
 
   // Check if we should show rest page (after 2 assessments)
   const completedCount = completed.filter((c) => c).length;
-  const showRestPage = completedCount === 2 && !completed[2];
+  const showRestPage = completedCount === 2 && !restDone;
 
   // Initialize rest timer when entering rest page
   useEffect(() => {
@@ -100,8 +135,8 @@ export default function MockAssessmentPage() {
   useEffect(() => {
     if (showRestPage && restTimeRemaining === 0 && completedCount === 2) {
       const timer = setTimeout(() => {
-        setCurrentIndex(2); // Move to 3rd assessment
-        setRestTimeRemaining(0);
+        setRestDone(true);
+        setCurrentIndex(2);
       }, 500);
       return () => clearTimeout(timer);
     }
@@ -129,7 +164,7 @@ export default function MockAssessmentPage() {
   };
 
   const handleContinueAfterRest = () => {
-    setRestTimeRemaining(0);
+    setRestDone(true);
     setCurrentIndex(2); // Move to 3rd assessment
   };
 
@@ -190,20 +225,158 @@ export default function MockAssessmentPage() {
       {/* Main Content */}
       <main className="mx-auto max-w-4xl px-6 py-12">
         {allCompleted ? (
-          /* Success State */
-          <div className="flex flex-col items-center justify-center rounded-[16px] border-2 border-[#1D9E75] bg-[#f0f7f4] p-12 text-center">
-            <div className="mb-4 text-6xl">✓</div>
-            <h2 className="text-3xl font-bold text-[#0f2e22]">Great job!</h2>
-            <p className="mt-3 text-lg text-[#6b9080]">You've completed all 4 assessments.</p>
-            <p className="mt-2 text-sm text-[#6b9080]">
-              This mock assessment is complete. To perform a real assessment, contact your clinic for a secure assessment link.
-            </p>
-            <Link
-              href="/"
-              className="mt-8 inline-block rounded-[12px] bg-[#1D9E75] px-8 py-4 font-bold text-white transition hover:bg-[#1a8f6a] active:scale-95"
-            >
-              Back to Home
-            </Link>
+          /* ── FULL REPORT ── */
+          <div className="space-y-8">
+            {/* Hero banner */}
+            <div className="rounded-[20px] bg-gradient-to-br from-[#1D9E75] to-[#0f6a4e] p-8 text-center text-white shadow-lg">
+              <div className="mb-3 text-6xl">🎉</div>
+              <h2 className="text-3xl font-bold">Assessment Complete!</h2>
+              <p className="mt-2 text-lg opacity-90">Great job! Here is your performance summary.</p>
+              <p className="mt-1 text-sm opacity-70">Completed on {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</p>
+            </div>
+
+            {/* Charts row */}
+            <div className="grid gap-6 md:grid-cols-2">
+              {/* Radar chart — overall shape */}
+              <div className="rounded-[16px] border border-[#d1dbd6] bg-white p-6">
+                <h3 className="mb-1 text-base font-bold text-[#0f2e22]">Performance Overview</h3>
+                <p className="mb-4 text-xs text-[#6b9080]">Score vs benchmark across all assessments</p>
+                <ResponsiveContainer width="100%" height={240}>
+                  <RadarChart data={MOCK_ASSESSMENTS.map((a) => ({
+                    name: a.title.split(" ")[0], // short label
+                    score: Math.round((a.scoreValue / a.scoreMax) * 100),
+                    benchmark: 80,
+                  }))}>
+                    <PolarGrid stroke="#e4ece8" />
+                    <PolarAngleAxis dataKey="name" tick={{ fill: "#6b9080", fontSize: 12, fontWeight: 600 }} />
+                    <Radar name="Your score" dataKey="score" stroke="#1D9E75" fill="#1D9E75" fillOpacity={0.35} strokeWidth={2} />
+                    <Radar name="Benchmark" dataKey="benchmark" stroke="#9db0a3" fill="#9db0a3" fillOpacity={0.15} strokeDasharray="4 2" strokeWidth={1.5} />
+                  </RadarChart>
+                </ResponsiveContainer>
+                <div className="flex justify-center gap-6 mt-2">
+                  <span className="flex items-center gap-1.5 text-xs text-[#6b9080]"><span className="inline-block h-2 w-4 rounded-full bg-[#1D9E75]" />Your score</span>
+                  <span className="flex items-center gap-1.5 text-xs text-[#6b9080]"><span className="inline-block h-2 w-4 rounded-full bg-[#9db0a3]" />Benchmark</span>
+                </div>
+              </div>
+
+              {/* Bar chart — per-assessment % */}
+              <div className="rounded-[16px] border border-[#d1dbd6] bg-white p-6">
+                <h3 className="mb-1 text-base font-bold text-[#0f2e22]">Score Breakdown</h3>
+                <p className="mb-4 text-xs text-[#6b9080]">Percentage of benchmark reached per test</p>
+                <ResponsiveContainer width="100%" height={240}>
+                  <BarChart
+                    data={MOCK_ASSESSMENTS.map((a) => ({
+                      name: a.title.split(" ")[0],
+                      score: Math.round((a.scoreValue / a.scoreMax) * 100),
+                      status: a.status,
+                    }))}
+                    margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e4ece8" vertical={false} />
+                    <XAxis dataKey="name" tick={{ fill: "#6b9080", fontSize: 12, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                    <YAxis domain={[0, 100]} tick={{ fill: "#9db0a3", fontSize: 11 }} axisLine={false} tickLine={false} unit="%" />
+                    <Tooltip
+                      formatter={(v) => [`${v}%`, "Score"]}
+                      contentStyle={{ borderRadius: 10, border: "1px solid #d1dbd6", fontSize: 13 }}
+                    />
+                    <Bar dataKey="score" radius={[6, 6, 0, 0]} maxBarSize={48}>
+                      {MOCK_ASSESSMENTS.map((a, i) => (
+                        <Cell key={i} fill={a.status === "Normal" ? "#1D9E75" : "#f59e0b"} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="flex justify-center gap-6 mt-2">
+                  <span className="flex items-center gap-1.5 text-xs text-[#6b9080]"><span className="inline-block h-2 w-2 rounded-full bg-[#1D9E75]" />Normal</span>
+                  <span className="flex items-center gap-1.5 text-xs text-[#6b9080]"><span className="inline-block h-2 w-2 rounded-full bg-amber-400" />Below Normal</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Per-assessment result cards */}
+            <div>
+              <h3 className="mb-4 text-lg font-bold text-[#0f2e22]">Detailed Results</h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {MOCK_ASSESSMENTS.map((a) => {
+                  const pct = Math.round((a.scoreValue / a.scoreMax) * 100);
+                  const isNormal = a.status === "Normal";
+                  return (
+                    <div key={a.id} className="rounded-[14px] border border-[#d1dbd6] bg-white p-5">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                          <span className="text-3xl">{a.icon}</span>
+                          <div>
+                            <p className="font-bold text-[#0f2e22] text-sm">{a.title}</p>
+                            <p className="text-xs text-[#6b9080]">{a.scoreLabel}</p>
+                          </div>
+                        </div>
+                        <span className={`rounded-full px-3 py-0.5 text-xs font-bold ${isNormal ? "bg-[#e8f3ef] text-[#1D9E75]" : "bg-amber-50 text-amber-700"}`}>
+                          {a.status}
+                        </span>
+                      </div>
+
+                      {/* Score bar */}
+                      <div className="mb-2">
+                        <div className="flex justify-between text-xs text-[#6b9080] mb-1">
+                          <span>{a.scoreValue} {a.scoreUnit}</span>
+                          <span>{pct}%</span>
+                        </div>
+                        <div className="h-2.5 w-full rounded-full bg-[#e4ece8]">
+                          <div
+                            className="h-full rounded-full transition-all duration-700"
+                            style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: isNormal ? "#1D9E75" : "#f59e0b" }}
+                          />
+                        </div>
+                        <p className="mt-1 text-[10px] text-[#9db0a3]">Benchmark: {a.benchmark}</p>
+                      </div>
+
+                      {/* Tip */}
+                      <p className="mt-3 text-xs leading-relaxed text-[#6b9080] border-t border-[#e4ece8] pt-3">
+                        💡 {a.tip}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Overall summary */}
+            <div className="rounded-[16px] border-2 border-[#1D9E75] bg-[#f0f7f4] p-6">
+              <h3 className="mb-3 text-base font-bold text-[#0f2e22]">📋 Overall Summary</h3>
+              <div className="grid grid-cols-3 divide-x divide-[#d1dbd6] text-center">
+                <div className="px-4">
+                  <p className="text-3xl font-bold text-[#1D9E75]">4</p>
+                  <p className="text-xs text-[#6b9080]">Tests Completed</p>
+                </div>
+                <div className="px-4">
+                  <p className="text-3xl font-bold text-[#1D9E75]">3</p>
+                  <p className="text-xs text-[#6b9080]">In Normal Range</p>
+                </div>
+                <div className="px-4">
+                  <p className="text-3xl font-bold text-amber-500">1</p>
+                  <p className="text-xs text-[#6b9080]">Needs Attention</p>
+                </div>
+              </div>
+              <p className="mt-4 text-sm text-[#6b9080]">
+                This is a mock assessment for demonstration purposes. Results are simulated and do not reflect real clinical measurements. Contact your clinic for an official assessment.
+              </p>
+            </div>
+
+            {/* Actions */}
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <Link
+                href="/"
+                className="flex-1 rounded-[12px] border-2 border-[#1D9E75] px-6 py-4 text-center font-bold text-[#1D9E75] transition hover:bg-[#f0f7f4]"
+              >
+                Back to Home
+              </Link>
+              <button
+                onClick={() => window.print()}
+                className="flex-1 flex items-center justify-center gap-2 rounded-[12px] bg-[#1D9E75] px-6 py-4 font-bold text-white transition hover:bg-[#1a8f6a] active:scale-95"
+              >
+                🖨️ Print Report
+              </button>
+            </div>
           </div>
         ) : showRestPage ? (
           /* Rest Page */
@@ -251,7 +424,17 @@ export default function MockAssessmentPage() {
 
             {/* Auto-continue message */}
             {restTimeRemaining > 0 && (
-              <p className="text-xs text-[#6b9080]">You'll automatically continue after the rest period</p>
+              <div className="flex flex-col items-center gap-2">
+                <p className="text-xs text-[#6b9080]">You'll automatically continue after the rest period</p>
+                {process.env.NODE_ENV === "development" && (
+                  <button
+                    onClick={handleContinueAfterRest}
+                    className="text-xs text-[#9db0a3] underline hover:text-[#1D9E75]"
+                  >
+                    Skip rest (dev only)
+                  </button>
+                )}
+              </div>
             )}
           </div>
         ) : (
