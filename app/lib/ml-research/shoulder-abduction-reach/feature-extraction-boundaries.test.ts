@@ -107,7 +107,6 @@ describe("feature extraction does not affect therapist labels", () => {
         exclusionFlag: null,
         raterConfidence: "high",
         note: "",
-        labeledAtMs: Date.now(),
       }),
       true,
     );

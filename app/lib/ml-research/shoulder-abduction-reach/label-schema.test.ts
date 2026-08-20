@@ -12,6 +12,7 @@ import {
   ML_RESEARCH_LABEL_SCHEMA_VERSION,
   ML_RESEARCH_RATER_ID_MAX_LENGTH,
   normalizeResearchRaterId,
+  projectShoulderAbductionReachLabelForRater,
   type ShoulderAbductionReachLabelRecord,
   type ShoulderAbductionReachLabelSubmission,
 } from "@/app/lib/ml-research/shoulder-abduction-reach/label-schema";
@@ -27,7 +28,6 @@ function validSubmission(): ShoulderAbductionReachLabelSubmission {
     exclusionFlag: null,
     raterConfidence: "high",
     note: "",
-    labeledAtMs: Date.now(),
   };
 }
 
@@ -37,6 +37,7 @@ function validRecord(): ShoulderAbductionReachLabelRecord {
     labelSchemaVersion: ML_RESEARCH_LABEL_SCHEMA_VERSION,
     datasetVersion: ML_RESEARCH_DATASET_VERSION,
     participantId: "dev-participant-001",
+    labeledAtMs: 1_700_000_000_000,
   };
 }
 
@@ -238,11 +239,40 @@ describe("isValidShoulderAbductionReachLabelSubmission", () => {
     assert.equal(isValidShoulderAbductionReachLabelSubmission(undefined), false);
   });
 
-  it("does not require participantId, labelSchemaVersion, or datasetVersion (submission shape)", () => {
+  it("does not require participantId, labelSchemaVersion, datasetVersion, or labeledAtMs (submission shape)", () => {
     const submission = validSubmission();
     assert.equal("participantId" in submission, false);
     assert.equal("labelSchemaVersion" in submission, false);
     assert.equal("datasetVersion" in submission, false);
+    assert.equal("labeledAtMs" in submission, false);
+  });
+
+  it("rejects a submission that still carries labeledAtMs", () => {
+    assert.equal(
+      isValidShoulderAbductionReachLabelSubmission({ ...validSubmission(), labeledAtMs: Date.now() }),
+      false,
+    );
+  });
+
+  it("rejects a submission that carries participantId (server-owned)", () => {
+    assert.equal(
+      isValidShoulderAbductionReachLabelSubmission({ ...validSubmission(), participantId: "forged-participant" }),
+      false,
+    );
+  });
+
+  it("rejects a submission that carries labelSchemaVersion (server-owned)", () => {
+    assert.equal(
+      isValidShoulderAbductionReachLabelSubmission({ ...validSubmission(), labelSchemaVersion: "wrong-version" }),
+      false,
+    );
+  });
+
+  it("rejects a submission that carries datasetVersion (server-owned)", () => {
+    assert.equal(
+      isValidShoulderAbductionReachLabelSubmission({ ...validSubmission(), datasetVersion: "wrong-dataset" }),
+      false,
+    );
   });
 });
 
@@ -289,5 +319,31 @@ describe("isValidShoulderAbductionReachLabelRecord", () => {
     assert.equal(isValidShoulderAbductionReachLabelRecord(null), false);
     assert.equal(isValidShoulderAbductionReachLabelRecord("record"), false);
     assert.equal(isValidShoulderAbductionReachLabelRecord(undefined), false);
+  });
+});
+
+describe("projectShoulderAbductionReachLabelForRater", () => {
+  it("omits participantId from the rater-facing view", () => {
+    const projected = projectShoulderAbductionReachLabelForRater(validRecord());
+    assert.equal("participantId" in projected, false);
+    assert.doesNotMatch(JSON.stringify(projected), /dev-participant-001/);
+  });
+
+  it("preserves every other field the labeling UI relies on", () => {
+    const record = validRecord();
+    const projected = projectShoulderAbductionReachLabelForRater(record);
+    assert.deepEqual(projected, omit(record, "participantId"));
+  });
+
+  it("does not mutate or strip provenance from the persisted record", () => {
+    const record = validRecord();
+    projectShoulderAbductionReachLabelForRater(record);
+    assert.equal(record.participantId, "dev-participant-001");
+    assert.equal(isValidShoulderAbductionReachLabelRecord(record), true);
+  });
+
+  it("produces a view that is no longer a valid full record (participantId is required on disk)", () => {
+    const projected = projectShoulderAbductionReachLabelForRater(validRecord());
+    assert.equal(isValidShoulderAbductionReachLabelRecord(projected), false);
   });
 });

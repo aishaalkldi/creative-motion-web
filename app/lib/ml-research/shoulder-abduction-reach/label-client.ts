@@ -7,7 +7,7 @@
  */
 
 import type { ShoulderAbductionCaptureSessionSummary, ShoulderAbductionReachRepForLabeling } from "./capture-reader";
-import type { ShoulderAbductionReachLabelRecord, ShoulderAbductionReachLabelSubmission } from "./label-schema";
+import type { ShoulderAbductionReachLabelForRater, ShoulderAbductionReachLabelSubmission } from "./label-schema";
 
 const LABEL_ENDPOINT = "/api/dev/ml-research/shoulder-abduction-reach-label";
 
@@ -28,6 +28,8 @@ export async function fetchLabelingSessions(): Promise<{
  * `raterId` is required — the API route only ever returns the labels
  * belonging to this exact rater, never anyone else's (structural
  * enforcement of rater independence; see the route's doc comment).
+ *
+ * Labels come back as the rater-facing projection, without `participantId`.
  */
 export async function fetchSessionForLabeling(
   devSessionId: string,
@@ -35,7 +37,7 @@ export async function fetchSessionForLabeling(
 ): Promise<{
   ok: boolean;
   reps: ShoulderAbductionReachRepForLabeling[];
-  labels: ShoulderAbductionReachLabelRecord[];
+  labels: ShoulderAbductionReachLabelForRater[];
   error?: string;
 }> {
   const response = await fetch(
@@ -43,7 +45,7 @@ export async function fetchSessionForLabeling(
   );
   const body = (await response.json().catch(() => ({}))) as {
     reps?: ShoulderAbductionReachRepForLabeling[];
-    labels?: ShoulderAbductionReachLabelRecord[];
+    labels?: ShoulderAbductionReachLabelForRater[];
     error?: string;
   };
   return { ok: response.ok, reps: body.reps ?? [], labels: body.labels ?? [], error: body.error };
@@ -51,7 +53,7 @@ export async function fetchSessionForLabeling(
 
 /**
  * `record` is deliberately the submission shape — no `participantId`,
- * `labelSchemaVersion`, or `datasetVersion` — those are stamped server-side.
+ * `labelSchemaVersion`, `datasetVersion`, or `labeledAtMs` — those are stamped server-side.
  */
 export async function postShoulderAbductionReachLabel(
   record: ShoulderAbductionReachLabelSubmission,

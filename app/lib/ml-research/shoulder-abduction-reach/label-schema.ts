@@ -135,8 +135,7 @@ export type VerifiedCaptureIdentityForLabelWrite = Pick<
 /**
  * Assembles the persisted label record from server-verified capture identity,
  * normalized rater id, user research input, and a server-owned timestamp.
- * The browser may still submit `labeledAtMs` for API-shape compatibility, but
- * persisted authority comes from the caller-supplied `labeledAtMs` argument.
+ * `labeledAtMs` is never accepted from the browser submission contract.
  */
 export function buildPersistedShoulderAbductionReachLabelRecord(
   verifiedCapture: VerifiedCaptureIdentityForLabelWrite,
@@ -161,15 +160,54 @@ export function buildPersistedShoulderAbductionReachLabelRecord(
 }
 
 /**
- * What the BROWSER submits — deliberately missing `participantId`,
- * `labelSchemaVersion`, and `datasetVersion`. Those three are stamped
- * server-side in the POST route (participantId looked up from the capture
- * file, the two versions hard-coded to the current constants), so the
- * client can neither see nor forge them. See the route's doc comment.
+ * The BROWSER-FACING view of a persisted label — omits `participantId`, which is
+ * server-owned provenance. `capture-reader.ts` already strips `participantId` from
+ * the rater-facing rep payload; this type applies the same blinding to the labels
+ * the GET route echoes back, so no part of the response carries participant
+ * identity. The persisted record itself is unchanged and still keeps
+ * `participantId` — this narrows only the HTTP representation.
+ */
+export type ShoulderAbductionReachLabelForRater = Omit<
+  ShoulderAbductionReachLabelRecord,
+  "participantId"
+>;
+
+/**
+ * Projects a persisted label into its rater-facing view.
+ *
+ * Deliberately an explicit field allowlist rather than a rest-spread omission:
+ * if a future provenance field is added to `ShoulderAbductionReachLabelRecord`,
+ * this fails to compile and forces a decision about whether the browser may see
+ * it, instead of silently leaking it.
+ */
+export function projectShoulderAbductionReachLabelForRater(
+  record: ShoulderAbductionReachLabelRecord,
+): ShoulderAbductionReachLabelForRater {
+  return {
+    labelSchemaVersion: record.labelSchemaVersion,
+    datasetVersion: record.datasetVersion,
+    devSessionId: record.devSessionId,
+    repetitionId: record.repetitionId,
+    sourceLineIndex: record.sourceLineIndex,
+    side: record.side,
+    raterId: record.raterId,
+    compensationLabel: record.compensationLabel,
+    exclusionFlag: record.exclusionFlag,
+    raterConfidence: record.raterConfidence,
+    note: record.note,
+    labeledAtMs: record.labeledAtMs,
+  };
+}
+
+/**
+ * What the BROWSER submits — deliberately missing server-owned fields:
+ * `participantId`, `labelSchemaVersion`, `datasetVersion`, and `labeledAtMs`.
+ * Locator fields (`devSessionId`, `sourceLineIndex`, `repetitionId`, `side`) are
+ * sent by the client but verified server-side against capture data before persist.
  */
 export type ShoulderAbductionReachLabelSubmission = Omit<
   ShoulderAbductionReachLabelRecord,
-  "participantId" | "labelSchemaVersion" | "datasetVersion"
+  "participantId" | "labelSchemaVersion" | "datasetVersion" | "labeledAtMs"
 >;
 
 function isCompensationLabel(value: unknown): value is ShoulderAbductionReachCompensationLabel {
@@ -191,18 +229,15 @@ function isConfidence(value: unknown): value is ShoulderAbductionReachLabelConfi
 }
 
 /**
- * Shared validation for the "submission-shaped" fields — everything except
- * `participantId`/`labelSchemaVersion`/`datasetVersion`, which the two
- * exported validators below check differently (submission: absent;
- * full record: server-stamped values).
+ * Client-submitted label input — excludes server-owned `labeledAtMs`.
  */
-function hasValidSubmissionFields(r: Partial<ShoulderAbductionReachLabelRecord>): boolean {
+function hasValidClientSubmissionFields(
+  r: Partial<ShoulderAbductionReachLabelRecord>,
+): boolean {
   const compensationSet = isCompensationLabel(r.compensationLabel);
   const exclusionSet = isExclusionFlag(r.exclusionFlag);
   const compensationNull = r.compensationLabel === null;
   const exclusionNull = r.exclusionFlag === null;
-  // Exactly one of the two must be a valid enum value while the other is
-  // explicitly null — never both set, never both null/absent.
   const exactlyOneLabelSet = (compensationSet && exclusionNull) || (exclusionSet && compensationNull);
 
   return (
@@ -216,8 +251,7 @@ function hasValidSubmissionFields(r: Partial<ShoulderAbductionReachLabelRecord>)
     normalizeResearchRaterId(typeof r.raterId === "string" ? r.raterId : "") !== null &&
     exactlyOneLabelSet &&
     isConfidence(r.raterConfidence) &&
-    typeof r.note === "string" &&
-    Number.isFinite(r.labeledAtMs)
+    typeof r.note === "string"
   );
 }
 
@@ -226,7 +260,12 @@ export function isValidShoulderAbductionReachLabelSubmission(
   value: unknown,
 ): value is ShoulderAbductionReachLabelSubmission {
   if (!value || typeof value !== "object") return false;
-  return hasValidSubmissionFields(value as Partial<ShoulderAbductionReachLabelRecord>);
+  const payload = value as Record<string, unknown>;
+  if ("labeledAtMs" in payload) return false;
+  if ("participantId" in payload) return false;
+  if ("labelSchemaVersion" in payload) return false;
+  if ("datasetVersion" in payload) return false;
+  return hasValidClientSubmissionFields(value as Partial<ShoulderAbductionReachLabelRecord>);
 }
 
 /** Validates a fully-assembled (server-stamped or persisted-and-reread) label record. */
@@ -240,6 +279,7 @@ export function isValidShoulderAbductionReachLabelRecord(
     r.datasetVersion === ML_RESEARCH_DATASET_VERSION &&
     typeof r.participantId === "string" &&
     r.participantId.length > 0 &&
-    hasValidSubmissionFields(r)
+    Number.isFinite(r.labeledAtMs) &&
+    hasValidClientSubmissionFields(r)
   );
 }

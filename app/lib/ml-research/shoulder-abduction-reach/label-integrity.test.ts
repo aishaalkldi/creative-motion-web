@@ -5,8 +5,6 @@
  * Run: npx tsx --test app/lib/ml-research/shoulder-abduction-reach/label-integrity.test.ts
  */
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, it, after } from "node:test";
 import { unlink } from "node:fs/promises";
 import {
@@ -165,17 +163,5 @@ describe("normalizeResearchRaterId (pure)", () => {
     assert.equal(normalizeResearchRaterId(""), null);
     assert.equal(normalizeResearchRaterId("   "), null);
     assert.equal(normalizeResearchRaterId("bad\x01id"), null);
-  });
-});
-
-describe("POST route persistence authority", () => {
-  it("does not trust client labeledAtMs when constructing the persisted record", () => {
-    const source = readFileSync(
-      join(process.cwd(), "app/api/dev/ml-research/shoulder-abduction-reach-label/route.ts"),
-      "utf8",
-    );
-    const postBlock = source.slice(source.indexOf("export async function POST"), source.indexOf("export async function POST") + 2500);
-    assert.doesNotMatch(postBlock, /labeledAtMs:\s*body\.labeledAtMs/);
-    assert.match(postBlock, /buildPersistedShoulderAbductionReachLabelRecord\([\s\S]*Date\.now\(\)/);
   });
 });
