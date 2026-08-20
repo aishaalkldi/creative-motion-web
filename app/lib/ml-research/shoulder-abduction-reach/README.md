@@ -90,3 +90,73 @@ Integrity controls (fail-closed, server-side):
   **not** authentication or verified clinician identity.
 - These controls improve dataset integrity for ML research. They do **not**
   establish clinical validity, diagnostic correctness, or ground truth.
+
+## Research dataset manifest (Slice 4, dev/research only)
+
+A **manifest** is the deterministic join of capture lines with therapist label
+lines, written to `dev-data/rasq-ml/shoulder-abduction-manifests/`
+(gitignored). It is an internal, derived, read-only research artifact — **not**
+a training dataset, not a clinical dataset, not adjudicated ground truth, and
+not a train/test split.
+
+```
+capture JSONL + label JSONL
+  → manifest-source-reader.ts  (raw lines, nothing filtered away)
+  → manifest-assembly.ts       (fail-closed identity join + diagnostics)
+  → manifest-schema.ts         (canonical, timestamp-free serialization)
+  → manifest-writer.ts         → dev-data/rasq-ml/shoulder-abduction-manifests/
+```
+
+Assemble one:
+
+```
+npx tsx scripts/ml-research/assemble-shoulder-abduction-manifest.ts \
+  --session <devSessionId> [--session <devSessionId> ...] \
+  [--out <path.manifest.json>] [--allow-diagnostics] [--print]
+```
+
+Sessions are named explicitly; there is no directory auto-discovery, so the
+`test-fixture-*` sessions other tests write into the capture directory can
+never leak into a research manifest.
+
+Design rules:
+
+- **Canonical sample identity** is `(devSessionId, sourceLineIndex)` — one
+  manifest sample per captured repetition. `repetitionId`, `side`, and
+  `participantId` are cross-checked identity *assertions*, never the join key
+  (Slice 1 `repetitionId` values can collide across sides).
+- **Fail closed.** A label is attached only when its own persisted
+  `devSessionId`, `sourceLineIndex`, `repetitionId`, `side`, and
+  `participantId` all agree with the located capture line. Anything else is
+  reported as a rejection (orphan, identity mismatch, malformed, or
+  version-incompatible) and left out.
+- **Multi-rater by construction.** `labels` is an array of independent rater
+  judgments — 0, 1, or many. The only collapse applied is Slice 2's existing
+  "latest label per `(sourceLineIndex, raterId)`" rule, reused directly from
+  `label-reader.ts`. No consensus, majority, reference label, severity score,
+  or numeric encoding is computed — that belongs to a later methodology stage.
+- **No silent data loss.** Unlike the labeling readers (which correctly skip
+  unparsable/invalid lines when serving the UI), the assembly path hands every
+  non-empty line to the assembler and reports it. The CLI additionally fails
+  closed on any rejection and writes nothing unless `--allow-diagnostics` is
+  passed.
+- **References, not copies.** A sample carries a source reference
+  (`relativeFilePath`, `lineIndex`, `frameCount`) — never frames, joints,
+  landmarks, video, images, or derived feature values. A future exporter
+  recovers the sequence from the source identity.
+- **Deterministic.** Samples sort by session then `sourceLineIndex`, labels by
+  `raterId` then `labeledAtMs`, rejections by session/kind/line/reason. The
+  manifest file itself contains no timestamp; wall-clock run metadata goes to
+  a separate `.run.json` sidecar, so identical inputs produce byte-identical
+  manifest content.
+- **Read-only on sources.** Assembly never writes to the capture or label
+  directories, and the writer refuses an output path inside either one.
+- `participantId` is retained as internal research provenance (needed later
+  for participant-level, leakage-safe splitting). No API route or page exposes
+  the manifest, and the labeling API remains unchanged.
+- Five distinct versions answer five different questions:
+  `captureSchemaVersion`, `featureSchemaVersion`, `labelSchemaVersion`,
+  `datasetVersion`, and `manifestSchemaVersion`
+  (`shoulder-abduction-manifest-v1`). Capture `features-v1` and `features-v2`
+  are both joinable; unrecognized versions are rejected, never joined
+  optimistically.
