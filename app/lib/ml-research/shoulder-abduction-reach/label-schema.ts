@@ -34,6 +34,35 @@ export const ML_RESEARCH_LABEL_SCHEMA_VERSION = "shoulder-abduction-label-schema
 export const ML_RESEARCH_DATASET_VERSION = "shoulder-abduction-dataset-v1" as const;
 
 /**
+ * Maximum length for a dev/research `raterId` after trim. Not an auth identity —
+ * just a conservative bound to reject malformed payloads.
+ */
+export const ML_RESEARCH_RATER_ID_MAX_LENGTH = 64;
+
+/** Rejects ASCII control characters and DEL in a trimmed rater id. */
+const RESEARCH_RATER_ID_CONTROL_CHAR_PATTERN = /[\x00-\x1f\x7f]/;
+
+/**
+ * Shared normalization for dev/research `raterId` values.
+ *
+ * - trims leading/trailing whitespace only (does NOT lowercase or collapse
+ *   internal whitespace — `Aisha-Rater-01` and `aisha-rater-01` stay distinct)
+ * - rejects empty / whitespace-only values
+ * - rejects unreasonably long values
+ * - rejects control-character payloads
+ *
+ * This is NOT authentication or verified clinician identity.
+ */
+export function normalizeResearchRaterId(raw: string): string | null {
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (trimmed.length === 0) return null;
+  if (trimmed.length > ML_RESEARCH_RATER_ID_MAX_LENGTH) return null;
+  if (RESEARCH_RATER_ID_CONTROL_CHAR_PATTERN.test(trimmed)) return null;
+  return trimmed;
+}
+
+/**
  * Ordinal compensation severity — the therapist's own visual judgment, never
  * derived from `peakNormalizedTrunkDriftRatio` or any other stored feature.
  */
@@ -72,17 +101,21 @@ export type ShoulderAbductionReachLabelRecord = {
   /** Side-qualified, unique repetition identifier from the capture record. */
   repetitionId: string;
   /**
-   * Bonus robustness key beyond the minimum spec field list — the 0-based
-   * line number of the labeled rep inside its capture JSONL file. Not the
-   * primary identity (repetitionId + raterId is, per the dedup rule below),
-   * but harmless extra traceability, and useful if a session captured
-   * before the Slice 1.1 repetitionId-uniqueness fix is ever labeled.
+   * Traceability locator — the 0-based line number of the labeled rep inside
+   * its capture JSONL file. NOT sufficient repetition identity alone: the POST
+   * route verifies `sourceLineIndex` together with `repetitionId` and `side`
+   * against the server-side capture record before accepting a label.
    */
   sourceLineIndex: number;
-  /** Server-verified from the capture record at write time — never trusted from the client. */
+  /** Server-derived from the verified capture record — never trusted from the client. */
   participantId: string;
+  /** Server-verified against the capture record at write time — not blindly trusted from the client. */
   side: ShoulderAbductionReachSide;
-  /** Free-text identifier the rater typed in — dev tooling only, not an auth identity. */
+  /**
+   * Dev/research identifier the rater typed in — normalized (trim only) at
+   * write time via `normalizeResearchRaterId`. NOT authentication or verified
+   * clinician identity.
+   */
   raterId: string;
   /** Exactly one of compensationLabel / exclusionFlag must be non-null — never both, never neither. */
   compensationLabel: ShoulderAbductionReachCompensationLabel | null;
@@ -90,9 +123,42 @@ export type ShoulderAbductionReachLabelRecord = {
   raterConfidence: ShoulderAbductionReachLabelConfidence;
   /** Optional free-text observation — never fed into ML features, qualitative only. */
   note: string;
-  /** Wall-clock time (ms since epoch) this label was submitted. */
+  /** Server-authoritative wall-clock time (ms since epoch) when the label was accepted. */
   labeledAtMs: number;
 };
+
+export type VerifiedCaptureIdentityForLabelWrite = Pick<
+  ShoulderAbductionReachLabelRecord,
+  "devSessionId" | "repetitionId" | "sourceLineIndex" | "side" | "participantId"
+>;
+
+/**
+ * Assembles the persisted label record from server-verified capture identity,
+ * normalized rater id, user research input, and a server-owned timestamp.
+ * The browser may still submit `labeledAtMs` for API-shape compatibility, but
+ * persisted authority comes from the caller-supplied `labeledAtMs` argument.
+ */
+export function buildPersistedShoulderAbductionReachLabelRecord(
+  verifiedCapture: VerifiedCaptureIdentityForLabelWrite,
+  normalizedRaterId: string,
+  submission: Pick<
+    ShoulderAbductionReachLabelSubmission,
+    "compensationLabel" | "exclusionFlag" | "raterConfidence" | "note"
+  >,
+  labeledAtMs: number,
+): ShoulderAbductionReachLabelRecord {
+  return {
+    ...verifiedCapture,
+    raterId: normalizedRaterId,
+    compensationLabel: submission.compensationLabel,
+    exclusionFlag: submission.exclusionFlag,
+    raterConfidence: submission.raterConfidence,
+    note: submission.note,
+    labeledAtMs,
+    labelSchemaVersion: ML_RESEARCH_LABEL_SCHEMA_VERSION,
+    datasetVersion: ML_RESEARCH_DATASET_VERSION,
+  };
+}
 
 /**
  * What the BROWSER submits — deliberately missing `participantId`,
@@ -147,8 +213,7 @@ function hasValidSubmissionFields(r: Partial<ShoulderAbductionReachLabelRecord>)
     Number.isInteger(r.sourceLineIndex) &&
     (r.sourceLineIndex as number) >= 0 &&
     (r.side === "left" || r.side === "right") &&
-    typeof r.raterId === "string" &&
-    r.raterId.trim().length > 0 &&
+    normalizeResearchRaterId(typeof r.raterId === "string" ? r.raterId : "") !== null &&
     exactlyOneLabelSet &&
     isConfidence(r.raterConfidence) &&
     typeof r.note === "string" &&

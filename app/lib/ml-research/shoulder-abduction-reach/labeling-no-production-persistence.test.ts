@@ -50,7 +50,7 @@ describe("labeling slice — no production persistence", () => {
 
   it("the labeling lab page refuses to render outside development", () => {
     const source = readFileSync(
-      join(process.cwd(), "app/clinician/shoulder-abduction-reach-labeling-lab/page.tsx"),
+      join(process.cwd(), "app/clinician/shoulder-abduction-reach-ml-labeling-lab/page.tsx"),
       "utf8",
     );
     assert.match(source, /NODE_ENV\s*!==\s*["']development["']/);

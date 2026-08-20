@@ -27,6 +27,8 @@ function label(opts: {
   repetitionId: string;
   raterId: string;
   labeledAtMs: number;
+  sourceLineIndex?: number;
+  side?: "left" | "right";
   compensationLabel?: ShoulderAbductionReachLabelRecord["compensationLabel"];
   confidence?: ShoulderAbductionReachLabelConfidence;
 }): ShoulderAbductionReachLabelRecord {
@@ -34,10 +36,10 @@ function label(opts: {
     labelSchemaVersion: ML_RESEARCH_LABEL_SCHEMA_VERSION,
     datasetVersion: ML_RESEARCH_DATASET_VERSION,
     devSessionId: TEST_SESSION_ID,
-    sourceLineIndex: 0,
+    sourceLineIndex: opts.sourceLineIndex ?? 0,
     repetitionId: opts.repetitionId,
     participantId: "dev-participant-fixture",
-    side: "right",
+    side: opts.side ?? "right",
     raterId: opts.raterId,
     compensationLabel: opts.compensationLabel ?? "NO_COMPENSATION",
     exclusionFlag: null,
@@ -48,17 +50,70 @@ function label(opts: {
 }
 
 describe("dedupeLatestLabelPerRepAndRater (pure)", () => {
-  it("keeps only the last label per (repetitionId, raterId) pair", () => {
+  it("keeps only the last label per (sourceLineIndex, raterId) pair", () => {
     const labels = [
       label({ repetitionId: "rep-1", raterId: "therapist-A", labeledAtMs: 1000, compensationLabel: "NO_COMPENSATION" }),
-      label({ repetitionId: "rep-2", raterId: "therapist-A", labeledAtMs: 1000, compensationLabel: "MILD_COMPENSATION" }),
-      // correction for rep-1 by the SAME rater
+      label({ repetitionId: "rep-2", raterId: "therapist-A", labeledAtMs: 1000, compensationLabel: "MILD_COMPENSATION", sourceLineIndex: 1 }),
+      // correction for line 0 by the SAME rater
       label({ repetitionId: "rep-1", raterId: "therapist-A", labeledAtMs: 2000, compensationLabel: "CLEAR_COMPENSATION" }),
     ];
     const result = dedupeLatestLabelPerRepAndRater(labels);
     assert.equal(result.length, 2);
-    const rep1 = result.find((l) => l.repetitionId === "rep-1");
+    const rep1 = result.find((l) => l.sourceLineIndex === 0);
     assert.equal(rep1?.compensationLabel, "CLEAR_COMPENSATION");
+  });
+
+  it("does not collapse colliding repetitionIds across sides for the same rater", () => {
+    const sharedRepetitionId = "shared-rep-id";
+    const labels = [
+      label({
+        repetitionId: sharedRepetitionId,
+        raterId: "therapist-A",
+        labeledAtMs: 1000,
+        sourceLineIndex: 0,
+        side: "right",
+        compensationLabel: "NO_COMPENSATION",
+      }),
+      label({
+        repetitionId: sharedRepetitionId,
+        raterId: "therapist-A",
+        labeledAtMs: 1100,
+        sourceLineIndex: 1,
+        side: "left",
+        compensationLabel: "MILD_COMPENSATION",
+      }),
+    ];
+    const result = dedupeLatestLabelPerRepAndRater(labels);
+    assert.equal(result.length, 2);
+  });
+
+  it("collapses whitespace-only raterId variants to one latest label for the same sourceLineIndex", () => {
+    const labels = [
+      label({
+        repetitionId: "rep-1",
+        raterId: " therapist-A ",
+        labeledAtMs: 1000,
+        compensationLabel: "NO_COMPENSATION",
+      }),
+      label({
+        repetitionId: "rep-1",
+        raterId: "therapist-A",
+        labeledAtMs: 2000,
+        compensationLabel: "CLEAR_COMPENSATION",
+      }),
+    ];
+    const result = dedupeLatestLabelPerRepAndRater(labels);
+    assert.equal(result.length, 1);
+    assert.equal(result[0]?.compensationLabel, "CLEAR_COMPENSATION");
+  });
+
+  it("preserves case-distinct raterIds as separate dedupe identities", () => {
+    const labels = [
+      label({ repetitionId: "rep-1", raterId: "Rater-A", labeledAtMs: 1000, compensationLabel: "NO_COMPENSATION" }),
+      label({ repetitionId: "rep-1", raterId: "rater-a", labeledAtMs: 1500, compensationLabel: "MILD_COMPENSATION" }),
+    ];
+    const result = dedupeLatestLabelPerRepAndRater(labels);
+    assert.equal(result.length, 2);
   });
 
   it("preserves BOTH raters' independent labels for the same repetition (does not collapse across raters)", () => {

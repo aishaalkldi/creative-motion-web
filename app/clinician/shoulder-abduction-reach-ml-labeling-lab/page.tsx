@@ -87,8 +87,9 @@ type LabelChoice =
   | { kind: "exclusion"; value: ShoulderAbductionReachExclusionFlag }
   | null;
 
-function repKey(rep: { repetitionId: string }): string {
-  return rep.repetitionId;
+function repKey(rep: { sourceLineIndex: number }): string {
+  // sourceLineIndex is unique per capture line — disambiguates repetitionId collisions across sides.
+  return String(rep.sourceLineIndex);
 }
 
 function formatMs(ms: number): string {
@@ -166,7 +167,7 @@ export default function ShoulderAbductionReachMlLabelingLabPage() {
       return;
     }
     setReps(result.reps);
-    const labeledIds = new Set(result.labels.map((l) => l.repetitionId));
+    const labeledIds = new Set(result.labels.map((l) => String(l.sourceLineIndex)));
     setLabeledRepIds(labeledIds);
     const firstUnlabeled = result.reps.findIndex((rep) => !labeledIds.has(repKey(rep)));
     setCurrentRepIndex(firstUnlabeled >= 0 ? firstUnlabeled : 0);
@@ -359,7 +360,7 @@ export default function ShoulderAbductionReachMlLabelingLabPage() {
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12, maxWidth: 900 }}>
             {reps.map((rep, idx) => (
               <button
-                key={rep.repetitionId}
+                key={`${rep.sourceLineIndex}-${rep.side}`}
                 type="button"
                 onClick={() => goToRep(idx)}
                 style={{
