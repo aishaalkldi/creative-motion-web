@@ -160,3 +160,132 @@ Design rules:
   (`shoulder-abduction-manifest-v1`). Capture `features-v1` and `features-v2`
   are both joinable; unrecognized versions are rejected, never joined
   optimistically.
+
+## Training export / QC (Slice 5, dev/research only)
+
+A **training export** is a QC-gated derivation of a Slice 4 manifest into a
+canonical supervised dataset for baseline ML experiments. See
+`training-export-schema.ts` and:
+
+```
+npx tsx scripts/ml-research/export-shoulder-abduction-training-dataset.ts \
+  --manifest <path.manifest.json> \
+  [--out <export-name>] \
+  [--print]
+```
+
+Output directory: `dev-data/rasq-ml/shoulder-abduction-training-exports/`
+(gitignored).
+
+Design rules:
+
+- **Slice 4 manifest is the only upstream input.** Raw capture/label files are
+  dereferenced only inside the Slice 5 exporter — never bypassed.
+- **Model input = pose frames only.** Derived features, therapist notes, and
+  `participantId` stay out of `input`.
+- **Fail closed** at dataset integrity and sample eligibility boundaries.
+- **No train/test split** in Slice 5 — splitting belongs to Slice 6.
+
+## Baseline experiment harness (Slice 6, dev/research only)
+
+A **baseline experiment** consumes a Slice 5 `.training-export.jsonl` ONLY,
+applies a participant-level holdout split, extracts auditable baseline features
+from pose frames, runs a transparent CPU-only multinomial logistic regression
+classifier, and reports **technical research metrics** — not clinical
+validation.
+
+```
+Slice 5 training export (.training-export.jsonl)
+  → baseline-experiment-reader.ts   (schema/provenance validation)
+  → baseline-experiment-readiness.ts  (scientific adequacy gate)
+  → baseline-experiment-split.ts      (participant-level holdout)
+  → baseline-feature-extraction.ts    (versioned pose-frame summaries)
+  → baseline-classifier.ts            (multinomial logistic regression)
+  → baseline-experiment-metrics.ts    (confusion matrix, P/R/F1, macro F1)
+  → baseline-experiment-writer.ts     → dev-data/rasq-ml/shoulder-abduction-baseline-experiments/
+```
+
+Run one:
+
+```
+npx tsx scripts/ml-research/run-shoulder-abduction-baseline-experiment.ts \
+  --export <path.training-export.jsonl> \
+  [--name <experiment-name>] \
+  [--seed <number>] \
+  [--print]
+```
+
+### What this is
+
+- A **research-only experiment harness** to validate dataset loading, leakage
+  prevention, feature boundaries, baseline training/evaluation mechanics, and
+  reproducible experiment metadata.
+- A **participant-level split policy** — a participant never appears in both
+  train and test. No row-level random splitting.
+- An explicit **NOT_READY** gate when data are scientifically inadequate
+  (e.g. one participant / one labeled sample). The harness refuses to train and
+  does **not** emit fake evaluation metrics.
+
+### What this is NOT
+
+- **Not a clinically validated ML model.** Metrics are technical research
+  outputs for methodology testing only.
+- **Not autonomous clinical decision-making.** Therapist review remains
+  required for care delivery.
+- **Not patient-specific training or personalization.** No longitudinal models
+  in this slice.
+- **Not trained on the current real dataset** when it contains only one
+  supervised candidate from one participant — that outcome is intentional
+  success, not failure.
+- **Not reading raw captures or labels directly.** Slice 5 export eligibility
+  is never bypassed.
+- Synthetic multi-participant fixtures exist **only** to exercise pipeline
+  mechanics in tests.
+
+### Data readiness policy (methodology configuration)
+
+The readiness gate (`shoulder-abduction-baseline-readiness-v1`) requires, at
+minimum:
+
+- enough distinct participants for participant-level separation,
+- enough eligible supervised samples,
+- enough target-class support for a baseline experiment attempt,
+- a feasible participant holdout split before any training.
+
+These thresholds describe **harness configuration**, not a claim that meeting
+them guarantees clinical or statistical validity. Future real experiments need
+additional independently therapist-labeled data from multiple participants.
+
+### Leakage prevention
+
+- `participantId` is available for grouping/splitting/provenance only — never
+  encoded as a model feature.
+- `raterId`, `devSessionId`, `repetitionId`, therapist notes, QC metadata,
+  deterministic compensation outputs, and target-derived fields are excluded
+  from the feature vector.
+- Post-split leakage validation fails closed if any participant appears in both
+  splits.
+
+### Baseline features (`shoulder-abduction-baseline-features-v1`)
+
+Simple, auditable summaries derived **only** from pose-frame landmarks:
+
+- frame count / movement duration,
+- exercised-side wrist Y trajectory statistics,
+- shoulder–elbow distance statistics,
+- bilateral shoulder trunk-width proxy,
+- peak wrist elevation,
+- core-joint presence ratio.
+
+No clinical goniometry claims. No reuse of Slice 1 deterministic compensation
+classifier outputs as inputs.
+
+### Experiment output
+
+Directory: `dev-data/rasq-ml/shoulder-abduction-baseline-experiments/` (gitignored)
+
+- `<name>.baseline-experiment.json` — canonical deterministic report (no wall clock)
+- `<name>.experiment-run.json` — non-canonical run sidecar (timestamp, node version)
+
+Exit code **0** for both completed experiments and intentional `NOT_READY`
+outcomes. Exit code **1** for malformed exports or usage errors.
