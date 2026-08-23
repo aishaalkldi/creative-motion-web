@@ -299,6 +299,11 @@ describe("volunteer research API", { concurrency: 1 }, () => {
       authedRequest("http://localhost/api/research/volunteer/session/complete", "PATCH", "token"),
     );
     assert.equal(completeRes.status, 404);
+    const { POST: createRepetition } = await import("../repetitions/route");
+    const repetitionRes = await createRepetition(
+      authedRequest("http://localhost/api/research/volunteer/repetitions", "POST", "token", {}),
+    );
+    assert.equal(repetitionRes.status, 404);
     process.env.ML_VOLUNTEER_COLLECTION_ENABLED = "true";
   });
 

@@ -41,7 +41,17 @@ Optional:
 - **Secrets:** Never logs campaign code, session tokens, deletion codes, hashes, or service-role keys.
 - **Campaign code:** High-entropy shared secret — provide only via `VOLUNTEER_QA_CAMPAIGN_CODE` in the operator process. Rotate if exposed.
 
-### Exit codes
+### Slice 8B.2 — repetition persistence (after Migration 022)
+
+Migration `022_ml_research_volunteer_repetitions.sql` must be applied on Staging before
+live repetition QA. The smoke harness does **not** POST repetitions by default.
+
+When Migration 022 is applied and you want to extend live QA later, set:
+
+`VOLUNTEER_QA_RUN_REPETITIONS=true`
+
+(Repetition live checks are optional and should remain off until migration review completes.)
+
 
 | Code | Meaning |
 |------|---------|

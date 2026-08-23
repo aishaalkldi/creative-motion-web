@@ -13,7 +13,7 @@ function read(rel: string): string {
 }
 
 describe("volunteer research isolation", () => {
-  it("migration creates only collection + movement tables (no repetitions)", () => {
+  it("migration 021 creates collection + movement tables only", () => {
     const sql = read("supabase/migrations/021_ml_research_volunteer_sessions.sql");
     assert.match(sql, /ml_research_volunteer_collection_sessions/);
     assert.match(sql, /ml_research_volunteer_movement_sessions/);
@@ -23,11 +23,28 @@ describe("volunteer research isolation", () => {
     assert.doesNotMatch(sql, /references public\.assessments/);
   });
 
-  it("store module does not reference clinical tables", () => {
-    const store = read("app/lib/research/volunteer-session-store.ts");
-    assert.doesNotMatch(store, /patients/);
-    assert.doesNotMatch(store, /cv_session_metrics/);
-    assert.doesNotMatch(store, /assessments/);
+  it("migration 022 creates repetitions table with research-only FK", () => {
+    const sql = read("supabase/migrations/022_ml_research_volunteer_repetitions.sql");
+    assert.match(sql, /ml_research_volunteer_repetitions/);
+    assert.match(sql, /references public\.ml_research_volunteer_movement_sessions/);
+    assert.doesNotMatch(sql, /references public\.patients/);
+    assert.doesNotMatch(sql, /references public\.cv_session_metrics/);
+    assert.doesNotMatch(sql, /references public\.assessments/);
+    assert.match(sql, /enable row level security/);
+    assert.match(sql, /revoke all on public\.ml_research_volunteer_repetitions from anon/);
+    assert.match(sql, /grant select, insert, update, delete on public\.ml_research_volunteer_repetitions/);
+  });
+
+  it("repetition modules do not reference clinical tables", () => {
+    for (const file of [
+      "app/lib/research/volunteer-repetition-store.ts",
+      "app/lib/research/volunteer-repetition-validation.ts",
+    ]) {
+      const source = read(file);
+      assert.doesNotMatch(source, /patients/);
+      assert.doesNotMatch(source, /cv_session_metrics/);
+      assert.doesNotMatch(source, /assessments/);
+    }
   });
 
   it("volunteer UI and hook remain untouched by 8B.1 backend files", () => {

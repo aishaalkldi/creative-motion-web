@@ -41,6 +41,7 @@ const PUBLIC_PATHS = new Set([
   "/api/research/volunteer/sessions",
   "/api/research/volunteer/movement-sessions",
   "/api/research/volunteer/session/complete",
+  "/api/research/volunteer/repetitions",
   // Ops readiness — env booleans + pilot table reachability only (no secrets).
   "/api/health/supabase",
 ]);

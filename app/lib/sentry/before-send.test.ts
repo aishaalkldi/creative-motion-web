@@ -27,6 +27,16 @@ describe("applySentryPrivacy — volunteer research", () => {
     assert.equal(out.request?.headers?.["x-volunteer-session-token"], undefined);
   });
 
+  it("redacts repetitions route bodies", () => {
+    const event = makeEvent("http://localhost/api/research/volunteer/repetitions", {
+      data: { frames: [{ frameIndex: 0 }] },
+      headers: { "x-volunteer-session-token": "raw-token" },
+    });
+    const out = applySentryPrivacy(event)!;
+    assert.equal(out.request?.data, "[Volunteer research request body redacted]");
+    assert.equal(out.request?.headers?.["x-volunteer-session-token"], undefined);
+  });
+
   it("redacts movement-session and complete routes", () => {
     for (const path of [
       "/api/research/volunteer/movement-sessions",

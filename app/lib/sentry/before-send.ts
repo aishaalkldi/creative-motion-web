@@ -1,10 +1,10 @@
-import type { ErrorEvent, EventHint } from "@sentry/nextjs";
+import type { ErrorEvent } from "@sentry/nextjs";
 
 const AI_ROUTE_BODY_REDACT =
   /\/api\/(?:assessments\/[^/?#]+\/translate|voice(?:\/|$))/;
 
 const VOLUNTEER_RESEARCH_ROUTE_BODY_REDACT =
-  /^\/api\/research\/volunteer\/(?:sessions|movement-sessions|session\/complete)$/;
+  /^\/api\/research\/volunteer\/(?:sessions|movement-sessions|session\/complete|repetitions)$/;
 
 const REDACTED_BODY = "[AI request body redacted]";
 const REDACTED_VOLUNTEER_BODY = "[Volunteer research request body redacted]";
@@ -54,7 +54,7 @@ function redactVolunteerResearchRequest(event: ErrorEvent): void {
 }
 
 /** Shared Sentry privacy filter — preserves existing redaction and adds AI route body redaction. */
-export function applySentryPrivacy(event: ErrorEvent, _hint?: EventHint): ErrorEvent | null {
+export function applySentryPrivacy(event: ErrorEvent): ErrorEvent | null {
   if (event.request?.url) {
     event.request.url = redactSensitiveUrls(event.request.url);
   }
