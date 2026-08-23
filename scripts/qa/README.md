@@ -34,6 +34,7 @@ Optional:
 |----------|---------|---------|
 | `VOLUNTEER_QA_BASE_URL` | `http://localhost:3000` | App under test |
 | `VOLUNTEER_QA_SKIP_CLEANUP` | unset | Set `true` to retain QA rows for debugging |
+| `VOLUNTEER_QA_RUN_REPETITIONS` | unset | Set `true` to run live repetition persistence checks (Migration 022 required — see below) |
 
 ### Safety
 
@@ -44,14 +45,33 @@ Optional:
 ### Slice 8B.2 — repetition persistence (after Migration 022)
 
 Migration `022_ml_research_volunteer_repetitions.sql` must be applied on Staging before
-live repetition QA. The smoke harness does **not** POST repetitions by default.
+live repetition QA. The smoke harness does **not** POST repetitions by default — the
+8B.1 checks and their pass count are unchanged when the flag below is unset (a single
+`SKIP` is recorded instead).
 
-When Migration 022 is applied and you want to extend live QA later, set:
+When Migration 022 is applied and you want to extend live QA, set:
 
 `VOLUNTEER_QA_RUN_REPETITIONS=true`
 
 (Repetition live checks are optional and should remain off until migration review completes.)
 
+With the flag set, after movement block 1 is created the harness submits one minimal
+synthetic **valid** Shoulder Abduction Reach v1 repetition payload (two frames, in-range
+landmarks/confidence, consistent tracking-quality ratios) built via the same
+`buildVolunteerRepetitionFixture` helper used by the repetition unit/API tests — not
+dev-data and not clinical thresholds. It exercises:
+
+- First submission → `200` with `created: true` and a `repetitionId`.
+- Identical retry (same `clientSubmissionId` + payload) → `200` with `created: false`
+  and the same `repetitionId` (idempotent).
+- Reused `clientSubmissionId` with a changed payload → `409` (conflict).
+- The corresponding row exists in `ml_research_volunteer_repetitions` (research-only,
+  no clinical FK) with a matching `payload_hash`.
+- Cleanup deletes the repetition row(s) **before** the parent movement/collection rows
+  (required by the `ON DELETE RESTRICT` FK) and verifies zero repetition rows remain.
+
+As with the rest of the harness, only redacted status/shape information is logged —
+never raw frames, hashes, tokens, or identity data.
 
 | Code | Meaning |
 |------|---------|

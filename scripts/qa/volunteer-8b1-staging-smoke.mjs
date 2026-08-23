@@ -9,6 +9,9 @@
  *   $env:VOLUNTEER_QA_CAMPAIGN_CODE = "<pilot-campaign-code>"
  *   npx tsx scripts/qa/volunteer-8b1-staging-smoke.mjs
  *
+ * Optional Slice 8B.2 repetition live QA (requires Migration 022 on Staging):
+ *   $env:VOLUNTEER_QA_RUN_REPETITIONS = "true"
+ *
  * See scripts/qa/README.md for prerequisites and safety notes.
  */
 import { createRequire } from "node:module";
@@ -30,6 +33,11 @@ import {
   COLLECTION_TABLE,
   MOVEMENT_TABLE,
 } from "../../app/lib/research/volunteer-session-store.ts";
+import {
+  buildVolunteerRepetitionFixture,
+  hashVolunteerRepetitionPayload,
+} from "../../app/lib/research/volunteer-repetition-validation.ts";
+import { REPETITION_TABLE } from "../../app/lib/research/volunteer-repetition-store.ts";
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const require = createRequire(resolve(REPO_ROOT, "package.json"));
@@ -178,8 +186,9 @@ function assertShape(obj, allowedKeys) {
 /**
  * @param {import("@supabase/supabase-js").SupabaseClient} admin
  * @param {string | null} collectionSessionId
+ * @param {string | null} repetitionMovementSessionId
  */
-async function cleanupQaRows(admin, collectionSessionId) {
+async function cleanupQaRows(admin, collectionSessionId, repetitionMovementSessionId) {
   if (!collectionSessionId || process.env.VOLUNTEER_QA_SKIP_CLEANUP === "true") {
     record(
       "Cleanup QA rows",
@@ -188,6 +197,17 @@ async function cleanupQaRows(admin, collectionSessionId) {
       process.env.VOLUNTEER_QA_SKIP_CLEANUP === "true" ? "VOLUNTEER_QA_SKIP_CLEANUP=true" : "no session id",
     );
     return;
+  }
+
+  // Repetition rows must be deleted before their parent movement session row —
+  // migration 022's FK is ON DELETE RESTRICT, so movement cleanup would fail otherwise.
+  let repErr = null;
+  if (repetitionMovementSessionId) {
+    const { error } = await admin
+      .from(REPETITION_TABLE)
+      .delete()
+      .eq("movement_session_id", repetitionMovementSessionId);
+    repErr = error;
   }
 
   const { error: moveErr } = await admin
@@ -199,14 +219,29 @@ async function cleanupQaRows(admin, collectionSessionId) {
     .delete()
     .eq("id", collectionSessionId);
 
-  const ok = !moveErr && !collErr;
+  const ok = !repErr && !moveErr && !collErr;
   record(
     "Cleanup QA rows",
     ok ? "PASS" : "FAIL",
     "delete test session + movement rows",
-    ok ? "deleted" : moveErr?.code ?? collErr?.code ?? "error",
+    ok ? "deleted" : repErr?.code ?? moveErr?.code ?? collErr?.code ?? "error",
     ok ? "" : "Rows may remain on Staging; inspect manually",
   );
+
+  if (repetitionMovementSessionId) {
+    const { data: residue, error: residueErr } = await admin
+      .from(REPETITION_TABLE)
+      .select("id")
+      .eq("movement_session_id", repetitionMovementSessionId)
+      .limit(1);
+    const noResidue = !residueErr && (residue?.length ?? 0) === 0;
+    record(
+      "Repetition cleanup leaves no residue",
+      noResidue ? "PASS" : "FAIL",
+      "0 repetition rows remain",
+      residueErr ? residueErr.code ?? "error" : `${residue?.length ?? 0} rows`,
+    );
+  }
 }
 
 async function main() {
@@ -230,6 +265,8 @@ async function main() {
   let sessionToken = null;
   /** @type {string | null} */
   let collectionSessionId = null;
+  /** @type {string | null} */
+  let repetitionMovementSessionId = null;
 
   try {
     record(
@@ -494,6 +531,117 @@ async function main() {
       );
     }
 
+    if (process.env.VOLUNTEER_QA_RUN_REPETITIONS === "true") {
+      const move1MovementSessionId =
+        typeof move1.json?.movementSessionId === "string" ? move1.json.movementSessionId : null;
+
+      if (!move1MovementSessionId) {
+        record(
+          "Repetition live QA",
+          "FAIL",
+          "movementSessionId from movement block 1",
+          "missing",
+          "Cannot run repetition QA without a movement session id",
+        );
+      } else {
+        repetitionMovementSessionId = move1MovementSessionId;
+
+        // Minimal synthetic valid Shoulder Abduction v1 payload — not dev-data, not clinical thresholds.
+        const fixture = buildVolunteerRepetitionFixture({
+          movementSessionId: move1MovementSessionId,
+        });
+        const repetitionBody = {
+          movementSessionId: fixture.movementSessionId,
+          clientSubmissionId: fixture.clientSubmissionId,
+          repetitionIndex: fixture.repetitionIndex,
+          captureSchemaVersion: fixture.captureSchemaVersion,
+          featureSchemaVersion: fixture.featureSchemaVersion,
+          startedAtMs: fixture.startedAtMs,
+          endedAtMs: fixture.endedAtMs,
+          frames: fixture.frames,
+          derivedFeatures: fixture.derivedFeatures,
+        };
+
+        const repFirst = await http("POST", "/api/research/volunteer/repetitions", {
+          token: sessionToken,
+          body: repetitionBody,
+        });
+        const repFirstOk =
+          repFirst.status === 200 &&
+          repFirst.json?.created === true &&
+          typeof repFirst.json?.repetitionId === "string";
+        record(
+          "Repetition first persistence",
+          repFirstOk ? "PASS" : "FAIL",
+          "200 created=true + repetitionId",
+          `${repFirst.status} created=${repFirst.json?.created} keys=${Object.keys(repFirst.json ?? {}).join(",")}`,
+        );
+
+        const repetitionId = repFirstOk ? repFirst.json.repetitionId : null;
+
+        const repRetry = await http("POST", "/api/research/volunteer/repetitions", {
+          token: sessionToken,
+          body: repetitionBody,
+        });
+        const repRetryOk =
+          repRetry.status === 200 &&
+          repRetry.json?.created === false &&
+          repRetry.json?.repetitionId === repetitionId;
+        record(
+          "Repetition identical retry idempotent",
+          repRetryOk ? "PASS" : "FAIL",
+          "200 created=false same repetitionId",
+          `${repRetry.status} created=${repRetry.json?.created} repetitionId=${
+            repRetry.json?.repetitionId === repetitionId ? "match" : "mismatch"
+          }`,
+        );
+
+        const repConflict = await http("POST", "/api/research/volunteer/repetitions", {
+          token: sessionToken,
+          body: { ...repetitionBody, repetitionIndex: repetitionBody.repetitionIndex + 1 },
+        });
+        record(
+          "Repetition conflicting reuse rejected",
+          repConflict.status === 409 ? "PASS" : "FAIL",
+          "409",
+          String(repConflict.status),
+        );
+
+        if (repetitionId) {
+          const { data: repRow } = await admin
+            .from(REPETITION_TABLE)
+            .select("id, movement_session_id, client_submission_id, payload_hash")
+            .eq("id", repetitionId)
+            .maybeSingle();
+          const expectedHash = hashVolunteerRepetitionPayload(fixture);
+          const repRowOk =
+            repRow?.movement_session_id === move1MovementSessionId &&
+            repRow?.client_submission_id === fixture.clientSubmissionId &&
+            repRow?.payload_hash === expectedHash;
+          record(
+            "DB repetition row persisted",
+            repRowOk ? "PASS" : "FAIL",
+            "row present with matching payload hash",
+            repRow ? (repRowOk ? "match" : "mismatch") : "row-missing",
+          );
+        } else {
+          record(
+            "DB repetition row persisted",
+            "SKIP",
+            "row present with matching payload hash",
+            "no repetitionId from first persistence",
+          );
+        }
+      }
+    } else {
+      record(
+        "Repetition live QA",
+        "SKIP",
+        "VOLUNTEER_QA_RUN_REPETITIONS=true",
+        "VOLUNTEER_QA_RUN_REPETITIONS unset — Migration 022 live checks not run",
+      );
+    }
+
     const complete1 = await http("PATCH", "/api/research/volunteer/session/complete", {
       token: sessionToken,
     });
@@ -554,7 +702,7 @@ async function main() {
       );
     }
   } finally {
-    await cleanupQaRows(admin, collectionSessionId);
+    await cleanupQaRows(admin, collectionSessionId, repetitionMovementSessionId);
   }
 
   const passed = results.filter((r) => r.status === "PASS").length;
