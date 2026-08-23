@@ -4,17 +4,144 @@ import { useRef, useEffect, useState, useCallback } from "react";
 
 interface MockCameraCaptureProps {
   isActive: boolean;
+  assessmentId?: string;
+  onLiveCue?: (cue: string) => void;
 }
 
-export default function MockCameraCapture({ isActive }: MockCameraCaptureProps) {
+const MEDIAPIPE_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/+esm";
+const MEDIAPIPE_WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm";
+const POSE_MODEL =
+  "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/latest/pose_landmarker_lite.task";
+
+type TargetPoint = {
+  x: number;
+  y: number;
+};
+
+const FUNCTIONAL_REACH_TARGETS: TargetPoint[] = [
+  // Alternating vertical pattern: up -> down -> up -> down -> up
+  { x: 0.66, y: 0.30 },
+  { x: 0.74, y: 0.68 },
+  { x: 0.80, y: 0.30 },
+  { x: 0.86, y: 0.68 },
+  { x: 0.92, y: 0.30 },
+];
+
+const SKELETON_CONNECTIONS: [number, number][] = [
+  [0, 1], [1, 2], [2, 3], [3, 7],
+  [0, 4], [4, 5], [5, 6], [6, 8],
+  [9, 10],
+  [11, 12],
+  [11, 13], [13, 15],
+  [12, 14], [14, 16],
+  [15, 17], [15, 19], [15, 21],
+  [16, 18], [16, 20], [16, 22],
+  [11, 23], [12, 24],
+  [23, 24],
+  [23, 25], [25, 27], [27, 29], [27, 31],
+  [24, 26], [26, 28], [28, 30], [28, 32],
+];
+
+export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }: MockCameraCaptureProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const poseLandmarkerRef = useRef<unknown>(null);
   const animFrameRef = useRef<number | null>(null);
   const lastVideoTimeRef = useRef<number>(-1);
+  const targetIndexRef = useRef<number>(0);
+  const targetHitFlashUntilRef = useRef<number>(0);
+  const lastTargetHitAtRef = useRef<number>(0);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const lastHitSoundAtRef = useRef<number>(0);
+  const detectTimestampRef = useRef<number>(0);
+  const lastLiveCueRef = useRef<string>("");
+  const lastLiveCueAtRef = useRef<number>(0);
   const [cameraPermission, setCameraPermission] = useState<"idle" | "loading" | "granted" | "denied">("idle");
   const [poseLoading, setPoseLoading] = useState(false);
+  const [poseReady, setPoseReady] = useState(false);
+  const [poseError, setPoseError] = useState<string | null>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
+  const [targetIndex, setTargetIndex] = useState(0);
+  const [targetSequenceDone, setTargetSequenceDone] = useState(false);
+  const [liveCue, setLiveCue] = useState("Follow the on-screen guidance.");
+
+  const showGuidedTargets = assessmentId === "functional-reach";
+  const activeTargets = FUNCTIONAL_REACH_TARGETS;
+
+  useEffect(() => {
+    targetIndexRef.current = targetIndex;
+  }, [targetIndex]);
+
+  useEffect(() => {
+    setTargetIndex(0);
+    targetIndexRef.current = 0;
+    setTargetSequenceDone(false);
+    targetHitFlashUntilRef.current = 0;
+    lastTargetHitAtRef.current = 0;
+    const introCue = showGuidedTargets
+      ? "Reach your hand to the glowing target point."
+      : "Follow the assessment instructions on screen.";
+    setLiveCue(introCue);
+    onLiveCue?.(introCue);
+    lastLiveCueRef.current = introCue;
+    lastLiveCueAtRef.current = performance.now();
+  }, [assessmentId, onLiveCue, showGuidedTargets]);
+
+  const emitLiveCue = useCallback((cue: string, minIntervalMs = 1600) => {
+    const now = performance.now();
+    const cueChanged = cue !== lastLiveCueRef.current;
+    const intervalReached = now - lastLiveCueAtRef.current > minIntervalMs;
+    if (!cueChanged && !intervalReached) return;
+    if (cueChanged || intervalReached) {
+      lastLiveCueRef.current = cue;
+      lastLiveCueAtRef.current = now;
+      setLiveCue(cue);
+      onLiveCue?.(cue);
+    }
+  }, [onLiveCue]);
+
+  const playTargetHitSound = useCallback(() => {
+    if (typeof window === "undefined") return;
+    const now = performance.now();
+    if (now - lastHitSoundAtRef.current < 180) return;
+    lastHitSoundAtRef.current = now;
+
+    const AudioCtx =
+      window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioCtx();
+      }
+      const ctx = audioContextRef.current;
+      if (!ctx) return;
+
+      if (ctx.state === "suspended") {
+        void ctx.resume();
+      }
+
+      const startAt = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(880, startAt);
+      osc.frequency.exponentialRampToValueAtTime(1320, startAt + 0.08);
+
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.exponentialRampToValueAtTime(0.14, startAt + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.16);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(startAt);
+      osc.stop(startAt + 0.17);
+    } catch {
+      // Ignore audio-device errors to keep camera loop stable
+    }
+  }, []);
 
   // Start camera
   useEffect(() => {
@@ -51,6 +178,15 @@ export default function MockCameraCapture({ isActive }: MockCameraCaptureProps) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive]);
 
+  useEffect(() => {
+    return () => {
+      if (audioContextRef.current) {
+        void audioContextRef.current.close();
+        audioContextRef.current = null;
+      }
+    };
+  }, []);
+
   // Attach stream to video element as soon as both are ready
   useEffect(() => {
     if (stream && videoRef.current && videoRef.current.srcObject !== stream) {
@@ -62,117 +198,378 @@ export default function MockCameraCapture({ isActive }: MockCameraCaptureProps) 
   useEffect(() => {
     if (cameraPermission !== "granted") return;
 
+    let cancelled = false;
+
     const loadPose = async () => {
       setPoseLoading(true);
+      setPoseReady(false);
       try {
-        const { FilesetResolver: FSR, PoseLandmarker: PL } = await import("@mediapipe/tasks-vision");
-        const vision = await FSR.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.34/wasm"
-        );
-        const landmarker = await PL.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath:
-              "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
-            delegate: "CPU",
-          },
-          runningMode: "VIDEO",
-          numPoses: 1,
-        });
+        const importModule = new Function("u", "return import(u)") as (u: string) => Promise<unknown>;
+        const mod = (await importModule(MEDIAPIPE_CDN)) as {
+          FilesetResolver: { forVisionTasks: (base: string) => Promise<unknown> };
+          PoseLandmarker: {
+            createFromOptions: (
+              fileset: unknown,
+              options: {
+                baseOptions: { modelAssetPath: string; delegate: "GPU" | "CPU" };
+                runningMode: string;
+                numPoses: number;
+                minPoseDetectionConfidence?: number;
+                minPosePresenceConfidence?: number;
+                minTrackingConfidence?: number;
+              }
+            ) => Promise<unknown>;
+          };
+          RunningMode?: { VIDEO: string };
+        };
+
+        if (cancelled) return;
+        const vision = await mod.FilesetResolver.forVisionTasks(MEDIAPIPE_WASM);
+        if (cancelled) return;
+        const runningMode = mod.RunningMode?.VIDEO ?? "VIDEO";
+
+        let landmarker: unknown;
+        try {
+          landmarker = await mod.PoseLandmarker.createFromOptions(vision, {
+            baseOptions: { modelAssetPath: POSE_MODEL, delegate: "GPU" },
+            runningMode,
+            numPoses: 1,
+            minPoseDetectionConfidence: 0.5,
+            minPosePresenceConfidence: 0.5,
+            minTrackingConfidence: 0.5,
+          });
+        } catch {
+          landmarker = await mod.PoseLandmarker.createFromOptions(vision, {
+            baseOptions: { modelAssetPath: POSE_MODEL, delegate: "CPU" },
+            runningMode,
+            numPoses: 1,
+            minPoseDetectionConfidence: 0.5,
+            minPosePresenceConfidence: 0.5,
+            minTrackingConfidence: 0.5,
+          });
+        }
+
+        if (cancelled) return;
         poseLandmarkerRef.current = landmarker;
+        detectTimestampRef.current = 0;
+        setPoseReady(true);
+        setPoseError(null);
       } catch (e) {
         console.error("Pose model load error:", e);
+        poseLandmarkerRef.current = null;
+        setPoseReady(false);
+        setPoseError("Pose engine unavailable in this browser.");
       } finally {
         setPoseLoading(false);
       }
     };
 
     loadPose();
+
+    return () => {
+      cancelled = true;
+    };
   }, [cameraPermission]);
+
+  const drawGuidedTargets = (
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    handPoint: { x: number; y: number } | null
+  ) => {
+    const currentIndex = Math.min(targetIndexRef.current, activeTargets.length - 1);
+    const now = performance.now();
+
+    // Soft path between targets
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,255,255,0.22)";
+    ctx.lineWidth = 2;
+    ctx.setLineDash([7, 7]);
+    ctx.beginPath();
+    activeTargets.forEach((p, i) => {
+      const x = p.x * width;
+      const y = p.y * height;
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        ctx.lineTo(x, y);
+      }
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+
+    // Draw past/current/future targets
+    activeTargets.forEach((point, idx) => {
+      const x = point.x * width;
+      const y = point.y * height;
+      const reached = idx < currentIndex || targetSequenceDone;
+      const active = idx === currentIndex && !targetSequenceDone;
+
+      if (reached) {
+        ctx.save();
+        ctx.fillStyle = "rgba(29,158,117,0.35)";
+        ctx.strokeStyle = "#1D9E75";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, 11, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+        return;
+      }
+
+      if (active) {
+        const pulse = 1 + 0.18 * Math.sin(now / 180);
+        ctx.save();
+        ctx.strokeStyle = "rgba(80, 235, 182, 0.95)";
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(x, y, 18 * pulse, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.fillStyle = "rgba(29,158,117,0.92)";
+        ctx.beginPath();
+        ctx.arc(x, y, 9, 0, Math.PI * 2);
+        ctx.fill();
+
+        // decorative sparkle ring
+        ctx.strokeStyle = "rgba(255,255,255,0.75)";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(x, y, 25 * pulse, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // hit flash
+        if (targetHitFlashUntilRef.current > now) {
+          ctx.strokeStyle = "rgba(255,255,255,0.95)";
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.arc(x, y, 30 * pulse, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      } else {
+        ctx.save();
+        ctx.fillStyle = "rgba(255,255,255,0.18)";
+        ctx.beginPath();
+        ctx.arc(x, y, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    });
+
+    // Draw hand marker and guidance line
+    if (handPoint) {
+    const currentTarget = activeTargets[currentIndex];
+      const tx = currentTarget.x * width;
+      const ty = currentTarget.y * height;
+      const dx = handPoint.x - tx;
+      const dy = handPoint.y - ty;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      ctx.save();
+      ctx.strokeStyle = "rgba(255,255,255,0.45)";
+      ctx.lineWidth = 1.8;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(handPoint.x, handPoint.y);
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.fillStyle = distance < 42 ? "#50ebb6" : "#fbbf24";
+      ctx.strokeStyle = "rgba(255,255,255,0.95)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(handPoint.x, handPoint.y, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      if (!targetSequenceDone && distance < 42 && now - lastTargetHitAtRef.current > 460) {
+        lastTargetHitAtRef.current = now;
+        targetHitFlashUntilRef.current = now + 220;
+        playTargetHitSound();
+        setTargetIndex((prev) => {
+          const next = prev + 1;
+          targetIndexRef.current = next;
+          if (next >= activeTargets.length) {
+            setTargetSequenceDone(true);
+            return activeTargets.length - 1;
+          }
+          return next;
+        });
+      }
+    }
+  };
 
   // Draw skeleton on canvas overlay
   const drawSkeleton = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const landmarker = poseLandmarkerRef.current as any;
-    if (!video || !canvas || video.readyState < 2) return;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    // Match canvas to actual video dimensions
-    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth || 1280;
-      canvas.height = video.videoHeight || 720;
-    }
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    if (landmarker && video.currentTime !== lastVideoTimeRef.current) {
-      lastVideoTimeRef.current = video.currentTime;
-      const results = landmarker.detectForVideo(video, performance.now());
-
-      if (results?.landmarks?.length > 0) {
-        const landmarks = results.landmarks[0];
-        const W = canvas.width;
-        const H = canvas.height;
-
-        // Draw connections (skeleton lines)
-        const connections: [number, number][] = [
-          [0, 1], [1, 2], [2, 3], [3, 7],
-          [0, 4], [4, 5], [5, 6], [6, 8],
-          [9, 10],
-          [11, 12],
-          [11, 13], [13, 15],
-          [12, 14], [14, 16],
-          [15, 17], [15, 19], [15, 21],
-          [16, 18], [16, 20], [16, 22],
-          [11, 23], [12, 24],
-          [23, 24],
-          [23, 25], [25, 27], [27, 29], [27, 31],
-          [24, 26], [26, 28], [28, 30], [28, 32],
-        ];
-
-        ctx.strokeStyle = "#1D9E75";
-        ctx.lineWidth = 3;
-        ctx.globalAlpha = 0.85;
-        for (const [a, b] of connections) {
-          const lA = landmarks[a];
-          const lB = landmarks[b];
-          if (lA && lB && lA.visibility > 0.4 && lB.visibility > 0.4) {
-            ctx.beginPath();
-            ctx.moveTo((1 - lA.x) * W, lA.y * H); // mirror horizontally
-            ctx.lineTo((1 - lB.x) * W, lB.y * H);
-            ctx.stroke();
-          }
-        }
-
-        // Draw joint circles
-        ctx.globalAlpha = 1;
-        for (const lm of landmarks) {
-          if (lm.visibility > 0.4) {
-            const x = (1 - lm.x) * W;
-            const y = lm.y * H;
-
-            // Outer glow ring
-            ctx.strokeStyle = "#ffffff";
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.arc(x, y, 8, 0, Math.PI * 2);
-            ctx.stroke();
-
-            // Inner filled circle
-            ctx.fillStyle = "#1D9E75";
-            ctx.beginPath();
-            ctx.arc(x, y, 5, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-        ctx.globalAlpha = 1;
+    try {
+      if (!video || !canvas || video.readyState < 2) {
+        return;
       }
-    }
 
-    animFrameRef.current = requestAnimationFrame(drawSkeleton);
-  }, []);
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      // Match canvas to actual video dimensions
+      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+        canvas.width = video.videoWidth || 1280;
+        canvas.height = video.videoHeight || 720;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      if (landmarker && video.currentTime !== lastVideoTimeRef.current) {
+        lastVideoTimeRef.current = video.currentTime;
+        let results: { landmarks?: Array<Array<{ x: number; y: number; visibility?: number }>> } | null = null;
+        try {
+          let ts = detectTimestampRef.current;
+          const now = performance.now();
+          ts = now <= ts ? ts + 0.001 : now;
+          detectTimestampRef.current = ts;
+          results = landmarker.detectForVideo(video, ts);
+        } catch (e) {
+          console.error("Pose runtime error:", e);
+          poseLandmarkerRef.current = null;
+          setPoseReady(false);
+          setPoseError("Pose tracking failed. Try Chrome/Edge.");
+        }
+
+        if (results?.landmarks?.length) {
+          const landmarks = results.landmarks[0];
+          const W = canvas.width;
+          const H = canvas.height;
+          let rightHandPoint: { x: number; y: number } | null = null;
+          let leftHandPoint: { x: number; y: number } | null = null;
+
+          ctx.strokeStyle = "#1D9E75";
+          ctx.lineWidth = 3;
+          ctx.globalAlpha = 0.85;
+          for (const [a, b] of SKELETON_CONNECTIONS) {
+            const lA = landmarks[a];
+            const lB = landmarks[b];
+            if (lA && lB && (lA.visibility ?? 1) > 0.4 && (lB.visibility ?? 1) > 0.4) {
+              ctx.beginPath();
+              ctx.moveTo((1 - lA.x) * W, lA.y * H); // mirror horizontally
+              ctx.lineTo((1 - lB.x) * W, lB.y * H);
+              ctx.stroke();
+            }
+          }
+
+          // Draw joint circles
+          ctx.globalAlpha = 1;
+          for (const lm of landmarks) {
+            if ((lm.visibility ?? 1) > 0.4) {
+              const x = (1 - lm.x) * W;
+              const y = lm.y * H;
+
+              // Outer glow ring
+              ctx.strokeStyle = "#ffffff";
+              ctx.lineWidth = 2;
+              ctx.beginPath();
+              ctx.arc(x, y, 8, 0, Math.PI * 2);
+              ctx.stroke();
+
+              // Inner filled circle
+              ctx.fillStyle = "#1D9E75";
+              ctx.beginPath();
+              ctx.arc(x, y, 5, 0, Math.PI * 2);
+              ctx.fill();
+            }
+          }
+
+          const rightWrist = landmarks[16];
+          if (rightWrist && (rightWrist.visibility ?? 1) > 0.45) {
+            rightHandPoint = { x: (1 - rightWrist.x) * W, y: rightWrist.y * H };
+          }
+          const leftWrist = landmarks[15];
+          if (leftWrist && (leftWrist.visibility ?? 1) > 0.45) {
+            leftHandPoint = { x: (1 - leftWrist.x) * W, y: leftWrist.y * H };
+          }
+
+          const leftShoulder = landmarks[11];
+          const rightShoulder = landmarks[12];
+          const leftHip = landmarks[23];
+          const rightHip = landmarks[24];
+          const leftKnee = landmarks[25];
+          const rightKnee = landmarks[26];
+          const leftAnkle = landmarks[27];
+          const rightAnkle = landmarks[28];
+
+          if (leftShoulder && rightShoulder) {
+            const shoulderSpan = Math.abs(leftShoulder.x - rightShoulder.x) * W;
+            if (shoulderSpan < W * 0.14) {
+              emitLiveCue("Move closer to the camera.");
+            } else if (shoulderSpan > W * 0.42) {
+              emitLiveCue("Move a little back from the camera.");
+            } else if (assessmentId === "sit-to-stand" && leftHip && rightHip && leftKnee && rightKnee) {
+              const hipY = (leftHip.y + rightHip.y) / 2;
+              const kneeY = (leftKnee.y + rightKnee.y) / 2;
+              const standDelta = kneeY - hipY;
+              if (standDelta > 0.2) {
+                emitLiveCue("Great. Now sit down.");
+              } else if (standDelta < 0.1) {
+                emitLiveCue("Good. Now stand up.");
+              } else {
+                emitLiveCue("Keep going: stand up, then sit down.");
+              }
+            } else if (assessmentId === "single-leg-stance" && leftAnkle && rightAnkle) {
+              const ankleDiff = Math.abs(leftAnkle.y - rightAnkle.y);
+              if (ankleDiff < 0.08) {
+                emitLiveCue("Lift one foot and hold your balance.");
+              } else {
+                emitLiveCue("Excellent. Keep your balance and hold.");
+              }
+            } else if (assessmentId === "functional-reach") {
+              if (targetSequenceDone) {
+                emitLiveCue("Excellent reach. Hold your arm steady.");
+              } else {
+                emitLiveCue("Reach your hand to the glowing target point.");
+              }
+            } else if (assessmentId === "timed-up-and-go" && leftHip && rightHip && leftKnee && rightKnee) {
+              const hipY = (leftHip.y + rightHip.y) / 2;
+              const kneeY = (leftKnee.y + rightKnee.y) / 2;
+              const standDelta = kneeY - hipY;
+              if (standDelta > 0.2) {
+                emitLiveCue("Good. Walk back a few steps, then return and sit.");
+              } else {
+                emitLiveCue("Stand up now and start walking.");
+              }
+            } else {
+              emitLiveCue("Keep your full body centered in the camera.");
+            }
+          }
+
+          if (showGuidedTargets) {
+            // use the hand further to the right on screen, fallback to available hand
+            const selectedHand =
+              rightHandPoint && leftHandPoint
+                ? (rightHandPoint.x > leftHandPoint.x ? rightHandPoint : leftHandPoint)
+                : (rightHandPoint || leftHandPoint);
+            drawGuidedTargets(ctx, W, H, selectedHand || null);
+          }
+
+          ctx.globalAlpha = 1;
+        } else if (showGuidedTargets) {
+          drawGuidedTargets(ctx, canvas.width, canvas.height, null);
+          emitLiveCue("Raise your hand to find the target point.");
+        }
+      } else if (showGuidedTargets) {
+        drawGuidedTargets(ctx, canvas.width, canvas.height, null);
+        emitLiveCue("Position your body so we can detect your pose.");
+      } else {
+        emitLiveCue("Stand where your full body is visible in camera.");
+      }
+    } finally {
+      animFrameRef.current = requestAnimationFrame(drawSkeleton);
+    }
+  }, [activeTargets, assessmentId, emitLiveCue, showGuidedTargets, targetSequenceDone]);
 
   // Start render loop once camera is ready
   useEffect(() => {
@@ -187,7 +584,7 @@ export default function MockCameraCapture({ isActive }: MockCameraCaptureProps) 
     };
 
     video.addEventListener("play", onPlay);
-    if (!video.paused) onPlay();
+    onPlay();
 
     return () => {
       video.removeEventListener("play", onPlay);
@@ -257,14 +654,43 @@ export default function MockCameraCapture({ isActive }: MockCameraCaptureProps) 
               </>
             ) : (
               <>
-                <div className="w-2 h-2 bg-[#1D9E75] rounded-full animate-pulse" />
-                <span className="text-xs font-bold text-[#1D9E75]">POSE TRACKING</span>
+                <div className={`w-2 h-2 rounded-full animate-pulse ${poseReady ? "bg-[#1D9E75]" : "bg-amber-400"}`} />
+                <span className={`text-xs font-bold ${poseReady ? "text-[#1D9E75]" : "text-amber-300"}`}>
+                  {poseReady ? "POSE TRACKING" : "POSE STARTING"}
+                </span>
               </>
             )}
+          </div>
+        )}
+
+        {cameraPermission === "granted" && poseError && (
+          <div className="absolute left-1/2 top-12 -translate-x-1/2 rounded-lg border border-amber-300/50 bg-black/70 px-3 py-1.5 text-[11px] font-semibold text-amber-200">
+            {poseError}
+          </div>
+        )}
+
+        {cameraPermission === "granted" && (
+          <div className="absolute left-1/2 bottom-3 z-20 -translate-x-1/2 rounded-xl border border-white/20 bg-black/65 px-3 py-2 text-center text-xs font-semibold text-white shadow-lg">
+            {liveCue}
+          </div>
+        )}
+
+        {/* Functional reach guided-target status */}
+        {cameraPermission === "granted" && showGuidedTargets && (
+          <div className="absolute bottom-3 right-3 rounded-xl border border-white/20 bg-black/60 px-3 py-2 text-right shadow-lg">
+            <p className="text-[10px] uppercase tracking-wider text-[#9db0a3]">Hand Reach Guide</p>
+            <p className="text-xs font-bold text-white">
+              {targetSequenceDone ? "Targets complete" : `Target ${Math.min(targetIndex + 1, activeTargets.length)} / ${activeTargets.length}`}
+            </p>
+          </div>
+        )}
+
+        {cameraPermission === "granted" && showGuidedTargets && (
+          <div className="absolute top-3 right-3 rounded-full bg-black/60 px-3 py-1 text-[11px] font-semibold text-white">
+            {targetSequenceDone ? "Excellent reach" : "Reach the glowing point"}
           </div>
         )}
       </div>
     </div>
   );
 }
-

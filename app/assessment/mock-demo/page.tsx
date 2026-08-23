@@ -102,6 +102,12 @@ export default function MockAssessmentPage() {
   const [completed, setCompleted] = useState<boolean[]>([false, false, false, false]);
   const [restTimeRemaining, setRestTimeRemaining] = useState(0);
   const [restDone, setRestDone] = useState(false);
+  const [voiceEnabled, setVoiceEnabled] = useState(true);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [liveCue, setLiveCue] = useState("");
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+  const lastLiveCueSpokenRef = useRef<{ text: string; at: number }>({ text: "", at: 0 });
 
   // Check if we should show rest page (after 2 assessments)
   const completedCount = completed.filter((c) => c).length;
@@ -181,6 +187,79 @@ export default function MockAssessmentPage() {
   };
 
   const allCompleted = completed.every((c) => c);
+
+  useEffect(() => {
+    setIsClient(true);
+    setSpeechSupported(typeof window !== "undefined" && "speechSynthesis" in window);
+  }, []);
+
+  const stopSpeech = () => {
+    if (!speechSupported) return;
+    window.speechSynthesis.cancel();
+    setIsSpeaking(false);
+  };
+
+  const speak = (text: string) => {
+    if (!speechSupported || !voiceEnabled || !text.trim()) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    const pageLang = document.documentElement.lang || "en";
+    utterance.lang = pageLang.startsWith("ar") ? "ar-SA" : "en-US";
+    utterance.rate = 0.92;
+    utterance.pitch = 1;
+    utterance.volume = 1;
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  useEffect(() => {
+    if (!speechSupported || !voiceEnabled) {
+      stopSpeech();
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      if (allCompleted) {
+        speak("Excellent work. You have completed all four assessments. Your report is now ready.");
+        return;
+      }
+
+      if (showRestPage) {
+        speak("You have completed two assessments. Please rest for two minutes. Breathe deeply and drink water if needed.");
+        return;
+      }
+
+      const steps = currentAssessment.instructions
+        .map((step, index) => `Step ${index + 1}. ${step}.`)
+        .join(" ");
+      speak(`Now starting ${currentAssessment.title}. ${currentAssessment.description}. ${steps}`);
+    }, 350);
+
+    return () => window.clearTimeout(timer);
+  }, [allCompleted, showRestPage, currentAssessment, voiceEnabled, speechSupported]);
+
+  useEffect(() => {
+    if (!speechSupported || !voiceEnabled || !liveCue.trim()) return;
+    if (isSpeaking) return;
+    const now = Date.now();
+    const repeatedSoon =
+      liveCue === lastLiveCueSpokenRef.current.text &&
+      now - lastLiveCueSpokenRef.current.at < 5000;
+    const globallyTooSoon = now - lastLiveCueSpokenRef.current.at < 2000;
+    if (repeatedSoon || globallyTooSoon) return;
+    lastLiveCueSpokenRef.current = { text: liveCue, at: now };
+    speak(liveCue);
+  }, [isSpeaking, liveCue, speechSupported, voiceEnabled]);
+
+  useEffect(() => {
+    return () => {
+      if (speechSupported) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [speechSupported]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -441,7 +520,11 @@ export default function MockAssessmentPage() {
           /* Assessment Card */
           <div className="space-y-8">
             {/* Camera Feed */}
-            <MockCameraCapture isActive={!allCompleted} />
+            <MockCameraCapture
+              isActive={!allCompleted}
+              assessmentId={currentAssessment.id}
+              onLiveCue={setLiveCue}
+            />
 
             {/* Assessment Info */}
             <div className="rounded-[16px] border border-[#d1dbd6] bg-white p-8">
@@ -464,6 +547,53 @@ export default function MockAssessmentPage() {
                       <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                     </svg>
                   </div>
+                )}
+              </div>
+
+              {/* Voice Guidance Controls */}
+              <div className="mb-4 flex flex-wrap items-center gap-2 rounded-[12px] border border-[#d1dbd6] bg-[#f7faf8] p-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!speechSupported) return;
+                    if (voiceEnabled) {
+                      stopSpeech();
+                    }
+                    setVoiceEnabled((prev) => !prev);
+                  }}
+                  className={`rounded-[10px] px-4 py-2 text-xs font-bold transition ${
+                    voiceEnabled
+                      ? "bg-[#1D9E75] text-white hover:bg-[#1a8f6a]"
+                      : "bg-white text-[#6b9080] border border-[#d1dbd6] hover:border-[#1D9E75]"
+                  }`}
+                >
+                  {voiceEnabled ? "Voice ON" : "Voice OFF"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!speechSupported) return;
+                    const steps = currentAssessment.instructions
+                      .map((step, index) => `Step ${index + 1}. ${step}.`)
+                      .join(" ");
+                    speak(`Repeating guidance. ${currentAssessment.title}. ${currentAssessment.description}. ${steps}`);
+                  }}
+                  disabled={!isClient || !voiceEnabled || !speechSupported}
+                  className="rounded-[10px] border border-[#d1dbd6] bg-white px-4 py-2 text-xs font-bold text-[#1D9E75] transition hover:border-[#1D9E75] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Repeat Voice
+                </button>
+                <span className="text-xs font-semibold text-[#6b9080]">
+                  {!isClient
+                    ? "Voice loading..."
+                    : speechSupported
+                      ? (isSpeaking ? "Speaking now..." : "Voice ready")
+                      : "Voice not supported in this browser"}
+                </span>
+                {liveCue && (
+                  <p className="w-full text-xs text-[#1D9E75]">
+                    Live coach: {liveCue}
+                  </p>
                 )}
               </div>
 
