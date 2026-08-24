@@ -686,8 +686,8 @@ describe("ShoulderAbductionReachPoseDetector", () => {
   it("deduplicates video frames by currentTime before calling detectForVideo (behavioral)", () => {
     const detectForVideoCalls: number[] = [];
     const landmarker: PoseLandmarkerInstance = {
-      detectForVideo: (_video, _ts) => {
-        detectForVideoCalls.push(_video.currentTime);
+      detectForVideo: (video) => {
+        detectForVideoCalls.push(video.currentTime);
         return { landmarks: [restingLandmarks()] };
       },
     };

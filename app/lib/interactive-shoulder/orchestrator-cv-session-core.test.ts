@@ -109,4 +109,14 @@ describe("orchestrator cv session core wrapper contract", () => {
       /sessionStartedRef\.current = true;\s*\r?\n\s*sessionCompleteFiredRef\.current = false;/,
     );
   });
+
+  it("resolves therapeutic side from session block scan, not blocks[0] only", () => {
+    const corePath = join(
+      process.cwd(),
+      "app/components/patient/interactive-shoulder/OrchestratorCvSessionCore.tsx",
+    );
+    const source = readFileSync(corePath, "utf8");
+    assert.match(source, /resolveBlockSideFromSessionDefinition\(sessionDefinition\.blocks\)/);
+    assert.doesNotMatch(source, /blockSide:\s*interactiveBlock\?\.side/);
+  });
 });

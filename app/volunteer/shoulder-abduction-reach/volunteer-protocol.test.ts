@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  VOLUNTEER_MOVEMENT_SAFETY_REMINDERS,
   VOLUNTEER_PROTOCOL_CONDITIONS,
   VOLUNTEER_TARGET_REPS,
   buildVolunteerSessionSummary,
@@ -63,5 +64,11 @@ describe("volunteer-protocol", () => {
     assert.equal(isCaptureComplete(2), false);
     assert.equal(isCaptureComplete(3), true);
     assert.equal(isCaptureComplete(4), true);
+  });
+
+  it("exposes non-clinical movement safety reminders", () => {
+    assert.equal(VOLUNTEER_MOVEMENT_SAFETY_REMINDERS.length, 4);
+    assert.match(VOLUNTEER_MOVEMENT_SAFETY_REMINDERS.join(" "), /pain-free range of motion/i);
+    assert.match(VOLUNTEER_MOVEMENT_SAFETY_REMINDERS.join(" "), /Simulated compensation is optional/i);
   });
 });

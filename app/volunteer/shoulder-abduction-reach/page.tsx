@@ -10,6 +10,7 @@ import { VolunteerWizardShell } from "@/app/volunteer/shoulder-abduction-reach/c
 import { useVolunteerCaptureSession } from "@/app/hooks/useVolunteerCaptureSession";
 import {
   VOLUNTEER_CAPTURE_SIDE,
+  VOLUNTEER_MOVEMENT_SAFETY_REMINDERS,
   VOLUNTEER_PROTOCOL_CONDITION_INSTRUCTIONS,
   VOLUNTEER_PROTOCOL_CONDITION_LABELS,
   VOLUNTEER_PROTOCOL_CONDITIONS,
@@ -40,6 +41,19 @@ function PrimaryButton({
     >
       {children}
     </button>
+  );
+}
+
+function MovementSafetyReminder() {
+  return (
+    <div className="rounded-lg border border-[#FECACA] bg-[#FEF2F2] px-4 py-3 text-[13px] text-[#991B1B]">
+      <p className="font-semibold text-[#7F1D1D]">Movement safety</p>
+      <ul className="mt-2 list-disc space-y-1 pl-5">
+        {VOLUNTEER_MOVEMENT_SAFETY_REMINDERS.map((reminder) => (
+          <li key={reminder}>{reminder}</li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -130,7 +144,8 @@ export default function VolunteerShoulderAbductionReachPage() {
           <div className="space-y-3 text-[14px] leading-relaxed text-[#6B7280]">
             <p>
               Thank you for helping with technical software development. This session collects
-              anonymous movement-tracking data to improve computer-vision research tools.
+              movement data without name or contact information to improve computer-vision research
+              tools.
             </p>
             <p>
               <strong className="font-semibold text-[#374151]">This is not medical care.</strong> It
@@ -153,12 +168,18 @@ export default function VolunteerShoulderAbductionReachPage() {
             <ul className="list-disc space-y-2 pl-5">
               <li>Your camera is used for on-device movement tracking only.</li>
               <li>
+                Loading this page and movement-tracking model files uses normal network downloads.
+              </li>
+              <li>
+                Movement video, landmarks, completed records, and movement payloads are{" "}
+                <strong>not uploaded</strong> in this pilot version.
+              </li>
+              <li>
                 Raw video and photos are not intentionally uploaded or stored in this technical
                 pilot.
               </li>
               <li>
-                In this pilot version, completed movement data is <strong>not sent to a server</strong>{" "}
-                — it stays in your browser memory only until you leave this page.
+                Completed movement data stays in your browser memory only until you leave this page.
               </li>
               <li>
                 No name, email, phone, diagnosis, or patient information is collected in this step.
@@ -259,6 +280,8 @@ export default function VolunteerShoulderAbductionReachPage() {
             therapist label, not ground truth, and not an ML prediction.
           </p>
 
+          <MovementSafetyReminder />
+
           <div className="space-y-3">
             {VOLUNTEER_PROTOCOL_CONDITIONS.map((condition) => (
               <label
@@ -325,6 +348,8 @@ export default function VolunteerShoulderAbductionReachPage() {
             {" — "}
             {VOLUNTEER_PROTOCOL_CONDITION_INSTRUCTIONS[protocolCondition]}
           </p>
+
+          <MovementSafetyReminder />
 
           <div className="relative aspect-[4/3] w-full max-w-[640px] overflow-hidden rounded-lg bg-black">
             <video

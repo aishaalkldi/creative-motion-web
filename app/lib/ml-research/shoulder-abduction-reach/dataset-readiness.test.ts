@@ -452,6 +452,53 @@ describe("labeling queue", () => {
     assert.doesNotMatch(serialized, /sensitive therapist note/);
     assert.doesNotMatch(serialized, /note/);
   });
+
+  it("does not expose participantId or other hidden identity fields in queue entries", () => {
+    const manifest = cleanManifest([
+      manifestSample({
+        sourceLineIndex: 0,
+        participantId: PARTICIPANT_A,
+        labels: [],
+      }),
+      manifestSample({
+        sourceLineIndex: 1,
+        participantId: PARTICIPANT_B,
+        labels: [
+          manifestLabel({ raterId: RATER_A, compensationLabel: "NO_COMPENSATION" }),
+          manifestLabel({ raterId: RATER_B, compensationLabel: "CLEAR_COMPENSATION" }),
+        ],
+      }),
+      manifestSample({
+        sourceLineIndex: 2,
+        participantId: PARTICIPANT_B,
+        labels: [],
+      }),
+    ]);
+
+    const queue = buildLabelingQueue(manifest);
+    const allEntries = [...queue.unlabeledQueue, ...queue.multiRaterQueue];
+    assert.equal(queue.unlabeledQueue.length, 2);
+    assert.deepEqual(
+      queue.unlabeledQueue.map((entry) => entry.sampleId),
+      [`${SESSION}#0`, `${SESSION}#2`],
+    );
+    assert.equal(queue.multiRaterQueue.length, 1);
+    assert.equal(queue.multiRaterQueue[0]!.sampleId, `${SESSION}#1`);
+
+    for (const entry of allEntries) {
+      assert.equal("participantId" in entry, false);
+      assert.equal("raterId" in entry, false);
+      assert.equal("compensationLabel" in entry, false);
+      assert.equal("exclusionFlag" in entry, false);
+      assert.equal("note" in entry, false);
+    }
+
+    const serialized = JSON.stringify(queue);
+    assert.doesNotMatch(serialized, /fixture-participant-a/i);
+    assert.doesNotMatch(serialized, /fixture-participant-b/i);
+    assert.doesNotMatch(serialized, /"participantId"/);
+    assert.doesNotMatch(serialized, /"raterId"/);
+  });
 });
 
 describe("collection gap analysis", () => {

@@ -29,12 +29,23 @@ export const ML_RESEARCH_LABEL_DATA_DIR = join(
   "shoulder-abduction-labels",
 );
 
+/** Test-only read-path override — null restores default `dev-data` resolution. */
+let labelDataDirReadOverride: string | null = null;
+
+export function setMlResearchLabelDataDirForTests(dir: string | null): void {
+  labelDataDirReadOverride = dir;
+}
+
+function labelDataDirForReads(): string {
+  return labelDataDirReadOverride ?? ML_RESEARCH_LABEL_DATA_DIR;
+}
+
 function sanitizeFileNameSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
 export function resolveDevSessionLabelsJsonlPath(devSessionId: string): string {
-  return join(ML_RESEARCH_LABEL_DATA_DIR, `${sanitizeFileNameSegment(devSessionId)}.labels.jsonl`);
+  return join(labelDataDirForReads(), `${sanitizeFileNameSegment(devSessionId)}.labels.jsonl`);
 }
 
 export async function appendShoulderAbductionReachLabelLocally(
