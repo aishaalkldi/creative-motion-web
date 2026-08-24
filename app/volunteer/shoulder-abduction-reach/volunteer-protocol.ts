@@ -46,12 +46,20 @@ export const VOLUNTEER_PROTOCOL_CONDITION_LABELS: Record<VolunteerProtocolCondit
 };
 
 export const VOLUNTEER_PROTOCOL_CONDITION_INSTRUCTIONS: Record<VolunteerProtocolCondition, string> = {
-  NORMAL: "Perform the shoulder movement naturally.",
+  NORMAL: "Perform the shoulder movement naturally within a comfortable, pain-free range.",
   SIMULATED_MILD_COMPENSATION:
-    "Perform the movement while intentionally adding a small visible trunk or shoulder adjustment.",
+    "Perform the movement while intentionally adding a small visible trunk or shoulder adjustment. Optional — skip if uncomfortable.",
   SIMULATED_CLEAR_COMPENSATION:
-    "Perform the movement while intentionally adding an obvious trunk or shoulder adjustment.",
+    "Perform the movement while intentionally adding an obvious trunk or shoulder adjustment. Optional — skip if uncomfortable.",
 };
+
+/** Non-clinical movement safety reminders shown before and during capture. */
+export const VOLUNTEER_MOVEMENT_SAFETY_REMINDERS = [
+  "Use only a comfortable, pain-free range of motion.",
+  "Do not force your arm, trunk, or shoulder into any position.",
+  "Stop immediately for pain, dizziness, unusual shortness of breath, discomfort, or if you feel unsafe.",
+  "Simulated compensation is optional — do not attempt it if uncomfortable.",
+] as const;
 
 export type VolunteerSessionSummary = {
   capturedCount: number;
