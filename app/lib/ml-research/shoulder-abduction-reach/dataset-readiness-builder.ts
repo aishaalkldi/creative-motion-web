@@ -339,7 +339,6 @@ function buildLabelingQueueEntry(
 ): LabelingQueueEntry {
   return {
     sampleId: sample.sampleId,
-    participantId: sample.participantId,
     devSessionId: sample.devSessionId,
     repetitionId: sample.repetitionId,
     repetitionIndex: sample.repetitionIndex,

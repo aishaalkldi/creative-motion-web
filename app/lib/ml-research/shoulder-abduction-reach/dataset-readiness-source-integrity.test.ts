@@ -302,6 +302,11 @@ describe("dataset readiness source integrity", () => {
     const readinessRaw = await readFile(READINESS_REPORT_PATH, "utf8");
     assert.doesNotMatch(readinessRaw, /sensitive therapist note must not leak/);
     assert.doesNotMatch(readinessRaw, /peakNormalizedTrunkDriftRatio/);
+
+    const queueRaw = await readFile(LABELING_QUEUE_PATH, "utf8");
+    assert.doesNotMatch(queueRaw, /"participantId"/);
+    assert.doesNotMatch(queueRaw, /fixture-participant-1/);
+    assert.doesNotMatch(queueRaw, /sensitive therapist note must not leak/);
   });
 
   it("writes deterministic canonical readiness and labeling-queue outputs", async () => {

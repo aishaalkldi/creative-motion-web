@@ -196,7 +196,6 @@ export type DatasetReadinessProvenance = {
 
 export type LabelingQueueEntry = {
   sampleId: string;
-  participantId: string;
   devSessionId: string;
   repetitionId: string;
   repetitionIndex: number;
