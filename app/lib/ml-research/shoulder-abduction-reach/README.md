@@ -289,3 +289,76 @@ Directory: `dev-data/rasq-ml/shoulder-abduction-baseline-experiments/` (gitignor
 
 Exit code **0** for both completed experiments and intentional `NOT_READY`
 outcomes. Exit code **1** for malformed exports or usage errors.
+
+## Dataset readiness / collection gaps (Slice 7, dev/research only)
+
+A **dataset-readiness report** is a deterministic inventory of what research
+data currently exists, what remains unlabeled or excluded, how
+participants/classes are distributed, and what collection or labeling gaps
+remain before a real baseline experiment may be attempted. Slice 7 does **not**
+train a model.
+
+```
+Slice 4 manifest (.manifest.json)
+  → dataset-readiness-builder.ts   (inventory, gaps, labeling queue, coverage)
+  → optional cross-check with Slice 5 QC + training export
+  → dataset-readiness-writer.ts    → dev-data/rasq-ml/shoulder-abduction-dataset-readiness/
+```
+
+Inspect one:
+
+```
+npx tsx scripts/ml-research/inspect-shoulder-abduction-dataset-readiness.ts \
+  --manifest <path.manifest.json> \
+  [--qc <path.qc-report.json>] \
+  [--export <path.training-export.jsonl>] \
+  [--name <report-name>] \
+  [--print]
+```
+
+### What this is
+
+- **Research-only collection/readiness infrastructure** — descriptive inventory
+  and planning signals, not clinical or statistical proof.
+- A **labeling-work queue** that lists unlabeled and unresolved multi-rater
+  samples without leaking compensation predictions, deterministic compensation
+  features, or therapist free-text notes.
+- **Participant/class coverage analysis** where participant diversity matters
+  more than raw repetition count.
+- Optional **cross-artifact integrity checks** when Slice 5 QC/training export
+  are supplied alongside the manifest.
+
+### What this is NOT
+
+- **Not model training.** No classifier fitting, no cross-validation, no
+  auto-labeling, and no inference of compensation labels for unlabeled data.
+- **Not a replacement for Slice 6.** Slice 6 remains the final gate before
+  baseline model training. Slice 7 may emit `READY_FOR_BASELINE_READINESS_CHECK`,
+  but Slice 6 must still independently validate adequacy.
+- **Not treating unlabeled as NO_COMPENSATION.** Missing therapist labels stay
+  explicitly unlabeled.
+- **Not a clinical sample-size claim.** Collection-gap codes such as
+  `NEED_MORE_DISTINCT_PARTICIPANTS` are methodology planning signals only.
+
+### Collection status
+
+- `DATA_COLLECTION_INCOMPLETE` — more collection, labeling, participant
+  diversity, or integrity work remains.
+- `READY_FOR_BASELINE_READINESS_CHECK` — collection/labeling appears complete
+  enough for Slice 6 to attempt its own readiness validation (Slice 6 may still
+  refuse).
+
+The current real dataset (29 manifest samples, 1 participant, 1 supervised
+candidate, 28 unlabeled) should remain `DATA_COLLECTION_INCOMPLETE`.
+
+### Output
+
+Directory: `dev-data/rasq-ml/shoulder-abduction-dataset-readiness/` (gitignored)
+
+- `<name>.dataset-readiness.json` — canonical deterministic report (no wall clock)
+- `<name>.labeling-queue.json` — deterministic labeling-work queue
+- `<name>.readiness-run.json` — non-canonical run sidecar (timestamp, node version)
+
+Exit code **0** when the report is written successfully (collection may still
+be incomplete). Exit code **1** for manifest integrity blockers or cross-artifact
+contradictions.
