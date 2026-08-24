@@ -160,3 +160,66 @@ export type ShoulderAbductionReachRepCaptureRecord = {
   frames: ShoulderAbductionReachCapturedFrame[];
   derivedFeatures: ShoulderAbductionReachDerivedFeatures;
 };
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function isValidTrackingQualitySummary(value: unknown): value is ShoulderAbductionReachTrackingQualitySummary {
+  if (!value || typeof value !== "object") return false;
+  const trackingQuality = value as Partial<ShoulderAbductionReachTrackingQualitySummary>;
+  if (!Number.isInteger(trackingQuality.framesTotal)) return false;
+  if (!Number.isInteger(trackingQuality.framesWithUsableAngle)) return false;
+  if (
+    trackingQuality.usableFrameRatio !== null &&
+    !Number.isFinite(trackingQuality.usableFrameRatio)
+  ) {
+    return false;
+  }
+  if ("minCoreJointVisibility" in trackingQuality) {
+    const visibility = trackingQuality.minCoreJointVisibility;
+    if (visibility !== null && visibility !== undefined && !Number.isFinite(visibility)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * Validates the minimum on-disk capture record shape required before Slice 5
+ * training export dereferences source JSONL lines. Aligns with the manifest
+ * assembly capture contract for context/frames identity, plus the derived
+ * feature fields the exporter reads for QC metadata.
+ */
+export function isValidShoulderAbductionReachRepCaptureRecordForTrainingExport(
+  value: unknown,
+): value is ShoulderAbductionReachRepCaptureRecord {
+  if (!value || typeof value !== "object") return false;
+
+  const record = value as {
+    context?: unknown;
+    frames?: unknown;
+    derivedFeatures?: unknown;
+  };
+  if (!record.context || typeof record.context !== "object") return false;
+  if (!Array.isArray(record.frames)) return false;
+  if (!record.derivedFeatures || typeof record.derivedFeatures !== "object") return false;
+
+  const context = record.context as Record<string, unknown>;
+  if (!isNonEmptyString(context.captureSchemaVersion)) return false;
+  if (!isNonEmptyString(context.featureSchemaVersion)) return false;
+  if (!isNonEmptyString(context.participantId)) return false;
+  if (!isNonEmptyString(context.devSessionId)) return false;
+  if (!isNonEmptyString(context.repetitionId)) return false;
+  if (!isNonEmptyString(context.movementType)) return false;
+  if (!Number.isInteger(context.repetitionIndex)) return false;
+  if (context.side !== "left" && context.side !== "right") return false;
+  if (!Number.isFinite(context.startedAtMs)) return false;
+  if (!Number.isFinite(context.endedAtMs)) return false;
+
+  const derivedFeatures = record.derivedFeatures as Record<string, unknown>;
+  if (!Number.isFinite(derivedFeatures.movementDurationMs)) return false;
+  if (!isValidTrackingQualitySummary(derivedFeatures.trackingQuality)) return false;
+
+  return true;
+}
