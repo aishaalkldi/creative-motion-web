@@ -13,7 +13,9 @@
  * API this page talks to (`capture-reader.ts` redacts them server-side), so
  * there is nothing for this page to accidentally display. `participantId`
  * is likewise never sent to the browser — it is looked up and stamped onto
- * the label server-side only, in the POST route.
+ * the label server-side only, in the POST route, and the labels the GET
+ * route echoes back are projected through
+ * `projectShoulderAbductionReachLabelForRater` to strip it.
  *
  * Rater independence is enforced by the API, not by this page: the GET
  * endpoint requires `raterId` and structurally can only return that rater's
@@ -294,7 +296,6 @@ export default function ShoulderAbductionReachMlLabelingLabPage() {
       exclusionFlag: labelChoice.kind === "exclusion" ? labelChoice.value : null,
       raterConfidence,
       note: note.trim(),
-      labeledAtMs: Date.now(),
     };
     const result = await postShoulderAbductionReachLabel(submission);
     setSubmitting(false);

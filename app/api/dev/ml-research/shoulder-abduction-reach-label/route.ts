@@ -4,25 +4,25 @@
  * DEV-ONLY. RASQ ML bridge, First Labeling Slice (2026-08-19).
  *
  * GET  (no query)                          -> { sessions: ShoulderAbductionCaptureSessionSummary[] }
- * GET  ?devSessionId=...&raterId=...        -> { reps: ShoulderAbductionReachRepForLabeling[], labels: ShoulderAbductionReachLabelRecord[] }
+ * GET  ?devSessionId=...&raterId=...        -> { reps: ShoulderAbductionReachRepForLabeling[], labels: ShoulderAbductionReachLabelForRater[] }
+ *      Labels are projected to the rater-facing view, so `participantId` never
+ *      reaches the browser in either half of the payload.
  *      `raterId` is REQUIRED once `devSessionId` is given — this is the
  *      structural enforcement of rater independence (test category #11):
  *      the route can only ever return the REQUESTING rater's own labels,
  *      because it has no code path that returns any other rater's.
  * POST { ShoulderAbductionReachLabelSubmission } -> appends one label line locally
- *      Server stamps `participantId`, `labelSchemaVersion`, and `datasetVersion`.
- *      Server verifies `devSessionId`, `sourceLineIndex`, `repetitionId`, and
- *      `side` together against the capture JSONL (`resolveCaptureIdentityForLabel`)
- *      before accepting a label. `raterId` is normalized via
- *      `normalizeResearchRaterId` (trim only — not auth). `labeledAtMs` is
- *      server-authoritative (`Date.now()` at accept time).
+ *      Submission excludes server-owned fields: participantId, labelSchemaVersion,
+ *      datasetVersion, labeledAtMs. Server verifies locator fields against capture
+ *      data, normalizes raterId, and stamps authoritative identity + labeledAtMs.
  *
  * Same posture as `/api/dev/ml-research/shoulder-abduction-reach-capture`:
  *  - Refuses to run at all outside development.
  *  - No Supabase client, no database import, no `cv_session_metrics` write.
  *  - No auth/session/patient-token handling.
- *  - Rejects any payload carrying a raw-video/image-shaped key, as
- *    defense-in-depth independent of the schema guarantee that neither
+ *  - Rejects any POST body carrying a raw-video/image-shaped key, checked
+ *    against the raw parsed body at the HTTP boundary, as defense-in-depth
+ *    independent of the schema guarantee that neither
  *    `ShoulderAbductionReachRepForLabeling` nor `ShoulderAbductionReachLabelRecord`
  *    ever includes one.
  */
@@ -40,6 +40,7 @@ import {
   isValidShoulderAbductionReachLabelRecord,
   isValidShoulderAbductionReachLabelSubmission,
   normalizeResearchRaterId,
+  projectShoulderAbductionReachLabelForRater,
   type ShoulderAbductionReachLabelRecord,
 } from "@/app/lib/ml-research/shoulder-abduction-reach/label-schema";
 
@@ -85,7 +86,13 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     readShoulderAbductionCaptureSessionForLabeling(devSessionId),
     readShoulderAbductionCaptureSessionLabelsForRater(devSessionId, normalizedRaterId),
   ]);
-  return NextResponse.json({ reps, labels });
+  // `participantId` stays server-side: reps are already redacted by
+  // `capture-reader.ts`, and labels are projected here so no part of the
+  // browser-facing payload carries participant identity.
+  return NextResponse.json({
+    reps,
+    labels: labels.map(projectShoulderAbductionReachLabelForRater),
+  });
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -97,6 +104,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
+  }
+
+  // Checked against the RAW body at the HTTP boundary: the persisted record is
+  // rebuilt from an allowlist, so inspecting only the record could never observe
+  // a media-shaped key the browser actually sent.
+  if (containsForbiddenKey(body)) {
+    return NextResponse.json({ error: "forbidden_payload_key" }, { status: 400 });
   }
 
   if (!isValidShoulderAbductionReachLabelSubmission(body)) {
