@@ -53,7 +53,10 @@ See `capture-schema.ts` for full types. Summary:
 
 ## What this is NOT
 
-- **Not therapist ground truth.** `simulationCondition` (e.g.
+- **Not therapist ground truth.** Therapist labels are observational research
+  reference labels — useful for ML dataset construction, but not validated
+  clinical ground truth and not a substitute for therapist review in care
+  delivery. `simulationCondition` (e.g.
   `"normal"` / `"simulated_trunk_lean"`) is an internal test-fixture label
   set by whoever is running the capture session, not a clinical judgment.
   Do not use it to train or evaluate a model as if it were a therapist
@@ -67,3 +70,23 @@ See `capture-schema.ts` for full types. Summary:
   camera-relative observation — see each field's doc comment in
   `capture-schema.ts` / `derived-features.ts` for what it does and does not
   claim.
+
+## Label integrity (Slice 2, dev/research only)
+
+Therapist labels are stored separately under
+`dev-data/rasq-ml/shoulder-abduction-labels/` (see `local-label-writer.ts`).
+
+Integrity controls (fail-closed, server-side):
+
+- `sourceLineIndex` is a **traceability locator** — not sufficient repetition
+  identity alone.
+- The label POST route verifies `devSessionId`, `sourceLineIndex`,
+  `repetitionId`, and `side` together against the capture JSONL line via
+  `resolveCaptureIdentityForLabel` before accepting a label.
+- `participantId` is **server-derived** from the verified capture record —
+  never accepted from the browser.
+- `raterId` is a dev/research identifier only (`normalizeResearchRaterId` trims
+  leading/trailing whitespace, rejects empty/control/oversized values). It is
+  **not** authentication or verified clinician identity.
+- These controls improve dataset integrity for ML research. They do **not**
+  establish clinical validity, diagnostic correctness, or ground truth.

@@ -160,18 +160,32 @@ export async function readShoulderAbductionCaptureSessionForLabeling(
   return reps;
 }
 
+/** Server-verified capture identity stamped onto a label record at write time. */
+export type ResolvedCaptureIdentityForLabel = {
+  devSessionId: string;
+  sourceLineIndex: number;
+  repetitionId: string;
+  side: ShoulderAbductionReachSide;
+  participantId: string;
+};
+
 /**
- * Server-only lookup used exclusively by the label POST route to stamp
- * `participantId` onto a label record — the browser payload never carries
- * participantId (see `label-schema.ts`'s `ShoulderAbductionReachLabelSubmission`),
- * so this is the one place it's ever read back out of the capture file.
- * Returns null if the session or line index doesn't exist.
+ * Resolves and verifies that submitted locator fields all refer to the SAME
+ * capture record. Fail-closed: returns null on any mismatch, missing session,
+ * out-of-range line index, or unparsable line.
+ *
+ * `sourceLineIndex` is a traceability locator — not sufficient identity alone.
+ * For Slice 1 data where `repetitionId` may collide across sides, the composite
+ * check `(sourceLineIndex, repetitionId, side)` disambiguates without rewriting
+ * historical capture files.
  */
-export async function lookupParticipantIdForRepetition(
-  devSessionId: string,
-  sourceLineIndex: number,
-): Promise<string | null> {
-  const filePath = resolveDevSessionJsonlPath(devSessionId);
+export async function resolveCaptureIdentityForLabel(params: {
+  devSessionId: string;
+  sourceLineIndex: number;
+  repetitionId: string;
+  side: ShoulderAbductionReachSide;
+}): Promise<ResolvedCaptureIdentityForLabel | null> {
+  const filePath = resolveDevSessionJsonlPath(params.devSessionId);
   let raw: string;
   try {
     raw = await readFile(filePath, "utf8");
@@ -179,13 +193,47 @@ export async function lookupParticipantIdForRepetition(
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw err;
   }
+
   const lines = raw.split("\n").filter((line) => line.trim().length > 0);
-  const line = lines[sourceLineIndex];
+  const line = lines[params.sourceLineIndex];
   if (!line) return null;
+
+  let parsed: ShoulderAbductionReachRepCaptureRecord;
   try {
-    const parsed = JSON.parse(line) as ShoulderAbductionReachRepCaptureRecord;
-    return parsed.context.participantId;
+    parsed = JSON.parse(line) as ShoulderAbductionReachRepCaptureRecord;
   } catch {
     return null;
   }
+
+  if (parsed.context.devSessionId !== params.devSessionId) return null;
+  if (parsed.context.repetitionId !== params.repetitionId) return null;
+  if (parsed.context.side !== params.side) return null;
+
+  return {
+    devSessionId: parsed.context.devSessionId,
+    sourceLineIndex: params.sourceLineIndex,
+    repetitionId: parsed.context.repetitionId,
+    side: parsed.context.side,
+    participantId: parsed.context.participantId,
+  };
+}
+
+/**
+ * Server-only lookup used by the label POST route. Verifies
+ * `(devSessionId, sourceLineIndex, repetitionId, side)` as a composite before
+ * returning `participantId`. Returns null if verification fails.
+ */
+export async function lookupParticipantIdForRepetition(
+  devSessionId: string,
+  sourceLineIndex: number,
+  expectedRepetitionId: string,
+  expectedSide: ShoulderAbductionReachSide,
+): Promise<string | null> {
+  const resolved = await resolveCaptureIdentityForLabel({
+    devSessionId,
+    sourceLineIndex,
+    repetitionId: expectedRepetitionId,
+    side: expectedSide,
+  });
+  return resolved?.participantId ?? null;
 }

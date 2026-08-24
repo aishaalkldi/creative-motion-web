@@ -5,10 +5,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  buildPersistedShoulderAbductionReachLabelRecord,
   isValidShoulderAbductionReachLabelRecord,
   isValidShoulderAbductionReachLabelSubmission,
   ML_RESEARCH_DATASET_VERSION,
   ML_RESEARCH_LABEL_SCHEMA_VERSION,
+  ML_RESEARCH_RATER_ID_MAX_LENGTH,
+  normalizeResearchRaterId,
   type ShoulderAbductionReachLabelRecord,
   type ShoulderAbductionReachLabelSubmission,
 } from "@/app/lib/ml-research/shoulder-abduction-reach/label-schema";
@@ -42,6 +45,58 @@ function omit<T extends object, K extends keyof T>(obj: T, key: K): Omit<T, K> {
   delete clone[key];
   return clone;
 }
+
+describe("normalizeResearchRaterId", () => {
+  it("trim leading and trailing whitespace deterministically", () => {
+    assert.equal(normalizeResearchRaterId("  therapist-A  "), "therapist-A");
+  });
+
+  it("preserves intentional case and internal spacing differences", () => {
+    assert.equal(normalizeResearchRaterId("Aisha-Rater-01"), "Aisha-Rater-01");
+    assert.notEqual(normalizeResearchRaterId("Aisha-Rater-01"), normalizeResearchRaterId("aisha-rater-01"));
+  });
+
+  it("rejects empty and whitespace-only values", () => {
+    assert.equal(normalizeResearchRaterId(""), null);
+    assert.equal(normalizeResearchRaterId("   "), null);
+  });
+
+  it("rejects unreasonably long values", () => {
+    assert.equal(normalizeResearchRaterId("a".repeat(ML_RESEARCH_RATER_ID_MAX_LENGTH + 1)), null);
+    assert.equal(normalizeResearchRaterId("a".repeat(ML_RESEARCH_RATER_ID_MAX_LENGTH)), "a".repeat(ML_RESEARCH_RATER_ID_MAX_LENGTH));
+  });
+
+  it("rejects control-character payloads", () => {
+    assert.equal(normalizeResearchRaterId("rater\x00id"), null);
+    assert.equal(normalizeResearchRaterId("rater\nid"), null);
+  });
+});
+
+describe("buildPersistedShoulderAbductionReachLabelRecord", () => {
+  it("uses the server-supplied labeledAtMs instead of any client submission time", () => {
+    const forgedClientMs = 1;
+    const serverMs = 1_700_000_000_000;
+    const record = buildPersistedShoulderAbductionReachLabelRecord(
+      {
+        devSessionId: "dev-session-test",
+        repetitionId: "dev-session-test-right-rep-1",
+        sourceLineIndex: 0,
+        side: "right",
+        participantId: "dev-participant-001",
+      },
+      "therapist-A",
+      {
+        compensationLabel: "NO_COMPENSATION",
+        exclusionFlag: null,
+        raterConfidence: "high",
+        note: "",
+      },
+      serverMs,
+    );
+    assert.equal(record.labeledAtMs, serverMs);
+    assert.notEqual(record.labeledAtMs, forgedClientMs);
+  });
+});
 
 describe("isValidShoulderAbductionReachLabelSubmission", () => {
   it("accepts a well-formed compensation-label submission", () => {
@@ -125,6 +180,21 @@ describe("isValidShoulderAbductionReachLabelSubmission", () => {
     assert.equal(isValidShoulderAbductionReachLabelSubmission({ ...validSubmission(), raterId: "" }), false);
     assert.equal(isValidShoulderAbductionReachLabelSubmission({ ...validSubmission(), raterId: "   " }), false);
     assert.equal(isValidShoulderAbductionReachLabelSubmission(omit(validSubmission(), "raterId")), false);
+  });
+
+  it("accepts a raterId with leading/trailing whitespace that normalizes cleanly", () => {
+    assert.equal(isValidShoulderAbductionReachLabelSubmission({ ...validSubmission(), raterId: "  therapist-A  " }), true);
+  });
+
+  it("rejects an overlong raterId", () => {
+    assert.equal(
+      isValidShoulderAbductionReachLabelSubmission({ ...validSubmission(), raterId: "a".repeat(ML_RESEARCH_RATER_ID_MAX_LENGTH + 1) }),
+      false,
+    );
+  });
+
+  it("rejects a raterId containing control characters", () => {
+    assert.equal(isValidShoulderAbductionReachLabelSubmission({ ...validSubmission(), raterId: "rater\x7fid" }), false);
   });
 
   it("rejects a missing raterConfidence", () => {

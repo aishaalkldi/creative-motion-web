@@ -5,24 +5,34 @@
  * NODE-ONLY (file I/O) except `dedupeLatestLabelPerRepAndRater`, which is a
  * pure function kept import-safe for unit testing.
  *
- * Labels are keyed by `(repetitionId, raterId)`, NOT by repetitionId alone —
- * two different raters labeling the same repetition must both be preserved
- * independently, never collapsed into "whichever was written last." Only
- * *re-submissions by the same rater* for the same repetition collapse to the
+ * Labels are keyed by `(sourceLineIndex, raterId)` — `sourceLineIndex` is the
+ * traceability locator that disambiguates Slice 1 `repetitionId` collisions
+ * across sides. Two different raters labeling the same repetition must both be
+ * preserved independently, never collapsed into "whichever was written last."
+ * Only *re-submissions by the same rater* for the same line collapse to the
  * latest one (append-only writer, "latest labeledAtMs wins" per pair).
  */
 
 import { readFile } from "node:fs/promises";
 import { resolveDevSessionLabelsJsonlPath } from "./local-label-writer";
-import { isValidShoulderAbductionReachLabelRecord, type ShoulderAbductionReachLabelRecord } from "./label-schema";
+import {
+  isValidShoulderAbductionReachLabelRecord,
+  normalizeResearchRaterId,
+  type ShoulderAbductionReachLabelRecord,
+} from "./label-schema";
 
-function labelDedupeKey(label: Pick<ShoulderAbductionReachLabelRecord, "repetitionId" | "raterId">): string {
-  return `${label.repetitionId}::${label.raterId}`;
+function labelDedupeKey(
+  label: Pick<ShoulderAbductionReachLabelRecord, "sourceLineIndex" | "raterId">,
+): string {
+  // Match filter semantics: trim-only normalization, preserve case/internal spacing.
+  const normalizedRaterId = normalizeResearchRaterId(label.raterId);
+  const raterKey = normalizedRaterId ?? label.raterId;
+  return `${label.sourceLineIndex}::${raterKey}`;
 }
 
 /**
  * Labels are append-only, so a session's file may contain more than one
- * label for the same `(repetitionId, raterId)` pair (a rater correcting an
+ * label for the same `(sourceLineIndex, normalizedRaterId)` pair (a rater correcting an
  * earlier submission). Keeps the record with the largest `labeledAtMs` per
  * pair — falls back to last-in-file-order if timestamps tie, matching the
  * writer's append order.
@@ -86,6 +96,11 @@ export async function readShoulderAbductionCaptureSessionLabelsForRater(
   devSessionId: string,
   raterId: string,
 ): Promise<ShoulderAbductionReachLabelRecord[]> {
+  const normalizedRaterId = normalizeResearchRaterId(raterId);
+  if (!normalizedRaterId) return [];
+
   const raw = await readRawLabelLines(devSessionId);
-  return dedupeLatestLabelPerRepAndRater(raw.filter((label) => label.raterId === raterId));
+  return dedupeLatestLabelPerRepAndRater(
+    raw.filter((label) => normalizeResearchRaterId(label.raterId) === normalizedRaterId),
+  );
 }

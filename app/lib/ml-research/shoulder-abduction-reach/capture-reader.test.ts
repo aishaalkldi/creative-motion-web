@@ -21,6 +21,7 @@ import {
   computeReviewCautionFlag,
   listShoulderAbductionCaptureSessions,
   lookupParticipantIdForRepetition,
+  resolveCaptureIdentityForLabel,
   readShoulderAbductionCaptureSessionForLabeling,
 } from "@/app/lib/ml-research/shoulder-abduction-reach/capture-reader";
 
@@ -123,14 +124,101 @@ describe("capture-reader (integration)", () => {
     assert.equal(reps[0].reviewCaution, true);
   });
 
-  it("looks up participantId server-side by (devSessionId, sourceLineIndex) for the label route to stamp", async () => {
-    const participantId = await lookupParticipantIdForRepetition(TEST_SESSION_ID, 0);
+  it("looks up participantId only when sourceLineIndex, repetitionId, and side all match the capture line", async () => {
+    const reps = await readShoulderAbductionCaptureSessionForLabeling(TEST_SESSION_ID);
+    const rightRep = reps.find((rep) => rep.side === "right");
+    assert.ok(rightRep);
+    const participantId = await lookupParticipantIdForRepetition(
+      TEST_SESSION_ID,
+      rightRep!.sourceLineIndex,
+      rightRep!.repetitionId,
+      rightRep!.side,
+    );
     assert.equal(participantId, "test-participant-should-not-leak");
   });
 
+  it("returns null when repetitionId does not match the selected capture line", async () => {
+    const reps = await readShoulderAbductionCaptureSessionForLabeling(TEST_SESSION_ID);
+    const rightRep = reps.find((rep) => rep.side === "right");
+    assert.ok(rightRep);
+    assert.equal(
+      await lookupParticipantIdForRepetition(
+        TEST_SESSION_ID,
+        rightRep!.sourceLineIndex,
+        "forged-repetition-id",
+        rightRep!.side,
+      ),
+      null,
+    );
+  });
+
+  it("returns null when side does not match the selected capture line", async () => {
+    const reps = await readShoulderAbductionCaptureSessionForLabeling(TEST_SESSION_ID);
+    const rightRep = reps.find((rep) => rep.side === "right");
+    assert.ok(rightRep);
+    assert.equal(
+      await lookupParticipantIdForRepetition(
+        TEST_SESSION_ID,
+        rightRep!.sourceLineIndex,
+        rightRep!.repetitionId,
+        "left",
+      ),
+      null,
+    );
+  });
+
   it("returns null for an out-of-range or missing sourceLineIndex", async () => {
-    assert.equal(await lookupParticipantIdForRepetition(TEST_SESSION_ID, 999), null);
-    assert.equal(await lookupParticipantIdForRepetition("no-such-session-xyz", 0), null);
+    assert.equal(
+      await lookupParticipantIdForRepetition(TEST_SESSION_ID, 999, "any-id", "right"),
+      null,
+    );
+    assert.equal(await lookupParticipantIdForRepetition("no-such-session-xyz", 0, "any-id", "right"), null);
+  });
+});
+
+describe("resolveCaptureIdentityForLabel (integration)", () => {
+  it("resolves when sourceLineIndex, repetitionId, and side all match", async () => {
+    const reps = await readShoulderAbductionCaptureSessionForLabeling(TEST_SESSION_ID);
+    const leftRep = reps.find((rep) => rep.side === "left");
+    assert.ok(leftRep);
+    const resolved = await resolveCaptureIdentityForLabel({
+      devSessionId: TEST_SESSION_ID,
+      sourceLineIndex: leftRep!.sourceLineIndex,
+      repetitionId: leftRep!.repetitionId,
+      side: leftRep!.side,
+    });
+    assert.ok(resolved);
+    assert.equal(resolved!.participantId, "test-participant-should-not-leak");
+    assert.equal(resolved!.devSessionId, TEST_SESSION_ID);
+    assert.equal(resolved!.side, "left");
+  });
+
+  it("rejects valid line index with identifiers belonging to a different record", async () => {
+    const reps = await readShoulderAbductionCaptureSessionForLabeling(TEST_SESSION_ID);
+    const rightRep = reps.find((rep) => rep.side === "right");
+    const leftRep = reps.find((rep) => rep.side === "left");
+    assert.ok(rightRep && leftRep);
+    assert.equal(
+      await resolveCaptureIdentityForLabel({
+        devSessionId: TEST_SESSION_ID,
+        sourceLineIndex: rightRep!.sourceLineIndex,
+        repetitionId: leftRep!.repetitionId,
+        side: leftRep!.side,
+      }),
+      null,
+    );
+  });
+
+  it("returns null for a missing session", async () => {
+    assert.equal(
+      await resolveCaptureIdentityForLabel({
+        devSessionId: "no-such-session-xyz",
+        sourceLineIndex: 0,
+        repetitionId: "any",
+        side: "right",
+      }),
+      null,
+    );
   });
 });
 

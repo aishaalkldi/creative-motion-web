@@ -10,9 +10,12 @@
  *      the route can only ever return the REQUESTING rater's own labels,
  *      because it has no code path that returns any other rater's.
  * POST { ShoulderAbductionReachLabelSubmission } -> appends one label line locally
- *      `participantId`, `labelSchemaVersion`, and `datasetVersion` are never
- *      read from the request body — they are looked up / hard-coded
- *      server-side (see below) so the browser can neither see nor forge them.
+ *      Server stamps `participantId`, `labelSchemaVersion`, and `datasetVersion`.
+ *      Server verifies `devSessionId`, `sourceLineIndex`, `repetitionId`, and
+ *      `side` together against the capture JSONL (`resolveCaptureIdentityForLabel`)
+ *      before accepting a label. `raterId` is normalized via
+ *      `normalizeResearchRaterId` (trim only — not auth). `labeledAtMs` is
+ *      server-authoritative (`Date.now()` at accept time).
  *
  * Same posture as `/api/dev/ml-research/shoulder-abduction-reach-capture`:
  *  - Refuses to run at all outside development.
@@ -27,16 +30,16 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
   listShoulderAbductionCaptureSessions,
-  lookupParticipantIdForRepetition,
+  resolveCaptureIdentityForLabel,
   readShoulderAbductionCaptureSessionForLabeling,
 } from "@/app/lib/ml-research/shoulder-abduction-reach/capture-reader";
 import { readShoulderAbductionCaptureSessionLabelsForRater } from "@/app/lib/ml-research/shoulder-abduction-reach/label-reader";
 import { appendShoulderAbductionReachLabelLocally } from "@/app/lib/ml-research/shoulder-abduction-reach/local-label-writer";
 import {
+  buildPersistedShoulderAbductionReachLabelRecord,
   isValidShoulderAbductionReachLabelRecord,
   isValidShoulderAbductionReachLabelSubmission,
-  ML_RESEARCH_DATASET_VERSION,
-  ML_RESEARCH_LABEL_SCHEMA_VERSION,
+  normalizeResearchRaterId,
   type ShoulderAbductionReachLabelRecord,
 } from "@/app/lib/ml-research/shoulder-abduction-reach/label-schema";
 
@@ -73,13 +76,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   const raterId = request.nextUrl.searchParams.get("raterId");
-  if (!raterId || !raterId.trim()) {
+  const normalizedRaterId = raterId ? normalizeResearchRaterId(raterId) : null;
+  if (!normalizedRaterId) {
     return NextResponse.json({ error: "rater_id_required" }, { status: 400 });
   }
 
   const [reps, labels] = await Promise.all([
     readShoulderAbductionCaptureSessionForLabeling(devSessionId),
-    readShoulderAbductionCaptureSessionLabelsForRater(devSessionId, raterId),
+    readShoulderAbductionCaptureSessionLabelsForRater(devSessionId, normalizedRaterId),
   ]);
   return NextResponse.json({ reps, labels });
 }
@@ -99,17 +103,32 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "invalid_record_shape" }, { status: 400 });
   }
 
-  const participantId = await lookupParticipantIdForRepetition(body.devSessionId, body.sourceLineIndex);
-  if (participantId === null) {
+  const normalizedRaterId = normalizeResearchRaterId(body.raterId);
+  if (!normalizedRaterId) {
+    return NextResponse.json({ error: "invalid_rater_id" }, { status: 400 });
+  }
+
+  const verifiedCapture = await resolveCaptureIdentityForLabel({
+    devSessionId: body.devSessionId,
+    sourceLineIndex: body.sourceLineIndex,
+    repetitionId: body.repetitionId,
+    side: body.side,
+  });
+  if (verifiedCapture === null) {
     return NextResponse.json({ error: "repetition_not_found" }, { status: 400 });
   }
 
-  const record: ShoulderAbductionReachLabelRecord = {
-    ...body,
-    labelSchemaVersion: ML_RESEARCH_LABEL_SCHEMA_VERSION,
-    datasetVersion: ML_RESEARCH_DATASET_VERSION,
-    participantId,
-  };
+  const record: ShoulderAbductionReachLabelRecord = buildPersistedShoulderAbductionReachLabelRecord(
+    verifiedCapture,
+    normalizedRaterId,
+    {
+      compensationLabel: body.compensationLabel,
+      exclusionFlag: body.exclusionFlag,
+      raterConfidence: body.raterConfidence,
+      note: body.note,
+    },
+    Date.now(),
+  );
 
   if (!isValidShoulderAbductionReachLabelRecord(record)) {
     return NextResponse.json({ error: "invalid_record_shape" }, { status: 400 });
