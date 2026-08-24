@@ -86,6 +86,77 @@ function startNewDetectorSession(detector: ShoulderAbductionReachPoseDetector): 
   internals.resetSessionState();
 }
 
+type LiveDetectInternals = {
+  previewActive: boolean;
+  videoEl: HTMLVideoElement | null;
+  canvasEl: HTMLCanvasElement | null;
+  poseLandmarker: PoseLandmarkerInstance | null;
+  lastProcessedVideoTimeS: number | null;
+  detectTimestamp: number;
+  animFrameId: number;
+  framesTotal: number;
+  tickLiveVideoFrame: (options?: { scheduleNext?: boolean }) => void;
+};
+
+type PoseLandmarkerInstance = {
+  detectForVideo: (video: HTMLVideoElement, ts: number) => { landmarks?: PoseLandmark[][] };
+  close?: () => void;
+};
+
+function installRafCapture(): {
+  callbacks: FrameRequestCallback[];
+  restore: () => void;
+} {
+  const callbacks: FrameRequestCallback[] = [];
+  const originalRaf = globalThis.requestAnimationFrame;
+  const originalCancel = globalThis.cancelAnimationFrame;
+  globalThis.requestAnimationFrame = ((cb: FrameRequestCallback) => {
+    callbacks.push(cb);
+    return callbacks.length;
+  }) as typeof requestAnimationFrame;
+  globalThis.cancelAnimationFrame = (() => {}) as typeof cancelAnimationFrame;
+  return {
+    callbacks,
+    restore: () => {
+      globalThis.requestAnimationFrame = originalRaf;
+      globalThis.cancelAnimationFrame = originalCancel;
+    },
+  };
+}
+
+function createMockVideo(currentTimeS: number): HTMLVideoElement {
+  return {
+    currentTime: currentTimeS,
+    videoWidth: 640,
+    videoHeight: 480,
+    paused: false,
+    play: async () => {},
+    addEventListener: () => {},
+    srcObject: null,
+  } as HTMLVideoElement;
+}
+
+function createMockCanvas(): HTMLCanvasElement {
+  return {
+    getContext: () => ({ clearRect: () => {} }),
+  } as unknown as HTMLCanvasElement;
+}
+
+function bootstrapLiveDetectSession(
+  detector: ShoulderAbductionReachPoseDetector,
+  video: HTMLVideoElement,
+  canvas: HTMLCanvasElement,
+  landmarker: PoseLandmarkerInstance,
+): LiveDetectInternals {
+  startNewDetectorSession(detector);
+  const internals = detector as unknown as LiveDetectInternals;
+  internals.videoEl = video;
+  internals.canvasEl = canvas;
+  internals.previewActive = true;
+  internals.poseLandmarker = landmarker;
+  return internals;
+}
+
 /**
  * Mirrors the one assignment the live capture loop makes after evaluating body framing.
  * That loop lives inside `start()` and needs a camera plus MediaPipe, so the value it
@@ -137,6 +208,41 @@ describe("ShoulderAbductionReachPoseDetector", () => {
     assert.equal(repEvents.length, 1);
     assert.equal(repEvents[0].side, "right");
     assert.equal(repEvents[0].repCount, 1);
+  });
+
+  it("onDevFrameCaptured is optional and omitting it leaves behavior unchanged (regression)", () => {
+    // Every other test in this file already omits onDevFrameCaptured and passes — this
+    // test exists purely to name that guarantee explicitly for the RASQ ML bridge.
+    const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+    driveFrames(detector, [restingLandmarks(), peakAbductionLandmarks(), restingLandmarks()]);
+    assert.equal(detector.getSnapshot().trackingStatus, "idle");
+  });
+
+  it("onDevFrameCaptured fires once per usable frame with the primary side's phase/rep state", () => {
+    const captured: Array<{ capturedAtMs: number; phase: string; repCount: number }> = [];
+    const detector = new ShoulderAbductionReachPoseDetector(
+      {
+        onSnapshot: () => {},
+        onDevFrameCaptured: (input) => {
+          assert.ok(input.frame.joints.right_shoulder, "the full NormalizedMotionFrame is passed through");
+          assert.ok(!("peakAngleDegrees" in input), "Slice 1.1: peak angle is no longer passed through here");
+          captured.push({ capturedAtMs: input.capturedAtMs, phase: input.phase, repCount: input.repCount });
+        },
+      },
+      "right",
+    );
+
+    driveFrames(detector, [restingLandmarks(), peakAbductionLandmarks(), null, restingLandmarks()]);
+
+    // 3 usable frames (the null frame has no landmarks, so no NormalizedMotionFrame exists for it).
+    assert.equal(captured.length, 3);
+    assert.equal(captured[0].phase, "resting");
+    // A single frame past resting always lands in "raising" first (the phase FSM only
+    // moves straight to "peak_abduction" from an existing "raising" state) — see
+    // tickShoulderAbductionReachPhase's "resting"/"unknown" case.
+    assert.equal(captured[1].phase, "raising");
+    assert.equal(captured[0].capturedAtMs, 1_000);
+    assert.equal(captured[1].capturedAtMs, 1_033);
   });
 
   it("emits compensationDetected only once trunk drift crosses threshold, and compensationCleared on return", () => {
@@ -551,13 +657,17 @@ describe("ShoulderAbductionReachPoseDetector", () => {
 
   it("writes the framing state from the real start() capture loop", () => {
     // The framing value is set privately in the tests above because the live loop needs a
-    // camera. That is only valid while `start()` still caches the evaluated framing into
-    // the same field the reset clears and the snapshot reads.
-    const startSource = ShoulderAbductionReachPoseDetector.prototype.start.toString();
+    // camera. That is only valid while the live capture tick still caches the evaluated
+    // framing into the same field the reset clears and the snapshot reads.
+    const tickSource = (
+      ShoulderAbductionReachPoseDetector.prototype as unknown as {
+        tickLiveVideoFrame: () => void;
+      }
+    ).tickLiveVideoFrame.toString();
     assert.match(
-      startSource,
+      tickSource,
       /this\.lastBodyFramingState\s*=\s*framing/,
-      "start() must cache the evaluated body framing — the tests set the same field directly",
+      "tickLiveVideoFrame must cache the evaluated body framing — the tests set the same field directly",
     );
   });
 
@@ -571,5 +681,52 @@ describe("ShoulderAbductionReachPoseDetector", () => {
       /this\.resetSessionState\(\)/,
       "start() must perform the session reset — the detector has no second lifecycle boundary",
     );
+  });
+
+  it("deduplicates video frames by currentTime before calling detectForVideo (behavioral)", () => {
+    const detectForVideoCalls: number[] = [];
+    const landmarker: PoseLandmarkerInstance = {
+      detectForVideo: (video) => {
+        detectForVideoCalls.push(video.currentTime);
+        return { landmarks: [restingLandmarks()] };
+      },
+    };
+
+    const video = createMockVideo(0);
+    const canvas = createMockCanvas();
+    const raf = installRafCapture();
+    try {
+      const detector = new ShoulderAbductionReachPoseDetector({ onSnapshot: () => {} }, "right");
+      const internals = bootstrapLiveDetectSession(detector, video, canvas, landmarker);
+
+      // First decoded frame at currentTime=0 -> one inference.
+      internals.tickLiveVideoFrame({ scheduleNext: false });
+      assert.deepEqual(detectForVideoCalls, [0]);
+
+      // Same currentTime on the next rAF tick -> skip inference.
+      internals.tickLiveVideoFrame({ scheduleNext: false });
+      assert.deepEqual(detectForVideoCalls, [0]);
+
+      // Video clock advances -> process the new frame.
+      video.currentTime = 0.033;
+      internals.tickLiveVideoFrame({ scheduleNext: false });
+      assert.deepEqual(detectForVideoCalls, [0, 0.033]);
+
+      // New session clears the dedup memory and allows the same currentTime again.
+      startNewDetectorSession(detector);
+      internals.videoEl = video;
+      internals.canvasEl = canvas;
+      internals.previewActive = true;
+      internals.poseLandmarker = landmarker;
+      video.currentTime = 0;
+      internals.tickLiveVideoFrame({ scheduleNext: false });
+      assert.deepEqual(detectForVideoCalls, [0, 0.033, 0]);
+
+      // Production loop still schedules another rAF tick after a duplicate skip.
+      internals.tickLiveVideoFrame({ scheduleNext: true });
+      assert.equal(raf.callbacks.length, 1);
+    } finally {
+      raf.restore();
+    }
   });
 });
