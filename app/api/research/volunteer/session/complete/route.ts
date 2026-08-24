@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
   checkVolunteerCompleteLimit,
@@ -9,6 +8,8 @@ import { genericServerErrorResponse } from "@/app/lib/api/safe-errors";
 import {
   getVolunteerSessionTokenFromRequest,
   resolveVolunteerSessionForCompletion,
+  volunteerJsonResponse,
+  withVolunteerNoCacheHeaders,
 } from "@/app/lib/research/volunteer-api-guards";
 import { completeVolunteerCollectionSession } from "@/app/lib/research/volunteer-session-store";
 
@@ -21,7 +22,7 @@ export async function PATCH(req: NextRequest) {
   if (rawToken) {
     const limited = checkVolunteerSessionTokenLimit(req, rawToken, "complete");
     if (!limited.allowed) {
-      return rateLimitExceededResponse(limited.retryAfterSec);
+      return withVolunteerNoCacheHeaders(rateLimitExceededResponse(limited.retryAfterSec));
     }
   }
 
@@ -30,7 +31,7 @@ export async function PATCH(req: NextRequest) {
 
   const completeLimited = checkVolunteerCompleteLimit(req, rawToken ?? "missing");
   if (!completeLimited.allowed) {
-    return rateLimitExceededResponse(completeLimited.retryAfterSec);
+    return withVolunteerNoCacheHeaders(rateLimitExceededResponse(completeLimited.retryAfterSec));
   }
 
   try {
@@ -40,18 +41,18 @@ export async function PATCH(req: NextRequest) {
     );
 
     if ("alreadyCompleted" in result && result.alreadyCompleted) {
-      return NextResponse.json({ ok: true, alreadyCompleted: true });
+      return volunteerJsonResponse({ ok: true, alreadyCompleted: true });
     }
 
     if ("deletionCode" in result) {
-      return NextResponse.json({
+      return volunteerJsonResponse({
         ok: true,
         deletionCode: result.deletionCode,
       });
     }
 
-    return genericServerErrorResponse();
+    return withVolunteerNoCacheHeaders(genericServerErrorResponse());
   } catch {
-    return genericServerErrorResponse();
+    return withVolunteerNoCacheHeaders(genericServerErrorResponse());
   }
 }

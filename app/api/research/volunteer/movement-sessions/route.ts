@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
   checkVolunteerMovementSessionLimit,
@@ -8,7 +7,10 @@ import {
 import { genericServerErrorResponse } from "@/app/lib/api/safe-errors";
 import {
   getVolunteerSessionTokenFromRequest,
+  readBoundedVolunteerJsonBody,
   resolveAuthenticatedVolunteerSession,
+  volunteerJsonResponse,
+  withVolunteerNoCacheHeaders,
 } from "@/app/lib/research/volunteer-api-guards";
 import { createVolunteerMovementSession } from "@/app/lib/research/volunteer-session-store";
 import { validateVolunteerMovementSessionBody } from "@/app/lib/research/volunteer-validation";
@@ -22,7 +24,7 @@ export async function POST(req: NextRequest) {
   if (rawToken) {
     const limited = checkVolunteerSessionTokenLimit(req, rawToken, "movement-sessions");
     if (!limited.allowed) {
-      return rateLimitExceededResponse(limited.retryAfterSec);
+      return withVolunteerNoCacheHeaders(rateLimitExceededResponse(limited.retryAfterSec));
     }
   }
 
@@ -31,21 +33,17 @@ export async function POST(req: NextRequest) {
 
   const movementLimited = checkVolunteerMovementSessionLimit(req, rawToken ?? "missing");
   if (!movementLimited.allowed) {
-    return rateLimitExceededResponse(movementLimited.retryAfterSec);
+    return withVolunteerNoCacheHeaders(rateLimitExceededResponse(movementLimited.retryAfterSec));
   }
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
-  }
+  const parsed = await readBoundedVolunteerJsonBody(req);
+  if (!parsed.ok) return parsed.response;
 
   const validated = validateVolunteerMovementSessionBody(
-    (body ?? {}) as Record<string, unknown>,
+    (parsed.value ?? {}) as Record<string, unknown>,
   );
   if (!validated.ok) {
-    return NextResponse.json({ error: validated.error }, { status: 400 });
+    return volunteerJsonResponse({ error: validated.error }, 400);
   }
 
   try {
@@ -55,11 +53,11 @@ export async function POST(req: NextRequest) {
       validated.value,
     );
 
-    return NextResponse.json({
+    return volunteerJsonResponse({
       movementSessionId: created.movementSessionId,
       blockIndex: created.blockIndex,
     });
   } catch {
-    return genericServerErrorResponse();
+    return withVolunteerNoCacheHeaders(genericServerErrorResponse());
   }
 }

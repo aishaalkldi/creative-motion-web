@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
   checkVolunteerSessionCreateLimit,
@@ -10,7 +9,10 @@ import {
 } from "@/app/lib/api/safe-errors";
 import {
   ensureVolunteerCollectionEnabled,
+  readBoundedVolunteerJsonBody,
   volunteerInvalidCampaignResponse,
+  volunteerJsonResponse,
+  withVolunteerNoCacheHeaders,
 } from "@/app/lib/research/volunteer-api-guards";
 import {
   isVolunteerCampaignCodeConfigured,
@@ -32,25 +34,21 @@ export async function POST(req: NextRequest) {
 
   const limited = checkVolunteerSessionCreateLimit(req);
   if (!limited.allowed) {
-    return rateLimitExceededResponse(limited.retryAfterSec);
+    return withVolunteerNoCacheHeaders(rateLimitExceededResponse(limited.retryAfterSec));
   }
 
   if (!isVolunteerCampaignCodeConfigured()) {
-    return serviceUnavailableResponse();
+    return withVolunteerNoCacheHeaders(serviceUnavailableResponse());
   }
 
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
-  }
+  const parsed = await readBoundedVolunteerJsonBody(req);
+  if (!parsed.ok) return parsed.response;
 
   const validated = validateVolunteerSessionCreateBody(
-    (body ?? {}) as Record<string, unknown>,
+    (parsed.value ?? {}) as Record<string, unknown>,
   );
   if (!validated.ok) {
-    return NextResponse.json({ error: validated.error }, { status: 400 });
+    return volunteerJsonResponse({ error: validated.error }, 400);
   }
 
   if (!verifyVolunteerCampaignCode(validated.value.campaignCode)) {
@@ -59,21 +57,20 @@ export async function POST(req: NextRequest) {
 
   const admin = getVolunteerResearchAdminClient();
   if (!admin) {
-    return serviceUnavailableResponse();
+    return withVolunteerNoCacheHeaders(serviceUnavailableResponse());
   }
 
   try {
     const created = await createVolunteerCollectionSession(admin, {
       consentVersion: validated.value.consentVersion,
-      consentAcceptedAtMs: validated.value.consentAcceptedAtMs,
       protocolVersion: validated.value.protocolVersion,
     });
 
-    return NextResponse.json({
+    return volunteerJsonResponse({
       sessionToken: created.sessionToken,
       expiresAt: created.expiresAt,
     });
   } catch {
-    return genericServerErrorResponse();
+    return withVolunteerNoCacheHeaders(genericServerErrorResponse());
   }
 }

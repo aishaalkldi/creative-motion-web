@@ -40,6 +40,7 @@ Optional:
 - **Production:** Script exits unless `VOLUNTEER_QA_CONFIRM_STAGING=true` and `VERCEL_ENV` is not `production`.
 - **Secrets:** Never logs campaign code, session tokens, deletion codes, hashes, or service-role keys.
 - **Campaign code:** High-entropy shared secret — provide only via `VOLUNTEER_QA_CAMPAIGN_CODE` in the operator process. Rotate if exposed.
+- **Consent timestamp:** Recorded server-side at session creation; do not send `consentAcceptedAtMs` in the request body.
 
 ### Exit codes
 
