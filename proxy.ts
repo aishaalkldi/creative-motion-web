@@ -37,6 +37,10 @@ const PUBLIC_PATHS = new Set([
   "/clinical-safety",
   // Slice 8A — public volunteer motion capture (in-memory only; exact path, not a prefix).
   "/volunteer/shoulder-abduction-reach",
+  // Slice 8B.1 — volunteer research APIs (exact paths only; not a broad prefix).
+  "/api/research/volunteer/sessions",
+  "/api/research/volunteer/movement-sessions",
+  "/api/research/volunteer/session/complete",
   // Ops readiness — env booleans + pilot table reachability only (no secrets).
   "/api/health/supabase",
 ]);
