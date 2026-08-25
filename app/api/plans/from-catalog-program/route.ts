@@ -15,6 +15,10 @@ import {
   type RateLimitResult,
 } from "../../../lib/rate-limit";
 import { serviceUnavailableResponse } from "../../../lib/api/safe-errors";
+import {
+  parsePlanSessionPrescriptionsFromBody,
+  toCatalogRpcSessionPrescribedSides,
+} from "../../../lib/clinical/clinical-prescribed-side";
 
 const PLAN_CREATE_ERROR = "Failed to create plan.";
 
@@ -40,7 +44,25 @@ type PostBody = {
   treatmentProgramId?: string;
   assessmentId?: string | null;
   catalogAssignmentRequestId?: string;
+  sessions?: unknown;
 };
+
+const CATALOG_POST_ALLOWED_KEYS = new Set([
+  "patientId",
+  "treatmentProgramId",
+  "assessmentId",
+  "catalogAssignmentRequestId",
+  "sessions",
+]);
+
+function rejectUnknownCatalogPostKeys(body: PostBody): string | null {
+  for (const key of Object.keys(body)) {
+    if (!CATALOG_POST_ALLOWED_KEYS.has(key)) {
+      return `Unknown request field: ${key}.`;
+    }
+  }
+  return null;
+}
 
 export type CatalogPlanPostDependencies = {
   /** Resolves the authenticated caller, or null if unauthenticated. */
@@ -75,6 +97,11 @@ export function createCatalogPlanPostHandler(deps: CatalogPlanPostDependencies) 
     try { body = (await req.json()) as PostBody; }
     catch { return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 }); }
 
+    const unknownKeyError = rejectUnknownCatalogPostKeys(body);
+    if (unknownKeyError) {
+      return NextResponse.json({ error: unknownKeyError }, { status: 400 });
+    }
+
     const patientId = body.patientId?.trim();
     const treatmentProgramId = body.treatmentProgramId?.trim();
     const catalogAssignmentRequestId = body.catalogAssignmentRequestId?.trim();
@@ -101,6 +128,11 @@ export function createCatalogPlanPostHandler(deps: CatalogPlanPostDependencies) 
       return NextResponse.json({ error: "assessmentId must be a valid UUID." }, { status: 400 });
     }
 
+    const sessionPrescriptions = parsePlanSessionPrescriptionsFromBody(body.sessions);
+    if (!sessionPrescriptions.ok) {
+      return NextResponse.json({ error: sessionPrescriptions.error }, { status: 400 });
+    }
+
     // Explicit object literal, never a spread of `body` — extra fields
     // a caller sends (providerId, token, patientToken, sessions,
     // exercises, blocks, sourceTreatmentProgramId,
@@ -116,6 +148,7 @@ export function createCatalogPlanPostHandler(deps: CatalogPlanPostDependencies) 
         treatmentProgramId,
         assessmentId,
         catalogAssignmentRequestId,
+        sessionPrescribedSides: toCatalogRpcSessionPrescribedSides(sessionPrescriptions.value),
       });
 
       return NextResponse.json(

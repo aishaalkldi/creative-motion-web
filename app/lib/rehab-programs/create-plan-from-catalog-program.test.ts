@@ -85,6 +85,7 @@ describe("createPlanFromCatalogProgram", () => {
     assert.equal(params.p_program_id, VALID_INPUT.treatmentProgramId);
     assert.equal(params.p_assessment_id, VALID_INPUT.assessmentId);
     assert.equal(params.p_catalog_assignment_request_id, VALID_INPUT.catalogAssignmentRequestId);
+    assert.equal(params.p_session_prescribed_sides, null);
   });
 
   it("4. generates a non-empty server-side token and passes it as p_patient_token", async () => {

@@ -111,7 +111,8 @@ describe("POST /api/plans/from-catalog-program", () => {
   it("3. missing required field (patientId) -> 400, wrapper never called", async () => {
     const { deps, createPlanCalls } = buildFakeDeps();
     const handler = createCatalogPlanPostHandler(deps);
-    const { patientId: _drop, ...rest } = VALID_BODY;
+    const rest = { ...VALID_BODY };
+    delete (rest as Partial<typeof VALID_BODY>).patientId;
     const res = await handler(fakeRequest(rest));
     assert.equal(res.status, 400);
     assert.deepEqual(createPlanCalls, []);
@@ -152,7 +153,8 @@ describe("POST /api/plans/from-catalog-program", () => {
   it("8. omitted/null assessmentId reaches the wrapper as null", async () => {
     const { deps, createPlanCalls } = buildFakeDeps();
     const handler = createCatalogPlanPostHandler(deps);
-    const { assessmentId: _drop, ...rest } = VALID_BODY;
+    const rest = { ...VALID_BODY };
+    delete (rest as Partial<typeof VALID_BODY>).assessmentId;
     const res = await handler(fakeRequest(rest));
     assert.equal(res.status, 201);
     assert.equal(createPlanCalls[0].input.assessmentId, null);
@@ -165,54 +167,44 @@ describe("POST /api/plans/from-catalog-program", () => {
     assert.equal(createPlanCalls[0].input.providerId, PROVIDER_ID);
   });
 
-  it("10. attacker-supplied providerId in the body is ignored", async () => {
+  it("10. attacker-supplied providerId in the body is rejected", async () => {
     const { deps, createPlanCalls } = buildFakeDeps();
     const handler = createCatalogPlanPostHandler(deps);
-    await handler(
+    const res = await handler(
       fakeRequest({ ...VALID_BODY, providerId: "99999999-9999-9999-9999-999999999999" }),
     );
-    assert.equal(createPlanCalls[0].input.providerId, PROVIDER_ID);
+    assert.equal(res.status, 400);
+    assert.deepEqual(createPlanCalls, []);
   });
 
-  it("11. attacker-supplied token/patientToken fields are ignored -- exact wrapper input asserted", async () => {
+  it("11. attacker-supplied token/patientToken fields are rejected", async () => {
     const { deps, createPlanCalls } = buildFakeDeps();
     const handler = createCatalogPlanPostHandler(deps);
-    await handler(
+    const res = await handler(
       fakeRequest({
         ...VALID_BODY,
         token: "attacker-token",
         patientToken: "attacker-patient-token",
       }),
     );
-    assert.deepEqual(createPlanCalls[0].input, {
-      providerId: PROVIDER_ID,
-      patientId: PATIENT_ID,
-      treatmentProgramId: PROGRAM_ID,
-      assessmentId: ASSESSMENT_ID,
-      catalogAssignmentRequestId: REQUEST_ID,
-    });
+    assert.equal(res.status, 400);
+    assert.deepEqual(createPlanCalls, []);
   });
 
-  it("12. sessions/exercises/blocks/provenance fields are not forwarded -- exact wrapper input asserted", async () => {
+  it("12. exercises/blocks/provenance fields are rejected as unknown request fields", async () => {
     const { deps, createPlanCalls } = buildFakeDeps();
     const handler = createCatalogPlanPostHandler(deps);
-    await handler(
+    const res = await handler(
       fakeRequest({
         ...VALID_BODY,
-        sessions: [{ id: "x" }],
         exercises: ["fake-exercise"],
         blocks: [{ blockKey: "x" }],
         sourceTreatmentProgramId: "88888888-8888-8888-8888-888888888888",
         sourceProgramSessionId: "99999999-9999-9999-9999-999999999999",
       }),
     );
-    assert.deepEqual(createPlanCalls[0].input, {
-      providerId: PROVIDER_ID,
-      patientId: PATIENT_ID,
-      treatmentProgramId: PROGRAM_ID,
-      assessmentId: ASSESSMENT_ID,
-      catalogAssignmentRequestId: REQUEST_ID,
-    });
+    assert.equal(res.status, 400);
+    assert.deepEqual(createPlanCalls, []);
   });
 
   it("13. created:true -> 201", async () => {

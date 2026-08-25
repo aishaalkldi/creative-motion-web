@@ -1,6 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/app/lib/supabase/database.types";
 import { generateSecurePatientToken } from "@/app/lib/patient-access-token";
+import {
+  type CatalogPlanSessionPrescriptionRpcRow,
+} from "@/app/lib/clinical/clinical-prescribed-side";
 
 /**
  * Server-only wrapper around the service-role-only
@@ -57,6 +60,8 @@ export type CreatePlanFromCatalogProgramInput = {
   assessmentId: string | null;
   /** Client-supplied idempotency key — one per "assign this program" action. */
   catalogAssignmentRequestId: string;
+  /** Optional therapist-authored per-session prescribed sides (fresh assignments only). */
+  sessionPrescribedSides?: CatalogPlanSessionPrescriptionRpcRow[];
 };
 
 export type CreatePlanFromCatalogProgramResult = {
@@ -153,6 +158,10 @@ export async function createPlanFromCatalogProgram(
     p_assessment_id: assessmentIdArg,
     p_catalog_assignment_request_id: input.catalogAssignmentRequestId,
     p_patient_token: token,
+    p_session_prescribed_sides:
+      input.sessionPrescribedSides && input.sessionPrescribedSides.length > 0
+        ? input.sessionPrescribedSides
+        : null,
   });
 
   if (error) {

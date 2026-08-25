@@ -10,6 +10,7 @@ import {
   normalizeExercisesForStorage,
   type PrescribedExerciseV1,
 } from "../../lib/exercise-resolve";
+import { validateGuidedPlanSessionPrescriptions } from "../../lib/clinical/clinical-prescribed-side";
 import type { StoredExercise } from "../../lib/exercise-prescription";
 import {
   buildPlanProgramMetadata,
@@ -107,6 +108,7 @@ type PostBody = {
     sessionNumber: number;
     title: string;
     exercises: (string | PrescribedExerciseV1)[];
+    prescribedSide?: unknown;
   }[];
   assignedBy?: string;
   programTemplateId?: string;
@@ -206,6 +208,11 @@ export async function POST(req: NextRequest) {
 
   // Insert plan sessions (when provided)
   if (body.sessions && body.sessions.length > 0) {
+    const prescriptionValidation = validateGuidedPlanSessionPrescriptions(body.sessions);
+    if (!prescriptionValidation.ok) {
+      return NextResponse.json({ error: prescriptionValidation.error }, { status: 400 });
+    }
+
     const sessionRows = body.sessions.map((s) => ({
       plan_id:        planId,
       provider_id:    user.id,
@@ -214,7 +221,10 @@ export async function POST(req: NextRequest) {
       title:          s.title,
       exercises:      normalizeExercisesForStorage(s.exercises),
       status:         "upcoming",
+      prescribed_side:
+        prescriptionValidation.prescribedSideBySessionNumber.get(s.sessionNumber) ?? null,
     }));
+
     const { error: sessErr } = await adminClient.from("plan_sessions").insert(sessionRows);
     if (sessErr) {
       console.error("[POST /api/plans] sessions insert failed");
