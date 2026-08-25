@@ -53,6 +53,43 @@ describe("validateVolunteerRepetitionBody", () => {
       participantId: "client-controlled",
     });
     assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error, "Request contains unsupported fields.");
+  });
+
+  it("rejects arbitrary extra top-level keys", () => {
+    const fixture = buildVolunteerRepetitionFixture();
+    const result = validateVolunteerRepetitionBody({
+      ...bodyFromFixture(fixture),
+      unexpectedField: "value",
+    });
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.error, "Request contains unsupported fields.");
+  });
+
+  it("rejects snake_case identity and ownership fields", () => {
+    const fixture = buildVolunteerRepetitionFixture();
+    for (const extra of [
+      { participant_id: crypto.randomUUID() },
+      { collection_session_id: crypto.randomUUID() },
+      { payload_hash: "abc" },
+    ]) {
+      const result = validateVolunteerRepetitionBody({
+        ...bodyFromFixture(fixture),
+        ...extra,
+      });
+      assert.equal(result.ok, false, JSON.stringify(extra));
+    }
+  });
+
+  it("rejects media-shaped top-level fields", () => {
+    const fixture = buildVolunteerRepetitionFixture();
+    for (const extra of [{ video: "x" }, { base64: "x" }, { blob: "x" }, { imageData: "x" }]) {
+      const result = validateVolunteerRepetitionBody({
+        ...bodyFromFixture(fixture),
+        ...extra,
+      });
+      assert.equal(result.ok, false, JSON.stringify(extra));
+    }
   });
 
   it("rejects unsupported capture schema", () => {

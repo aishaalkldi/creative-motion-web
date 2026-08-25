@@ -6,7 +6,12 @@ import { after, before, beforeEach, describe, it } from "node:test";
 import { NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { hashVolunteerCampaignCodeForEnvSetup } from "@/app/lib/research/volunteer-campaign";
-import { VOLUNTEER_SESSION_TOKEN_HEADER } from "@/app/lib/research/volunteer-constants";
+import {
+  VOLUNTEER_CONSENT_VERSION,
+  VOLUNTEER_PROTOCOL_VERSION,
+  VOLUNTEER_SESSION_TOKEN_HEADER,
+} from "@/app/lib/research/volunteer-constants";
+import { VOLUNTEER_NO_CACHE_HEADERS } from "@/app/lib/research/volunteer-api-guards";
 import {
   buildVolunteerRepetitionFixture,
   hashVolunteerRepetitionPayload,
@@ -237,14 +242,19 @@ function createVolunteerAdminWithRepetitions() {
   };
 }
 
+function assertNoCacheHeaders(res: Response): void {
+  for (const [name, value] of Object.entries(VOLUNTEER_NO_CACHE_HEADERS)) {
+    assert.equal(res.headers.get(name), value, name);
+  }
+}
+
 async function createActiveSessionWithMovement() {
   const createRes = await createSession(
     authedPost("http://localhost/api/research/volunteer/sessions", null, {
       campaignCode: CAMPAIGN_CODE,
       ageConfirmed18Plus: true,
-      consentVersion: "volunteer-ml-capture-1.0",
-      consentAcceptedAtMs: Date.now(),
-      protocolVersion: "shoulder-abduction-volunteer-v1",
+      consentVersion: VOLUNTEER_CONSENT_VERSION,
+      protocolVersion: VOLUNTEER_PROTOCOL_VERSION,
     }),
   );
   const { sessionToken } = (await createRes.json()) as { sessionToken: string };
@@ -284,7 +294,22 @@ describe("POST /api/research/volunteer/repetitions", { concurrency: 1 }, () => {
       authedPost("http://localhost/api/research/volunteer/repetitions", "token", {}),
     );
     assert.equal(res.status, 404);
+    assertNoCacheHeaders(res);
     process.env.ML_VOLUNTEER_COLLECTION_ENABLED = "true";
+  });
+
+  it("rejects client-supplied consentAcceptedAtMs during session setup", async () => {
+    const res = await createSession(
+      authedPost("http://localhost/api/research/volunteer/sessions", null, {
+        campaignCode: CAMPAIGN_CODE,
+        ageConfirmed18Plus: true,
+        consentVersion: VOLUNTEER_CONSENT_VERSION,
+        consentAcceptedAtMs: Date.now(),
+        protocolVersion: VOLUNTEER_PROTOCOL_VERSION,
+      }),
+    );
+    assert.equal(res.status, 400);
+    assertNoCacheHeaders(res);
   });
 
   it("persists first submission and returns repetitionId only", async () => {
@@ -304,6 +329,7 @@ describe("POST /api/research/volunteer/repetitions", { concurrency: 1 }, () => {
       }),
     );
     assert.equal(res.status, 200);
+    assertNoCacheHeaders(res);
     const body = (await res.json()) as { repetitionId: string; created: boolean };
     assert.equal(body.created, true);
     assert.ok(body.repetitionId);
@@ -363,6 +389,7 @@ describe("POST /api/research/volunteer/repetitions", { concurrency: 1 }, () => {
       }),
     );
     assert.equal(conflict.status, 409);
+    assertNoCacheHeaders(conflict);
   });
 
   it("returns 404 when movement session is not owned by authenticated collection session", async () => {
@@ -416,6 +443,7 @@ describe("POST /api/research/volunteer/repetitions", { concurrency: 1 }, () => {
       ),
     );
     assert.equal(res.status, 413);
+    assertNoCacheHeaders(res);
   });
 
   it("returns 413 for oversized streamed body without Content-Length", async () => {
@@ -429,6 +457,7 @@ describe("POST /api/research/volunteer/repetitions", { concurrency: 1 }, () => {
       ),
     );
     assert.equal(res.status, 413);
+    assertNoCacheHeaders(res);
   });
 
   it("returns 400 for malformed JSON body", async () => {
@@ -441,6 +470,29 @@ describe("POST /api/research/volunteer/repetitions", { concurrency: 1 }, () => {
       ),
     );
     assert.equal(res.status, 400);
+    assertNoCacheHeaders(res);
+  });
+
+  it("rejects extra top-level fields without persisting a row", async () => {
+    const { sessionToken, movementSessionId } = await createActiveSessionWithMovement();
+    const fixture = buildVolunteerRepetitionFixture({ movementSessionId });
+    const res = await createRepetition(
+      authedPost("http://localhost/api/research/volunteer/repetitions", sessionToken, {
+        movementSessionId: fixture.movementSessionId,
+        clientSubmissionId: fixture.clientSubmissionId,
+        repetitionIndex: fixture.repetitionIndex,
+        captureSchemaVersion: fixture.captureSchemaVersion,
+        featureSchemaVersion: fixture.featureSchemaVersion,
+        startedAtMs: fixture.startedAtMs,
+        endedAtMs: fixture.endedAtMs,
+        frames: fixture.frames,
+        derivedFeatures: fixture.derivedFeatures,
+        unexpectedField: "forged",
+      }),
+    );
+    assert.equal(res.status, 400);
+    assertNoCacheHeaders(res);
+    assert.equal(admin.__repetitions.length, 0);
   });
 
   it("accepts valid JSON streamed without Content-Length", async () => {

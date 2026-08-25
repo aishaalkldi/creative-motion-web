@@ -44,6 +44,47 @@ const TRACKING_QUALITY_KEYS = new Set([
   "minCoreJointVisibility",
 ]);
 
+const REPETITION_TOP_LEVEL_ALLOWED_KEYS = new Set([
+  "movementSessionId",
+  "clientSubmissionId",
+  "repetitionIndex",
+  "captureSchemaVersion",
+  "featureSchemaVersion",
+  "startedAtMs",
+  "endedAtMs",
+  "frames",
+  "derivedFeatures",
+]);
+
+const REPETITION_SERVER_OWNED_REJECTED_KEYS = new Set([
+  "participantId",
+  "participant_id",
+  "collectionSessionId",
+  "collection_session_id",
+  "payloadHash",
+  "payload_hash",
+  "sessionToken",
+  "session_token",
+  "session_token_hash",
+  "deletionCode",
+  "deletion_code",
+  "status",
+  "repetitionId",
+  "devSessionId",
+  "simulationCondition",
+  "movementType",
+  "side",
+  "protocolCondition",
+  "video",
+  "image",
+  "base64",
+  "blob",
+  "photo",
+  "media",
+  "rawVideo",
+  "imageData",
+]);
+
 /** Floating-point tolerance for usableFrameRatio consistency checks. */
 export const VOLUNTEER_REPETITION_RATIO_TOLERANCE = 1e-6;
 
@@ -98,16 +139,33 @@ function hasOnlyKeys(value: Record<string, unknown>, allowed: Set<string>): bool
   return Object.keys(value).every((key) => allowed.has(key));
 }
 
-function isForbiddenIdentityField(body: VolunteerRepetitionSubmissionBody): boolean {
-  return (
-    body.participantId !== undefined ||
-    body.devSessionId !== undefined ||
-    body.repetitionId !== undefined ||
-    body.simulationCondition !== undefined ||
-    body.movementType !== undefined ||
-    body.side !== undefined ||
-    body.protocolCondition !== undefined
-  );
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function rejectDisallowedTopLevelKeys(
+  body: unknown,
+): VolunteerRepetitionValidationResult | { ok: true; value: Record<string, unknown> } {
+  if (!isPlainObject(body)) {
+    return { ok: false, error: "Invalid request body." };
+  }
+
+  for (const key of Object.keys(body)) {
+    if (REPETITION_SERVER_OWNED_REJECTED_KEYS.has(key)) {
+      return { ok: false, error: "Request contains unsupported fields." };
+    }
+    if (!REPETITION_TOP_LEVEL_ALLOWED_KEYS.has(key)) {
+      return { ok: false, error: "Request contains unsupported fields." };
+    }
+    if (key !== "frames" && key !== "derivedFeatures") {
+      const value = body[key];
+      if (value !== null && typeof value === "object") {
+        return { ok: false, error: "Request contains unsupported fields." };
+      }
+    }
+  }
+
+  return { ok: true, value: body };
 }
 
 function sanitizeLandmark(
@@ -306,43 +364,44 @@ export function isVolunteerRepetitionBodyTooLarge(contentLengthHeader: string | 
 export function validateVolunteerRepetitionBody(
   body: VolunteerRepetitionSubmissionBody,
 ): VolunteerRepetitionValidationResult {
-  if (isForbiddenIdentityField(body)) {
-    return { ok: false, error: "Client identity fields are not accepted." };
-  }
+  const shape = rejectDisallowedTopLevelKeys(body);
+  if (!shape.ok) return shape;
 
-  if (!isUuid(body.movementSessionId)) {
+  const record = shape.value as VolunteerRepetitionSubmissionBody;
+
+  if (!isUuid(record.movementSessionId)) {
     return { ok: false, error: "Movement session id is invalid." };
   }
-  if (!isUuid(body.clientSubmissionId)) {
+  if (!isUuid(record.clientSubmissionId)) {
     return { ok: false, error: "Client submission id is invalid." };
   }
-  if (!Number.isInteger(body.repetitionIndex) || (body.repetitionIndex as number) < 1) {
+  if (!Number.isInteger(record.repetitionIndex) || (record.repetitionIndex as number) < 1) {
     return { ok: false, error: "Repetition index is invalid." };
   }
-  if (body.captureSchemaVersion !== ML_RESEARCH_CAPTURE_SCHEMA_VERSION) {
+  if (record.captureSchemaVersion !== ML_RESEARCH_CAPTURE_SCHEMA_VERSION) {
     return { ok: false, error: "Capture schema version is not supported." };
   }
   if (
-    typeof body.featureSchemaVersion !== "string" ||
-    !SUPPORTED_FEATURE_SCHEMA_VERSIONS.has(body.featureSchemaVersion)
+    typeof record.featureSchemaVersion !== "string" ||
+    !SUPPORTED_FEATURE_SCHEMA_VERSIONS.has(record.featureSchemaVersion)
   ) {
     return { ok: false, error: "Feature schema version is not supported." };
   }
-  if (!isFiniteNumber(body.startedAtMs) || body.startedAtMs < 0) {
+  if (!isFiniteNumber(record.startedAtMs) || record.startedAtMs < 0) {
     return { ok: false, error: "Started timestamp is invalid." };
   }
-  if (!isFiniteNumber(body.endedAtMs) || body.endedAtMs < body.startedAtMs) {
+  if (!isFiniteNumber(record.endedAtMs) || record.endedAtMs < record.startedAtMs) {
     return { ok: false, error: "Ended timestamp is invalid." };
   }
-  if (!Array.isArray(body.frames) || body.frames.length === 0) {
+  if (!Array.isArray(record.frames) || record.frames.length === 0) {
     return { ok: false, error: "Frames are required." };
   }
-  if (body.frames.length > VOLUNTEER_REPETITION_MAX_FRAMES) {
+  if (record.frames.length > VOLUNTEER_REPETITION_MAX_FRAMES) {
     return { ok: false, error: "Frame count exceeds the allowed limit." };
   }
 
   const frames: ShoulderAbductionReachCapturedFrame[] = [];
-  for (const frame of body.frames) {
+  for (const frame of record.frames) {
     const sanitizedFrame = sanitizeFrame(frame);
     if (!sanitizedFrame) {
       return { ok: false, error: "Frame payload is invalid." };
@@ -353,7 +412,7 @@ export function validateVolunteerRepetitionBody(
     return { ok: false, error: "Frame sequence is invalid." };
   }
 
-  const derivedFeatures = sanitizeDerivedFeatures(body.derivedFeatures, frames.length);
+  const derivedFeatures = sanitizeDerivedFeatures(record.derivedFeatures, frames.length);
   if (!derivedFeatures) {
     return { ok: false, error: "Derived features are invalid." };
   }
@@ -361,13 +420,13 @@ export function validateVolunteerRepetitionBody(
   return {
     ok: true,
     value: {
-      movementSessionId: (body.movementSessionId as string).trim(),
-      clientSubmissionId: (body.clientSubmissionId as string).trim(),
-      repetitionIndex: body.repetitionIndex as number,
+      movementSessionId: (record.movementSessionId as string).trim(),
+      clientSubmissionId: (record.clientSubmissionId as string).trim(),
+      repetitionIndex: record.repetitionIndex as number,
       captureSchemaVersion: ML_RESEARCH_CAPTURE_SCHEMA_VERSION,
-      featureSchemaVersion: body.featureSchemaVersion,
-      startedAtMs: body.startedAtMs,
-      endedAtMs: body.endedAtMs,
+      featureSchemaVersion: record.featureSchemaVersion,
+      startedAtMs: record.startedAtMs,
+      endedAtMs: record.endedAtMs,
       frames,
       derivedFeatures,
     },

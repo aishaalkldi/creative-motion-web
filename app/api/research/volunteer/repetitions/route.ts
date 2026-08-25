@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import {
   checkVolunteerRepetitionLimit,
@@ -13,6 +12,8 @@ import {
   ensureVolunteerCollectionEnabled,
   getVolunteerSessionTokenFromRequest,
   resolveAuthenticatedVolunteerSession,
+  volunteerJsonResponse,
+  withVolunteerNoCacheHeaders,
 } from "@/app/lib/research/volunteer-api-guards";
 import { persistVolunteerRepetition } from "@/app/lib/research/volunteer-repetition-store";
 import { readVolunteerRepetitionJsonBody } from "@/app/lib/research/volunteer-repetition-request";
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
   if (rawToken) {
     const limited = checkVolunteerSessionTokenLimit(req, rawToken, "repetitions");
     if (!limited.allowed) {
-      return rateLimitExceededResponse(limited.retryAfterSec);
+      return withVolunteerNoCacheHeaders(rateLimitExceededResponse(limited.retryAfterSec));
     }
   }
 
@@ -42,22 +43,17 @@ export async function POST(req: NextRequest) {
 
   const repetitionLimited = checkVolunteerRepetitionLimit(req, rawToken ?? "missing");
   if (!repetitionLimited.allowed) {
-    return rateLimitExceededResponse(repetitionLimited.retryAfterSec);
+    return withVolunteerNoCacheHeaders(rateLimitExceededResponse(repetitionLimited.retryAfterSec));
   }
 
   const parsed = await readVolunteerRepetitionJsonBody(req);
-  if (!parsed.ok) {
-    if (parsed.status === 413) {
-      return NextResponse.json({ error: "Repetition payload exceeds allowed size." }, { status: 413 });
-    }
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
-  }
+  if (!parsed.ok) return parsed.response;
 
   const validated = validateVolunteerRepetitionBody(
-    (parsed.body ?? {}) as VolunteerRepetitionSubmissionBody,
+    parsed.body as VolunteerRepetitionSubmissionBody,
   );
   if (!validated.ok) {
-    return NextResponse.json({ error: validated.error }, { status: 400 });
+    return volunteerJsonResponse({ error: validated.error }, 400);
   }
 
   try {
@@ -69,16 +65,16 @@ export async function POST(req: NextRequest) {
 
     if (!result.ok) {
       if (result.reason === "payload_conflict") {
-        return NextResponse.json({ error: "Submission conflict." }, { status: 409 });
+        return volunteerJsonResponse({ error: "Submission conflict." }, 409);
       }
-      return unableToCompleteResponse(404);
+      return withVolunteerNoCacheHeaders(unableToCompleteResponse(404));
     }
 
-    return NextResponse.json({
+    return volunteerJsonResponse({
       repetitionId: result.repetitionId,
       created: result.created,
     });
   } catch {
-    return genericServerErrorResponse();
+    return withVolunteerNoCacheHeaders(genericServerErrorResponse());
   }
 }
