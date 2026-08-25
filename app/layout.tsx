@@ -85,7 +85,7 @@ export default function RootLayout({
       <body
         suppressHydrationWarning
         className="min-h-full flex flex-col bg-[var(--background)] text-[var(--foreground)]"
-        style={{ fontFamily: "var(--font-inter, ui-sans-serif, system-ui, sans-serif)" }}
+        style={{ fontFamily: "var(--app-font-body, var(--font-inter, ui-sans-serif, system-ui, sans-serif))" }}
       >
         <ThemeProvider>
           <GlobalLanguageProvider>{children}</GlobalLanguageProvider>

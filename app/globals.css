@@ -43,6 +43,7 @@
   --font-sans:  var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono:  var(--font-ibm-plex-mono), ui-monospace, monospace;
   --font-display: var(--font-geist), var(--font-inter), ui-sans-serif, sans-serif;
+  --app-font-body: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
 }
 
 /* ── RASQ theme tokens — light (default) ──────────────────────────────────
@@ -114,7 +115,7 @@ html {
 }
 
 html[lang="ar"] {
-  font-family: var(--font-noto-sans-arabic), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --app-font-body: "Arslan Wessam", var(--font-noto-sans-arabic), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0;
 }
 
@@ -122,12 +123,12 @@ body {
   min-height: 100%;
   background: linear-gradient(180deg, var(--background) 0%, var(--background-elevated) 100%);
   color: var(--foreground);
-  font-family: var(--font-sans);
+  font-family: var(--app-font-body);
   line-height: 1.65;
 }
 
 html[lang="ar"] body {
-  font-family: var(--font-noto-sans-arabic), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--app-font-body);
   line-height: 1.8;
 }
 
