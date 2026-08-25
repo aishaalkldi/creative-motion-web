@@ -1,8 +1,12 @@
 "use client";
 
+import { useId } from "react";
 import type { ClinicalPrescribedSide } from "@/app/lib/clinical/clinical-prescribed-side";
+import { buildPrescribedSideRadioIds } from "@/app/lib/clinical/prescribed-side-selector-ids";
 
 type PrescribedSideSelectorProps = {
+  /** Distinguishes guided vs catalog (and other) selector instances on one page. */
+  groupIdPrefix: string;
   sessionLabel: string;
   value: ClinicalPrescribedSide | null | undefined;
   onChange: (side: ClinicalPrescribedSide) => void;
@@ -19,12 +23,17 @@ const OPTIONS: { value: ClinicalPrescribedSide; label: string }[] = [
  * No default selection — clinician must choose explicitly.
  */
 export function PrescribedSideSelector({
+  groupIdPrefix,
   sessionLabel,
   value,
   onChange,
   disabled = false,
 }: PrescribedSideSelectorProps) {
-  const groupName = `prescribed-side-${sessionLabel.replace(/\s+/g, "-").toLowerCase()}`;
+  const reactId = useId();
+  const { groupName, leftInputId, rightInputId } = buildPrescribedSideRadioIds(
+    groupIdPrefix,
+    reactId,
+  );
 
   return (
     <fieldset
@@ -41,9 +50,11 @@ export function PrescribedSideSelector({
       <div className="flex flex-wrap gap-3" role="radiogroup" aria-label={`Prescribed treatment side for ${sessionLabel}`}>
         {OPTIONS.map((option) => {
           const checked = value === option.value;
+          const inputId = option.value === "left" ? leftInputId : rightInputId;
           return (
             <label
               key={option.value}
+              htmlFor={inputId}
               className={`flex min-w-[7rem] cursor-pointer items-center gap-2 rounded-[6px] border px-3 py-2 text-sm transition ${
                 checked
                   ? "border-[#1D9E75]/50 bg-[#1D9E75]/10 text-white"
@@ -51,6 +62,7 @@ export function PrescribedSideSelector({
               } ${disabled ? "cursor-not-allowed opacity-60" : ""}`}
             >
               <input
+                id={inputId}
                 type="radio"
                 name={groupName}
                 value={option.value}

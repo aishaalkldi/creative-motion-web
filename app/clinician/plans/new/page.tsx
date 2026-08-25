@@ -441,6 +441,7 @@ function EditableSessionCard({
 
       {requiresPrescribedSide && (
         <PrescribedSideSelector
+          groupIdPrefix="guided"
           sessionLabel={`Session ${session.sessionNumber}`}
           value={session.prescribedSide}
           onChange={(side: ClinicalPrescribedSide) =>

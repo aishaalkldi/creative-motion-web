@@ -12,7 +12,6 @@ import {
   guidedSessionRequiresPrescribedSide,
 } from "@/app/lib/clinical/clinical-prescribed-side-applicability";
 import {
-  applyPrescribedSideMapToGuidedSessions,
   buildCatalogPlanSessionsPayload,
   buildGuidedPlanSessionsPayload,
   formatPrescribedSideForReview,
@@ -117,19 +116,13 @@ describe("Clinical Slice C2 — prescribed-side plan UI", () => {
     assert.equal(payload[1]?.prescribedSide, "right");
   });
 
-  it("9. reordering sessions keeps side ownership by sessionNumber", () => {
-    const reordered = applyPrescribedSideMapToGuidedSessions(
-      [
-        { sessionNumber: 2, title: "B", exercises: [IS_EXERCISE] },
-        { sessionNumber: 1, title: "A", exercises: [IS_EXERCISE] },
-      ],
-      new Map([
-        [1, "left"],
-        [2, "right"],
-      ]),
-    );
-    assert.equal(reordered.find((s) => s.sessionNumber === 1)?.prescribedSide, "left");
-    assert.equal(reordered.find((s) => s.sessionNumber === 2)?.prescribedSide, "right");
+  it("9. session numbers remain stable in guided payload after draft edits", () => {
+    const payload = buildGuidedPlanSessionsPayload([
+      { sessionNumber: 2, title: "B", exercises: [IS_EXERCISE], prescribedSide: "right" },
+      { sessionNumber: 1, title: "A", exercises: [IS_EXERCISE], prescribedSide: "left" },
+    ]);
+    assert.equal(payload.find((s) => s.sessionNumber === 1)?.prescribedSide, "left");
+    assert.equal(payload.find((s) => s.sessionNumber === 2)?.prescribedSide, "right");
   });
 
   it("10. changing to a non-applicable activity clears/omits side", () => {

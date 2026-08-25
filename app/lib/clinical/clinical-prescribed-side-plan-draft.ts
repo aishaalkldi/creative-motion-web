@@ -16,6 +16,9 @@ export const PRESCRIBED_SIDE_UNAVAILABLE_MESSAGE =
 export const PRESCRIBED_SIDE_REQUIRED_MESSAGE =
   "Select a prescribed treatment side (Left or Right) for each Interactive Shoulder session.";
 
+export const CATALOG_ASSIGNMENT_IDEMPOTENCY_CONFLICT_MESSAGE =
+  "This assignment request conflicts with a previous submission. Review the patient's plans before retrying.";
+
 export type SessionPrescribedSideDraft = ClinicalPrescribedSide | null | undefined;
 
 export type GuidedPlanSessionDraftInput = {
@@ -158,39 +161,13 @@ export function buildCatalogPlanSessionsPayload(
   return payload;
 }
 
-/** Re-key prescribed sides when session numbers change after reorder/remove. */
-export function remapPrescribedSidesBySessionNumber(
-  sessions: readonly { sessionNumber: number; prescribedSide?: SessionPrescribedSideDraft }[],
-): Map<number, ClinicalPrescribedSide> {
-  const map = new Map<number, ClinicalPrescribedSide>();
-  for (const session of sessions) {
-    if (session.prescribedSide === "left" || session.prescribedSide === "right") {
-      map.set(session.sessionNumber, session.prescribedSide);
-    }
-  }
-  return map;
-}
-
-export function applyPrescribedSideMapToGuidedSessions<
-  T extends GuidedPlanSessionDraftInput,
->(sessions: readonly T[], sideBySessionNumber: ReadonlyMap<number, ClinicalPrescribedSide>): T[] {
-  return sessions.map((session) => {
-    const reconciled = reconcileGuidedSessionPrescribedSide(session);
-    if (!isApplicableGuidedSession(reconciled)) {
-      return reconciled;
-    }
-    const side = sideBySessionNumber.get(session.sessionNumber);
-    if (side === "left" || side === "right") {
-      return { ...reconciled, prescribedSide: side };
-    }
-    return { ...reconciled, prescribedSide: undefined };
-  });
-}
-
 export function mapPlanAssignHttpError(
   status: number,
   body: { error?: string },
 ): string {
+  if (status === 409) {
+    return CATALOG_ASSIGNMENT_IDEMPOTENCY_CONFLICT_MESSAGE;
+  }
   if (status === 503 && body.error === API_ERRORS.SERVICE_UNAVAILABLE) {
     return PRESCRIBED_SIDE_UNAVAILABLE_MESSAGE;
   }

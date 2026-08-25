@@ -1,9 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClinicalPrescribedSide } from "@/app/lib/clinical/clinical-prescribed-side";
 import {
   buildCatalogPlanSessionsPayload,
+  CATALOG_ASSIGNMENT_IDEMPOTENCY_CONFLICT_MESSAGE,
   formatPrescribedSideForReview,
   isApplicableCatalogSession,
   mapPlanAssignHttpError,
@@ -12,7 +13,15 @@ import {
   validateCatalogPrescribedSideDraftForSubmit,
   type CatalogPlanSessionDraftInput,
 } from "@/app/lib/clinical/clinical-prescribed-side-plan-draft";
-import type { CatalogProgramListItem } from "@/app/api/plans/catalog-programs/route";
+import {
+  buildCatalogAssignmentFingerprint,
+  createCatalogAssignmentAttemptController,
+} from "@/app/lib/clinical/clinical-prescribed-side-catalog-assignment";
+import {
+  CATALOG_PROGRAMS_LOAD_ERROR_MESSAGE,
+  parseCatalogProgramsResponse,
+  type CatalogProgramListItem,
+} from "@/app/lib/clinical/catalog-programs-list";
 import { PrescribedSideSelector } from "@/app/components/clinician/PrescribedSideSelector";
 
 type CatalogProgramAssignPanelProps = {
@@ -36,31 +45,76 @@ export function CatalogProgramAssignPanel({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
+  const assignmentControllerRef = useRef(createCatalogAssignmentAttemptController());
+  const assignAbortRef = useRef<AbortController | null>(null);
+  const catalogLoadAbortRef = useRef<AbortController | null>(null);
+  const patientScopeRef = useRef(0);
+
+  const resetCatalogAssignmentUi = useCallback(() => {
+    assignAbortRef.current?.abort();
+    assignAbortRef.current = null;
+    assignmentControllerRef.current.resetAll();
+    setSelectedProgramId(null);
+    setSessionDrafts([]);
+    setSaveError("");
+    setSaving(false);
+  }, []);
+
   useEffect(() => {
-    let cancelled = false;
+    patientScopeRef.current += 1;
+    resetCatalogAssignmentUi();
+  }, [patientId, assessmentId, resetCatalogAssignmentUi]);
+
+  useEffect(() => {
+    const scopeAtStart = patientScopeRef.current;
+    catalogLoadAbortRef.current?.abort();
+    const abort = new AbortController();
+    catalogLoadAbortRef.current = abort;
+
     setLoading(true);
     setLoadError("");
-    fetch("/api/plans/catalog-programs")
+    setPrograms([]);
+
+    fetch("/api/plans/catalog-programs", { cache: "no-store", signal: abort.signal })
       .then(async (res) => {
         if (!res.ok) {
           const body = (await res.json().catch(() => ({}))) as { error?: string };
-          throw new Error(body.error ?? "Failed to load catalog programs.");
+          throw new Error(body.error ?? CATALOG_PROGRAMS_LOAD_ERROR_MESSAGE);
         }
-        return res.json() as Promise<{ programs: CatalogProgramListItem[] }>;
+        return res.json() as Promise<unknown>;
       })
       .then((data) => {
-        if (!cancelled) setPrograms(data.programs);
+        if (abort.signal.aborted || scopeAtStart !== patientScopeRef.current) return;
+        const parsed = parseCatalogProgramsResponse(data);
+        if (!parsed.ok) {
+          setLoadError(parsed.error);
+          return;
+        }
+        setPrograms(parsed.programs);
       })
       .catch((err: unknown) => {
-        if (!cancelled) {
-          setLoadError(err instanceof Error ? err.message : "Failed to load catalog programs.");
-        }
+        if (abort.signal.aborted || scopeAtStart !== patientScopeRef.current) return;
+        setLoadError(
+          err instanceof Error ? err.message : CATALOG_PROGRAMS_LOAD_ERROR_MESSAGE,
+        );
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!abort.signal.aborted && scopeAtStart === patientScopeRef.current) {
+          setLoading(false);
+        }
       });
+
     return () => {
-      cancelled = true;
+      abort.abort();
+    };
+  }, [patientId]);
+
+  useEffect(() => {
+    const controller = assignmentControllerRef.current;
+    return () => {
+      catalogLoadAbortRef.current?.abort();
+      assignAbortRef.current?.abort();
+      controller.resetAll();
     };
   }, []);
 
@@ -70,6 +124,10 @@ export function CatalogProgramAssignPanel({
   );
 
   const selectProgram = useCallback((program: CatalogProgramListItem) => {
+    if (assignmentControllerRef.current.isInFlight()) return;
+    assignAbortRef.current?.abort();
+    assignAbortRef.current = null;
+    assignmentControllerRef.current.resetAssignmentKey();
     setSelectedProgramId(program.id);
     setSessionDrafts(
       program.sessions.map((session) =>
@@ -85,6 +143,7 @@ export function CatalogProgramAssignPanel({
   }, []);
 
   function updateSessionDraft(sessionNumber: number, prescribedSide: ClinicalPrescribedSide) {
+    if (assignmentControllerRef.current.isInFlight()) return;
     setSessionDrafts((prev) =>
       prev.map((session) =>
         session.sessionNumber === sessionNumber
@@ -95,41 +154,89 @@ export function CatalogProgramAssignPanel({
   }
 
   async function handleCatalogAssign() {
-    if (!selectedProgram) return;
+    if (!selectedProgram || assignmentControllerRef.current.isInFlight()) return;
+
     const validation = validateCatalogPrescribedSideDraftForSubmit(sessionDrafts);
     if (!validation.ok) {
       setSaveError(validation.error);
       return;
     }
 
+    const sessionPrescriptions = buildCatalogPlanSessionsPayload(sessionDrafts);
+    const fingerprint = buildCatalogAssignmentFingerprint({
+      patientId,
+      treatmentProgramId: selectedProgram.id,
+      assessmentId,
+      sessionPrescriptions,
+    });
+
+    const attempt = assignmentControllerRef.current.beginSubmitAttempt(fingerprint);
+    if (!attempt.ok) return;
+
+    const scopeAtStart = patientScopeRef.current;
+    const generationAtStart = attempt.generation;
+
     setSaving(true);
     setSaveError("");
+
+    assignAbortRef.current?.abort();
+    const abort = new AbortController();
+    assignAbortRef.current = abort;
 
     try {
       const res = await fetch("/api/plans/from-catalog-program", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        signal: abort.signal,
         body: JSON.stringify({
           patientId,
           treatmentProgramId: selectedProgram.id,
           assessmentId,
-          catalogAssignmentRequestId: crypto.randomUUID(),
-          sessions: buildCatalogPlanSessionsPayload(sessionDrafts),
+          catalogAssignmentRequestId: attempt.requestId,
+          sessions: sessionPrescriptions,
         }),
       });
 
+      if (
+        abort.signal.aborted ||
+        scopeAtStart !== patientScopeRef.current ||
+        generationAtStart !== assignmentControllerRef.current.getGeneration()
+      ) {
+        return;
+      }
+
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) {
+        if (res.status === 409) {
+          assignmentControllerRef.current.completeConflict();
+          setSaveError(CATALOG_ASSIGNMENT_IDEMPOTENCY_CONFLICT_MESSAGE);
+          setSaving(false);
+          return;
+        }
+        assignmentControllerRef.current.completeFailure();
         throw new Error(mapPlanAssignHttpError(res.status, body));
       }
 
-      onAssigned();
+      assignmentControllerRef.current.completeSuccess(fingerprint);
+      if (scopeAtStart === patientScopeRef.current) {
+        onAssigned();
+      }
     } catch (err) {
+      if (abort.signal.aborted) return;
+      if (
+        scopeAtStart !== patientScopeRef.current ||
+        generationAtStart !== assignmentControllerRef.current.getGeneration()
+      ) {
+        return;
+      }
+      assignmentControllerRef.current.completeFailure();
       setSaveError(err instanceof Error ? err.message : "Failed to assign catalog program.");
       setSaving(false);
     }
   }
 
+  const controlsDisabled = saving;
   const applicableSessions = sessionDrafts.filter((session) => isApplicableCatalogSession(session));
 
   return (
@@ -156,7 +263,8 @@ export function CatalogProgramAssignPanel({
               key={program.id}
               type="button"
               onClick={() => selectProgram(program)}
-              className={`rounded-[7px] border px-4 py-3 text-left transition ${
+              disabled={controlsDisabled}
+              className={`rounded-[7px] border px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-50 ${
                 selectedProgramId === program.id
                   ? "border-[#1D9E75]/40 bg-[#1D9E75]/8"
                   : "border-[#1E2D42] bg-[#0B1220] hover:border-[#1D9E75]/20"
@@ -191,10 +299,11 @@ export function CatalogProgramAssignPanel({
             isApplicableCatalogSession(session) ? (
               <PrescribedSideSelector
                 key={session.sessionNumber}
+                groupIdPrefix="catalog"
                 sessionLabel={`Session ${session.sessionNumber}`}
                 value={session.prescribedSide}
                 onChange={(side) => updateSessionDraft(session.sessionNumber, side)}
-                disabled={saving}
+                disabled={controlsDisabled}
               />
             ) : null,
           )}
@@ -208,7 +317,7 @@ export function CatalogProgramAssignPanel({
           <button
             type="button"
             onClick={handleCatalogAssign}
-            disabled={saving}
+            disabled={controlsDisabled}
             className="rounded-[7px] bg-[#1D9E75] px-5 py-2.5 text-sm font-bold text-[#0B1220] transition hover:bg-[#5DCAA5] disabled:opacity-50"
           >
             {saving ? "Assigning…" : "Assign catalog program"}
