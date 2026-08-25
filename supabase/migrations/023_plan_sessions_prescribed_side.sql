@@ -4,6 +4,13 @@
 -- Therapist-authored unilateral treatment side for a clinical plan
 -- session. Nullable for legacy/non-unilateral sessions. No default.
 --
+-- Rolling deployment (application + migration):
+--   - Preferred order: apply this migration before enabling side-aware UI.
+--   - If application code arrives first, legacy plan creation without
+--     prescribedSide continues to work (no column/RPC seventh arg used).
+--   - Side-aware writes fail closed (HTTP 503) until this migration is
+--     available; coordinate deploy before clinician side-selection UI.
+--
 -- Scope:
 --   - Adds plan_sessions.prescribed_side with a check constraint
 --   - Extends create_plan_from_catalog_program() with an optional

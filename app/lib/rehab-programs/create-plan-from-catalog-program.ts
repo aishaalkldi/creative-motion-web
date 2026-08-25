@@ -4,6 +4,7 @@ import { generateSecurePatientToken } from "@/app/lib/patient-access-token";
 import {
   type CatalogPlanSessionPrescriptionRpcRow,
 } from "@/app/lib/clinical/clinical-prescribed-side";
+import { isMissingPrescribedSideRpcArgument } from "@/app/lib/clinical/clinical-prescribed-side-capability";
 
 /**
  * Server-only wrapper around the service-role-only
@@ -79,6 +80,7 @@ export type CreatePlanFromCatalogProgramErrorReason =
   | "program_not_eligible"
   | "idempotency_conflict"
   | "integrity_failed"
+  | "prescribed_side_unavailable"
   | "rpc_failed";
 
 /**
@@ -120,7 +122,10 @@ type RpcResultShape = {
  * application-level reason and always falls through to the fully
  * generic "rpc_failed".
  */
-function classifyRpcError(message: string): CreatePlanFromCatalogProgramErrorReason {
+function classifyRpcError(message: string, errorCode?: string | null): CreatePlanFromCatalogProgramErrorReason {
+  if (isMissingPrescribedSideRpcArgument({ code: errorCode, message })) {
+    return "prescribed_side_unavailable";
+  }
   if (message.includes("required")) return "invalid_input";
   if (message.includes("patient/provider verification failed")) return "ownership_failed";
   if (message.includes("assessment verification failed")) return "assessment_failed";
@@ -151,23 +156,25 @@ export async function createPlanFromCatalogProgram(
   // comment above) -- the generated Args type just doesn't say so.
   const assessmentIdArg = input.assessmentId as unknown as string;
 
-  const { data, error } = await client.rpc("create_plan_from_catalog_program", {
+  const rpcArgs: Database["public"]["Functions"]["create_plan_from_catalog_program"]["Args"] = {
     p_provider_id: input.providerId,
     p_patient_id: input.patientId,
     p_program_id: input.treatmentProgramId,
     p_assessment_id: assessmentIdArg,
     p_catalog_assignment_request_id: input.catalogAssignmentRequestId,
     p_patient_token: token,
-    p_session_prescribed_sides:
-      input.sessionPrescribedSides && input.sessionPrescribedSides.length > 0
-        ? input.sessionPrescribedSides
-        : null,
-  });
+  };
+
+  if (input.sessionPrescribedSides && input.sessionPrescribedSides.length > 0) {
+    rpcArgs.p_session_prescribed_sides = input.sessionPrescribedSides;
+  }
+
+  const { data, error } = await client.rpc("create_plan_from_catalog_program", rpcArgs);
 
   if (error) {
     console.error("[createPlanFromCatalogProgram] rpc failed:", error.message);
     throw new CreatePlanFromCatalogProgramError(
-      classifyRpcError(error.message ?? ""),
+      classifyRpcError(error.message ?? "", error.code),
       "Could not create the treatment plan.",
     );
   }

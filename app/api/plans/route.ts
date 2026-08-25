@@ -10,7 +10,12 @@ import {
   normalizeExercisesForStorage,
   type PrescribedExerciseV1,
 } from "../../lib/exercise-resolve";
-import { validateGuidedPlanSessionPrescriptions } from "../../lib/clinical/clinical-prescribed-side";
+import {
+  buildGuidedPlanSessionInsertRows,
+  requiresPrescribedSideStorageCapability,
+  validateGuidedPlanSessionPrescriptions,
+} from "../../lib/clinical/clinical-prescribed-side";
+import { probePrescribedSideStorageCapability } from "../../lib/clinical/clinical-prescribed-side-capability";
 import type { StoredExercise } from "../../lib/exercise-prescription";
 import {
   buildPlanProgramMetadata,
@@ -152,6 +157,26 @@ export async function POST(req: NextRequest) {
   const ownership = await validatePatientOwnership(adminClient, patientId, user.id);
   if (!ownership.ok) return ownershipErrorResponse(ownership);
 
+  let prescribedSideBySessionNumber = new Map<number, "left" | "right">();
+  if (body.sessions && body.sessions.length > 0) {
+    const prescriptionValidation = validateGuidedPlanSessionPrescriptions(body.sessions);
+    if (!prescriptionValidation.ok) {
+      return NextResponse.json({ error: prescriptionValidation.error }, { status: 400 });
+    }
+    prescribedSideBySessionNumber = prescriptionValidation.prescribedSideBySessionNumber;
+
+    if (requiresPrescribedSideStorageCapability(prescribedSideBySessionNumber)) {
+      const capability = await probePrescribedSideStorageCapability(adminClient);
+      if (!capability.ok) {
+        console.error("[POST /api/plans] prescribed-side capability probe failed");
+        return NextResponse.json({ error: PLAN_CREATE_ERROR }, { status: 500 });
+      }
+      if (!capability.available) {
+        return serviceUnavailableResponse();
+      }
+    }
+  }
+
   const programMetadata = buildPlanProgramMetadata({
     programTemplateId:
       body.programTemplateId ??
@@ -208,22 +233,17 @@ export async function POST(req: NextRequest) {
 
   // Insert plan sessions (when provided)
   if (body.sessions && body.sessions.length > 0) {
-    const prescriptionValidation = validateGuidedPlanSessionPrescriptions(body.sessions);
-    if (!prescriptionValidation.ok) {
-      return NextResponse.json({ error: prescriptionValidation.error }, { status: 400 });
-    }
-
-    const sessionRows = body.sessions.map((s) => ({
-      plan_id:        planId,
-      provider_id:    user.id,
-      patient_id:     patientId,
-      session_number: s.sessionNumber,
-      title:          s.title,
-      exercises:      normalizeExercisesForStorage(s.exercises),
-      status:         "upcoming",
-      prescribed_side:
-        prescriptionValidation.prescribedSideBySessionNumber.get(s.sessionNumber) ?? null,
-    }));
+    const sessionRows = buildGuidedPlanSessionInsertRows({
+      planId,
+      providerId: user.id,
+      patientId,
+      sessions: body.sessions.map((session) => ({
+        sessionNumber: session.sessionNumber,
+        title: session.title,
+        exercises: normalizeExercisesForStorage(session.exercises),
+      })),
+      prescribedSideBySessionNumber,
+    });
 
     const { error: sessErr } = await adminClient.from("plan_sessions").insert(sessionRows);
     if (sessErr) {

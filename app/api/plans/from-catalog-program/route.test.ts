@@ -48,7 +48,36 @@ type FakeDepsOptions = {
   rateLimited?: boolean;
   createPlanResult?: CreatePlanFromCatalogProgramResult;
   createPlanError?: Error;
+  capabilityAvailable?: boolean;
+  capabilityProbeOk?: boolean;
 };
+
+function buildCapabilityAdmin(available: boolean, ok = true) {
+  return {
+    from() {
+      return {
+        select() {
+          return {
+            limit: async () => {
+              if (!ok) {
+                return { error: { code: "42501", message: "permission denied" } };
+              }
+              if (available) {
+                return { error: null };
+              }
+              return {
+                error: {
+                  code: "42703",
+                  message: 'column "prescribed_side" does not exist',
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+}
 
 function buildFakeDeps(options: FakeDepsOptions = {}) {
   const createPlanCalls: { client: unknown; input: CreatePlanFromCatalogProgramInput }[] = [];
@@ -62,7 +91,9 @@ function buildFakeDeps(options: FakeDepsOptions = {}) {
     return options.createPlanResult ?? SUCCESS_RESULT;
   };
 
-  const adminClientSentinel = { __fake: "admin-client" };
+  const capabilityAvailable = options.capabilityAvailable ?? true;
+  const capabilityProbeOk = options.capabilityProbeOk ?? true;
+  const adminClientSentinel = buildCapabilityAdmin(capabilityAvailable, capabilityProbeOk);
 
   const deps: CatalogPlanPostDependencies = {
     getAuthenticatedUser: async () =>
@@ -298,6 +329,7 @@ describe("POST /api/plans/from-catalog-program", () => {
       "program_not_eligible",
       "idempotency_conflict",
       "integrity_failed",
+      "prescribed_side_unavailable",
       "rpc_failed",
     ] as const;
     for (const reason of reasons) {
@@ -319,6 +351,69 @@ describe("POST /api/plans/from-catalog-program", () => {
     const handler = createCatalogPlanPostHandler(deps);
     const res = await handler(fakeRequest(VALID_BODY));
     assert.equal(res.status, 429);
+    assert.deepEqual(createPlanCalls, []);
+  });
+
+  it("6. catalog creation without side forwards an empty prescription list", async () => {
+    const { deps, createPlanCalls } = buildFakeDeps();
+    const handler = createCatalogPlanPostHandler(deps);
+    const res = await handler(fakeRequest(VALID_BODY));
+    assert.equal(res.status, 201);
+    assert.deepEqual(createPlanCalls[0]?.input.sessionPrescribedSides, []);
+  });
+
+  it("7. catalog creation without side succeeds when migration capability is unavailable", async () => {
+    const { deps, createPlanCalls } = buildFakeDeps({ capabilityAvailable: false });
+    const handler = createCatalogPlanPostHandler(deps);
+    const res = await handler(fakeRequest(VALID_BODY));
+    assert.equal(res.status, 201);
+    assert.equal(createPlanCalls.length, 1);
+  });
+
+  it("9. side-aware catalog creation returns 503 before wrapper call when capability is unavailable", async () => {
+    const { deps, createPlanCalls } = buildFakeDeps({ capabilityAvailable: false });
+    const handler = createCatalogPlanPostHandler(deps);
+    const res = await handler(
+      fakeRequest({
+        ...VALID_BODY,
+        sessions: [{ sessionNumber: 1, prescribedSide: "left" }],
+      }),
+    );
+    assert.equal(res.status, 503);
+    assert.deepEqual(createPlanCalls, []);
+    const json = await res.json();
+    assert.equal(json.error, "Service temporarily unavailable.");
+  });
+
+  it("9b. side-aware RPC unavailable maps to sanitized 503 response", async () => {
+    const { deps } = buildFakeDeps({
+      createPlanError: new CreatePlanFromCatalogProgramError(
+        "prescribed_side_unavailable",
+        "Could not create the treatment plan.",
+      ),
+    });
+    const handler = createCatalogPlanPostHandler(deps);
+    const res = await handler(
+      fakeRequest({
+        ...VALID_BODY,
+        sessions: [{ sessionNumber: 1, prescribedSide: "right" }],
+      }),
+    );
+    assert.equal(res.status, 503);
+    const json = await res.json();
+    assert.equal(json.error, "Service temporarily unavailable.");
+  });
+
+  it("10. unrelated capability probe failures return 500 without calling wrapper", async () => {
+    const { deps, createPlanCalls } = buildFakeDeps({ capabilityProbeOk: false });
+    const handler = createCatalogPlanPostHandler(deps);
+    const res = await handler(
+      fakeRequest({
+        ...VALID_BODY,
+        sessions: [{ sessionNumber: 1, prescribedSide: "left" }],
+      }),
+    );
+    assert.equal(res.status, 500);
     assert.deepEqual(createPlanCalls, []);
   });
 });

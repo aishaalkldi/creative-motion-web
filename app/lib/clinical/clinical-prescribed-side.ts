@@ -198,3 +198,53 @@ export function validateGuidedPlanSessionPrescriptions(
 
   return { ok: true, prescribedSideBySessionNumber };
 }
+
+/** True when at least one session carries an explicit left/right prescription. */
+export function requiresPrescribedSideStorageCapability(
+  prescribedSideBySessionNumber: ReadonlyMap<number, ClinicalPrescribedSide>,
+): boolean {
+  return prescribedSideBySessionNumber.size > 0;
+}
+
+export type GuidedPlanSessionInsertRow = {
+  plan_id: string;
+  provider_id: string;
+  patient_id: string;
+  session_number: number;
+  title: string;
+  exercises: unknown;
+  status: string;
+  prescribed_side?: ClinicalPrescribedSide;
+};
+
+/**
+ * Builds plan_sessions insert rows for guided plan creation.
+ * Omits prescribed_side entirely unless a non-null side was validated
+ * for that session — pre-migration databases never see the column.
+ */
+export function buildGuidedPlanSessionInsertRows(params: {
+  planId: string;
+  providerId: string;
+  patientId: string;
+  sessions: readonly { sessionNumber: number; title: string; exercises: unknown }[];
+  prescribedSideBySessionNumber: ReadonlyMap<number, ClinicalPrescribedSide>;
+}): GuidedPlanSessionInsertRow[] {
+  return params.sessions.map((session) => {
+    const row: GuidedPlanSessionInsertRow = {
+      plan_id: params.planId,
+      provider_id: params.providerId,
+      patient_id: params.patientId,
+      session_number: session.sessionNumber,
+      title: session.title,
+      exercises: session.exercises,
+      status: "upcoming",
+    };
+
+    const prescribedSide = params.prescribedSideBySessionNumber.get(session.sessionNumber);
+    if (prescribedSide !== undefined) {
+      row.prescribed_side = prescribedSide;
+    }
+
+    return row;
+  });
+}

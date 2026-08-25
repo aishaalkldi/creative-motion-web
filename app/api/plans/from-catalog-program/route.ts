@@ -19,6 +19,7 @@ import {
   parsePlanSessionPrescriptionsFromBody,
   toCatalogRpcSessionPrescribedSides,
 } from "../../../lib/clinical/clinical-prescribed-side";
+import { probePrescribedSideStorageCapability } from "../../../lib/clinical/clinical-prescribed-side-capability";
 
 const PLAN_CREATE_ERROR = "Failed to create plan.";
 
@@ -36,6 +37,7 @@ const ERROR_STATUS: Record<CreatePlanFromCatalogProgramErrorReason, number> = {
   program_not_eligible: 422,
   idempotency_conflict: 409,
   integrity_failed: 500,
+  prescribed_side_unavailable: 503,
   rpc_failed: 500,
 };
 
@@ -133,6 +135,18 @@ export function createCatalogPlanPostHandler(deps: CatalogPlanPostDependencies) 
       return NextResponse.json({ error: sessionPrescriptions.error }, { status: 400 });
     }
 
+    const sessionPrescribedSides = toCatalogRpcSessionPrescribedSides(sessionPrescriptions.value);
+    if (sessionPrescribedSides.length > 0) {
+      const capability = await probePrescribedSideStorageCapability(deps.adminClient);
+      if (!capability.ok) {
+        console.error("[POST /api/plans/from-catalog-program] prescribed-side capability probe failed");
+        return NextResponse.json({ error: PLAN_CREATE_ERROR }, { status: 500 });
+      }
+      if (!capability.available) {
+        return serviceUnavailableResponse();
+      }
+    }
+
     // Explicit object literal, never a spread of `body` — extra fields
     // a caller sends (providerId, token, patientToken, sessions,
     // exercises, blocks, sourceTreatmentProgramId,
@@ -148,7 +162,7 @@ export function createCatalogPlanPostHandler(deps: CatalogPlanPostDependencies) 
         treatmentProgramId,
         assessmentId,
         catalogAssignmentRequestId,
-        sessionPrescribedSides: toCatalogRpcSessionPrescribedSides(sessionPrescriptions.value),
+        sessionPrescribedSides,
       });
 
       return NextResponse.json(
@@ -163,6 +177,9 @@ export function createCatalogPlanPostHandler(deps: CatalogPlanPostDependencies) 
     } catch (err) {
       if (err instanceof CreatePlanFromCatalogProgramError) {
         console.error("[POST /api/plans/from-catalog-program]", err.reason, err.message);
+        if (err.reason === "prescribed_side_unavailable") {
+          return serviceUnavailableResponse();
+        }
         return NextResponse.json({ error: PLAN_CREATE_ERROR }, { status: ERROR_STATUS[err.reason] });
       }
       console.error("[POST /api/plans/from-catalog-program] unexpected error");

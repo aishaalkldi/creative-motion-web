@@ -25,6 +25,28 @@ function fakeRequest(body: unknown) {
   };
 }
 
+function capabilityAdminClient(available = true) {
+  return {
+    from() {
+      return {
+        select() {
+          return {
+            limit: async () => {
+              if (available) return { error: null };
+              return {
+                error: {
+                  code: "42703",
+                  message: 'column "prescribed_side" does not exist',
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+}
+
 describe("clinical prescribed-side contract", () => {
   it("1. valid guided clinician session with left persists left on insert payload", () => {
     const result = validateGuidedPlanSessionPrescriptions([
@@ -49,7 +71,7 @@ describe("clinical prescribed-side contract", () => {
     const handler = createCatalogPlanPostHandler({
       getAuthenticatedUser: async () => ({ id: PROVIDER_ID }),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      adminClient: {} as any,
+      adminClient: capabilityAdminClient() as any,
       checkWriteLimit: () => ({ allowed: true }),
       createPlan: async (_client, input) => {
         createPlanCalls.push(input);
@@ -140,7 +162,7 @@ describe("clinical prescribed-side contract", () => {
     const handler = createCatalogPlanPostHandler({
       getAuthenticatedUser: async () => ({ id: PROVIDER_ID }),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      adminClient: {} as any,
+      adminClient: capabilityAdminClient() as any,
       checkWriteLimit: () => ({ allowed: true }),
       createPlan: async () => {
         throw new Error("should not be called");
@@ -193,7 +215,7 @@ describe("clinical prescribed-side contract", () => {
     const handler = createCatalogPlanPostHandler({
       getAuthenticatedUser: async () => ({ id: PROVIDER_ID }),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      adminClient: {} as any,
+      adminClient: capabilityAdminClient() as any,
       checkWriteLimit: () => ({ allowed: true }),
       createPlan: async () => {
         throw new CreatePlanFromCatalogProgramError("invalid_input", "nope");
