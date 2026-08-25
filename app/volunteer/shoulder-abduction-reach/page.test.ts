@@ -81,6 +81,26 @@ describe("volunteer shoulder abduction reach — Slice 8B.3 integrity", () => {
     assert.match(source, /onRepCaptured/);
   });
 
+  it("retry UI is gated on retryKind so buttons are never no-ops", () => {
+    const source = readFileSync(PAGE_PATH, "utf8");
+    assert.match(source, /retryKind === "rep"/);
+    assert.match(source, /retryKind === "completion"/);
+    assert.match(source, /retryKind === "session"/);
+    const captureSection = source.slice(
+      source.indexOf('{step === "capture" ?'),
+      source.indexOf('{displayStep === "summary"'),
+    );
+    assert.doesNotMatch(captureSection, /retryCompletion\(\)[\s\S]*retryFailedRep/);
+  });
+
+  it("capture hook retains count metadata without a capturedRecords array", () => {
+    const source = readFileSync(HOOK_PATH, "utf8");
+    assert.match(source, /capturedCount/);
+    assert.doesNotMatch(source, /capturedRecords/);
+    assert.match(source, /resetRecorder/);
+    assert.match(source, /captureBlockGenerationRef/);
+  });
+
   it("movement safety reminders are shown before and during capture", () => {
     const pageSource = readFileSync(PAGE_PATH, "utf8");
     const protocolSource = readFileSync(

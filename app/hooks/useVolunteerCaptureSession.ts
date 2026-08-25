@@ -5,7 +5,7 @@
  * Persistence is handled separately via useVolunteerResearchPersistence (Slice 8B.3).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ShoulderAbductionReachPoseDetector,
   type ShoulderAbductionReachPoseDetectorSnapshot,
@@ -13,7 +13,10 @@ import {
 import type { ShoulderAbductionReachSide } from "@/app/lib/shoulder-rehabilitation";
 import type { ShoulderAbductionReachRepCaptureRecord } from "@/app/lib/ml-research/shoulder-abduction-reach/capture-schema";
 import type { ShoulderAbductionReachRejectedCapture } from "@/app/lib/ml-research/shoulder-abduction-reach/rep-recorder";
-import { createVolunteerInMemoryCaptureSink } from "@/app/volunteer/shoulder-abduction-reach/volunteer-capture-sink";
+import {
+  createVolunteerInMemoryCaptureSink,
+  type VolunteerInMemoryCaptureSink,
+} from "@/app/volunteer/shoulder-abduction-reach/volunteer-capture-sink";
 import {
   createCameraRequestController,
   disposeDetectorIfStale,
@@ -24,6 +27,7 @@ import {
 } from "@/app/volunteer/shoulder-abduction-reach/volunteer-camera-request-control";
 import {
   isCaptureComplete,
+  VOLUNTEER_TARGET_REPS,
   type VolunteerProtocolCondition,
 } from "@/app/volunteer/shoulder-abduction-reach/volunteer-protocol";
 
@@ -49,12 +53,57 @@ export function useVolunteerCaptureSession({
   const previewStreamRef = useRef<MediaStream | null>(null);
   const requestControllerRef = useRef<CameraRequestController>(createCameraRequestController());
 
+  const captureBlockGenerationRef = useRef(0);
+  const protocolConditionRef = useRef(protocolCondition);
+  protocolConditionRef.current = protocolCondition;
+
+  const onRepCapturedRef = useRef(onRepCaptured);
+  onRepCapturedRef.current = onRepCaptured;
+  const onTargetReachedRef = useRef(onTargetReached);
+  onTargetReachedRef.current = onTargetReached;
+
+  const capturedCountRef = useRef(0);
+  const targetReachedRef = useRef(false);
+
+  const captureSinkRef = useRef<VolunteerInMemoryCaptureSink | null>(null);
+  if (!captureSinkRef.current) {
+    captureSinkRef.current = createVolunteerInMemoryCaptureSink({
+      participantId: IN_MEMORY_PARTICIPANT_ID,
+      sessionId: IN_MEMORY_SESSION_ID,
+      side,
+      getProtocolCondition: () => protocolConditionRef.current,
+      getCaptureBlockGeneration: () => captureBlockGenerationRef.current,
+      onRepCaptured: (record) => {
+        if (capturedCountRef.current >= VOLUNTEER_TARGET_REPS) {
+          return;
+        }
+        if (targetReachedRef.current) {
+          return;
+        }
+        onRepCapturedRef.current?.(record);
+        capturedCountRef.current += 1;
+        applyState(() => setCapturedCount(capturedCountRef.current));
+        const reachedTarget = isCaptureComplete(capturedCountRef.current);
+        if (reachedTarget) {
+          targetReachedRef.current = true;
+          onTargetReachedRef.current?.();
+        }
+      },
+      onRepRejected: (rejected) => {
+        if (requestControllerRef.current.shouldApplyState()) {
+          setRejectedCount((count) => count + 1);
+          setLastRejection(rejected);
+        }
+      },
+    });
+  }
+
   const [cameraPreviewActive, setCameraPreviewActive] = useState(false);
   const [starting, setStarting] = useState(false);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<ShoulderAbductionReachPoseDetectorSnapshot | null>(null);
-  const [capturedRecords, setCapturedRecords] = useState<ShoulderAbductionReachRepCaptureRecord[]>([]);
+  const [capturedCount, setCapturedCount] = useState(0);
   const [rejectedCount, setRejectedCount] = useState(0);
   const [lastRejection, setLastRejection] = useState<ShoulderAbductionReachRejectedCapture | null>(null);
 
@@ -75,45 +124,6 @@ export function useVolunteerCaptureSession({
     applyState(() => setCameraPreviewActive(false));
   }, [applyState]);
 
-  const handleRepCaptured = useCallback(
-    (record: ShoulderAbductionReachRepCaptureRecord) => {
-      onRepCaptured?.(record);
-      applyState(() => {
-        setCapturedRecords((records) => {
-          const next = [...records, record];
-          if (isCaptureComplete(next.length)) {
-            onTargetReached?.();
-          }
-          return next;
-        });
-      });
-    },
-    [applyState, onRepCaptured, onTargetReached],
-  );
-
-  const handleRepRejected = useCallback(
-    (rejected: ShoulderAbductionReachRejectedCapture) => {
-      applyState(() => {
-        setRejectedCount((count) => count + 1);
-        setLastRejection(rejected);
-      });
-    },
-    [applyState],
-  );
-
-  const captureSink = useMemo(
-    () =>
-      createVolunteerInMemoryCaptureSink({
-        participantId: IN_MEMORY_PARTICIPANT_ID,
-        sessionId: IN_MEMORY_SESSION_ID,
-        side,
-        protocolCondition,
-        onRepCaptured: handleRepCaptured,
-        onRepRejected: handleRepRejected,
-      }),
-    [side, protocolCondition, handleRepCaptured, handleRepRejected],
-  );
-
   const stopDetector = useCallback(() => {
     const controller = requestControllerRef.current;
     controller.invalidateDetector();
@@ -126,6 +136,20 @@ export function useVolunteerCaptureSession({
     stopDetector();
     stopPreviewStream();
   }, [stopDetector, stopPreviewStream]);
+
+  const resetCaptureBlock = useCallback(() => {
+    captureBlockGenerationRef.current += 1;
+    captureSinkRef.current?.resetRecorder();
+    capturedCountRef.current = 0;
+    targetReachedRef.current = false;
+    applyState(() => {
+      setCapturedCount(0);
+      setRejectedCount(0);
+      setLastRejection(null);
+      setSnapshot(null);
+      setError(null);
+    });
+  }, [applyState]);
 
   const enableCameraPreview = useCallback(async () => {
     const video = videoRef.current;
@@ -212,6 +236,9 @@ export function useVolunteerCaptureSession({
       setError(null);
     });
 
+    const sink = captureSinkRef.current;
+    if (!sink) return;
+
     let detector: ShoulderAbductionReachPoseDetector | null = null;
 
     try {
@@ -224,7 +251,7 @@ export function useVolunteerCaptureSession({
           },
           onDevFrameCaptured: (frame) => {
             if (controller.isDetectorCurrent(generation)) {
-              captureSink.handleFrame(frame);
+              sink.handleFrame(frame);
             }
           },
         },
@@ -266,7 +293,7 @@ export function useVolunteerCaptureSession({
         applyState(() => setStarting(false));
       }
     }
-  }, [applyState, side, captureSink, stopDetector, stopPreviewStream]);
+  }, [applyState, side, stopDetector, stopPreviewStream]);
 
   const reattachCameraPreview = useCallback(async () => {
     const video = videoRef.current;
@@ -311,14 +338,8 @@ export function useVolunteerCaptureSession({
   const resetSession = useCallback(() => {
     requestControllerRef.current.invalidateAll();
     stopAll();
-    applyState(() => {
-      setSnapshot(null);
-      setCapturedRecords([]);
-      setRejectedCount(0);
-      setLastRejection(null);
-      setError(null);
-    });
-  }, [applyState, stopAll]);
+    resetCaptureBlock();
+  }, [stopAll, resetCaptureBlock]);
 
   useEffect(() => {
     const controller = requestControllerRef.current;
@@ -328,6 +349,7 @@ export function useVolunteerCaptureSession({
       detectorRef.current = null;
       stopMediaStreamTracks(previewStreamRef.current);
       previewStreamRef.current = null;
+      captureBlockGenerationRef.current += 1;
     };
   }, []);
 
@@ -339,8 +361,7 @@ export function useVolunteerCaptureSession({
     running,
     error,
     snapshot,
-    capturedRecords,
-    capturedCount: capturedRecords.length,
+    capturedCount,
     rejectedCount,
     lastRejection,
     enableCameraPreview,
@@ -349,5 +370,13 @@ export function useVolunteerCaptureSession({
     stopDetector,
     stopAll,
     resetSession,
+    /** @internal Behavioral tests only */
+    __testOnly: {
+      getCaptureSink: () => captureSinkRef.current,
+      getCaptureBlockGeneration: () => captureBlockGenerationRef.current,
+      bumpCaptureBlockGeneration: () => {
+        captureBlockGenerationRef.current += 1;
+      },
+    },
   };
 }

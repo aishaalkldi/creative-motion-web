@@ -105,10 +105,10 @@ export default function VolunteerShoulderAbductionReachPage() {
     isCreatingMovement,
     isSaving,
     phase,
+    retryKind,
     safeErrorMessage,
     deletionCode,
     captureTargetReached,
-    retryableRepIndex,
   } = persistence;
 
   const handleRepCaptured = useCallback(
@@ -343,7 +343,11 @@ export default function VolunteerShoulderAbductionReachPage() {
                 isCreatingSession
               }
             >
-              {consentSubmitting || isCreatingSession ? "Starting session…" : "Continue"}
+              {consentSubmitting || isCreatingSession
+                ? "Starting session…"
+                : phase === "retry_required" && retryKind === "session"
+                  ? "Retry starting session"
+                  : "Continue"}
             </PrimaryButton>
           </div>
         </section>
@@ -555,13 +559,16 @@ export default function VolunteerShoulderAbductionReachPage() {
             </SecondaryButton>
           </div>
 
-          {phase === "retry_required" ? (
+          {phase === "retry_required" && retryKind === "rep" ? (
             <div className="flex flex-wrap gap-3">
-              {retryableRepIndex !== null ? (
-                <PrimaryButton onClick={() => void retryFailedRep()}>
-                  Retry saving repetition
-                </PrimaryButton>
-              ) : null}
+              <PrimaryButton onClick={() => void retryFailedRep()}>
+                Retry saving repetition
+              </PrimaryButton>
+            </div>
+          ) : null}
+
+          {phase === "retry_required" && retryKind === "completion" ? (
+            <div className="flex flex-wrap gap-3">
               <PrimaryButton onClick={() => void retryCompletion()}>
                 Retry finalizing session
               </PrimaryButton>

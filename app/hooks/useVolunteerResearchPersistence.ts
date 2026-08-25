@@ -15,6 +15,7 @@ import {
 
 const INITIAL_PUBLIC_STATE: VolunteerPersistencePublicState = {
   phase: "idle",
+  retryKind: null,
   expiresAt: null,
   deletionCode: null,
   movementSessionReady: false,

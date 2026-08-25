@@ -1,8 +1,8 @@
 /**
- * Volunteer Shoulder Abduction Reach — Slice 8A in-memory capture sink.
+ * Volunteer Shoulder Abduction Reach — in-memory capture sink.
  *
  * Wires detector frame callbacks to the existing rep-recorder and capture schema.
- * In-memory only — no API calls, no persistence.
+ * Persistence is handled separately by the research persistence controller.
  */
 
 import type { NormalizedMotionFrame } from "@/app/lib/motion-intelligence";
@@ -18,6 +18,7 @@ import {
   createShoulderAbductionReachRepRecorderState,
   tickShoulderAbductionReachRepRecorder,
   type ShoulderAbductionReachRejectedCapture,
+  type ShoulderAbductionReachRepRecorderState,
 } from "@/app/lib/ml-research/shoulder-abduction-reach/rep-recorder";
 
 /** Picks the eight bilateral joints recorded for this exercise from a full motion frame. */
@@ -44,24 +45,41 @@ export type VolunteerInMemoryCaptureSinkOptions = {
   sessionId: string;
   side: ShoulderAbductionReachSide;
   /** Protocol metadata only — never therapist ground truth. */
-  protocolCondition?: string;
+  getProtocolCondition: () => string | undefined;
+  /** Returns the active capture-block generation; stale callbacks must be ignored. */
+  getCaptureBlockGeneration: () => number;
   onRepCaptured: (record: ShoulderAbductionReachRepCaptureRecord) => void;
   onRepRejected?: (rejected: ShoulderAbductionReachRejectedCapture) => void;
 };
 
 export type VolunteerInMemoryCaptureSink = {
   handleFrame: (input: VolunteerCaptureFrameInput) => void;
+  /** Resets the private repetition recorder so the next movement block starts at index 1. */
+  resetRecorder: () => void;
+  /** Exposed for behavioral tests — current emitted repetition count in this recorder. */
+  getEmittedRepCount: () => number;
 };
 
 export function createVolunteerInMemoryCaptureSink(
   options: VolunteerInMemoryCaptureSinkOptions,
 ): VolunteerInMemoryCaptureSink {
-  const state = createShoulderAbductionReachRepRecorderState();
+  let recorderState: ShoulderAbductionReachRepRecorderState =
+    createShoulderAbductionReachRepRecorderState();
+
+  const resetRecorder = () => {
+    recorderState = createShoulderAbductionReachRepRecorderState();
+  };
 
   return {
+    resetRecorder,
+    getEmittedRepCount: () => recorderState.emittedRepCount,
+
     handleFrame(input: VolunteerCaptureFrameInput) {
+      const blockGeneration = options.getCaptureBlockGeneration();
+
+      const protocolCondition = options.getProtocolCondition();
       const { completedRep, rejectedCapture } = tickShoulderAbductionReachRepRecorder(
-        state,
+        recorderState,
         {
           joints: pickCapturedJoints(input.frame),
           phase: input.phase,
@@ -75,11 +93,14 @@ export function createVolunteerInMemoryCaptureSink(
           devSessionId: options.sessionId,
           side: options.side,
           movementType: "shoulder_abduction_reach",
-          ...(options.protocolCondition !== undefined
-            ? { simulationCondition: options.protocolCondition }
-            : {}),
+          ...(protocolCondition !== undefined ? { simulationCondition: protocolCondition } : {}),
         },
       );
+
+      if (blockGeneration !== options.getCaptureBlockGeneration()) {
+        return;
+      }
+
       if (completedRep) {
         options.onRepCaptured(completedRep);
       }

@@ -27,6 +27,8 @@ export type VolunteerPersistencePhase =
   | "completed"
   | "fatal_error";
 
+export type VolunteerRetryKind = "session" | "rep" | "completion" | null;
+
 export type RepPersistenceState =
   | "queued"
   | "submitting"
@@ -43,6 +45,7 @@ export type QueuedRepEntry = {
 
 export type VolunteerPersistencePublicState = {
   phase: VolunteerPersistencePhase;
+  retryKind: VolunteerRetryKind;
   expiresAt: string | null;
   deletionCode: string | null;
   movementSessionReady: boolean;
@@ -76,8 +79,42 @@ const SAFE_ERRORS = {
     "This repetition could not be saved because the data is too large. Please start a new capture block.",
   genericFatal: "Something went wrong. Please start again from the beginning.",
   genericRetry: "A network issue occurred. You may retry saving the pending repetition.",
+  sessionRetry: "Could not start the research session. Please check your connection and try again.",
   completionFailed: "Could not finalize the session. You may retry completion.",
 } as const;
+
+function scrubQueuedRepFrames(reps: QueuedRepEntry[]): QueuedRepEntry[] {
+  return reps.map((rep) => ({
+    ...rep,
+    payload: {
+      ...rep.payload,
+      frames: [],
+    },
+  }));
+}
+
+function deriveRetryKind(internal: InternalState): VolunteerRetryKind {
+  if (internal.phase !== "retry_required") {
+    return null;
+  }
+  if (internal.queuedReps.some((rep) => rep.state === "retryable_error")) {
+    return "rep";
+  }
+  const allRepsPersisted =
+    internal.queuedReps.length >= VOLUNTEER_TARGET_REPS &&
+    internal.queuedReps.every((rep) => rep.state === "persisted");
+  if (
+    internal.captureTargetReached &&
+    allRepsPersisted &&
+    internal.sessionToken !== null
+  ) {
+    return "completion";
+  }
+  if (internal.sessionCreateRetryable) {
+    return "session";
+  }
+  return null;
+}
 
 function toPublicState(internal: InternalState): VolunteerPersistencePublicState {
   const allRepsPersisted =
@@ -101,6 +138,7 @@ function toPublicState(internal: InternalState): VolunteerPersistencePublicState
 
   return {
     phase: internal.phase,
+    retryKind: deriveRetryKind(internal),
     expiresAt: internal.expiresAt,
     deletionCode: internal.deletionCode,
     movementSessionReady: internal.movementSessionId !== null,
@@ -128,6 +166,7 @@ type InternalState = {
   queuedReps: QueuedRepEntry[];
   safeErrorMessage: string | null;
   sessionCreateInFlight: boolean;
+  sessionCreateRetryable: boolean;
   movementCreateInFlight: boolean;
   completionInFlight: boolean;
   queueProcessing: boolean;
@@ -145,6 +184,7 @@ function createInitialInternalState(): InternalState {
     queuedReps: [],
     safeErrorMessage: null,
     sessionCreateInFlight: false,
+    sessionCreateRetryable: false,
     movementCreateInFlight: false,
     completionInFlight: false,
     queueProcessing: false,
@@ -183,6 +223,10 @@ export type VolunteerPersistenceController = {
   resetAll: () => void;
   clearDeletionCode: () => void;
   dispose: () => void;
+  /** @internal Behavioral tests only */
+  __testOnly: {
+    getQueuedRepFrameCounts: () => number[];
+  };
 };
 
 export function createVolunteerPersistenceController(
@@ -213,6 +257,14 @@ export function createVolunteerPersistenceController(
     return state.generation;
   };
 
+  const clearSensitiveState = () => {
+    scrubQueuedRepFrames(state.queuedReps);
+    state = {
+      ...createInitialInternalState(),
+      generation: state.generation,
+    };
+  };
+
   const isCurrentGeneration = (generation: number) =>
     mounted.value && generation === state.generation;
 
@@ -232,7 +284,7 @@ export function createVolunteerPersistenceController(
       const repIndex = state.queuedReps.indexOf(nextRep);
       const updatedReps = [...state.queuedReps];
       updatedReps[repIndex] = { ...nextRep, state: "submitting" };
-      setState({ queuedReps: updatedReps, safeErrorMessage: null });
+      setState({ queuedReps: updatedReps, safeErrorMessage: null, sessionCreateRetryable: false });
 
       const result = await client.submitRepetition(
         state.sessionToken!,
@@ -329,6 +381,7 @@ export function createVolunteerPersistenceController(
       completionInFlight: true,
       phase: "completing",
       safeErrorMessage: null,
+      sessionCreateRetryable: false,
     });
 
     const result = await client.completeSession(state.sessionToken, abortController?.signal);
@@ -351,7 +404,7 @@ export function createVolunteerPersistenceController(
         return;
       }
       setState({
-        phase: "fatal_error",
+        phase: "retry_required",
         safeErrorMessage: SAFE_ERRORS.completionFailed,
       });
       return;
@@ -383,6 +436,7 @@ export function createVolunteerPersistenceController(
         sessionCreateInFlight: true,
         phase: "creating_session",
         safeErrorMessage: null,
+        sessionCreateRetryable: false,
       });
 
       const result = await client.createSession(campaignCode, abortController?.signal);
@@ -397,13 +451,24 @@ export function createVolunteerPersistenceController(
           expiresAt: result.value.expiresAt,
           phase: "session_ready",
           safeErrorMessage: null,
+          sessionCreateRetryable: false,
         });
         return true;
+      }
+
+      if (result.error.retryable) {
+        setState({
+          phase: "retry_required",
+          safeErrorMessage: SAFE_ERRORS.sessionRetry,
+          sessionCreateRetryable: true,
+        });
+        return false;
       }
 
       setState({
         phase: "fatal_error",
         safeErrorMessage: errorToSafeMessage(result.error),
+        sessionCreateRetryable: false,
       });
       return false;
     },
@@ -460,6 +525,7 @@ export function createVolunteerPersistenceController(
 
     enqueueRep(record) {
       if (!state.movementSessionId) return;
+      if (state.queuedReps.length >= VOLUNTEER_TARGET_REPS) return;
       if (state.queuedReps.some((rep) => rep.repetitionIndex === record.context.repetitionIndex)) {
         return;
       }
@@ -481,6 +547,7 @@ export function createVolunteerPersistenceController(
       setState({
         queuedReps: [...state.queuedReps, entry],
         phase: state.phase === "session_ready" ? "capturing" : state.phase,
+        sessionCreateRetryable: false,
       });
 
       void processQueue(state.generation);
@@ -503,16 +570,19 @@ export function createVolunteerPersistenceController(
         queuedReps: updatedReps,
         phase: "saving",
         safeErrorMessage: null,
+        sessionCreateRetryable: false,
       });
       await processQueue(generation);
     },
 
     async retryCompletion() {
+      const publicState = toPublicState(state);
+      if (!publicState.canComplete) return;
       await attemptCompletion(state.generation);
     },
 
     resetMovementBlock() {
-      const generation = bumpGeneration();
+      bumpGeneration();
       setState({
         movementSessionId: null,
         captureTargetReached: false,
@@ -523,13 +593,13 @@ export function createVolunteerPersistenceController(
         completionInFlight: false,
         queueProcessing: false,
         deletionCode: null,
+        sessionCreateRetryable: false,
       });
-      void generation;
     },
 
     resetAll() {
       bumpGeneration();
-      state = createInitialInternalState();
+      clearSensitiveState();
       emit();
     },
 
@@ -542,6 +612,12 @@ export function createVolunteerPersistenceController(
       if (abortController) {
         abortController.abort();
       }
+      bumpGeneration();
+      clearSensitiveState();
+    },
+
+    __testOnly: {
+      getQueuedRepFrameCounts: () => state.queuedReps.map((rep) => rep.payload.frames.length),
     },
   };
 }
