@@ -7,6 +7,7 @@ import { useGlobalLanguage } from "@/app/components/GlobalLanguageProvider";
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  LineChart, Line, CartesianGrid as LineGrid,
   ResponsiveContainer, Cell,
 } from "recharts";
 
@@ -176,6 +177,10 @@ export default function MockAssessmentPage() {
       completeTitle: isArabic ? "اكتمل التقييم!" : "Assessment Complete!",
       completeSubtitle: isArabic ? "رائع! إليك ملخص الأداء الخاص بك." : "Great job! Here is your performance summary.",
       completedOn: isArabic ? "اكتمل بتاريخ" : "Completed on",
+      progressTitle: isArabic ? "مخطط التقدم" : "Progress Chart",
+      progressIntro: isArabic ? "التقدم عبر التقييمات الأربعة في الجلسة" : "Progress across the four assessments in this session",
+      progressLabel: isArabic ? "التقدم المكتمل" : "Completion Progress",
+      progressNote: isArabic ? "كل خطوة تمثل تقييمًا واحدًا مكتملًا" : "Each step represents one completed assessment",
       performanceOverview: isArabic ? "نظرة عامة على الأداء" : "Performance Overview",
       performanceIntro: isArabic ? "النتيجة مقابل المعيار عبر جميع التقييمات" : "Score vs benchmark across all assessments",
       scoreBreakdown: isArabic ? "تفصيل الدرجات" : "Score Breakdown",
@@ -185,10 +190,19 @@ export default function MockAssessmentPage() {
       testsCompleted: isArabic ? "الاختبارات المكتملة" : "Tests Completed",
       inNormalRange: isArabic ? "ضمن النطاق الطبيعي" : "In Normal Range",
       needsAttention: isArabic ? "يحتاج إلى انتباه" : "Needs Attention",
+      totalScore: isArabic ? "إجمالي الدرجة" : "Total Score",
+      bestResult: isArabic ? "أفضل نتيجة" : "Best Result",
+      sessionStatus: isArabic ? "حالة الجلسة" : "Session Status",
+      sessionStrong: isArabic ? "أداء جيد" : "Strong session",
+      sessionStable: isArabic ? "جلسة ثابتة" : "Stable session",
       yourScore: isArabic ? "نتيجتك" : "Your score",
       benchmark: isArabic ? "المعيار" : "Benchmark",
       normal: isArabic ? "طبيعي" : "Normal",
       belowNormal: isArabic ? "أقل من الطبيعي" : "Below Normal",
+      focusTitle: isArabic ? "ما الذي نركز عليه بعد ذلك؟" : "What to focus on next?",
+      focusBody: isArabic
+        ? "الحفاظ على التوازن وتمارين القوة الخفيفة يمكن أن يدعم التحسن في الاختبارات المقبلة."
+        : "Balance maintenance and light strengthening can support improvement in future tests.",
       disclaimer: isArabic
         ? "هذا تقييم تجريبي لأغراض العرض فقط. النتائج محاكاة ولا تعكس القياسات السريرية الحقيقية. تواصل مع العيادة للحصول على تقييم رسمي."
         : "This is a mock assessment for demonstration purposes. Results are simulated and do not reflect real clinical measurements. Contact your clinic for an official assessment.",
@@ -324,6 +338,21 @@ export default function MockAssessmentPage() {
   };
 
   const allCompleted = completed.every((c) => c);
+  const completionProgressData = MOCK_ASSESSMENTS.map((assessment, index) => ({
+    step: index + 1,
+    name: assessmentShortLabel(assessment),
+    progress: Math.round(((index + 1) / MOCK_ASSESSMENTS.length) * 100),
+    score: Math.round((assessment.scoreValue / assessment.scoreMax) * 100),
+  }));
+  const totalScorePercent = Math.round(
+    MOCK_ASSESSMENTS.reduce((sum, assessment) => sum + assessment.scoreValue / assessment.scoreMax, 0) /
+      MOCK_ASSESSMENTS.length *
+      100
+  );
+  const bestAssessment = MOCK_ASSESSMENTS.reduce((best, assessment) =>
+    assessment.scoreValue / assessment.scoreMax > best.scoreValue / best.scoreMax ? assessment : best
+  , MOCK_ASSESSMENTS[0]);
+  const normalCount = MOCK_ASSESSMENTS.filter((assessment) => assessment.status === "Normal").length;
 
   useEffect(() => {
     setIsClient(true);
@@ -457,62 +486,120 @@ export default function MockAssessmentPage() {
               </p>
             </div>
 
+            {/* Summary metrics */}
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="rounded-[16px] border border-[#d1dbd6] bg-white p-5 shadow-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6b9080]">{ui.report.totalScore}</p>
+                <p className="mt-2 text-3xl font-bold text-[#1D9E75]">{totalScorePercent}%</p>
+                <p className="mt-1 text-xs text-[#6b9080]">{ui.report.sessionStrong}</p>
+              </div>
+              <div className="rounded-[16px] border border-[#d1dbd6] bg-white p-5 shadow-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6b9080]">{ui.report.testsCompleted}</p>
+                <p className="mt-2 text-3xl font-bold text-[#1D9E75]">4/4</p>
+                <p className="mt-1 text-xs text-[#6b9080]">{ui.report.sessionStatus}</p>
+              </div>
+              <div className="rounded-[16px] border border-[#d1dbd6] bg-white p-5 shadow-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6b9080]">{ui.report.bestResult}</p>
+                <p className="mt-2 text-2xl font-bold text-[#0f2e22]">{assessmentTitle(bestAssessment)}</p>
+                <p className="mt-1 text-xs text-[#6b9080]">{Math.round((bestAssessment.scoreValue / bestAssessment.scoreMax) * 100)}% {ui.report.yourScore}</p>
+              </div>
+              <div className="rounded-[16px] border border-[#d1dbd6] bg-white p-5 shadow-sm">
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-[#6b9080]">{ui.report.sessionStatus}</p>
+                <p className="mt-2 text-2xl font-bold text-[#1D9E75]">{normalCount}/4</p>
+                <p className="mt-1 text-xs text-[#6b9080]">{ui.report.inNormalRange}</p>
+              </div>
+            </div>
+
             {/* Charts row */}
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="grid gap-6 lg:grid-cols-3">
+              {/* Progress chart */}
+              <div className="rounded-[16px] border border-[#d1dbd6] bg-white p-6 lg:col-span-1">
+                <h3 className="mb-1 text-base font-bold text-[#0f2e22]">{ui.report.progressTitle}</h3>
+                <p className="mb-4 text-xs text-[#6b9080]">{ui.report.progressIntro}</p>
+                <ResponsiveContainer width="100%" height={240}>
+                  <LineChart data={completionProgressData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <LineGrid strokeDasharray="3 3" stroke="#e4ece8" vertical={false} />
+                  <XAxis dataKey="step" tick={{ fill: "#6b9080", fontSize: 12, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                  <YAxis domain={[0, 100]} tick={{ fill: "#9db0a3", fontSize: 11 }} axisLine={false} tickLine={false} unit="%" />
+                  <Tooltip
+                    formatter={(v, name) => [`${v}%`, name === "progress" ? ui.report.progressLabel : ui.report.yourScore]}
+                    labelFormatter={(label) => `${isArabic ? "الخطوة" : "Step"} ${label}`}
+                    contentStyle={{ borderRadius: 10, border: "1px solid #d1dbd6", fontSize: 13 }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="progress"
+                    stroke="#1D9E75"
+                    strokeWidth={3}
+                    dot={{ r: 4, fill: "#1D9E75" }}
+                    activeDot={{ r: 6 }}
+                    name={ui.report.progressLabel}
+                  />
+                  </LineChart>
+                </ResponsiveContainer>
+                <p className="mt-2 text-[11px] text-[#9db0a3]">{ui.report.progressNote}</p>
+              </div>
+
               {/* Radar chart — overall shape */}
-              <div className="rounded-[16px] border border-[#d1dbd6] bg-white p-6">
+              <div className="rounded-[16px] border border-[#d1dbd6] bg-white p-6 lg:col-span-1">
                 <h3 className="mb-1 text-base font-bold text-[#0f2e22]">{ui.report.performanceOverview}</h3>
                 <p className="mb-4 text-xs text-[#6b9080]">{ui.report.performanceIntro}</p>
                 <ResponsiveContainer width="100%" height={240}>
                   <RadarChart data={MOCK_ASSESSMENTS.map((a) => ({
-                    name: assessmentShortLabel(a),
-                    score: Math.round((a.scoreValue / a.scoreMax) * 100),
-                    benchmark: 80,
+                  name: assessmentShortLabel(a),
+                  score: Math.round((a.scoreValue / a.scoreMax) * 100),
+                  benchmark: 80,
                   }))}>
-                    <PolarGrid stroke="#e4ece8" />
-                    <PolarAngleAxis dataKey="name" tick={{ fill: "#6b9080", fontSize: 12, fontWeight: 600 }} />
-                    <Radar name={ui.report.yourScore} dataKey="score" stroke="#1D9E75" fill="#1D9E75" fillOpacity={0.35} strokeWidth={2} />
-                    <Radar name={ui.report.benchmark} dataKey="benchmark" stroke="#9db0a3" fill="#9db0a3" fillOpacity={0.15} strokeDasharray="4 2" strokeWidth={1.5} />
+                  <PolarGrid stroke="#e4ece8" />
+                  <PolarAngleAxis dataKey="name" tick={{ fill: "#6b9080", fontSize: 12, fontWeight: 600 }} />
+                  <Radar name={ui.report.yourScore} dataKey="score" stroke="#1D9E75" fill="#1D9E75" fillOpacity={0.35} strokeWidth={2} />
+                  <Radar name={ui.report.benchmark} dataKey="benchmark" stroke="#9db0a3" fill="#9db0a3" fillOpacity={0.15} strokeDasharray="4 2" strokeWidth={1.5} />
                   </RadarChart>
                 </ResponsiveContainer>
-                <div className="flex justify-center gap-6 mt-2">
+                <div className="mt-2 flex justify-center gap-6">
                   <span className="flex items-center gap-1.5 text-xs text-[#6b9080]"><span className="inline-block h-2 w-4 rounded-full bg-[#1D9E75]" />{ui.report.yourScore}</span>
                   <span className="flex items-center gap-1.5 text-xs text-[#6b9080]"><span className="inline-block h-2 w-4 rounded-full bg-[#9db0a3]" />{ui.report.benchmark}</span>
                 </div>
               </div>
 
               {/* Bar chart — per-assessment % */}
-              <div className="rounded-[16px] border border-[#d1dbd6] bg-white p-6">
+              <div className="rounded-[16px] border border-[#d1dbd6] bg-white p-6 lg:col-span-1">
                 <h3 className="mb-1 text-base font-bold text-[#0f2e22]">{ui.report.scoreBreakdown}</h3>
                 <p className="mb-4 text-xs text-[#6b9080]">{ui.report.scoreBreakdownIntro}</p>
                 <ResponsiveContainer width="100%" height={240}>
                   <BarChart
-                    data={MOCK_ASSESSMENTS.map((a) => ({
-                      name: assessmentShortLabel(a),
-                      score: Math.round((a.scoreValue / a.scoreMax) * 100),
-                      status: a.status,
-                    }))}
-                    margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
+                  data={MOCK_ASSESSMENTS.map((a) => ({
+                    name: assessmentShortLabel(a),
+                    score: Math.round((a.scoreValue / a.scoreMax) * 100),
+                    status: a.status,
+                  }))}
+                  margin={{ top: 4, right: 8, left: -16, bottom: 0 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e4ece8" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fill: "#6b9080", fontSize: 12, fontWeight: 600 }} axisLine={false} tickLine={false} />
-                    <YAxis domain={[0, 100]} tick={{ fill: "#9db0a3", fontSize: 11 }} axisLine={false} tickLine={false} unit="%" />
-                    <Tooltip
-                      formatter={(v) => [`${v}%`, "Score"]}
-                      contentStyle={{ borderRadius: 10, border: "1px solid #d1dbd6", fontSize: 13 }}
-                    />
-                    <Bar dataKey="score" radius={[6, 6, 0, 0]} maxBarSize={48}>
-                      {MOCK_ASSESSMENTS.map((a, i) => (
-                        <Cell key={i} fill={a.status === "Normal" ? "#1D9E75" : "#f59e0b"} />
-                      ))}
-                    </Bar>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e4ece8" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fill: "#6b9080", fontSize: 12, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                  <YAxis domain={[0, 100]} tick={{ fill: "#9db0a3", fontSize: 11 }} axisLine={false} tickLine={false} unit="%" />
+                  <Tooltip
+                    formatter={(v) => [`${v}%`, "Score"]}
+                    contentStyle={{ borderRadius: 10, border: "1px solid #d1dbd6", fontSize: 13 }}
+                  />
+                  <Bar dataKey="score" radius={[6, 6, 0, 0]} maxBarSize={48}>
+                    {MOCK_ASSESSMENTS.map((a, i) => (
+                      <Cell key={i} fill={a.status === "Normal" ? "#1D9E75" : "#f59e0b"} />
+                    ))}
+                  </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-                <div className="flex justify-center gap-6 mt-2">
+                <div className="mt-2 flex justify-center gap-6">
                   <span className="flex items-center gap-1.5 text-xs text-[#6b9080]"><span className="inline-block h-2 w-2 rounded-full bg-[#1D9E75]" />{ui.report.normal}</span>
                   <span className="flex items-center gap-1.5 text-xs text-[#6b9080]"><span className="inline-block h-2 w-2 rounded-full bg-amber-400" />{ui.report.belowNormal}</span>
                 </div>
               </div>
+            </div>
+
+            {/* Focus card */}
+            <div className="rounded-[16px] border border-[#d1dbd6] bg-white p-6 shadow-sm">
+              <h3 className="text-base font-bold text-[#0f2e22]">{ui.report.focusTitle}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-[#6b9080]">{ui.report.focusBody}</p>
             </div>
 
             {/* Per-assessment result cards */}
