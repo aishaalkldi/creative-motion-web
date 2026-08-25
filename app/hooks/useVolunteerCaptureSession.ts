@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * Volunteer capture session — Slice 8A (in-memory only, no network persistence).
- * Reuses ShoulderAbductionReachPoseDetector + volunteer in-memory capture sink.
+ * Volunteer capture session — camera/detector lifecycle with in-memory capture sink.
+ * Persistence is handled separately via useVolunteerResearchPersistence (Slice 8B.3).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -33,12 +33,14 @@ const IN_MEMORY_SESSION_ID = "volunteer-local-session";
 export type UseVolunteerCaptureSessionOptions = {
   side: ShoulderAbductionReachSide;
   protocolCondition: VolunteerProtocolCondition;
+  onRepCaptured?: (record: ShoulderAbductionReachRepCaptureRecord) => void;
   onTargetReached?: () => void;
 };
 
 export function useVolunteerCaptureSession({
   side,
   protocolCondition,
+  onRepCaptured,
   onTargetReached,
 }: UseVolunteerCaptureSessionOptions) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -75,6 +77,7 @@ export function useVolunteerCaptureSession({
 
   const handleRepCaptured = useCallback(
     (record: ShoulderAbductionReachRepCaptureRecord) => {
+      onRepCaptured?.(record);
       applyState(() => {
         setCapturedRecords((records) => {
           const next = [...records, record];
@@ -85,7 +88,7 @@ export function useVolunteerCaptureSession({
         });
       });
     },
-    [applyState, onTargetReached],
+    [applyState, onRepCaptured, onTargetReached],
   );
 
   const handleRepRejected = useCallback(

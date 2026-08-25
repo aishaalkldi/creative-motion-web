@@ -9,6 +9,7 @@ import {
   VOLUNTEER_TARGET_REPS,
   buildVolunteerSessionSummary,
   canProceedFromConsent,
+  canProceedFromConsentWithCampaign,
   isCaptureComplete,
   isVolunteerProtocolCondition,
 } from "./volunteer-protocol";
@@ -58,6 +59,23 @@ describe("volunteer-protocol", () => {
     assert.equal(summary.protocolCondition, "SIMULATED_MILD_COMPENSATION");
     assert.equal(summary.side, "right");
     assert.equal(summary.lastTrackingStatus, "good");
+  });
+
+  it("allows continue only when both consent checkboxes and campaign code are present", () => {
+    assert.equal(
+      canProceedFromConsentWithCampaign(
+        { ageConfirmed: true, participationAgreed: true },
+        "  PILOT  ",
+      ),
+      true,
+    );
+    assert.equal(
+      canProceedFromConsentWithCampaign(
+        { ageConfirmed: true, participationAgreed: true },
+        "   ",
+      ),
+      false,
+    );
   });
 
   it("marks capture complete at the target repetition count", () => {

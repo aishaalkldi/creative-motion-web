@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * Volunteer Shoulder Abduction Reach — Slice 8A public capture (in-memory only).
- * No server persistence, no dev-data, no remote uploads.
+ * Volunteer Shoulder Abduction Reach — public capture with research persistence (Slice 8B.3).
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { useVolunteerResearchPersistence } from "@/app/hooks/useVolunteerResearchPersistence";
 import { VolunteerWizardShell } from "@/app/volunteer/shoulder-abduction-reach/components/VolunteerWizardShell";
 import { useVolunteerCaptureSession } from "@/app/hooks/useVolunteerCaptureSession";
 import {
@@ -16,7 +16,7 @@ import {
   VOLUNTEER_PROTOCOL_CONDITIONS,
   VOLUNTEER_TARGET_REPS,
   buildVolunteerSessionSummary,
-  canProceedFromConsent,
+  canProceedFromConsentWithCampaign,
   isCaptureComplete,
   type VolunteerConsentState,
   type VolunteerProtocolCondition,
@@ -84,11 +84,43 @@ export default function VolunteerShoulderAbductionReachPage() {
     ageConfirmed: false,
     participationAgreed: false,
   });
+  const [campaignCode, setCampaignCode] = useState("");
   const [protocolCondition, setProtocolCondition] = useState<VolunteerProtocolCondition>("NORMAL");
+  const [consentSubmitting, setConsentSubmitting] = useState(false);
+  const [startSubmitting, setStartSubmitting] = useState(false);
+
+  const persistence = useVolunteerResearchPersistence();
+  const {
+    enqueueRep,
+    notifyCaptureTargetReached,
+    createCollectionSession,
+    createMovementSession,
+    resetMovementBlock,
+    resetAll,
+    clearDeletionCode,
+    retryFailedRep,
+    retryCompletion,
+    isCompleted,
+    isCreatingSession,
+    isCreatingMovement,
+    isSaving,
+    phase,
+    safeErrorMessage,
+    deletionCode,
+    captureTargetReached,
+    retryableRepIndex,
+  } = persistence;
+
+  const handleRepCaptured = useCallback(
+    (record: Parameters<typeof enqueueRep>[0]) => {
+      enqueueRep(record);
+    },
+    [enqueueRep],
+  );
 
   const handleTargetReached = useCallback(() => {
-    setStep("summary");
-  }, []);
+    notifyCaptureTargetReached();
+  }, [notifyCaptureTargetReached]);
 
   const {
     videoRef,
@@ -110,8 +142,21 @@ export default function VolunteerShoulderAbductionReachPage() {
   } = useVolunteerCaptureSession({
     side: VOLUNTEER_CAPTURE_SIDE,
     protocolCondition,
+    onRepCaptured: handleRepCaptured,
     onTargetReached: handleTargetReached,
   });
+
+  useEffect(() => {
+    if (captureTargetReached && step === "capture") {
+      stopAll();
+    }
+  }, [captureTargetReached, step, stopAll]);
+
+  useEffect(() => {
+    if (phase === "fatal_error" && step === "capture") {
+      stopAll();
+    }
+  }, [phase, step, stopAll]);
 
   useEffect(() => {
     if (step === "capture") {
@@ -120,13 +165,55 @@ export default function VolunteerShoulderAbductionReachPage() {
   }, [step, reattachCameraPreview]);
 
   useEffect(() => {
-    if (step === "summary") {
+    if (isCompleted) {
       stopAll();
     }
-  }, [step, stopAll]);
+  }, [isCompleted, stopAll]);
+
+  const displayStep: VolunteerWizardStep = isCompleted ? "summary" : step;
+
+  const handleConsentContinue = async () => {
+    if (!canProceedFromConsentWithCampaign(consent, campaignCode)) return;
+    setConsentSubmitting(true);
+    const code = campaignCode.trim();
+    const ok = await createCollectionSession(code);
+    setConsentSubmitting(false);
+    if (ok) {
+      setCampaignCode("");
+      setStep("camera");
+    }
+  };
+
+  const handleStartCapture = async () => {
+    if (startSubmitting || running || starting) return;
+    setStartSubmitting(true);
+    const movementReady = await createMovementSession(protocolCondition);
+    if (movementReady) {
+      await startCapture();
+    }
+    setStartSubmitting(false);
+  };
+
+  const handleResetSession = () => {
+    stopAll();
+    resetSession();
+    resetMovementBlock();
+    setStep("condition");
+  };
+
+  const handleFinishExit = () => {
+    stopAll();
+    clearDeletionCode();
+    resetAll();
+    setStep("welcome");
+    setConsent({ ageConfirmed: false, participationAgreed: false });
+    setCampaignCode("");
+    setProtocolCondition("NORMAL");
+    resetSession();
+  };
 
   const summary =
-    step === "summary"
+    displayStep === "summary" && isCompleted
       ? buildVolunteerSessionSummary({
           capturedCount,
           rejectedCount,
@@ -135,6 +222,11 @@ export default function VolunteerShoulderAbductionReachPage() {
           lastTrackingStatus: snapshot?.trackingStatus ?? "idle",
         })
       : null;
+
+  const showSavingState =
+    step === "capture" &&
+    isCaptureComplete(capturedCount) &&
+    !isCompleted;
 
   return (
     <VolunteerWizardShell stepLabel="Volunteer capture">
@@ -149,7 +241,8 @@ export default function VolunteerShoulderAbductionReachPage() {
             </p>
             <p>
               <strong className="font-semibold text-[#374151]">This is not medical care.</strong> It
-              is not a diagnosis, clinical assessment, or treatment.
+              is not a diagnosis, clinical assessment, or treatment. This is research and technical
+              data collection only.
             </p>
             <p className="rounded-lg border border-[#FDE68A] bg-[#FFFBEB] px-4 py-3 text-[#92400E]">
               For this initial technical pilot, please use a <strong>laptop or desktop computer</strong>{" "}
@@ -166,30 +259,50 @@ export default function VolunteerShoulderAbductionReachPage() {
           <div className="space-y-3 text-[14px] leading-relaxed text-[#6B7280]">
             <p>Please confirm the following before continuing:</p>
             <ul className="list-disc space-y-2 pl-5">
-              <li>Your camera is used for on-device movement tracking only.</li>
+              <li>
+                No name, email, phone number, diagnosis, or patient record is requested in this flow.
+              </li>
+              <li>
+                The server creates a random research participant identifier for this session.
+              </li>
+              <li>
+                Bounded pose-landmark time-series and derived technical movement features are
+                uploaded to research storage after each successfully captured repetition.
+              </li>
+              <li>
+                Raw camera video, photos, and audio are <strong>not</strong> uploaded.
+              </li>
               <li>
                 Loading this page and movement-tracking model files uses normal network downloads.
               </li>
               <li>
-                Movement video, landmarks, completed records, and movement payloads are{" "}
-                <strong>not uploaded</strong> in this pilot version.
+                The selected movement condition is <strong>protocol metadata only</strong> — not
+                therapist ground truth and not an ML prediction.
               </li>
               <li>
-                Raw video and photos are not intentionally uploaded or stored in this technical
-                pilot.
+                You may stop participation before completion by closing or exiting this page.
               </li>
               <li>
-                Completed movement data stays in your browser memory only until you leave this page.
+                Refreshing or closing this page loses the in-memory session and any unsaved retry
+                state — you would need to start again.
               </li>
-              <li>
-                No name, email, phone, diagnosis, or patient information is collected in this step.
-              </li>
-              <li>You may stop at any time by closing or exiting this page.</li>
-              <li>This technical pilot is not medical care.</li>
+              <li>This technical pilot is not medical care, diagnosis, or treatment.</li>
             </ul>
           </div>
 
           <div className="space-y-3 rounded-lg border border-[#E2E8E5] bg-white p-4">
+            <label className="block text-[14px] text-[#374151]">
+              <span className="mb-1 block font-medium">Study campaign code</span>
+              <input
+                type="text"
+                autoComplete="off"
+                spellCheck={false}
+                value={campaignCode}
+                onChange={(e) => setCampaignCode(e.target.value)}
+                className="w-full rounded-lg border border-[#D1D5DB] px-3 py-2 text-[14px]"
+                placeholder="Enter the code provided by the study team"
+              />
+            </label>
             <label className="flex items-start gap-3 text-[14px] text-[#374151]">
               <input
                 type="checkbox"
@@ -216,13 +329,21 @@ export default function VolunteerShoulderAbductionReachPage() {
             </label>
           </div>
 
+          {safeErrorMessage ? (
+            <p className="text-[14px] text-red-600">{safeErrorMessage}</p>
+          ) : null}
+
           <div className="flex gap-3">
             <SecondaryButton onClick={() => setStep("welcome")}>Back</SecondaryButton>
             <PrimaryButton
-              onClick={() => setStep("camera")}
-              disabled={!canProceedFromConsent(consent)}
+              onClick={() => void handleConsentContinue()}
+              disabled={
+                !canProceedFromConsentWithCampaign(consent, campaignCode) ||
+                consentSubmitting ||
+                isCreatingSession
+              }
             >
-              Continue
+              {consentSubmitting || isCreatingSession ? "Starting session…" : "Continue"}
             </PrimaryButton>
           </div>
         </section>
@@ -390,48 +511,70 @@ export default function VolunteerShoulderAbductionReachPage() {
               <dt className="font-medium text-[#9CA3AF]">Rejected</dt>
               <dd className="text-[#374151]">
                 {rejectedCount}
-                {lastRejection
-                  ? ` (${lastRejection.reason})`
-                  : ""}
+                {lastRejection ? ` (${lastRejection.reason})` : ""}
               </dd>
             </div>
           </dl>
 
           {error ? <p className="text-[14px] text-red-600">{error}</p> : null}
+          {safeErrorMessage ? (
+            <p className="text-[14px] text-red-600">{safeErrorMessage}</p>
+          ) : null}
+
+          {showSavingState ? (
+            <p className="text-[14px] text-[#374151]">
+              {isSaving
+                ? "Saving repetitions and finalizing your session…"
+                : "All repetitions captured. Waiting to save…"}
+            </p>
+          ) : null}
 
           <div className="flex flex-wrap gap-3">
             <PrimaryButton
-              onClick={() => void startCapture()}
-              disabled={starting || running || isCaptureComplete(capturedCount)}
+              onClick={() => void handleStartCapture()}
+              disabled={
+                starting ||
+                running ||
+                startSubmitting ||
+                isCreatingMovement ||
+                isCaptureComplete(capturedCount) ||
+                phase === "fatal_error"
+              }
             >
-              Start
+              {startSubmitting || isCreatingMovement
+                ? "Preparing…"
+                : starting
+                  ? "Starting…"
+                  : "Start"}
             </PrimaryButton>
             <SecondaryButton onClick={stopDetector} disabled={!running}>
               Stop
             </SecondaryButton>
-            <SecondaryButton
-              onClick={() => {
-                resetSession();
-                setStep("condition");
-              }}
-              disabled={running}
-            >
+            <SecondaryButton onClick={handleResetSession} disabled={running}>
               Reset session
             </SecondaryButton>
           </div>
 
-          {isCaptureComplete(capturedCount) ? (
-            <PrimaryButton onClick={() => setStep("summary")}>View summary</PrimaryButton>
+          {phase === "retry_required" ? (
+            <div className="flex flex-wrap gap-3">
+              {retryableRepIndex !== null ? (
+                <PrimaryButton onClick={() => void retryFailedRep()}>
+                  Retry saving repetition
+                </PrimaryButton>
+              ) : null}
+              <PrimaryButton onClick={() => void retryCompletion()}>
+                Retry finalizing session
+              </PrimaryButton>
+            </div>
           ) : null}
         </section>
       ) : null}
 
-      {step === "summary" && summary ? (
+      {displayStep === "summary" && summary && isCompleted ? (
         <section className="space-y-6">
           <h1 className="text-[22px] font-bold text-[#0A0F1A]">Session complete</h1>
           <p className="text-[14px] text-[#6B7280]">
-            Thank you. The following technical capture summary was held in memory only. If you
-            refresh or close this page, it will disappear — that is expected for this pilot.
+            Thank you. Your technical movement data has been saved to research storage.
           </p>
 
           <div className="rounded-lg border border-[#E2E8E5] bg-white p-4 text-[14px] text-[#374151]">
@@ -469,21 +612,22 @@ export default function VolunteerShoulderAbductionReachPage() {
             </dl>
           </div>
 
+          {deletionCode ? (
+            <div className="rounded-lg border border-[#BFDBFE] bg-[#EFF6FF] px-4 py-3 text-[14px] text-[#1E3A8A]">
+              <p className="font-semibold">One-time research reference</p>
+              <p className="mt-2">
+                If the study team provides a deletion-request process, retain this code — it is shown
+                only once and cannot be recovered from this page:
+              </p>
+              <p className="mt-2 font-mono text-[16px] tracking-wider">{deletionCode}</p>
+            </div>
+          ) : null}
+
           <p className="text-[13px] text-[#9CA3AF]">
-            No therapist labels or clinical scores are shown here. This data was not uploaded.
+            No therapist labels or clinical scores are shown here. Raw video was not uploaded.
           </p>
 
-          <PrimaryButton
-            onClick={() => {
-              stopAll();
-              setStep("welcome");
-              setConsent({ ageConfirmed: false, participationAgreed: false });
-              setProtocolCondition("NORMAL");
-              resetSession();
-            }}
-          >
-            Finish / Exit
-          </PrimaryButton>
+          <PrimaryButton onClick={handleFinishExit}>Finish / Exit</PrimaryButton>
         </section>
       ) : null}
     </VolunteerWizardShell>
