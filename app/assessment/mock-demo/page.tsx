@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import MockCameraCapture from "@/app/components/patient/MockCameraCapture";
+import { useGlobalLanguage } from "@/app/components/GlobalLanguageProvider";
 import {
   RadarChart, Radar, PolarGrid, PolarAngleAxis,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -13,7 +14,9 @@ const MOCK_ASSESSMENTS = [
   {
     id: "sit-to-stand",
     title: "Sit-to-Stand",
+    titleAr: "الوقوف من الجلوس",
     description: "Stand up from a chair 5 times at your own pace",
+    descriptionAr: "قُم من الكرسي 5 مرات بالوتيرة المناسبة لك",
     instructions: [
       "Sit in a sturdy chair with your back against the chair",
       "Your feet should be flat on the ground about shoulder-width apart",
@@ -21,21 +24,35 @@ const MOCK_ASSESSMENTS = [
       "Stand up and sit down as quickly as possible for 5 repetitions",
       "The timer will start when you stand for the first time",
     ],
+    instructionsAr: [
+      "اجلس على كرسي ثابت مع إسناد ظهرك إلى الكرسي",
+      "ضع قدميك على الأرض بمسافة تقارب عرض الكتفين",
+      "ضع ذراعيك متقاطعتين على صدرك",
+      "قُم واجلس أسرع ما يمكن لمدة 5 مرات",
+      "سيبدأ المؤقت عند أول مرة تقف فيها",
+    ],
     icon: "🪑",
     difficulty: "Easy",
+    difficultyAr: "سهل",
     // Mock scores that will be shown in the report
     scoreLabel: "Reps Completed",
+    scoreLabelAr: "عدد التكرارات المكتملة",
     scoreValue: 5,
     scoreMax: 5,
     scoreUnit: "reps",
     benchmark: "5 reps (normal)",
+    benchmarkAr: "5 تكرارات (طبيعي)",
     status: "Normal",
+    statusAr: "طبيعي",
     tip: "You completed all 5 repetitions. Keep practising to improve your speed.",
+    tipAr: "أكملت جميع التكرارات الخمسة. واصل التدريب لتحسين السرعة.",
   },
   {
     id: "single-leg-stance",
     title: "Single-Leg Stance",
+    titleAr: "الوقوف على ساق واحدة",
     description: "Stand on one leg for as long as you can",
+    descriptionAr: "قف على ساق واحدة لأطول مدة ممكنة",
     instructions: [
       "Stand on one leg while keeping the other leg raised",
       "You can hold onto something for balance if needed",
@@ -43,20 +60,34 @@ const MOCK_ASSESSMENTS = [
       "If you need to put your foot down, that marks the end of the test",
       "We'll test both legs",
     ],
+    instructionsAr: [
+      "قف على ساق واحدة مع رفع الساق الأخرى",
+      "يمكنك التمسك بشيء للتوازن إذا احتجت",
+      "حاول الحفاظ على هذه الوضعية لمدة تصل إلى 30 ثانية",
+      "إذا وضعت قدمك على الأرض فسينتهي الاختبار",
+      "سنختبر الساقين معًا",
+    ],
     icon: "🧍",
     difficulty: "Medium",
+    difficultyAr: "متوسط",
     scoreLabel: "Balance Duration",
+    scoreLabelAr: "مدة التوازن",
     scoreValue: 18,
     scoreMax: 30,
     scoreUnit: "sec",
     benchmark: "≥ 20 sec (normal)",
+    benchmarkAr: "20 ثانية أو أكثر (طبيعي)",
     status: "Below Normal",
+    statusAr: "أقل من الطبيعي",
     tip: "Balance duration is slightly below the target. Daily balance exercises will help improve this.",
+    tipAr: "مدة التوازن أقل قليلًا من الهدف. تمارين التوازن اليومية ستساعد على التحسن.",
   },
   {
     id: "functional-reach",
     title: "Functional Reach",
+    titleAr: "الوصول الوظيفي",
     description: "Reach forward as far as you can without losing your balance",
+    descriptionAr: "امتد للأمام لأقصى مسافة ممكنة دون فقدان توازنك",
     instructions: [
       "Stand with your feet shoulder-width apart",
       "Extend your dominant arm to shoulder height",
@@ -64,20 +95,34 @@ const MOCK_ASSESSMENTS = [
       "We'll measure the distance you reached",
       "Try this 3 times and we'll take the best result",
     ],
+    instructionsAr: [
+      "قف وقدماك بمسافة عرض الكتفين",
+      "مد ذراعك المهيمنة حتى مستوى الكتف",
+      "امتد للأمام لأقصى مسافة ممكنة دون أن تخطو للأمام",
+      "سنقيس المسافة التي وصلت إليها",
+      "حاول 3 مرات وسنأخذ أفضل نتيجة",
+    ],
     icon: "🙌",
     difficulty: "Medium",
+    difficultyAr: "متوسط",
     scoreLabel: "Reach Distance",
+    scoreLabelAr: "مسافة الوصول",
     scoreValue: 28,
     scoreMax: 35,
     scoreUnit: "cm",
     benchmark: "≥ 25 cm (normal)",
+    benchmarkAr: "25 سم أو أكثر (طبيعي)",
     status: "Normal",
+    statusAr: "طبيعي",
     tip: "Good reach distance. Core strengthening exercises can help you reach even further.",
+    tipAr: "مسافة وصول جيدة. تمارين تقوية الجذع قد تساعدك على الوصول أبعد.",
   },
   {
     id: "timed-up-and-go",
     title: "Timed Up and Go",
+    titleAr: "الوقوف والمشي والعودة",
     description: "Stand up, walk 10 feet, and sit back down",
+    descriptionAr: "قُم، امشِ 10 أقدام، ثم اجلس مرة أخرى",
     instructions: [
       "Start in a seated position in a sturdy chair",
       "When ready, stand up and walk 10 feet at a normal pace",
@@ -85,19 +130,33 @@ const MOCK_ASSESSMENTS = [
       "Sit back down in the chair",
       "We'll time how long this takes you",
     ],
+    instructionsAr: [
+      "ابدأ وأنت جالس على كرسي ثابت",
+      "عندما تكون جاهزًا، قف وامشِ 10 أقدام بوتيرة طبيعية",
+      "استدر وارجع إلى الكرسي",
+      "اجلس مرة أخرى على الكرسي",
+      "سنقيس الوقت الذي تستغرقه",
+    ],
     icon: "🚶",
     difficulty: "Medium",
+    difficultyAr: "متوسط",
     scoreLabel: "Completion Time",
+    scoreLabelAr: "وقت الإكمال",
     scoreValue: 11,
     scoreMax: 20,
     scoreUnit: "sec",
     benchmark: "< 12 sec (normal)",
+    benchmarkAr: "أقل من 12 ثانية (طبيعي)",
     status: "Normal",
+    statusAr: "طبيعي",
     tip: "Excellent time! You are within the normal range for mobility and fall risk.",
+    tipAr: "وقت ممتاز! أنت ضمن النطاق الطبيعي للحركة وخطر السقوط.",
   },
 ];
 
 export default function MockAssessmentPage() {
+  const { language } = useGlobalLanguage();
+  const isArabic = language === "ar";
   const [currentIndex, setCurrentIndex] = useState(0);
   const [completed, setCompleted] = useState<boolean[]>([false, false, false, false]);
   const [restTimeRemaining, setRestTimeRemaining] = useState(0);
@@ -108,6 +167,84 @@ export default function MockAssessmentPage() {
   const [speechSupported, setSpeechSupported] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const lastLiveCueSpokenRef = useRef<{ text: string; at: number }>({ text: "", at: 0 });
+
+  const ui = {
+    title: isArabic ? "جلسة التقييم التجريبية" : "Assessment Session",
+    subtitle: isArabic ? "التقييم التجريبي" : "Mock Assessment",
+    progressSuffix: isArabic ? "مكتمل" : "complete",
+    report: {
+      completeTitle: isArabic ? "اكتمل التقييم!" : "Assessment Complete!",
+      completeSubtitle: isArabic ? "رائع! إليك ملخص الأداء الخاص بك." : "Great job! Here is your performance summary.",
+      completedOn: isArabic ? "اكتمل بتاريخ" : "Completed on",
+      performanceOverview: isArabic ? "نظرة عامة على الأداء" : "Performance Overview",
+      performanceIntro: isArabic ? "النتيجة مقابل المعيار عبر جميع التقييمات" : "Score vs benchmark across all assessments",
+      scoreBreakdown: isArabic ? "تفصيل الدرجات" : "Score Breakdown",
+      scoreBreakdownIntro: isArabic ? "النسبة المئوية من المعيار لكل اختبار" : "Percentage of benchmark reached per test",
+      detailedResults: isArabic ? "النتائج التفصيلية" : "Detailed Results",
+      overallSummary: isArabic ? "الملخص العام" : "Overall Summary",
+      testsCompleted: isArabic ? "الاختبارات المكتملة" : "Tests Completed",
+      inNormalRange: isArabic ? "ضمن النطاق الطبيعي" : "In Normal Range",
+      needsAttention: isArabic ? "يحتاج إلى انتباه" : "Needs Attention",
+      yourScore: isArabic ? "نتيجتك" : "Your score",
+      benchmark: isArabic ? "المعيار" : "Benchmark",
+      normal: isArabic ? "طبيعي" : "Normal",
+      belowNormal: isArabic ? "أقل من الطبيعي" : "Below Normal",
+      disclaimer: isArabic
+        ? "هذا تقييم تجريبي لأغراض العرض فقط. النتائج محاكاة ولا تعكس القياسات السريرية الحقيقية. تواصل مع العيادة للحصول على تقييم رسمي."
+        : "This is a mock assessment for demonstration purposes. Results are simulated and do not reflect real clinical measurements. Contact your clinic for an official assessment.",
+      backHome: isArabic ? "العودة إلى الصفحة الرئيسية" : "Back to Home",
+      printReport: isArabic ? "طباعة التقرير" : "Print Report",
+    },
+    rest: {
+      greatProgress: isArabic ? "تقدم رائع!" : "Great Progress!",
+      message: isArabic ? "أكملت تقييمين. خذ لحظة للراحة." : "You've completed 2 assessments. Take a moment to rest.",
+      remaining: isArabic ? "الوقت المتبقي للراحة" : "Rest time remaining",
+      whileRest: isArabic ? "أثناء الراحة:" : "While you rest:",
+      water: isArabic ? "اشرب بضع رشفات من الماء" : "Take a few sips of water",
+      breathe: isArabic ? "قم ببعض التنفس العميق" : "Do some deep breathing",
+      stretch: isArabic ? "قم بتمدد لطيف إذا كان مريحًا" : "Stretch gently if comfortable",
+      continue: isArabic ? "الانتقال إلى التقييم التالي" : "Continue to Next Assessment",
+      autoContinue: isArabic ? "سيتم الانتقال تلقائيًا بعد فترة الراحة" : "You'll automatically continue after the rest period",
+      skipRest: isArabic ? "تخطي الراحة (للتطوير فقط)" : "Skip rest (dev only)",
+    },
+    assessment: {
+      voiceOn: isArabic ? "الصوت مفعل" : "Voice ON",
+      voiceOff: isArabic ? "الصوت متوقف" : "Voice OFF",
+      repeatVoice: isArabic ? "إعادة التعليمات صوتيًا" : "Repeat Voice",
+      voiceLoading: isArabic ? "جارٍ تحميل الصوت..." : "Voice loading...",
+      voiceReady: isArabic ? "الصوت جاهز" : "Voice ready",
+      voiceNotSupported: isArabic ? "الصوت غير مدعوم في هذا المتصفح" : "Voice not supported in this browser",
+      liveCoach: isArabic ? "الموجه المباشر:" : "Live coach:",
+      howToPerform: isArabic ? "كيفية أداء هذا التقييم:" : "How to perform this assessment:",
+      safetyTitle: isArabic ? "تنبيه السلامة" : "Safety Notice",
+      safetyBody: isArabic
+        ? "قم بكل تقييم في بيئة آمنة. توقف فورًا إذا شعرت بألم أو دوار أو ضيق في التنفس. إذا كنت في المنزل، فتأكد من وجود شخص قريب."
+        : "Perform each assessment in a safe environment. Stop immediately if you experience pain, dizziness, or shortness of breath. If performing at home, ensure someone is nearby.",
+      previous: isArabic ? "السابق" : "Previous",
+      completeAssessment: isArabic ? "إكمال التقييم" : "Complete Assessment",
+      nextAssessment: isArabic ? "التقييم التالي" : "Next Assessment",
+      assessmentComplete: isArabic ? "اكتمل التقييم" : "Assessment Complete",
+      sequence: isArabic ? "تسلسل التقييمات" : "Assessment Sequence",
+    },
+    common: {
+      loading: isArabic ? "جاري التشغيل..." : "Starting camera…",
+      allowCamera: isArabic ? "يرجى السماح بالوصول إلى الكاميرا عند الطلب" : "Please allow camera access when prompted",
+      targetGuide: isArabic ? "دليل الوصول باليد" : "Hand Reach Guide",
+      targetComplete: isArabic ? "اكتملت الأهداف" : "Targets complete",
+      reachPoint: isArabic ? "صل إلى النقطة المضيئة" : "Reach the glowing point",
+    },
+  };
+
+  const assessmentTitle = (assessment = currentAssessment) => (isArabic ? assessment.titleAr : assessment.title);
+  const assessmentDescription = (assessment = currentAssessment) => (isArabic ? assessment.descriptionAr : assessment.description);
+  const assessmentInstructions = (assessment = currentAssessment) => (isArabic ? assessment.instructionsAr : assessment.instructions);
+  const assessmentDifficulty = (assessment = currentAssessment) => (isArabic ? assessment.difficultyAr : assessment.difficulty);
+  const assessmentScoreLabel = (assessment = currentAssessment) => (isArabic ? assessment.scoreLabelAr : assessment.scoreLabel);
+  const assessmentBenchmark = (assessment = currentAssessment) => (isArabic ? assessment.benchmarkAr : assessment.benchmark);
+  const assessmentStatus = (assessment = currentAssessment) => (isArabic ? assessment.statusAr : assessment.status);
+  const assessmentTip = (assessment = currentAssessment) => (isArabic ? assessment.tipAr : assessment.tip);
+  const assessmentShortLabel = (assessment: typeof MOCK_ASSESSMENTS[number]) =>
+    isArabic ? assessment.titleAr.split(" ")[0] : assessment.title.split(" ")[0];
 
   // Check if we should show rest page (after 2 assessments)
   const completedCount = completed.filter((c) => c).length;
@@ -203,8 +340,7 @@ export default function MockAssessmentPage() {
     if (!speechSupported || !voiceEnabled || !text.trim()) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
-    const pageLang = document.documentElement.lang || "en";
-    utterance.lang = pageLang.startsWith("ar") ? "ar-SA" : "en-US";
+    utterance.lang = isArabic ? "ar-SA" : "en-US";
     utterance.rate = 0.92;
     utterance.pitch = 1;
     utterance.volume = 1;
@@ -222,19 +358,24 @@ export default function MockAssessmentPage() {
 
     const timer = window.setTimeout(() => {
       if (allCompleted) {
-        speak("Excellent work. You have completed all four assessments. Your report is now ready.");
+        speak(isArabic
+          ? "عمل ممتاز. لقد أكملت جميع التقييمات الأربعة. تقريرك جاهز الآن."
+          : "Excellent work. You have completed all four assessments. Your report is now ready.");
         return;
       }
 
       if (showRestPage) {
-        speak("You have completed two assessments. Please rest for two minutes. Breathe deeply and drink water if needed.");
+        speak(isArabic
+          ? "لقد أكملت تقييمين. يرجى الراحة لمدة دقيقتين. تنفس بعمق واشرب الماء إذا احتجت."
+          : "You have completed two assessments. Please rest for two minutes. Breathe deeply and drink water if needed.");
         return;
       }
 
-      const steps = currentAssessment.instructions
-        .map((step, index) => `Step ${index + 1}. ${step}.`)
+      const stepLabel = isArabic ? "الخطوة" : "Step";
+      const steps = assessmentInstructions(currentAssessment)
+        .map((step, index) => `${stepLabel} ${index + 1}. ${step}.`)
         .join(" ");
-      speak(`Now starting ${currentAssessment.title}. ${currentAssessment.description}. ${steps}`);
+      speak(`${isArabic ? "نبدأ الآن" : "Now starting"} ${assessmentTitle(currentAssessment)}. ${assessmentDescription(currentAssessment)}. ${steps}`);
     }, 350);
 
     return () => window.clearTimeout(timer);
@@ -268,7 +409,7 @@ export default function MockAssessmentPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#F4F6F5] to-white">
+    <div className="min-h-screen bg-gradient-to-b from-[#F4F6F5] to-white" dir={isArabic ? "rtl" : "ltr"}>
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-[#d1dbd6] bg-white/80 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
@@ -282,13 +423,13 @@ export default function MockAssessmentPage() {
               </svg>
             </Link>
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-[#6b9080]">Mock Assessment</p>
-              <h1 className="text-lg font-bold text-[#0f2e22]">Assessment Session</h1>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-[#6b9080]">{ui.subtitle}</p>
+              <h1 className="text-lg font-bold text-[#0f2e22]">{ui.title}</h1>
             </div>
           </div>
           <div className="text-right">
-            <p className="text-sm font-semibold text-[#1D9E75]">{currentIndex + 1} of {MOCK_ASSESSMENTS.length}</p>
-            <p className="text-xs text-[#6b9080]">{progress}% complete</p>
+            <p className="text-sm font-semibold text-[#1D9E75]">{currentIndex + 1} / {MOCK_ASSESSMENTS.length}</p>
+            <p className="text-xs text-[#6b9080]">{progress}% {ui.progressSuffix}</p>
           </div>
         </div>
 
@@ -309,43 +450,45 @@ export default function MockAssessmentPage() {
             {/* Hero banner */}
             <div className="rounded-[20px] bg-gradient-to-br from-[#1D9E75] to-[#0f6a4e] p-8 text-center text-white shadow-lg">
               <div className="mb-3 text-6xl">🎉</div>
-              <h2 className="text-3xl font-bold">Assessment Complete!</h2>
-              <p className="mt-2 text-lg opacity-90">Great job! Here is your performance summary.</p>
-              <p className="mt-1 text-sm opacity-70">Completed on {new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}</p>
+              <h2 className="text-3xl font-bold">{ui.report.completeTitle}</h2>
+              <p className="mt-2 text-lg opacity-90">{ui.report.completeSubtitle}</p>
+              <p className="mt-1 text-sm opacity-70">
+                {ui.report.completedOn} {new Date().toLocaleDateString(isArabic ? "ar-EG" : "en-GB", { day: "numeric", month: "long", year: "numeric" })}
+              </p>
             </div>
 
             {/* Charts row */}
             <div className="grid gap-6 md:grid-cols-2">
               {/* Radar chart — overall shape */}
               <div className="rounded-[16px] border border-[#d1dbd6] bg-white p-6">
-                <h3 className="mb-1 text-base font-bold text-[#0f2e22]">Performance Overview</h3>
-                <p className="mb-4 text-xs text-[#6b9080]">Score vs benchmark across all assessments</p>
+                <h3 className="mb-1 text-base font-bold text-[#0f2e22]">{ui.report.performanceOverview}</h3>
+                <p className="mb-4 text-xs text-[#6b9080]">{ui.report.performanceIntro}</p>
                 <ResponsiveContainer width="100%" height={240}>
                   <RadarChart data={MOCK_ASSESSMENTS.map((a) => ({
-                    name: a.title.split(" ")[0], // short label
+                    name: assessmentShortLabel(a),
                     score: Math.round((a.scoreValue / a.scoreMax) * 100),
                     benchmark: 80,
                   }))}>
                     <PolarGrid stroke="#e4ece8" />
                     <PolarAngleAxis dataKey="name" tick={{ fill: "#6b9080", fontSize: 12, fontWeight: 600 }} />
-                    <Radar name="Your score" dataKey="score" stroke="#1D9E75" fill="#1D9E75" fillOpacity={0.35} strokeWidth={2} />
-                    <Radar name="Benchmark" dataKey="benchmark" stroke="#9db0a3" fill="#9db0a3" fillOpacity={0.15} strokeDasharray="4 2" strokeWidth={1.5} />
+                    <Radar name={ui.report.yourScore} dataKey="score" stroke="#1D9E75" fill="#1D9E75" fillOpacity={0.35} strokeWidth={2} />
+                    <Radar name={ui.report.benchmark} dataKey="benchmark" stroke="#9db0a3" fill="#9db0a3" fillOpacity={0.15} strokeDasharray="4 2" strokeWidth={1.5} />
                   </RadarChart>
                 </ResponsiveContainer>
                 <div className="flex justify-center gap-6 mt-2">
-                  <span className="flex items-center gap-1.5 text-xs text-[#6b9080]"><span className="inline-block h-2 w-4 rounded-full bg-[#1D9E75]" />Your score</span>
-                  <span className="flex items-center gap-1.5 text-xs text-[#6b9080]"><span className="inline-block h-2 w-4 rounded-full bg-[#9db0a3]" />Benchmark</span>
+                  <span className="flex items-center gap-1.5 text-xs text-[#6b9080]"><span className="inline-block h-2 w-4 rounded-full bg-[#1D9E75]" />{ui.report.yourScore}</span>
+                  <span className="flex items-center gap-1.5 text-xs text-[#6b9080]"><span className="inline-block h-2 w-4 rounded-full bg-[#9db0a3]" />{ui.report.benchmark}</span>
                 </div>
               </div>
 
               {/* Bar chart — per-assessment % */}
               <div className="rounded-[16px] border border-[#d1dbd6] bg-white p-6">
-                <h3 className="mb-1 text-base font-bold text-[#0f2e22]">Score Breakdown</h3>
-                <p className="mb-4 text-xs text-[#6b9080]">Percentage of benchmark reached per test</p>
+                <h3 className="mb-1 text-base font-bold text-[#0f2e22]">{ui.report.scoreBreakdown}</h3>
+                <p className="mb-4 text-xs text-[#6b9080]">{ui.report.scoreBreakdownIntro}</p>
                 <ResponsiveContainer width="100%" height={240}>
                   <BarChart
                     data={MOCK_ASSESSMENTS.map((a) => ({
-                      name: a.title.split(" ")[0],
+                      name: assessmentShortLabel(a),
                       score: Math.round((a.scoreValue / a.scoreMax) * 100),
                       status: a.status,
                     }))}
@@ -366,15 +509,15 @@ export default function MockAssessmentPage() {
                   </BarChart>
                 </ResponsiveContainer>
                 <div className="flex justify-center gap-6 mt-2">
-                  <span className="flex items-center gap-1.5 text-xs text-[#6b9080]"><span className="inline-block h-2 w-2 rounded-full bg-[#1D9E75]" />Normal</span>
-                  <span className="flex items-center gap-1.5 text-xs text-[#6b9080]"><span className="inline-block h-2 w-2 rounded-full bg-amber-400" />Below Normal</span>
+                  <span className="flex items-center gap-1.5 text-xs text-[#6b9080]"><span className="inline-block h-2 w-2 rounded-full bg-[#1D9E75]" />{ui.report.normal}</span>
+                  <span className="flex items-center gap-1.5 text-xs text-[#6b9080]"><span className="inline-block h-2 w-2 rounded-full bg-amber-400" />{ui.report.belowNormal}</span>
                 </div>
               </div>
             </div>
 
             {/* Per-assessment result cards */}
             <div>
-              <h3 className="mb-4 text-lg font-bold text-[#0f2e22]">Detailed Results</h3>
+              <h3 className="mb-4 text-lg font-bold text-[#0f2e22]">{ui.report.detailedResults}</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 {MOCK_ASSESSMENTS.map((a) => {
                   const pct = Math.round((a.scoreValue / a.scoreMax) * 100);
@@ -385,12 +528,12 @@ export default function MockAssessmentPage() {
                         <div className="flex items-center gap-3">
                           <span className="text-3xl">{a.icon}</span>
                           <div>
-                            <p className="font-bold text-[#0f2e22] text-sm">{a.title}</p>
-                            <p className="text-xs text-[#6b9080]">{a.scoreLabel}</p>
+                            <p className="font-bold text-[#0f2e22] text-sm">{assessmentTitle(a)}</p>
+                            <p className="text-xs text-[#6b9080]">{assessmentScoreLabel(a)}</p>
                           </div>
                         </div>
                         <span className={`rounded-full px-3 py-0.5 text-xs font-bold ${isNormal ? "bg-[#e8f3ef] text-[#1D9E75]" : "bg-amber-50 text-amber-700"}`}>
-                          {a.status}
+                          {assessmentStatus(a)}
                         </span>
                       </div>
 
@@ -406,12 +549,12 @@ export default function MockAssessmentPage() {
                             style={{ width: `${Math.min(pct, 100)}%`, backgroundColor: isNormal ? "#1D9E75" : "#f59e0b" }}
                           />
                         </div>
-                        <p className="mt-1 text-[10px] text-[#9db0a3]">Benchmark: {a.benchmark}</p>
+                        <p className="mt-1 text-[10px] text-[#9db0a3]">{isArabic ? "المعيار:" : "Benchmark:"} {assessmentBenchmark(a)}</p>
                       </div>
 
                       {/* Tip */}
                       <p className="mt-3 text-xs leading-relaxed text-[#6b9080] border-t border-[#e4ece8] pt-3">
-                        💡 {a.tip}
+                        💡 {assessmentTip(a)}
                       </p>
                     </div>
                   );
@@ -421,24 +564,22 @@ export default function MockAssessmentPage() {
 
             {/* Overall summary */}
             <div className="rounded-[16px] border-2 border-[#1D9E75] bg-[#f0f7f4] p-6">
-              <h3 className="mb-3 text-base font-bold text-[#0f2e22]">📋 Overall Summary</h3>
+              <h3 className="mb-3 text-base font-bold text-[#0f2e22]">📋 {ui.report.overallSummary}</h3>
               <div className="grid grid-cols-3 divide-x divide-[#d1dbd6] text-center">
                 <div className="px-4">
                   <p className="text-3xl font-bold text-[#1D9E75]">4</p>
-                  <p className="text-xs text-[#6b9080]">Tests Completed</p>
+                  <p className="text-xs text-[#6b9080]">{ui.report.testsCompleted}</p>
                 </div>
                 <div className="px-4">
                   <p className="text-3xl font-bold text-[#1D9E75]">3</p>
-                  <p className="text-xs text-[#6b9080]">In Normal Range</p>
+                  <p className="text-xs text-[#6b9080]">{ui.report.inNormalRange}</p>
                 </div>
                 <div className="px-4">
                   <p className="text-3xl font-bold text-amber-500">1</p>
-                  <p className="text-xs text-[#6b9080]">Needs Attention</p>
+                  <p className="text-xs text-[#6b9080]">{ui.report.needsAttention}</p>
                 </div>
               </div>
-              <p className="mt-4 text-sm text-[#6b9080]">
-                This is a mock assessment for demonstration purposes. Results are simulated and do not reflect real clinical measurements. Contact your clinic for an official assessment.
-              </p>
+              <p className="mt-4 text-sm text-[#6b9080]">{ui.report.disclaimer}</p>
             </div>
 
             {/* Actions */}
@@ -447,13 +588,13 @@ export default function MockAssessmentPage() {
                 href="/"
                 className="flex-1 rounded-[12px] border-2 border-[#1D9E75] px-6 py-4 text-center font-bold text-[#1D9E75] transition hover:bg-[#f0f7f4]"
               >
-                Back to Home
+                {ui.report.backHome}
               </Link>
               <button
                 onClick={() => window.print()}
                 className="flex-1 flex items-center justify-center gap-2 rounded-[12px] bg-[#1D9E75] px-6 py-4 font-bold text-white transition hover:bg-[#1a8f6a] active:scale-95"
               >
-                🖨️ Print Report
+                🖨️ {ui.report.printReport}
               </button>
             </div>
           </div>
@@ -461,32 +602,32 @@ export default function MockAssessmentPage() {
           /* Rest Page */
           <div className="flex flex-col items-center justify-center rounded-[16px] border-2 border-[#1D9E75] bg-gradient-to-b from-[#f0f7f4] to-[#e8f3ef] p-12 text-center min-h-96">
             <div className="mb-6 text-7xl">😊</div>
-            <h2 className="text-4xl font-bold text-[#0f2e22] mb-2">Great Progress!</h2>
-            <p className="text-lg text-[#6b9080] mb-8">You've completed 2 assessments. Take a moment to rest.</p>
+            <h2 className="text-4xl font-bold text-[#0f2e22] mb-2">{ui.rest.greatProgress}</h2>
+            <p className="text-lg text-[#6b9080] mb-8">{ui.rest.message}</p>
             
             {/* Rest Timer */}
             <div className="mb-8">
               <div className="text-7xl font-bold text-[#1D9E75] font-mono tracking-wider">
                 {formatTime(restTimeRemaining)}
               </div>
-              <p className="mt-4 text-sm text-[#6b9080]">Rest time remaining</p>
+              <p className="mt-4 text-sm text-[#6b9080]">{ui.rest.remaining}</p>
             </div>
 
             {/* Rest Guidance */}
             <div className="mb-8 max-w-md rounded-[12px] border border-[#d1dbd6] bg-white p-6">
-              <h3 className="font-bold text-[#0f2e22] mb-3">While you rest:</h3>
+              <h3 className="font-bold text-[#0f2e22] mb-3">{ui.rest.whileRest}</h3>
               <ul className="space-y-2 text-left text-sm text-[#6b9080]">
                 <li className="flex gap-2">
                   <span>💧</span>
-                  <span>Take a few sips of water</span>
+                  <span>{ui.rest.water}</span>
                 </li>
                 <li className="flex gap-2">
                   <span>🫁</span>
-                  <span>Do some deep breathing</span>
+                  <span>{ui.rest.breathe}</span>
                 </li>
                 <li className="flex gap-2">
                   <span>🧘</span>
-                  <span>Stretch gently if comfortable</span>
+                  <span>{ui.rest.stretch}</span>
                 </li>
               </ul>
             </div>
@@ -497,20 +638,20 @@ export default function MockAssessmentPage() {
                 onClick={handleContinueAfterRest}
                 className="rounded-[12px] bg-[#1D9E75] px-8 py-4 font-bold text-white transition hover:bg-[#1a8f6a] active:scale-95"
               >
-                Continue to Next Assessment
+                {ui.rest.continue}
               </button>
             )}
 
             {/* Auto-continue message */}
             {restTimeRemaining > 0 && (
               <div className="flex flex-col items-center gap-2">
-                <p className="text-xs text-[#6b9080]">You'll automatically continue after the rest period</p>
+                <p className="text-xs text-[#6b9080]">{ui.rest.autoContinue}</p>
                 {process.env.NODE_ENV === "development" && (
                   <button
                     onClick={handleContinueAfterRest}
                     className="text-xs text-[#9db0a3] underline hover:text-[#1D9E75]"
                   >
-                    Skip rest (dev only)
+                    {ui.rest.skipRest}
                   </button>
                 )}
               </div>
@@ -532,11 +673,11 @@ export default function MockAssessmentPage() {
                 <div className="flex items-start gap-4">
                   <div className="text-5xl">{currentAssessment.icon}</div>
                   <div>
-                    <h2 className="text-3xl font-bold text-[#0f2e22]">{currentAssessment.title}</h2>
-                    <p className="mt-2 text-lg text-[#6b9080]">{currentAssessment.description}</p>
+                    <h2 className="text-3xl font-bold text-[#0f2e22]">{assessmentTitle(currentAssessment)}</h2>
+                    <p className="mt-2 text-lg text-[#6b9080]">{assessmentDescription(currentAssessment)}</p>
                     <div className="mt-4 flex items-center gap-2">
                       <span className="rounded-full bg-[#e8f3ef] px-3 py-1 text-xs font-bold uppercase text-[#1D9E75]">
-                        {currentAssessment.difficulty}
+                        {assessmentDifficulty(currentAssessment)}
                       </span>
                     </div>
                   </div>
@@ -567,41 +708,41 @@ export default function MockAssessmentPage() {
                       : "bg-white text-[#6b9080] border border-[#d1dbd6] hover:border-[#1D9E75]"
                   }`}
                 >
-                  {voiceEnabled ? "Voice ON" : "Voice OFF"}
+                  {voiceEnabled ? ui.assessment.voiceOn : ui.assessment.voiceOff}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     if (!speechSupported) return;
-                    const steps = currentAssessment.instructions
-                      .map((step, index) => `Step ${index + 1}. ${step}.`)
+                    const steps = assessmentInstructions(currentAssessment)
+                      .map((step, index) => `${isArabic ? "الخطوة" : "Step"} ${index + 1}. ${step}.`)
                       .join(" ");
-                    speak(`Repeating guidance. ${currentAssessment.title}. ${currentAssessment.description}. ${steps}`);
+                    speak(`${isArabic ? "إعادة التعليمات" : "Repeating guidance"}. ${assessmentTitle(currentAssessment)}. ${assessmentDescription(currentAssessment)}. ${steps}`);
                   }}
                   disabled={!isClient || !voiceEnabled || !speechSupported}
                   className="rounded-[10px] border border-[#d1dbd6] bg-white px-4 py-2 text-xs font-bold text-[#1D9E75] transition hover:border-[#1D9E75] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  Repeat Voice
+                  {ui.assessment.repeatVoice}
                 </button>
                 <span className="text-xs font-semibold text-[#6b9080]">
                   {!isClient
-                    ? "Voice loading..."
+                  ? ui.assessment.voiceLoading
                     : speechSupported
-                      ? (isSpeaking ? "Speaking now..." : "Voice ready")
-                      : "Voice not supported in this browser"}
+                    ? (isSpeaking ? (isArabic ? "جاري التحدث..." : "Speaking now...") : ui.assessment.voiceReady)
+                    : ui.assessment.voiceNotSupported}
                 </span>
                 {liveCue && (
                   <p className="w-full text-xs text-[#1D9E75]">
-                    Live coach: {liveCue}
+                    {ui.assessment.liveCoach} {liveCue}
                   </p>
                 )}
               </div>
 
               {/* Instructions */}
               <div className="mt-8">
-                <h3 className="mb-4 text-base font-bold text-[#0f2e22]">How to perform this assessment:</h3>
+                <h3 className="mb-4 text-base font-bold text-[#0f2e22]">{ui.assessment.howToPerform}</h3>
                 <ol className="space-y-3">
-                  {currentAssessment.instructions.map((instruction, i) => (
+                  {assessmentInstructions(currentAssessment).map((instruction, i) => (
                     <li key={i} className="flex gap-3">
                       <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-[#e8f3ef] font-bold text-[#1D9E75]">
                         {i + 1}
@@ -618,10 +759,8 @@ export default function MockAssessmentPage() {
               <div className="flex gap-3">
                 <div className="text-lg">⚠️</div>
                 <div>
-                  <p className="text-sm font-semibold text-amber-900">Safety Notice</p>
-                  <p className="mt-1 text-xs text-amber-800">
-                    Perform each assessment in a safe environment. Stop immediately if you experience pain, dizziness, or shortness of breath. If performing at home, ensure someone is nearby.
-                  </p>
+                  <p className="text-sm font-semibold text-amber-900">{ui.assessment.safetyTitle}</p>
+                  <p className="mt-1 text-xs text-amber-800">{ui.assessment.safetyBody}</p>
                 </div>
               </div>
             </div>
@@ -636,7 +775,7 @@ export default function MockAssessmentPage() {
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                 </svg>
-                Previous
+                {ui.assessment.previous}
               </button>
 
               {!completed[currentIndex] ? (
@@ -644,7 +783,7 @@ export default function MockAssessmentPage() {
                   onClick={handleCompleteAssessment}
                   className="flex-1 rounded-[12px] bg-[#1D9E75] px-6 py-4 font-bold text-white transition hover:bg-[#1a8f6a] active:scale-95"
                 >
-                  Complete Assessment
+                  {ui.assessment.completeAssessment}
                 </button>
               ) : (
                 <button
@@ -652,7 +791,7 @@ export default function MockAssessmentPage() {
                   disabled={currentIndex === MOCK_ASSESSMENTS.length - 1}
                   className="flex-1 flex items-center justify-center gap-2 rounded-[12px] bg-[#1D9E75] px-6 py-4 font-bold text-white transition hover:bg-[#1a8f6a] active:scale-95 disabled:bg-[#6b9080]"
                 >
-                  {currentIndex === MOCK_ASSESSMENTS.length - 1 ? "Assessment Complete" : "Next Assessment"}
+                  {currentIndex === MOCK_ASSESSMENTS.length - 1 ? ui.assessment.assessmentComplete : ui.assessment.nextAssessment}
                   {currentIndex !== MOCK_ASSESSMENTS.length - 1 && (
                     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -666,7 +805,7 @@ export default function MockAssessmentPage() {
 
         {/* Assessment List Sidebar */}
         <div className="mt-12">
-          <h3 className="mb-4 text-base font-bold text-[#0f2e22]">Assessment Sequence</h3>
+          <h3 className="mb-4 text-base font-bold text-[#0f2e22]">{ui.assessment.sequence}</h3>
           <div className="grid gap-3">
             {MOCK_ASSESSMENTS.map((assessment, i) => (
               <button
@@ -682,8 +821,8 @@ export default function MockAssessmentPage() {
               >
                 <div className={`text-2xl`}>{assessment.icon}</div>
                 <div className="flex-1">
-                  <p className="font-bold text-[#0f2e22]">{i + 1}. {assessment.title}</p>
-                  <p className="text-xs text-[#6b9080]">{assessment.description}</p>
+                  <p className="font-bold text-[#0f2e22]">{i + 1}. {isArabic ? assessment.titleAr : assessment.title}</p>
+                  <p className="text-xs text-[#6b9080]">{isArabic ? assessment.descriptionAr : assessment.description}</p>
                 </div>
                 {completed[i] && (
                   <div className="rounded-full bg-[#1D9E75] p-1">

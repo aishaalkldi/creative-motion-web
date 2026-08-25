@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback } from "react";
+import { useGlobalLanguage } from "@/app/components/GlobalLanguageProvider";
 
 interface MockCameraCaptureProps {
   isActive: boolean;
@@ -43,6 +44,8 @@ const SKELETON_CONNECTIONS: [number, number][] = [
 ];
 
 export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }: MockCameraCaptureProps) {
+  const { language } = useGlobalLanguage();
+  const isArabic = language === "ar";
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const poseLandmarkerRef = useRef<unknown>(null);
@@ -63,14 +66,53 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [targetIndex, setTargetIndex] = useState(0);
   const [targetSequenceDone, setTargetSequenceDone] = useState(false);
-  const [liveCue, setLiveCue] = useState("Follow the on-screen guidance.");
+  const [liveCue, setLiveCue] = useState(isArabic ? "اتبع الإرشادات المعروضة على الشاشة." : "Follow the on-screen guidance.");
 
   const showGuidedTargets = assessmentId === "functional-reach";
   const activeTargets = FUNCTIONAL_REACH_TARGETS;
+  const ui = {
+    introTargets: isArabic ? "مد يدك إلى نقطة الهدف المضيئة." : "Reach your hand to the glowing target point.",
+    introAssessment: isArabic ? "اتبع تعليمات التقييم على الشاشة." : "Follow the assessment instructions on screen.",
+    poseUnavailable: isArabic ? "نظام تتبع الوضعية غير متاح في هذا المتصفح." : "Pose engine unavailable in this browser.",
+    poseFailed: isArabic ? "فشل تتبع الوضعية. جرّب Chrome أو Edge." : "Pose tracking failed. Try Chrome/Edge.",
+    moveCloser: isArabic ? "اقترب قليلًا من الكاميرا." : "Move closer to the camera.",
+    moveBack: isArabic ? "ابتعد قليلًا عن الكاميرا." : "Move a little back from the camera.",
+    sitDown: isArabic ? "رائع. اجلس الآن." : "Great. Now sit down.",
+    standUp: isArabic ? "جيد. قف الآن." : "Good. Now stand up.",
+    keepGoing: isArabic ? "تابع: قف ثم اجلس." : "Keep going: stand up, then sit down.",
+    liftFoot: isArabic ? "ارفع قدمًا واحدة وحافظ على توازنك." : "Lift one foot and hold your balance.",
+    holdBalance: isArabic ? "ممتاز. واصل الحفاظ على توازنك." : "Excellent. Keep your balance and hold.",
+    reachTarget: isArabic ? "مد يدك إلى نقطة الهدف المضيئة." : "Reach your hand to the glowing target point.",
+    holdArmSteady: isArabic ? "ممتاز. حافظ على ثبات ذراعك." : "Excellent reach. Hold your arm steady.",
+    walkBack: isArabic ? "جيد. امشِ بضع خطوات للخلف ثم عد واجلس." : "Good. Walk back a few steps, then return and sit.",
+    startWalking: isArabic ? "قف الآن وابدأ المشي." : "Stand up now and start walking.",
+    keepCentered: isArabic ? "حافظ على تمركز جسمك داخل الكاميرا." : "Keep your full body centered in the camera.",
+    bodyVisible: isArabic ? "قف بحيث يظهر جسمك بالكامل في الكاميرا." : "Stand where your full body is visible in camera.",
+    raiseHand: isArabic ? "ارفع يدك للعثور على نقطة الهدف." : "Raise your hand to find the target point.",
+    positionBody: isArabic ? "ضع جسمك بحيث نتمكن من اكتشاف وضعيتك." : "Position your body so we can detect your pose.",
+    cameraDenied: isArabic ? "تم رفض إذن الكاميرا" : "Camera Permission Denied",
+    cameraDeniedHelp: isArabic ? "يرجى تفعيل الوصول إلى الكاميرا من إعدادات المتصفح للمتابعة" : "Please enable camera access in your browser settings to continue",
+    startingCamera: isArabic ? "جارٍ تشغيل الكاميرا…" : "Starting camera…",
+    allowCamera: isArabic ? "يرجى السماح بالوصول إلى الكاميرا عند الطلب" : "Please allow camera access when prompted",
+    loadingAi: isArabic ? "جارٍ تحميل الذكاء الاصطناعي…" : "Loading AI…",
+    poseTracking: isArabic ? "تتبّع الوضعية" : "POSE TRACKING",
+    poseStarting: isArabic ? "بدء التتبّع" : "POSE STARTING",
+    handReachGuide: isArabic ? "دليل الوصول باليد" : "Hand Reach Guide",
+    targetsComplete: isArabic ? "اكتملت الأهداف" : "Targets complete",
+    reachGlow: isArabic ? "صل إلى النقطة المضيئة" : "Reach the glowing point",
+    targetLabel: isArabic ? "الهدف" : "Target",
+    excellentReach: isArabic ? "وصول ممتاز" : "Excellent reach",
+    defaultCue: isArabic ? "اتبع الإرشادات المعروضة على الشاشة." : "Follow the on-screen guidance.",
+  };
 
   useEffect(() => {
     targetIndexRef.current = targetIndex;
   }, [targetIndex]);
+
+  useEffect(() => {
+    setLiveCue(ui.defaultCue);
+    lastLiveCueRef.current = ui.defaultCue;
+  }, [ui.defaultCue]);
 
   useEffect(() => {
     setTargetIndex(0);
@@ -78,14 +120,12 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
     setTargetSequenceDone(false);
     targetHitFlashUntilRef.current = 0;
     lastTargetHitAtRef.current = 0;
-    const introCue = showGuidedTargets
-      ? "Reach your hand to the glowing target point."
-      : "Follow the assessment instructions on screen.";
+    const introCue = showGuidedTargets ? ui.introTargets : ui.introAssessment;
     setLiveCue(introCue);
     onLiveCue?.(introCue);
     lastLiveCueRef.current = introCue;
     lastLiveCueAtRef.current = performance.now();
-  }, [assessmentId, onLiveCue, showGuidedTargets]);
+  }, [assessmentId, onLiveCue, showGuidedTargets, ui.introAssessment, ui.introTargets]);
 
   const emitLiveCue = useCallback((cue: string, minIntervalMs = 1600) => {
     const now = performance.now();
@@ -258,7 +298,7 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
         console.error("Pose model load error:", e);
         poseLandmarkerRef.current = null;
         setPoseReady(false);
-        setPoseError("Pose engine unavailable in this browser.");
+        setPoseError(ui.poseUnavailable);
       } finally {
         setPoseLoading(false);
       }
@@ -438,7 +478,7 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
           console.error("Pose runtime error:", e);
           poseLandmarkerRef.current = null;
           setPoseReady(false);
-          setPoseError("Pose tracking failed. Try Chrome/Edge.");
+          setPoseError(ui.poseFailed);
         }
 
         if (results?.landmarks?.length) {
@@ -505,44 +545,44 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
           if (leftShoulder && rightShoulder) {
             const shoulderSpan = Math.abs(leftShoulder.x - rightShoulder.x) * W;
             if (shoulderSpan < W * 0.14) {
-              emitLiveCue("Move closer to the camera.");
+              emitLiveCue(ui.moveCloser);
             } else if (shoulderSpan > W * 0.42) {
-              emitLiveCue("Move a little back from the camera.");
+              emitLiveCue(ui.moveBack);
             } else if (assessmentId === "sit-to-stand" && leftHip && rightHip && leftKnee && rightKnee) {
               const hipY = (leftHip.y + rightHip.y) / 2;
               const kneeY = (leftKnee.y + rightKnee.y) / 2;
               const standDelta = kneeY - hipY;
               if (standDelta > 0.2) {
-                emitLiveCue("Great. Now sit down.");
+                emitLiveCue(ui.sitDown);
               } else if (standDelta < 0.1) {
-                emitLiveCue("Good. Now stand up.");
+                emitLiveCue(ui.standUp);
               } else {
-                emitLiveCue("Keep going: stand up, then sit down.");
+                emitLiveCue(ui.keepGoing);
               }
             } else if (assessmentId === "single-leg-stance" && leftAnkle && rightAnkle) {
               const ankleDiff = Math.abs(leftAnkle.y - rightAnkle.y);
               if (ankleDiff < 0.08) {
-                emitLiveCue("Lift one foot and hold your balance.");
+                emitLiveCue(ui.liftFoot);
               } else {
-                emitLiveCue("Excellent. Keep your balance and hold.");
+                emitLiveCue(ui.holdBalance);
               }
             } else if (assessmentId === "functional-reach") {
               if (targetSequenceDone) {
-                emitLiveCue("Excellent reach. Hold your arm steady.");
+                emitLiveCue(ui.holdArmSteady);
               } else {
-                emitLiveCue("Reach your hand to the glowing target point.");
+                emitLiveCue(ui.reachTarget);
               }
             } else if (assessmentId === "timed-up-and-go" && leftHip && rightHip && leftKnee && rightKnee) {
               const hipY = (leftHip.y + rightHip.y) / 2;
               const kneeY = (leftKnee.y + rightKnee.y) / 2;
               const standDelta = kneeY - hipY;
               if (standDelta > 0.2) {
-                emitLiveCue("Good. Walk back a few steps, then return and sit.");
+                emitLiveCue(ui.walkBack);
               } else {
-                emitLiveCue("Stand up now and start walking.");
+                emitLiveCue(ui.startWalking);
               }
             } else {
-              emitLiveCue("Keep your full body centered in the camera.");
+              emitLiveCue(ui.keepCentered);
             }
           }
 
@@ -558,13 +598,13 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
           ctx.globalAlpha = 1;
         } else if (showGuidedTargets) {
           drawGuidedTargets(ctx, canvas.width, canvas.height, null);
-          emitLiveCue("Raise your hand to find the target point.");
+          emitLiveCue(ui.raiseHand);
         }
       } else if (showGuidedTargets) {
         drawGuidedTargets(ctx, canvas.width, canvas.height, null);
-        emitLiveCue("Position your body so we can detect your pose.");
+        emitLiveCue(ui.positionBody);
       } else {
-        emitLiveCue("Stand where your full body is visible in camera.");
+        emitLiveCue(ui.bodyVisible);
       }
     } finally {
       animFrameRef.current = requestAnimationFrame(drawSkeleton);
@@ -596,8 +636,8 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
     return (
       <div className="flex h-72 flex-col items-center justify-center rounded-[12px] border-2 border-amber-200 bg-amber-50">
         <div className="text-4xl mb-3">📷</div>
-        <p className="font-semibold text-amber-900">Camera Permission Denied</p>
-        <p className="mt-1 text-xs text-amber-800">Please enable camera access in your browser settings to continue</p>
+        <p className="font-semibold text-amber-900">{ui.cameraDenied}</p>
+        <p className="mt-1 text-xs text-amber-800">{ui.cameraDeniedHelp}</p>
       </div>
     );
   }
@@ -608,8 +648,8 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
       {(cameraPermission === "idle" || cameraPermission === "loading") && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#0f1a15]">
           <div className="mb-3 h-8 w-8 animate-spin rounded-full border-4 border-[#1D9E75]/30 border-t-[#1D9E75]" />
-          <p className="font-semibold text-white">Starting camera…</p>
-          <p className="mt-1 text-xs text-[#6b9080]">Please allow camera access when prompted</p>
+          <p className="font-semibold text-white">{ui.startingCamera}</p>
+          <p className="mt-1 text-xs text-[#6b9080]">{ui.allowCamera}</p>
         </div>
       )}
 
@@ -650,13 +690,13 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
             {poseLoading ? (
               <>
                 <div className="h-2 w-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                <span className="text-xs font-bold text-white">Loading AI…</span>
+                <span className="text-xs font-bold text-white">{ui.loadingAi}</span>
               </>
             ) : (
               <>
                 <div className={`w-2 h-2 rounded-full animate-pulse ${poseReady ? "bg-[#1D9E75]" : "bg-amber-400"}`} />
                 <span className={`text-xs font-bold ${poseReady ? "text-[#1D9E75]" : "text-amber-300"}`}>
-                  {poseReady ? "POSE TRACKING" : "POSE STARTING"}
+                  {poseReady ? ui.poseTracking : ui.poseStarting}
                 </span>
               </>
             )}
@@ -678,16 +718,16 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
         {/* Functional reach guided-target status */}
         {cameraPermission === "granted" && showGuidedTargets && (
           <div className="absolute bottom-3 right-3 rounded-xl border border-white/20 bg-black/60 px-3 py-2 text-right shadow-lg">
-            <p className="text-[10px] uppercase tracking-wider text-[#9db0a3]">Hand Reach Guide</p>
+            <p className="text-[10px] uppercase tracking-wider text-[#9db0a3]">{ui.handReachGuide}</p>
             <p className="text-xs font-bold text-white">
-              {targetSequenceDone ? "Targets complete" : `Target ${Math.min(targetIndex + 1, activeTargets.length)} / ${activeTargets.length}`}
+              {targetSequenceDone ? ui.targetsComplete : `${ui.targetLabel} ${Math.min(targetIndex + 1, activeTargets.length)} / ${activeTargets.length}`}
             </p>
           </div>
         )}
 
         {cameraPermission === "granted" && showGuidedTargets && (
           <div className="absolute top-3 right-3 rounded-full bg-black/60 px-3 py-1 text-[11px] font-semibold text-white">
-            {targetSequenceDone ? "Excellent reach" : "Reach the glowing point"}
+            {targetSequenceDone ? ui.excellentReach : ui.reachGlow}
           </div>
         )}
       </div>
