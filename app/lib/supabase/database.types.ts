@@ -539,6 +539,7 @@ export type Database = {
           id: string
           patient_id: string
           plan_id: string
+          prescribed_side: string | null
           provider_id: string
           scheduled_at: string | null
           session_number: number
@@ -555,6 +556,7 @@ export type Database = {
           id?: string
           patient_id: string
           plan_id: string
+          prescribed_side?: string | null
           provider_id: string
           scheduled_at?: string | null
           session_number: number
@@ -571,6 +573,7 @@ export type Database = {
           id?: string
           patient_id?: string
           plan_id?: string
+          prescribed_side?: string | null
           provider_id?: string
           scheduled_at?: string | null
           session_number?: number
@@ -1288,6 +1291,7 @@ export type Database = {
           p_patient_token: string
           p_program_id: string
           p_provider_id: string
+          p_session_prescribed_sides?: Json | null
         }
         Returns: Json
       }
