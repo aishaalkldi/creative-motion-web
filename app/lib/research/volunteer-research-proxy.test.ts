@@ -16,6 +16,7 @@ describe("proxy public paths — volunteer research", () => {
     assert.match(proxy, /"\/api\/research\/volunteer\/sessions"/);
     assert.match(proxy, /"\/api\/research\/volunteer\/movement-sessions"/);
     assert.match(proxy, /"\/api\/research\/volunteer\/session\/complete"/);
+    assert.match(proxy, /"\/api\/research\/volunteer\/repetitions"/);
     assert.doesNotMatch(proxy, /"\/api\/research\/volunteer\/"/);
   });
 

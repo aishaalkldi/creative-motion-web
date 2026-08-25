@@ -4,7 +4,7 @@ const AI_ROUTE_BODY_REDACT =
   /\/api\/(?:assessments\/[^/?#]+\/translate|voice(?:\/|$))/;
 
 const VOLUNTEER_RESEARCH_ROUTE_BODY_REDACT =
-  /^\/api\/research\/volunteer\/(?:sessions|movement-sessions|session\/complete)$/;
+  /^\/api\/research\/volunteer\/(?:sessions|movement-sessions|session\/complete|repetitions)$/;
 
 const REDACTED_BODY = "[AI request body redacted]";
 const REDACTED_VOLUNTEER_BODY = "[Volunteer research request body redacted]";

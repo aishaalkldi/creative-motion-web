@@ -89,6 +89,12 @@ export const VOLUNTEER_COMPLETE_RATE_LIMIT: RateLimitConfig = {
   windowMs: DEFAULT_WINDOW_MS,
 };
 
+/** Volunteer research — repetition submission per IP + token prefix */
+export const VOLUNTEER_REPETITION_RATE_LIMIT: RateLimitConfig = {
+  max: 40,
+  windowMs: DEFAULT_WINDOW_MS,
+};
+
 /**
  * Extract client IP from proxy headers (Vercel, nginx, local dev).
  */
@@ -261,6 +267,12 @@ export function checkVolunteerCompleteLimit(req: NextRequest, token: string): Ra
   const ip = getClientIp(req);
   const prefix = tokenBucketPrefix(token);
   return consumeRateLimit(`volunteer:complete:${ip}:${prefix}`, VOLUNTEER_COMPLETE_RATE_LIMIT);
+}
+
+export function checkVolunteerRepetitionLimit(req: NextRequest, token: string): RateLimitResult {
+  const ip = getClientIp(req);
+  const prefix = tokenBucketPrefix(token);
+  return consumeRateLimit(`volunteer:repetition:${ip}:${prefix}`, VOLUNTEER_REPETITION_RATE_LIMIT);
 }
 
 /** Standard 429 response — no token or internal details. */
