@@ -313,7 +313,7 @@ function printReport(payload: {
   <ul>${recList}</ul>
 
   <div class="footer">
-    <span>RASQ — Rehabilitation, precisely.</span>
+    <span>RASQ Rehabilitation, precisely.</span>
     <span>Automated support for therapist review only. Does not provide diagnosis.</span>
   </div>
 </body>
