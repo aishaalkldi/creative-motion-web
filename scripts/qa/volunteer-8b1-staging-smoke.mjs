@@ -162,7 +162,6 @@ function validSessionBody(campaignCode) {
     campaignCode,
     ageConfirmed18Plus: true,
     consentVersion: VOLUNTEER_CONSENT_VERSION,
-    consentAcceptedAtMs: Date.now(),
     protocolVersion: VOLUNTEER_PROTOCOL_VERSION,
   };
 }

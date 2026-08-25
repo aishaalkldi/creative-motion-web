@@ -26,12 +26,23 @@ export const ML_RESEARCH_DEV_DATA_DIR = join(
   "shoulder-abduction",
 );
 
+/** Test-only read-path override — null restores default `dev-data` resolution. */
+let captureDataDirReadOverride: string | null = null;
+
+export function setMlResearchCaptureDataDirForTests(dir: string | null): void {
+  captureDataDirReadOverride = dir;
+}
+
+function captureDataDirForReads(): string {
+  return captureDataDirReadOverride ?? ML_RESEARCH_DEV_DATA_DIR;
+}
+
 function sanitizeFileNameSegment(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
 export function resolveDevSessionJsonlPath(devSessionId: string): string {
-  return join(ML_RESEARCH_DEV_DATA_DIR, `${sanitizeFileNameSegment(devSessionId)}.jsonl`);
+  return join(captureDataDirForReads(), `${sanitizeFileNameSegment(devSessionId)}.jsonl`);
 }
 
 /**

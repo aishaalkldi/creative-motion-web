@@ -7,6 +7,10 @@ import { NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { hashVolunteerSecret } from "@/app/lib/research/volunteer-crypto";
 import {
+  VOLUNTEER_METADATA_BODY_MAX_BYTES,
+  VOLUNTEER_NO_CACHE_HEADERS,
+} from "@/app/lib/research/volunteer-api-guards";
+import {
   hashVolunteerCampaignCodeForEnvSetup,
 } from "@/app/lib/research/volunteer-campaign";
 import {
@@ -73,10 +77,15 @@ function validCreateBody(overrides: Record<string, unknown> = {}) {
     campaignCode: CAMPAIGN_CODE,
     ageConfirmed18Plus: true,
     consentVersion: VOLUNTEER_CONSENT_VERSION,
-    consentAcceptedAtMs: Date.now(),
     protocolVersion: VOLUNTEER_PROTOCOL_VERSION,
     ...overrides,
   };
+}
+
+function assertNoCacheHeaders(res: Response): void {
+  for (const [name, value] of Object.entries(VOLUNTEER_NO_CACHE_HEADERS)) {
+    assert.equal(res.headers.get(name), value, name);
+  }
 }
 
 function createInMemoryVolunteerAdmin() {
@@ -331,6 +340,7 @@ describe("volunteer research API", { concurrency: 1 }, () => {
   it("creates session with token + expiresAt only", async () => {
     const res = await createSession(sessionCreateRequest(validCreateBody()));
     assert.equal(res.status, 200);
+    assertNoCacheHeaders(res);
     const body = (await res.json()) as Record<string, unknown>;
     assert.ok(typeof body.sessionToken === "string");
     assert.ok(typeof body.expiresAt === "string");
@@ -399,6 +409,7 @@ describe("volunteer research API", { concurrency: 1 }, () => {
       ),
     );
     assert.equal(first.status, 200);
+    assertNoCacheHeaders(first);
     const firstBody = (await first.json()) as { movementSessionId: string; blockIndex: number };
     assert.equal(firstBody.blockIndex, 1);
 
@@ -426,6 +437,7 @@ describe("volunteer research API", { concurrency: 1 }, () => {
       authedRequest("http://localhost/api/research/volunteer/session/complete", "PATCH", sessionToken),
     );
     assert.equal(completeRes.status, 200);
+    assertNoCacheHeaders(completeRes);
     const completeBody = (await completeRes.json()) as { ok: boolean; deletionCode: string };
     assert.equal(completeBody.ok, true);
     assert.match(completeBody.deletionCode, /^[2-9A-HJ-NP-Z]{4}-/);
@@ -443,5 +455,120 @@ describe("volunteer research API", { concurrency: 1 }, () => {
     const repeatBody = (await repeatRes.json()) as { alreadyCompleted: boolean; deletionCode?: string };
     assert.equal(repeatBody.alreadyCompleted, true);
     assert.equal(repeatBody.deletionCode, undefined);
+  });
+
+  it("rejects client-supplied consentAcceptedAtMs", async () => {
+    for (const forged of [0, 1, Date.now(), Date.now() + 60_000]) {
+      const res = await createSession(
+        sessionCreateRequest(validCreateBody({ consentAcceptedAtMs: forged })),
+      );
+      assert.equal(res.status, 400);
+      assertNoCacheHeaders(res);
+    }
+  });
+
+  it("rejects extra session-create fields", async () => {
+    const res = await createSession(
+      sessionCreateRequest(validCreateBody({ sessionToken: "forged-token" })),
+    );
+    assert.equal(res.status, 400);
+    assertNoCacheHeaders(res);
+  });
+
+  it("rejects unsupported media type", async () => {
+    const res = await createSession(
+      new NextRequest("http://localhost/api/research/volunteer/sessions", {
+        method: "POST",
+        headers: {
+          "content-type": "text/plain",
+          "x-forwarded-for": makeIp(),
+        },
+        body: "plain",
+      }),
+    );
+    assert.equal(res.status, 415);
+    assertNoCacheHeaders(res);
+  });
+
+  it("accepts application/json with charset", async () => {
+    const text = JSON.stringify(validCreateBody());
+    const res = await createSession(
+      new NextRequest("http://localhost/api/research/volunteer/sessions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json; charset=utf-8",
+          "content-length": String(Buffer.byteLength(text)),
+          "x-forwarded-for": makeIp(),
+        },
+        body: text,
+      }),
+    );
+    assert.equal(res.status, 200);
+    assertNoCacheHeaders(res);
+  });
+
+  it("rejects malformed JSON", async () => {
+    const body = "{not-json";
+    const res = await createSession(
+      new NextRequest("http://localhost/api/research/volunteer/sessions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(Buffer.byteLength(body)),
+          "x-forwarded-for": makeIp(),
+        },
+        body,
+      }),
+    );
+    assert.equal(res.status, 400);
+    assertNoCacheHeaders(res);
+  });
+
+  it("rejects oversized declared content-length", async () => {
+    const res = await createSession(
+      new NextRequest("http://localhost/api/research/volunteer/sessions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "content-length": String(VOLUNTEER_METADATA_BODY_MAX_BYTES + 1),
+          "x-forwarded-for": makeIp(),
+        },
+        body: JSON.stringify(validCreateBody()),
+      }),
+    );
+    assert.equal(res.status, 413);
+    assertNoCacheHeaders(res);
+  });
+
+  it("rejects oversized streamed body when content-length is absent", async () => {
+    const padding = "x".repeat(VOLUNTEER_METADATA_BODY_MAX_BYTES);
+    const body = JSON.stringify({ ...validCreateBody(), padding });
+    const res = await createSession(
+      new NextRequest("http://localhost/api/research/volunteer/sessions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-forwarded-for": makeIp(),
+        },
+        body,
+      }),
+    );
+    assert.equal(res.status, 413);
+    assertNoCacheHeaders(res);
+  });
+
+  it("records consent timestamp server-side within the request window", async () => {
+    const beforeMs = Date.now();
+    const res = await createSession(sessionCreateRequest(validCreateBody()));
+    const afterMs = Date.now();
+    assert.equal(res.status, 200);
+
+    const { sessionToken } = (await res.json()) as { sessionToken: string };
+    const stored = admin.__collectionSessions.find(
+      (row) => row.session_token_hash === hashVolunteerSecret(sessionToken),
+    )!;
+    const consentMs = Number(stored.consent_accepted_at_ms);
+    assert.ok(consentMs >= beforeMs);
+    assert.ok(consentMs <= afterMs);
   });
 });

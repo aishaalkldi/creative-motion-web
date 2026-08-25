@@ -41,12 +41,36 @@ describe("volunteer shoulder abduction reach — Slice 8A integrity", () => {
     const source = readFileSync(HOOK_PATH, "utf8");
     const startBody = source.slice(
       source.indexOf("const startCapture = useCallback"),
-      source.indexOf("}, [side, captureSink, stopDetector, stopPreviewStream]);"),
+      source.indexOf("const reattachCameraPreview = useCallback"),
     );
     const stopCallIndex = startBody.indexOf("stopDetector();");
     const constructorIndex = startBody.indexOf("new ShoulderAbductionReachPoseDetector");
     assert.ok(stopCallIndex >= 0, "startCapture must call stopDetector() first");
     assert.ok(constructorIndex > stopCallIndex, "stopDetector() must run before constructing detector");
+    assert.match(source, /createCameraRequestController/);
+    assert.match(source, /beginDetectorRequest/);
+    assert.match(source, /isDetectorCurrent/);
+  });
+
+  it("welcome and consent copy avoid anonymous overclaims and disclose network downloads", () => {
+    const source = readFileSync(PAGE_PATH, "utf8");
+    assert.doesNotMatch(source, /anonymous movement-tracking data/i);
+    assert.match(source, /movement data without name or contact information/i);
+    assert.match(source, /normal network downloads/i);
+    assert.match(source, /not uploaded/i);
+    assert.match(source, /movement payloads/i);
+  });
+
+  it("movement safety reminders are shown before and during capture", () => {
+    const pageSource = readFileSync(PAGE_PATH, "utf8");
+    const protocolSource = readFileSync(
+      join(process.cwd(), "app/volunteer/shoulder-abduction-reach/volunteer-protocol.ts"),
+      "utf8",
+    );
+    assert.match(pageSource, /VOLUNTEER_MOVEMENT_SAFETY_REMINDERS/);
+    assert.match(protocolSource, /pain-free range of motion/i);
+    assert.match(protocolSource, /Stop immediately for pain, dizziness/i);
+    assert.equal((pageSource.match(/<MovementSafetyReminder \/>/g) ?? []).length, 2);
   });
 
   it("volunteer source files never import dev-capture-sink or dev API helpers", () => {

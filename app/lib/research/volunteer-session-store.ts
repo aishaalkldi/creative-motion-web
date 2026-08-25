@@ -66,7 +66,6 @@ function isExpired(iso: string): boolean {
 
 export type CreateCollectionSessionInput = {
   consentVersion: string;
-  consentAcceptedAtMs: number;
   protocolVersion: string;
 };
 
@@ -83,6 +82,7 @@ export async function createVolunteerCollectionSession(
   const sessionTokenHash = hashVolunteerSecret(sessionToken);
   const expiresAt = new Date(Date.now() + VOLUNTEER_SESSION_TTL_MS).toISOString();
   const participantId = randomUUID();
+  const consentAcceptedAtMs = Date.now();
 
   const { error } = await admin.from(COLLECTION_TABLE).insert({
     participant_id: participantId,
@@ -91,7 +91,7 @@ export async function createVolunteerCollectionSession(
     status: "active",
     age_confirmed_18_plus: true,
     consent_version: input.consentVersion,
-    consent_accepted_at_ms: input.consentAcceptedAtMs,
+    consent_accepted_at_ms: consentAcceptedAtMs,
     protocol_version: input.protocolVersion,
   });
 

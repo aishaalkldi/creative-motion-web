@@ -129,7 +129,6 @@ describe("volunteer-session-store", { concurrency: 1 }, () => {
   it("stores only token hash, never raw token", async () => {
     const created = await createVolunteerCollectionSession(admin, {
       consentVersion: "volunteer-ml-capture-1.0",
-      consentAcceptedAtMs: Date.now(),
       protocolVersion: VOLUNTEER_PROTOCOL_VERSION,
     });
     const row = admin.__collection[0]!;
@@ -137,10 +136,25 @@ describe("volunteer-session-store", { concurrency: 1 }, () => {
     assert.notEqual(row.session_token_hash, created.sessionToken);
   });
 
+  it("records consent acceptance timestamp server-side", async () => {
+    const beforeMs = Date.now();
+    const created = await createVolunteerCollectionSession(admin, {
+      consentVersion: "volunteer-ml-capture-1.0",
+      protocolVersion: VOLUNTEER_PROTOCOL_VERSION,
+    });
+    const afterMs = Date.now();
+    const row = admin.__collection.find(
+      (candidate) => candidate.session_token_hash === hashVolunteerSecret(created.sessionToken),
+    )!;
+    const stored = Number(row.consent_accepted_at_ms);
+    assert.ok(Number.isFinite(stored));
+    assert.ok(stored >= beforeMs);
+    assert.ok(stored <= afterMs);
+  });
+
   it("assigns incremental block_index values", async () => {
     const created = await createVolunteerCollectionSession(admin, {
       consentVersion: "volunteer-ml-capture-1.0",
-      consentAcceptedAtMs: Date.now(),
       protocolVersion: VOLUNTEER_PROTOCOL_VERSION,
     });
     const resolved = await resolveVolunteerCollectionSessionByToken(admin, created.sessionToken);
@@ -164,7 +178,6 @@ describe("volunteer-session-store", { concurrency: 1 }, () => {
   it("stores deletion code hash only at completion", async () => {
     const created = await createVolunteerCollectionSession(admin, {
       consentVersion: "volunteer-ml-capture-1.0",
-      consentAcceptedAtMs: Date.now(),
       protocolVersion: VOLUNTEER_PROTOCOL_VERSION,
     });
     const resolved = await resolveVolunteerCollectionSessionByToken(admin, created.sessionToken);

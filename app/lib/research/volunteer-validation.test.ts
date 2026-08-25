@@ -16,7 +16,6 @@ const validCreateBody = {
   campaignCode: "code",
   ageConfirmed18Plus: true,
   consentVersion: VOLUNTEER_CONSENT_VERSION,
-  consentAcceptedAtMs: Date.now(),
   protocolVersion: VOLUNTEER_PROTOCOL_VERSION,
 };
 
@@ -37,7 +36,7 @@ describe("validateVolunteerSessionCreateBody", () => {
     assert.equal(result.ok, false);
   });
 
-  it("rejects invalid consent metadata", () => {
+  it("rejects invalid consent version", () => {
     assert.equal(
       validateVolunteerSessionCreateBody({
         ...validCreateBody,
@@ -45,13 +44,33 @@ describe("validateVolunteerSessionCreateBody", () => {
       }).ok,
       false,
     );
-    assert.equal(
-      validateVolunteerSessionCreateBody({
+  });
+
+  it("rejects client-supplied consentAcceptedAtMs", () => {
+    for (const forged of [0, 1, Date.now(), Date.now() + 60_000]) {
+      const result = validateVolunteerSessionCreateBody({
         ...validCreateBody,
-        consentAcceptedAtMs: -1,
-      }).ok,
-      false,
-    );
+        consentAcceptedAtMs: forged,
+      });
+      assert.equal(result.ok, false);
+    }
+  });
+
+  it("rejects extra session fields", () => {
+    for (const extra of [
+      { participantId: crypto.randomUUID() },
+      { sessionToken: "forged-token" },
+      { deletionCode: "ABCD-1234" },
+      { collectionSessionId: crypto.randomUUID() },
+      { status: "completed" },
+      { nested: { campaignCode: "x" } },
+    ]) {
+      const result = validateVolunteerSessionCreateBody({
+        ...validCreateBody,
+        ...extra,
+      });
+      assert.equal(result.ok, false, JSON.stringify(extra));
+    }
   });
 
   it("accepts valid create body", () => {
@@ -93,6 +112,16 @@ describe("validateVolunteerMovementSessionBody", () => {
       movementType: "shoulder_abduction_reach",
       protocolCondition: "NORMAL",
       side: "left",
+    });
+    assert.equal(result.ok, false);
+  });
+
+  it("rejects extra movement fields", () => {
+    const result = validateVolunteerMovementSessionBody({
+      movementType: "shoulder_abduction_reach",
+      protocolCondition: "NORMAL",
+      side: "right",
+      blockIndex: 99,
     });
     assert.equal(result.ok, false);
   });
