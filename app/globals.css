@@ -113,11 +113,22 @@ html {
   -moz-osx-font-smoothing: grayscale;
 }
 
+html[lang="ar"] {
+  font-family: var(--font-noto-sans-arabic), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0;
+}
+
 body {
   min-height: 100%;
   background: linear-gradient(180deg, var(--background) 0%, var(--background-elevated) 100%);
   color: var(--foreground);
   font-family: var(--font-sans);
+  line-height: 1.65;
+}
+
+html[lang="ar"] body {
+  font-family: var(--font-noto-sans-arabic), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.8;
 }
 
 /* ── Smooth, subtle theme transition — respects reduced-motion ── */

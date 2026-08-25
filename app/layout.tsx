@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Script from "next/script";
-import { Inter, IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
+import { Inter, IBM_Plex_Mono, Space_Grotesk, Noto_Sans_Arabic } from "next/font/google";
 import { GlobalLanguageProvider } from "@/app/components/GlobalLanguageProvider";
 import { ThemeProvider } from "@/app/components/ThemeProvider";
 import "./globals.css";
@@ -26,6 +26,14 @@ const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-inter",
+  display: "swap",
+});
+
+// Arabic body — Noto Sans Arabic (clear, friendly, and highly readable)
+const notoSansArabic = Noto_Sans_Arabic({
+  subsets: ["arabic"],
+  weight: ["400", "500", "700"],
+  variable: "--font-noto-sans-arabic",
   display: "swap",
 });
 
@@ -67,7 +75,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`h-full antialiased ${inter.variable} ${ibmPlexMono.variable} ${spaceGrotesk.variable}`}
+      className={`h-full antialiased ${inter.variable} ${notoSansArabic.variable} ${ibmPlexMono.variable} ${spaceGrotesk.variable}`}
     >
       <head>
         <Script id="rasq-no-flash-theme" strategy="beforeInteractive">
