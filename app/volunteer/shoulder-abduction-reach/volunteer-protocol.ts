@@ -35,6 +35,13 @@ export function canProceedFromConsent(consent: VolunteerConsentState): boolean {
   return consent.ageConfirmed && consent.participationAgreed;
 }
 
+export function canProceedFromConsentWithCampaign(
+  consent: VolunteerConsentState,
+  campaignCode: string,
+): boolean {
+  return canProceedFromConsent(consent) && campaignCode.trim().length > 0;
+}
+
 export function isVolunteerProtocolCondition(value: string): value is VolunteerProtocolCondition {
   return (VOLUNTEER_PROTOCOL_CONDITIONS as readonly string[]).includes(value);
 }

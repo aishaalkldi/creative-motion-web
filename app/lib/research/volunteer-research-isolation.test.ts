@@ -47,15 +47,25 @@ describe("volunteer research isolation", () => {
     }
   });
 
-  it("volunteer UI and hook remain untouched by 8B.1 backend files", () => {
+  it("volunteer UI wires to browser persistence client without server-only crypto imports", () => {
     const files = [
       "app/volunteer/shoulder-abduction-reach/page.tsx",
       "app/hooks/useVolunteerCaptureSession.ts",
+      "app/hooks/useVolunteerResearchPersistence.ts",
+      "app/volunteer/shoulder-abduction-reach/volunteer-browser-persistence-client.ts",
+      "app/volunteer/shoulder-abduction-reach/volunteer-research-persistence-controller.ts",
     ];
     for (const file of files) {
       const content = read(file);
-      assert.doesNotMatch(content, /research\/volunteer/);
-      assert.doesNotMatch(content, /ML_VOLUNTEER_COLLECTION_ENABLED/);
+      assert.doesNotMatch(content, /from\s+["']node:crypto["']/);
+      assert.doesNotMatch(content, /volunteer-session-store/);
+      assert.doesNotMatch(content, /volunteer-repetition-store/);
     }
+    const page = read("app/volunteer/shoulder-abduction-reach/page.tsx");
+    assert.match(page, /useVolunteerResearchPersistence/);
+    const client = read(
+      "app/volunteer/shoulder-abduction-reach/volunteer-browser-persistence-client.ts",
+    );
+    assert.match(client, /\/api\/research\/volunteer\//);
   });
 });
