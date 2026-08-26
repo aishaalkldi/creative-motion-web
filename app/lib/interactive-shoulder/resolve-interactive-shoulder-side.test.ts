@@ -14,6 +14,7 @@ import {
   resolveBlockSideFromSessionDefinition,
   resolveClinicalPrescribedSideForRuntime,
   resolveInteractiveShoulderSide,
+  resolveOrchestratorTherapeuticSide,
 } from "./resolve-interactive-shoulder-side";
 import { createInitialTargetLifecycle, tickTargetLifecycle } from "./target-lifecycle";
 import { DEFAULT_SAFE_TARGET_BOUNDS, resolveSideBiasedBounds } from "./target-generator";
@@ -30,6 +31,38 @@ function movementBlock(overrides: Partial<MovementBlock> & Pick<MovementBlock, "
     ...overrides,
   };
 }
+
+describe("resolveOrchestratorTherapeuticSide", () => {
+  const blocks = toSessionDefinition(STROKE_UPPER_LIMB_RECOVERY_FOUNDATION_SESSION_1).blocks;
+
+  it("returns null in strict clinical mode when prescribed side is missing or invalid", () => {
+    assert.equal(
+      resolveOrchestratorTherapeuticSide({
+        prescribedSide: null,
+        clinicalPrescribedSideRequired: true,
+        blocks,
+      }),
+      null,
+    );
+    assert.equal(
+      resolveOrchestratorTherapeuticSide({
+        prescribedSide: "Left",
+        clinicalPrescribedSideRequired: true,
+        blocks,
+      }),
+      null,
+    );
+  });
+
+  it("does not call legacy fallback in strict clinical mode", () => {
+    const resolved = resolveOrchestratorTherapeuticSide({
+      prescribedSide: "bilateral",
+      clinicalPrescribedSideRequired: true,
+      blocks,
+    });
+    assert.equal(resolved, null);
+  });
+});
 
 describe("resolveClinicalPrescribedSideForRuntime", () => {
   it("accepts exact left and right only", () => {

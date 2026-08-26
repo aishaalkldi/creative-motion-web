@@ -68,6 +68,34 @@ export function resolveClinicalPrescribedSideForRuntime(
   return { ok: true, side: parsed.value, source: "prescribed" };
 }
 
+/**
+ * Orchestrator runtime laterality. In strict clinical mode, missing or invalid
+ * prescribed side yields null — no legacy RIGHT fallback. Non-clinical flows
+ * keep the documented block/prescribed/fallback resolution.
+ */
+export function resolveOrchestratorTherapeuticSide(input: {
+  prescribedSide?: string | null;
+  clinicalPrescribedSideRequired?: boolean;
+  blocks: readonly Pick<MovementBlock, "side">[];
+}): ResolvedInteractiveShoulderSide | null {
+  if (input.clinicalPrescribedSideRequired) {
+    const clinical = resolveClinicalPrescribedSideForRuntime(input.prescribedSide);
+    if (!clinical.ok) {
+      return null;
+    }
+    return {
+      side: clinical.side,
+      source: clinical.source,
+      usedFallback: false,
+    };
+  }
+
+  return resolveInteractiveShoulderSide({
+    prescribedSide: input.prescribedSide,
+    blockSide: resolveBlockSideFromSessionDefinition(input.blocks),
+  });
+}
+
 export function resolveInteractiveShoulderSide(input: {
   prescribedSide?: string | null;
   blockSide?: MovementBlockSide | null;

@@ -11,10 +11,9 @@ import {
   type RefObject,
 } from "react";
 import { getExerciseCvRegistryEntry } from "@/app/lib/cv/exercise-cv-registry";
-import {
-  ShoulderAbductionReachPoseDetector,
-  type ShoulderAbductionReachMeasuredEvent,
-  type ShoulderAbductionReachPoseDetectorSnapshot,
+import type {
+  ShoulderAbductionReachMeasuredEvent,
+  ShoulderAbductionReachPoseDetectorSnapshot,
 } from "@/app/lib/cv/shoulder-abduction-reach-pose-detector";
 import {
   createPatientCvCameraConsentRecord,
@@ -71,11 +70,15 @@ import type { TargetAttemptTickConfig } from "@/app/lib/interactive-shoulder/orc
 import type { TherapeuticTarget } from "@/app/lib/interactive-shoulder/types";
 import { INTERACTIVE_SHOULDER_CV_EXERCISE_ID } from "@/app/lib/interactive-shoulder/interactive-shoulder-exercise-ids";
 import {
-  resolveBlockSideFromSessionDefinition,
-  resolveClinicalPrescribedSideForRuntime,
-  resolveInteractiveShoulderSide,
-  type ResolvedInteractiveShoulderSide,
+  disposeOrchestratorCvDetector,
+  mountOrchestratorCvDetector,
+  shouldStartOrchestratorCvCamera,
+  type OrchestratorCvActiveDetectorHandle,
+} from "@/app/lib/interactive-shoulder/orchestrator-cv-detector-lifecycle";
+import {
+  resolveOrchestratorTherapeuticSide,
 } from "@/app/lib/interactive-shoulder/resolve-interactive-shoulder-side";
+import type { ShoulderAbductionReachSide } from "@/app/lib/shoulder-rehabilitation";
 import type { OrchestratorCvSessionCoreProps } from "@/app/lib/interactive-shoulder/orchestrator-cv-session-types";
 import {
   mapPatternCompletionToSessionInput,
@@ -176,25 +179,18 @@ export function OrchestratorCvSessionCore({
   const entry = getExerciseCvRegistryEntry(INTERACTIVE_SHOULDER_CV_EXERCISE_ID);
   const profile = entry?.calibrationProfile;
   const interactiveBlock = sessionDefinition.blocks[0];
-  const clinicalSideResult = clinicalPrescribedSideRequired
-    ? resolveClinicalPrescribedSideForRuntime(prescribedSide)
-    : null;
-  const prescribedSideBlocked = clinicalSideResult !== null && !clinicalSideResult.ok;
-  const resolvedTherapeuticSide: ResolvedInteractiveShoulderSide = clinicalSideResult?.ok
-    ? {
-        side: clinicalSideResult.side,
-        source: clinicalSideResult.source,
-        usedFallback: false,
-      }
-    : resolveInteractiveShoulderSide({
-        prescribedSide,
-        blockSide: resolveBlockSideFromSessionDefinition(sessionDefinition.blocks),
-      });
+  const resolvedTherapeuticSide = resolveOrchestratorTherapeuticSide({
+    prescribedSide,
+    clinicalPrescribedSideRequired,
+    blocks: sessionDefinition.blocks,
+  });
+  const prescribedSideBlocked =
+    clinicalPrescribedSideRequired && resolvedTherapeuticSide === null;
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const detectorRef = useRef<ShoulderAbductionReachPoseDetector | null>(null);
+  const detectorRef = useRef<OrchestratorCvActiveDetectorHandle | null>(null);
   const orchestratorRef = useRef<SessionOrchestrator | null>(null);
   const runnerStatesRef = useRef<ActiveBlockRunnerStates>({
     instructional: createInitialInstructionalLifecycle(),
@@ -211,8 +207,8 @@ export function OrchestratorCvSessionCore({
   const faultPauseAppliedRef = useRef(false);
   const devMouseRef = useRef<{ x: number; y: number } | null>(null);
   const snapshotRef = useRef<ShoulderAbductionReachPoseDetectorSnapshot | null>(null);
-  const therapeuticSideRef = useRef(resolvedTherapeuticSide.side);
-  therapeuticSideRef.current = resolvedTherapeuticSide.side;
+  const therapeuticSideRef = useRef<ShoulderAbductionReachSide | null>(null);
+  therapeuticSideRef.current = resolvedTherapeuticSide?.side ?? null;
   /**
    * SESSION-SCOPED adaptive state, or null when adaptive difficulty is not enabled for
    * this session. Held in a ref alongside the other runtime state this loop owns.
@@ -384,10 +380,18 @@ export function OrchestratorCvSessionCore({
     }
   }, [profile, language, sessionDefinition]);
 
+  const therapeuticSideKey = resolvedTherapeuticSide?.side ?? null;
+
   useLayoutEffect(() => {
     if (!profile) return;
     const DetectorClass = entry!.detectorResolver();
-    const detector = new DetectorClass(
+    const detector = mountOrchestratorCvDetector<
+      OrchestratorCvActiveDetectorHandle,
+      ShoulderAbductionReachPoseDetectorSnapshot,
+      ShoulderAbductionReachMeasuredEvent
+    >(
+      resolvedTherapeuticSide,
+      (callbacks, side) => new DetectorClass(callbacks, side),
       {
         onSnapshot: (snap) => {
           setSnapshot(snap);
@@ -395,20 +399,27 @@ export function OrchestratorCvSessionCore({
         },
         onMeasuredEvent: handleOrchestratorEvent,
       },
-      resolvedTherapeuticSide.side,
     );
     detectorRef.current = detector;
     return () => {
-      detector.stop();
+      disposeOrchestratorCvDetector(detector);
       detectorRef.current = null;
       cancelAnimationFrame(rafRef.current);
     };
-  }, [entry, handleOrchestratorEvent, profile, reportReadiness, resolvedTherapeuticSide.side]);
+  }, [entry, handleOrchestratorEvent, profile, reportReadiness, resolvedTherapeuticSide, therapeuticSideKey]);
 
   useEffect(() => {
-    if (!consentAccepted || !profile || prescribedSideBlocked) return;
+    if (
+      !shouldStartOrchestratorCvCamera({
+        consentAccepted,
+        profileAvailable: Boolean(profile),
+        resolvedTherapeuticSide,
+      })
+    ) {
+      return;
+    }
     void startSession();
-  }, [consentAccepted, prescribedSideBlocked, profile, startSession]);
+  }, [consentAccepted, profile, resolvedTherapeuticSide, startSession]);
 
   useEffect(() => {
     const loop = () => {
@@ -451,14 +462,21 @@ export function OrchestratorCvSessionCore({
 
         const currentBlock = snap.currentBlock;
         const currentBlockId = currentBlock?.blockId ?? null;
+        const activeTherapeuticSide = therapeuticSideRef.current;
 
-        if (!hasRuntimeFault && currentBlockId && activeBlockIdRef.current !== currentBlockId && currentBlock) {
+        if (
+          activeTherapeuticSide &&
+          !hasRuntimeFault &&
+          currentBlockId &&
+          activeBlockIdRef.current !== currentBlockId &&
+          currentBlock
+        ) {
           activeBlockIdRef.current = currentBlockId;
           clearHitFeedback();
           setPresentationProgress(null);
           const transition = resetRunnerStatesForBlockTransition({
             block: currentBlock,
-            side: therapeuticSideRef.current,
+            side: activeTherapeuticSide,
           });
           runnerStatesRef.current = transition.states;
           targetStateRef.current = transition.states.target;
@@ -474,6 +492,11 @@ export function OrchestratorCvSessionCore({
           if (transition.fault) {
             applyRuntimeFault(transition.fault, orchestrator, now);
           }
+        }
+
+        if (!activeTherapeuticSide) {
+          rafRef.current = requestAnimationFrame(loop);
+          return;
         }
 
         const poseSnap = snapshotRef.current;
@@ -498,7 +521,7 @@ export function OrchestratorCvSessionCore({
           // slightly off, never out of bounds.
           const adaptivePlacement = resolveAdaptiveTargetPlacement({
             adaptiveState,
-            affectedSide: therapeuticSideRef.current,
+            affectedSide: activeTherapeuticSide,
             shoulderAnchorNormalized: poseSnap?.primaryShoulderNormalized ?? null,
             reachRadiusNormalized: poseSnap?.estimatedArmLengthNormalized ?? null,
             bounds: DEFAULT_SAFE_TARGET_BOUNDS,
@@ -528,7 +551,7 @@ export function OrchestratorCvSessionCore({
             snap,
             nowMs: now,
             wrist: wrist ?? null,
-            side: therapeuticSideRef.current,
+            side: activeTherapeuticSide,
             hitExitTransitionMs,
             states: runnerStatesRef.current,
             activeMotionPattern: activeMotionPatternRef.current,
@@ -693,7 +716,7 @@ export function OrchestratorCvSessionCore({
         </div>
       ) : (
         <>
-          {resolvedTherapeuticSide.usedFallback ? (
+          {resolvedTherapeuticSide?.usedFallback ? (
             <p className={`mb-2 rounded-[6px] border border-[#E2E8E5] bg-[#F9FAFB] px-2 py-1 text-[11px] text-[#6B7280] ${arClass}`}>
               {ui.therapeuticSideFallback}
             </p>
