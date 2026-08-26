@@ -183,6 +183,101 @@ describe("assembleUpperLimbMotorScreenSessionResult — mechanical derivation", 
   });
 });
 
+describe("assembleUpperLimbMotorScreenSessionResult — integer-millisecond normalization", () => {
+  /**
+   * Reproduces the real live-capture defect: performance.now()-sourced
+   * timestamps subtract to a fractional millisecond value
+   * (488342.6999999881 was the actual value from a real POST failure —
+   * "invalid input syntax for type integer"). protectivePauseDurationMsTotal
+   * is both a typed INTEGER column and separately CHECK-constrained
+   * against the same value embedded in result_payload (migration 019:
+   * ulmssr_payload_pause_duration_chk casts
+   * result_payload->'technicalTrackingQuality'->>'protectivePauseDurationMsTotal'
+   * via ::integer) — a fractional value fails BOTH, and fixing only the
+   * typed-column side would still leave result_payload's cast failing,
+   * which is exactly why normalization must happen once, upstream, here.
+   */
+  const FRACTIONAL_MS = 488342.6999999881;
+
+  it("rounds protectivePauseDurationMsTotal to an integer even when summed from fractional per-attempt durations", () => {
+    const attempt = makeAttempt({ protectivePauseDurationMs: FRACTIONAL_MS });
+    const result = assembleUpperLimbMotorScreenSessionResult(baseInput({ attempts: [attempt] }));
+
+    assert.equal(result.technicalTrackingQuality.protectivePauseDurationMsTotal, Math.round(FRACTIONAL_MS));
+    assert.equal(Number.isInteger(result.technicalTrackingQuality.protectivePauseDurationMsTotal), true);
+  });
+
+  it("rounds the sum once (not each addend) across multiple fractional per-attempt durations", () => {
+    const attemptA = makeAttempt({ attemptIndex: 0, protectivePauseDurationMs: 100.3 });
+    const attemptB = makeAttempt({ attemptIndex: 1, protectivePauseDurationMs: 200.4 });
+    const result = assembleUpperLimbMotorScreenSessionResult(
+      baseInput({ attempts: [attemptA, attemptB] }),
+    );
+
+    // Sum-then-round: 100.3 + 200.4 = 300.7 -> 301 (not round(100.3)+round(200.4) = 100+200 = 300).
+    assert.equal(result.technicalTrackingQuality.protectivePauseDurationMsTotal, 301);
+  });
+
+  it("rounds each attempt's own embedded protectivePauseDurationMs in the persisted attempts array", () => {
+    const attempt = makeAttempt({ protectivePauseDurationMs: FRACTIONAL_MS });
+    const result = assembleUpperLimbMotorScreenSessionResult(baseInput({ attempts: [attempt] }));
+
+    assert.equal(result.attempts[0].protectivePauseDurationMs, Math.round(FRACTIONAL_MS));
+  });
+
+  it("rounds reachTimeMs, returnTimeMs, and totalMovementTimeMs when fractional", () => {
+    const attempt = makeAttempt({
+      reachTimeMs: 411.5000001,
+      returnTimeMs: 388.49999,
+      totalMovementTimeMs: 1000.6,
+    });
+    const result = assembleUpperLimbMotorScreenSessionResult(baseInput({ attempts: [attempt] }));
+
+    assert.equal(result.attempts[0].reachTimeMs, 412);
+    assert.equal(result.attempts[0].returnTimeMs, 388);
+    assert.equal(result.attempts[0].totalMovementTimeMs, 1001);
+  });
+
+  it("preserves null for reachTimeMs/returnTimeMs/totalMovementTimeMs rather than coercing to 0", () => {
+    const attempt = makeAttempt({ reachTimeMs: null, returnTimeMs: null, totalMovementTimeMs: null });
+    const result = assembleUpperLimbMotorScreenSessionResult(baseInput({ attempts: [attempt] }));
+
+    assert.equal(result.attempts[0].reachTimeMs, null);
+    assert.equal(result.attempts[0].returnTimeMs, null);
+    assert.equal(result.attempts[0].totalMovementTimeMs, null);
+  });
+
+  it("leaves already-integer durations completely unchanged", () => {
+    const attempt = makeAttempt({
+      reachTimeMs: 400,
+      returnTimeMs: 400,
+      totalMovementTimeMs: 1000,
+      protectivePauseDurationMs: 700,
+    });
+    const result = assembleUpperLimbMotorScreenSessionResult(baseInput({ attempts: [attempt] }));
+
+    assert.equal(result.attempts[0].reachTimeMs, 400);
+    assert.equal(result.attempts[0].returnTimeMs, 400);
+    assert.equal(result.attempts[0].totalMovementTimeMs, 1000);
+    assert.equal(result.attempts[0].protectivePauseDurationMs, 700);
+    assert.equal(result.technicalTrackingQuality.protectivePauseDurationMsTotal, 700);
+  });
+
+  it("does not mutate the caller's original attempt object while rounding", () => {
+    const attempt = makeAttempt({ reachTimeMs: FRACTIONAL_MS, protectivePauseDurationMs: FRACTIONAL_MS });
+    const snapshot = JSON.parse(JSON.stringify(attempt));
+    assembleUpperLimbMotorScreenSessionResult(baseInput({ attempts: [attempt] }));
+    assert.deepEqual(attempt, snapshot);
+  });
+
+  it("longestPauseGapMs remains an explicit opaque passthrough — this module does not touch it (see forward-reach-pause-duration.ts for where that field's own rounding lives)", () => {
+    const result = assembleUpperLimbMotorScreenSessionResult(
+      baseInput({ longestPauseGapMs: FRACTIONAL_MS }),
+    );
+    assert.equal(result.technicalTrackingQuality.longestPauseGapMs, FRACTIONAL_MS);
+  });
+});
+
 describe("assembleUpperLimbMotorScreenSessionResult — explicit passthrough, no derivation/reconciliation", () => {
   it("passes taskCompletion through verbatim even when it does not correspond to any attempt", () => {
     const mismatchedTaskCompletion = [

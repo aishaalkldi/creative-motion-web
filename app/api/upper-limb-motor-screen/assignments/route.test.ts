@@ -11,9 +11,19 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  createUpperLimbAssignmentGetHandler,
   createUpperLimbAssignmentPostHandler,
+  type UpperLimbAssignmentGetDependencies,
   type UpperLimbAssignmentPostDependencies,
 } from "./route";
+
+const SCREEN_DEFINITION_ID = "upper-limb-forward-reach-v1";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function fakeGetRequest(params: Record<string, string>): any {
+  const searchParams = new URLSearchParams(params);
+  return { nextUrl: { searchParams } };
+}
 
 const PROVIDER_ID = "11111111-1111-1111-1111-111111111111";
 const PATIENT_ID = "22222222-2222-2222-2222-222222222222";
@@ -69,6 +79,7 @@ type FakeResult = { data: unknown; error: { code?: string; message: string } | n
 type FakeAdminOptions = {
   patientLookup?: FakeResult;
   insertResult?: FakeResult;
+  findResult?: FakeResult;
 };
 
 function buildFakeAdminClient(options: FakeAdminOptions = {}) {
@@ -79,6 +90,7 @@ function buildFakeAdminClient(options: FakeAdminOptions = {}) {
   // of .eq("id", patientId)) fails the test even though the fake still
   // "works" mechanically.
   const patientEqCalls: [string, unknown][] = [];
+  const findEqCalls: [string, unknown][] = [];
   const patientLookup: FakeResult = options.patientLookup ?? {
     data: { id: PATIENT_ID, provider_id: PROVIDER_ID },
     error: null,
@@ -87,6 +99,7 @@ function buildFakeAdminClient(options: FakeAdminOptions = {}) {
     data: null,
     error: { message: "insert not configured for this test" },
   };
+  const findResult: FakeResult = options.findResult ?? { data: null, error: null };
 
   const client = {
     from(table: string) {
@@ -106,23 +119,33 @@ function buildFakeAdminClient(options: FakeAdminOptions = {}) {
         };
       }
       if (table === "upper_limb_motor_screen_assignments") {
-        return {
+        // Single chainable builder covering both write (insert -> select
+        // -> single) and read (select -> eq* -> order -> limit ->
+        // maybeSingle) call shapes — mirrors how a real Supabase query
+        // builder is one object regardless of which methods get called.
+        const builder = {
           insert: (payload: unknown) => {
             insertCalls.push(payload);
-            return {
-              select: () => ({
-                single: async () => insertResult,
-              }),
-            };
+            return builder;
           },
+          select: () => builder,
+          eq: (column: string, value: unknown) => {
+            findEqCalls.push([column, value]);
+            return builder;
+          },
+          order: () => builder,
+          limit: () => builder,
+          single: async () => insertResult,
+          maybeSingle: async () => findResult,
         };
+        return builder;
       }
       throw new Error(`unexpected table in fake admin client: ${table}`);
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 
-  return { client, insertCalls, patientEqCalls };
+  return { client, insertCalls, patientEqCalls, findEqCalls };
 }
 
 type BuildDepsOptions = {
@@ -132,7 +155,7 @@ type BuildDepsOptions = {
 };
 
 function buildDeps(options: BuildDepsOptions = {}) {
-  const { client, insertCalls, patientEqCalls } = buildFakeAdminClient(options.admin);
+  const { client, insertCalls, patientEqCalls, findEqCalls } = buildFakeAdminClient(options.admin);
   const deps: UpperLimbAssignmentPostDependencies = {
     getAuthenticatedUser: async () =>
       options.authenticated === false ? null : { id: PROVIDER_ID },
@@ -142,7 +165,17 @@ function buildDeps(options: BuildDepsOptions = {}) {
     generateId: () => GENERATED_ID,
     now: () => NOW,
   };
-  return { deps, insertCalls, patientEqCalls };
+  return { deps, insertCalls, patientEqCalls, findEqCalls };
+}
+
+function buildGetDeps(options: BuildDepsOptions = {}) {
+  const { client, patientEqCalls, findEqCalls } = buildFakeAdminClient(options.admin);
+  const deps: UpperLimbAssignmentGetDependencies = {
+    getAuthenticatedUser: async () =>
+      options.authenticated === false ? null : { id: PROVIDER_ID },
+    adminClient: client,
+  };
+  return { deps, patientEqCalls, findEqCalls };
 }
 
 const INSERTED_ROW = {
@@ -303,5 +336,90 @@ describe("POST /api/upper-limb-motor-screen/assignments", () => {
     assert.equal(res.status, 500);
     const json = await res.json();
     assert.ok(!JSON.stringify(json).includes("unique constraint"));
+  });
+});
+
+describe("GET /api/upper-limb-motor-screen/assignments", () => {
+  it("unauthenticated request -> 401, no lookups", async () => {
+    const { deps, patientEqCalls, findEqCalls } = buildGetDeps({ authenticated: false });
+    const res = await createUpperLimbAssignmentGetHandler(deps)(
+      fakeGetRequest({ patientId: PATIENT_ID, screenDefinitionId: SCREEN_DEFINITION_ID }),
+    );
+    assert.equal(res.status, 401);
+    assert.deepEqual(patientEqCalls, []);
+    assert.deepEqual(findEqCalls, []);
+  });
+
+  it("missing patientId -> 400, no lookups", async () => {
+    const { deps, findEqCalls } = buildGetDeps();
+    const res = await createUpperLimbAssignmentGetHandler(deps)(
+      fakeGetRequest({ screenDefinitionId: SCREEN_DEFINITION_ID }),
+    );
+    assert.equal(res.status, 400);
+    assert.deepEqual(findEqCalls, []);
+  });
+
+  it("malformed (non-UUID) patientId -> 400, no lookups", async () => {
+    const { deps, patientEqCalls, findEqCalls } = buildGetDeps();
+    const res = await createUpperLimbAssignmentGetHandler(deps)(
+      fakeGetRequest({ patientId: "42", screenDefinitionId: SCREEN_DEFINITION_ID }),
+    );
+    assert.equal(res.status, 400);
+    assert.deepEqual(patientEqCalls, []);
+    assert.deepEqual(findEqCalls, []);
+  });
+
+  it("missing screenDefinitionId -> 400, no find lookup", async () => {
+    const { deps, findEqCalls } = buildGetDeps();
+    const res = await createUpperLimbAssignmentGetHandler(deps)(fakeGetRequest({ patientId: PATIENT_ID }));
+    assert.equal(res.status, 400);
+    assert.deepEqual(findEqCalls, []);
+  });
+
+  it("patient ownership failure -> 404, never leaks another provider's data, no find lookup", async () => {
+    const { deps, findEqCalls } = buildGetDeps({
+      admin: { patientLookup: { data: null, error: { code: "PGRST116", message: "no rows" } } },
+    });
+    const res = await createUpperLimbAssignmentGetHandler(deps)(
+      fakeGetRequest({ patientId: PATIENT_ID, screenDefinitionId: SCREEN_DEFINITION_ID }),
+    );
+    assert.equal(res.status, 404);
+    assert.deepEqual(findEqCalls, []);
+  });
+
+  it("no matching assignment -> 200 { assignment: null }, never fabricated", async () => {
+    const { deps } = buildGetDeps({ admin: { findResult: { data: null, error: null } } });
+    const res = await createUpperLimbAssignmentGetHandler(deps)(
+      fakeGetRequest({ patientId: PATIENT_ID, screenDefinitionId: SCREEN_DEFINITION_ID }),
+    );
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.assignment, null);
+  });
+
+  it("find lookup filters on exactly (patient_id, provider_id, screenDefinitionId) — provider-scoped, regression guard", async () => {
+    const { deps, findEqCalls } = buildGetDeps({
+      admin: { findResult: { data: INSERTED_ROW, error: null } },
+    });
+    await createUpperLimbAssignmentGetHandler(deps)(
+      fakeGetRequest({ patientId: PATIENT_ID, screenDefinitionId: SCREEN_DEFINITION_ID }),
+    );
+    assert.deepEqual(findEqCalls, [
+      ["patient_id", PATIENT_ID],
+      ["provider_id", PROVIDER_ID],
+      ["assignment_payload->>screenDefinitionId", SCREEN_DEFINITION_ID],
+    ]);
+  });
+
+  it("returns the found assignment in the same public shape as POST", async () => {
+    const { deps } = buildGetDeps({ admin: { findResult: { data: INSERTED_ROW, error: null } } });
+    const res = await createUpperLimbAssignmentGetHandler(deps)(
+      fakeGetRequest({ patientId: PATIENT_ID, screenDefinitionId: SCREEN_DEFINITION_ID }),
+    );
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.assignment.assignment.id, GENERATED_ID);
+    assert.equal(json.assignment.patientId, PATIENT_ID);
+    assert.equal(json.assignment.providerId, PROVIDER_ID);
   });
 });

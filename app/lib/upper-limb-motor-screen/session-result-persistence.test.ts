@@ -10,8 +10,9 @@ import {
   toUpperLimbMotorScreenSessionResultPublic,
   validateFinalizeAccess,
 } from "./session-result-persistence";
+import { assembleUpperLimbMotorScreenSessionResult } from "./session-result-assembler";
 import { UPPER_LIMB_MOTOR_SCREEN_SCHEMA_VERSION } from "./schema-version";
-import type { UpperLimbMotorScreenSessionResult } from "./types";
+import type { UpperLimbMotorScreenSessionResult, UpperLimbMovementAttemptResult } from "./types";
 import type { UpperLimbMotorScreenSessionResultsRow } from "@/app/lib/supabase/database.types";
 
 const RESULT: UpperLimbMotorScreenSessionResult = {
@@ -93,6 +94,66 @@ describe("buildUpperLimbMotorScreenSessionResultInsert", () => {
       row.protective_pause_duration_ms_total,
       row.result_payload.technicalTrackingQuality.protectivePauseDurationMsTotal,
     );
+  });
+
+  it("end-to-end (real assembler -> real insert builder): a fractional live-capture pause duration reaches persistence as a matching integer in both the typed column and result_payload, exactly reproducing the observed live-camera failure mode", () => {
+    // 488342.6999999881 was the real value from a live capture that
+    // failed persistence with "invalid input syntax for type integer".
+    const attempt: UpperLimbMovementAttemptResult = {
+      attemptIndex: 0,
+      taskId: "forwardReach",
+      testedSide: "right",
+      startedAtMs: 0,
+      completedAtMs: 490000,
+      completionState: "completed",
+      targetReached: true,
+      dwellConfirmed: true,
+      returnToStartCompleted: true,
+      reachTimeMs: 1200.4000001,
+      returnTimeMs: 900.5,
+      totalMovementTimeMs: 2500.9999998,
+      normalizedPathLength: 0.3,
+      pathEfficiency: 0.9,
+      peakShoulderAngleDeg: null,
+      peakElbowExtensionDeg: null,
+      trunkDisplacementObserved: null,
+      withinConfiguredLimitThroughout: null,
+      trackingQualitySummary: "unknown",
+      protectivePauseCount: 1,
+      protectivePauseDurationMs: 488342.6999999881,
+      protectivePauseEvents: [],
+      factualNotes: [],
+    };
+
+    const assembled = assembleUpperLimbMotorScreenSessionResult({
+      id: "session-result-fractional",
+      assignmentId: "assignment-1",
+      status: "computed",
+      taskCompletion: [{ taskId: "forwardReach", testedSide: "right", completionState: "completed" }],
+      attempts: [attempt],
+      clinicalStopEvents: [],
+      overallTrackingQuality: "unknown",
+      longestPauseGapMs: 0,
+      trunkCompensationObserved: null,
+      asymmetryNotes: [],
+    });
+
+    const row = buildUpperLimbMotorScreenSessionResultInsert({
+      providerId: "provider-1",
+      patientId: "patient-1",
+      result: assembled,
+    });
+
+    assert.equal(Number.isInteger(row.protective_pause_duration_ms_total), true);
+    assert.equal(
+      row.protective_pause_duration_ms_total,
+      row.result_payload.technicalTrackingQuality.protectivePauseDurationMsTotal,
+      "the typed column and the value embedded in result_payload must be identical (019's CHECK constraint requires this)",
+    );
+    assert.equal(row.protective_pause_duration_ms_total, Math.round(488342.6999999881));
+    assert.equal(Number.isInteger(row.result_payload.attempts[0].reachTimeMs), true);
+    assert.equal(Number.isInteger(row.result_payload.attempts[0].returnTimeMs), true);
+    assert.equal(Number.isInteger(row.result_payload.attempts[0].totalMovementTimeMs), true);
   });
 });
 

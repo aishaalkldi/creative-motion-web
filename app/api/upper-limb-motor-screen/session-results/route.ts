@@ -10,6 +10,12 @@
  * body is shape-validated (session-result-request-validation.ts, new)
  * and then handed to the existing, unchanged, policy-neutral
  * assembler (assembleUpperLimbMotorScreenSessionResult).
+ *
+ * GET /api/upper-limb-motor-screen/session-results?assignmentId=
+ *
+ * Read-only, additive. Verifies assignment ownership first (same
+ * fetchAssignmentForSessionResultOwnership used by POST), then returns
+ * the latest existing session result for that assignment, or null.
  */
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
@@ -22,6 +28,7 @@ import { assembleUpperLimbMotorScreenSessionResult } from "@/app/lib/upper-limb-
 import {
   buildUpperLimbMotorScreenSessionResultInsert,
   fetchAssignmentForSessionResultOwnership,
+  findLatestUpperLimbMotorScreenSessionResult,
   insertUpperLimbMotorScreenSessionResult,
   toUpperLimbMotorScreenSessionResultPublic,
 } from "@/app/lib/upper-limb-motor-screen/session-result-persistence";
@@ -31,6 +38,8 @@ import {
   type RateLimitResult,
 } from "@/app/lib/rate-limit";
 import { serviceUnavailableResponse } from "@/app/lib/api/safe-errors";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const CREATE_ERROR = "Failed to create session result.";
 
@@ -108,9 +117,59 @@ export function createUpperLimbSessionResultPostHandler(
   };
 }
 
+// ── GET dependency-injected handler ─────────────────────────────────────────────
+
+export type UpperLimbSessionResultGetDependencies = {
+  getAuthenticatedUser: () => Promise<{ id: string } | null>;
+  adminClient: SupabaseClient;
+};
+
+export function createUpperLimbSessionResultGetHandler(
+  deps: UpperLimbSessionResultGetDependencies,
+) {
+  return async function handleGet(req: NextRequest): Promise<NextResponse> {
+    const user = await deps.getAuthenticatedUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+    const { searchParams } = req.nextUrl;
+    const assignmentId = searchParams.get("assignmentId")?.trim() ?? "";
+
+    if (!assignmentId) {
+      return NextResponse.json({ error: "assignmentId is required." }, { status: 400 });
+    }
+    if (!UUID_RE.test(assignmentId)) {
+      return NextResponse.json({ error: "assignmentId must be a valid UUID." }, { status: 400 });
+    }
+
+    // Ownership verified first, exactly as POST does.
+    const ownership = await fetchAssignmentForSessionResultOwnership(deps.adminClient, {
+      assignmentId,
+      providerId: user.id,
+    });
+    if (!ownership.ok) {
+      return NextResponse.json({ error: ownership.message }, { status: ownership.httpStatus });
+    }
+
+    const result = await findLatestUpperLimbMotorScreenSessionResult(deps.adminClient, {
+      assignmentId,
+    });
+    if (!result.ok) {
+      console.error("[GET /api/upper-limb-motor-screen/session-results]", result.message);
+      return NextResponse.json({ error: result.message }, { status: result.httpStatus });
+    }
+
+    return NextResponse.json({
+      sessionResult: result.row ? toUpperLimbMotorScreenSessionResultPublic(result.row) : null,
+    });
+  };
+}
+
 // ── Real production dependencies ───────────────────────────────────────────────
 
-async function buildRealDependencies(): Promise<UpperLimbSessionResultPostDependencies | null> {
+async function buildRealClients(): Promise<{
+  getAuthenticatedUser: () => Promise<{ id: string } | null>;
+  adminClient: SupabaseClient;
+} | null> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const svc = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -143,15 +202,25 @@ async function buildRealDependencies(): Promise<UpperLimbSessionResultPostDepend
       return { id: user.id };
     },
     adminClient,
-    checkWriteLimit: checkClinicianWriteLimit,
-    generateId: () => crypto.randomUUID(),
   };
 }
 
 // ── POST /api/upper-limb-motor-screen/session-results ──────────────────────────
 
 export async function POST(req: NextRequest) {
-  const deps = await buildRealDependencies();
-  if (!deps) return serviceUnavailableResponse();
-  return createUpperLimbSessionResultPostHandler(deps)(req);
+  const clients = await buildRealClients();
+  if (!clients) return serviceUnavailableResponse();
+  return createUpperLimbSessionResultPostHandler({
+    ...clients,
+    checkWriteLimit: checkClinicianWriteLimit,
+    generateId: () => crypto.randomUUID(),
+  })(req);
+}
+
+// ── GET /api/upper-limb-motor-screen/session-results ────────────────────────────
+
+export async function GET(req: NextRequest) {
+  const clients = await buildRealClients();
+  if (!clients) return serviceUnavailableResponse();
+  return createUpperLimbSessionResultGetHandler(clients)(req);
 }

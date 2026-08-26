@@ -11,9 +11,17 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  createUpperLimbSessionResultGetHandler,
   createUpperLimbSessionResultPostHandler,
+  type UpperLimbSessionResultGetDependencies,
   type UpperLimbSessionResultPostDependencies,
 } from "./route";
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function fakeGetRequest(params: Record<string, string>): any {
+  const searchParams = new URLSearchParams(params);
+  return { nextUrl: { searchParams } };
+}
 
 const PROVIDER_ID = "11111111-1111-1111-1111-111111111111";
 const PATIENT_ID = "22222222-2222-2222-2222-222222222222";
@@ -46,6 +54,7 @@ type FakeResult = { data: unknown; error: { code?: string; message: string } | n
 type FakeAdminOptions = {
   assignmentLookup?: FakeResult;
   insertResult?: FakeResult;
+  findResult?: FakeResult;
 };
 
 function buildFakeAdminClient(options: FakeAdminOptions = {}) {
@@ -55,6 +64,7 @@ function buildFakeAdminClient(options: FakeAdminOptions = {}) {
   // for why this matters: a swapped column/value would still "work"
   // against a naive fake but must fail this regression assertion.
   const assignmentEqCalls: [string, unknown][] = [];
+  const findEqCalls: [string, unknown][] = [];
   const assignmentLookup: FakeResult = options.assignmentLookup ?? {
     data: { id: ASSIGNMENT_ID, provider_id: PROVIDER_ID, patient_id: PATIENT_ID },
     error: null,
@@ -63,6 +73,7 @@ function buildFakeAdminClient(options: FakeAdminOptions = {}) {
     data: null,
     error: { message: "insert not configured for this test" },
   };
+  const findResult: FakeResult = options.findResult ?? { data: null, error: null };
 
   const client = {
     from(table: string) {
@@ -82,23 +93,32 @@ function buildFakeAdminClient(options: FakeAdminOptions = {}) {
         };
       }
       if (table === "upper_limb_motor_screen_session_results") {
-        return {
+        // Single chainable builder covering both write (insert -> select
+        // -> single) and read (select -> eq -> order -> limit ->
+        // maybeSingle) call shapes.
+        const builder = {
           insert: (payload: unknown) => {
             insertCalls.push(payload);
-            return {
-              select: () => ({
-                single: async () => insertResult,
-              }),
-            };
+            return builder;
           },
+          select: () => builder,
+          eq: (column: string, value: unknown) => {
+            findEqCalls.push([column, value]);
+            return builder;
+          },
+          order: () => builder,
+          limit: () => builder,
+          single: async () => insertResult,
+          maybeSingle: async () => findResult,
         };
+        return builder;
       }
       throw new Error(`unexpected table in fake admin client: ${table}`);
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 
-  return { client, insertCalls, assignmentEqCalls };
+  return { client, insertCalls, assignmentEqCalls, findEqCalls };
 }
 
 type BuildDepsOptions = {
@@ -108,7 +128,7 @@ type BuildDepsOptions = {
 };
 
 function buildDeps(options: BuildDepsOptions = {}) {
-  const { client, insertCalls, assignmentEqCalls } = buildFakeAdminClient(options.admin);
+  const { client, insertCalls, assignmentEqCalls, findEqCalls } = buildFakeAdminClient(options.admin);
   const deps: UpperLimbSessionResultPostDependencies = {
     getAuthenticatedUser: async () =>
       options.authenticated === false ? null : { id: PROVIDER_ID },
@@ -117,7 +137,17 @@ function buildDeps(options: BuildDepsOptions = {}) {
       options.rateLimited ? { allowed: false, retryAfterSec: 30 } : { allowed: true },
     generateId: () => GENERATED_ID,
   };
-  return { deps, insertCalls, assignmentEqCalls };
+  return { deps, insertCalls, assignmentEqCalls, findEqCalls };
+}
+
+function buildGetDeps(options: BuildDepsOptions = {}) {
+  const { client, assignmentEqCalls, findEqCalls } = buildFakeAdminClient(options.admin);
+  const deps: UpperLimbSessionResultGetDependencies = {
+    getAuthenticatedUser: async () =>
+      options.authenticated === false ? null : { id: PROVIDER_ID },
+    adminClient: client,
+  };
+  return { deps, assignmentEqCalls, findEqCalls };
 }
 
 const INSERTED_ROW = {
@@ -247,5 +277,75 @@ describe("POST /api/upper-limb-motor-screen/session-results", () => {
     assert.equal(res.status, 500);
     const json = await res.json();
     assert.ok(!JSON.stringify(json).includes("unique constraint"));
+  });
+});
+
+describe("GET /api/upper-limb-motor-screen/session-results", () => {
+  it("unauthenticated request -> 401, no lookups", async () => {
+    const { deps, assignmentEqCalls, findEqCalls } = buildGetDeps({ authenticated: false });
+    const res = await createUpperLimbSessionResultGetHandler(deps)(
+      fakeGetRequest({ assignmentId: ASSIGNMENT_ID }),
+    );
+    assert.equal(res.status, 401);
+    assert.deepEqual(assignmentEqCalls, []);
+    assert.deepEqual(findEqCalls, []);
+  });
+
+  it("missing assignmentId -> 400, no lookups", async () => {
+    const { deps, findEqCalls } = buildGetDeps();
+    const res = await createUpperLimbSessionResultGetHandler(deps)(fakeGetRequest({}));
+    assert.equal(res.status, 400);
+    assert.deepEqual(findEqCalls, []);
+  });
+
+  it("malformed (non-UUID) assignmentId -> 400, no lookups", async () => {
+    const { deps, assignmentEqCalls, findEqCalls } = buildGetDeps();
+    const res = await createUpperLimbSessionResultGetHandler(deps)(
+      fakeGetRequest({ assignmentId: "not-a-uuid" }),
+    );
+    assert.equal(res.status, 400);
+    assert.deepEqual(assignmentEqCalls, []);
+    assert.deepEqual(findEqCalls, []);
+  });
+
+  it("assignment ownership verified FIRST — failure -> 404, no find lookup", async () => {
+    const { deps, findEqCalls } = buildGetDeps({
+      admin: { assignmentLookup: { data: null, error: null } },
+    });
+    const res = await createUpperLimbSessionResultGetHandler(deps)(
+      fakeGetRequest({ assignmentId: ASSIGNMENT_ID }),
+    );
+    assert.equal(res.status, 404);
+    assert.deepEqual(findEqCalls, []);
+  });
+
+  it("no existing session result -> 200 { sessionResult: null }, never fabricated", async () => {
+    const { deps } = buildGetDeps({ admin: { findResult: { data: null, error: null } } });
+    const res = await createUpperLimbSessionResultGetHandler(deps)(
+      fakeGetRequest({ assignmentId: ASSIGNMENT_ID }),
+    );
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.sessionResult, null);
+  });
+
+  it("find lookup filters on exactly (assignment_id) — regression guard", async () => {
+    const { deps, findEqCalls } = buildGetDeps({
+      admin: { findResult: { data: INSERTED_ROW, error: null } },
+    });
+    await createUpperLimbSessionResultGetHandler(deps)(fakeGetRequest({ assignmentId: ASSIGNMENT_ID }));
+    assert.deepEqual(findEqCalls, [["assignment_id", ASSIGNMENT_ID]]);
+  });
+
+  it("returns the found session result in the same public shape as POST", async () => {
+    const { deps } = buildGetDeps({ admin: { findResult: { data: INSERTED_ROW, error: null } } });
+    const res = await createUpperLimbSessionResultGetHandler(deps)(
+      fakeGetRequest({ assignmentId: ASSIGNMENT_ID }),
+    );
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.sessionResult.sessionResult.id, GENERATED_ID);
+    assert.equal(json.sessionResult.assignmentId, ASSIGNMENT_ID);
+    assert.equal(json.sessionResult.providerId, PROVIDER_ID);
   });
 });

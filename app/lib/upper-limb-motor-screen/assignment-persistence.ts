@@ -78,3 +78,42 @@ export async function insertUpperLimbMotorScreenAssignment(
 
   return { ok: true, row: data as UpperLimbMotorScreenAssignmentsRow };
 }
+
+export type FindLatestAssignmentResult =
+  | { ok: true; row: UpperLimbMotorScreenAssignmentsRow | null }
+  | { ok: false; httpStatus: 500; message: string };
+
+/**
+ * Finds the most recently created assignment for a given patient +
+ * screenDefinitionId, scoped to the authenticated provider — the read
+ * side of the resume/duplicate-prevention contract (GET
+ * /api/upper-limb-motor-screen/assignments). screen_definition_id is a
+ * legacy-only, nullable typed column this module never writes (see
+ * header), so matching is done against the canonical JSONB payload via
+ * assignment_payload->>screenDefinitionId, never the typed column.
+ * Ownership must already be verified by the caller (validatePatientOwnership)
+ * before this is called; providerId is filtered here too as defense in
+ * depth so a cross-provider row can never be returned even if that check
+ * were ever skipped upstream.
+ */
+export async function findLatestUpperLimbMotorScreenAssignment(
+  adminClient: SupabaseClient,
+  input: { patientId: string; providerId: string; screenDefinitionId: string },
+): Promise<FindLatestAssignmentResult> {
+  const { data, error } = await adminClient
+    .from("upper_limb_motor_screen_assignments")
+    .select("*")
+    .eq("patient_id", input.patientId)
+    .eq("provider_id", input.providerId)
+    .eq("assignment_payload->>screenDefinitionId", input.screenDefinitionId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[findLatestUpperLimbMotorScreenAssignment] query failed:", error.message);
+    return { ok: false, httpStatus: 500, message: "Unable to complete request." };
+  }
+
+  return { ok: true, row: (data as UpperLimbMotorScreenAssignmentsRow | null) ?? null };
+}
