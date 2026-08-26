@@ -1,5 +1,5 @@
 /**
- * RASQ Upper-Limb Motor Screen — assignment persistence (019/020).
+ * RASQ Upper-Limb Motor Screen — assignment persistence (019/020/024).
  *
  * Maps between the domain UpperLimbMotorScreenAssignment object and
  * the upper_limb_motor_screen_assignments row shape. Legacy-only
@@ -13,6 +13,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { UpperLimbMotorScreenAssignmentsRow } from "@/app/lib/supabase/database.types";
 import type { UpperLimbMotorScreenAssignment } from "./types";
 import { UPPER_LIMB_MOTOR_SCREEN_SCHEMA_VERSION } from "./schema-version";
+import {
+  CreateUpperLimbMotorScreenAssignmentError,
+  createUpperLimbMotorScreenAssignment,
+} from "./create-upper-limb-motor-screen-assignment";
 
 export type UpperLimbMotorScreenAssignmentInsert = {
   id: string;
@@ -21,12 +25,16 @@ export type UpperLimbMotorScreenAssignmentInsert = {
   status: UpperLimbMotorScreenAssignment["status"];
   assignment_payload: UpperLimbMotorScreenAssignment;
   schema_version: string;
+  assignment_request_id?: string | null;
+  assignment_request_payload_hash?: string | null;
 };
 
 export function buildUpperLimbMotorScreenAssignmentInsert(input: {
   providerId: string;
   patientId: string;
   assignment: UpperLimbMotorScreenAssignment;
+  assignmentRequestId?: string | null;
+  assignmentRequestPayloadHash?: string | null;
 }): UpperLimbMotorScreenAssignmentInsert {
   return {
     id: input.assignment.id,
@@ -35,6 +43,8 @@ export function buildUpperLimbMotorScreenAssignmentInsert(input: {
     status: input.assignment.status,
     assignment_payload: input.assignment,
     schema_version: UPPER_LIMB_MOTOR_SCREEN_SCHEMA_VERSION,
+    assignment_request_id: input.assignmentRequestId ?? null,
+    assignment_request_payload_hash: input.assignmentRequestPayloadHash ?? null,
   };
 }
 
@@ -44,10 +54,12 @@ export type UpperLimbMotorScreenAssignmentPublic = {
   providerId: string;
   createdAt: string;
   updatedAt: string;
+  created: boolean;
 };
 
 export function toUpperLimbMotorScreenAssignmentPublic(
   row: UpperLimbMotorScreenAssignmentsRow,
+  created: boolean,
 ): UpperLimbMotorScreenAssignmentPublic {
   return {
     assignment: row.assignment_payload as unknown as UpperLimbMotorScreenAssignment,
@@ -55,26 +67,44 @@ export function toUpperLimbMotorScreenAssignmentPublic(
     providerId: row.provider_id,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    created,
   };
 }
+
+export type InsertUpperLimbMotorScreenAssignmentResult =
+  | { ok: true; row: UpperLimbMotorScreenAssignmentsRow; created: boolean }
+  | { ok: false; httpStatus: 400 | 404 | 409 | 500; message: string };
 
 export async function insertUpperLimbMotorScreenAssignment(
   adminClient: SupabaseClient,
   row: UpperLimbMotorScreenAssignmentInsert,
-): Promise<
-  | { ok: true; row: UpperLimbMotorScreenAssignmentsRow }
-  | { ok: false; httpStatus: 500; message: string }
-> {
-  const { data, error } = await adminClient
-    .from("upper_limb_motor_screen_assignments")
-    .insert(row)
-    .select("*")
-    .single();
+): Promise<InsertUpperLimbMotorScreenAssignmentResult> {
+  try {
+    const result = await createUpperLimbMotorScreenAssignment(adminClient, {
+      providerId: row.provider_id,
+      patientId: row.patient_id,
+      assignmentRequestId: row.assignment_request_id ?? null,
+      assignmentRequestPayloadHash: row.assignment_request_payload_hash ?? null,
+      assignment: row.assignment_payload,
+    });
 
-  if (error) {
-    console.error("[insertUpperLimbMotorScreenAssignment] insert failed:", error.message);
+    return { ok: true, row: result.row, created: result.created };
+  } catch (error) {
+    if (error instanceof CreateUpperLimbMotorScreenAssignmentError) {
+      if (error.reason === "invalid_input") {
+        return { ok: false, httpStatus: 400, message: "Invalid assignment request." };
+      }
+      if (error.reason === "ownership_failed") {
+        return { ok: false, httpStatus: 404, message: "Patient not found." };
+      }
+      if (error.reason === "idempotency_conflict") {
+        return { ok: false, httpStatus: 409, message: "Assignment request conflict." };
+      }
+      console.error("[insertUpperLimbMotorScreenAssignment]", error.message);
+      return { ok: false, httpStatus: 500, message: "Unable to complete request." };
+    }
+
+    console.error("[insertUpperLimbMotorScreenAssignment] unexpected failure:", error);
     return { ok: false, httpStatus: 500, message: "Unable to complete request." };
   }
-
-  return { ok: true, row: data as UpperLimbMotorScreenAssignmentsRow };
 }
