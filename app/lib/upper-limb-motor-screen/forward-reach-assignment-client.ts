@@ -23,6 +23,14 @@ import {
   type UpperLimbTaskAssignmentGroup,
 } from "./types";
 import { validateUpperLimbMotorScreenAssignment } from "./assignment-validation";
+import {
+  buildForwardReachAssignmentFingerprint,
+  type ForwardReachAssignmentRequestSnapshotInput,
+} from "./assignment-request-payload";
+import {
+  createForwardReachAssignmentAttemptController,
+  type ForwardReachAssignmentAttemptController,
+} from "./forward-reach-assignment-idempotency";
 
 export const FORWARD_REACH_SCREEN_DEFINITION_ID = "upper-limb-motor-screen-v1" as const;
 export const FORWARD_REACH_BASELINE_TASK_ID = "forwardReach" as const;
@@ -33,6 +41,7 @@ export const FORWARD_REACH_ASSIGNMENT_REQUEST_TOP_LEVEL_KEYS = [
   "affectedSide",
   "configuration",
   "taskAssignmentGroups",
+  "assignmentRequestId",
 ] as const;
 
 export type ForwardReachAssignmentRequestPayload = {
@@ -41,6 +50,7 @@ export type ForwardReachAssignmentRequestPayload = {
   affectedSide: UpperLimbSide;
   configuration: ClinicianControlledConfiguration;
   taskAssignmentGroups: [UpperLimbTaskAssignmentGroup];
+  assignmentRequestId: string;
 };
 
 export type ForwardReachAssignmentFormState = {
@@ -228,7 +238,7 @@ export function validateForwardReachAssignmentForm(
 export function buildForwardReachAssignmentCreatePayload(
   patientId: string,
   form: ForwardReachAssignmentFormState,
-): ForwardReachAssignmentRequestPayload | null {
+): ForwardReachAssignmentRequestSnapshotInput | null {
   const validation = validateForwardReachAssignmentForm(form);
   if (!validation.ok) return null;
 
@@ -282,7 +292,7 @@ export function buildForwardReachAssignmentCreatePayload(
 
 /** Mirrors the server-side domain check using placeholder server-owned fields. */
 export function assertForwardReachPayloadMatchesAssignmentValidator(
-  payload: ForwardReachAssignmentRequestPayload,
+  payload: ForwardReachAssignmentRequestSnapshotInput,
 ): boolean {
   const candidate = {
     id: "client-shape-check",
@@ -333,26 +343,47 @@ export type ForwardReachAssignmentSubmitResult =
       fieldErrors?: ForwardReachFormFieldError[];
     };
 
-export function createForwardReachAssignmentSubmitter() {
-  let inFlight = false;
+function isRetryableAssignmentHttpStatus(status: number): boolean {
+  return status >= 500 || status === 429;
+}
+
+export type ForwardReachAssignmentSubmitOptions = {
+  fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
+  scopeAtStart?: number;
+  currentScope?: () => number;
+  generationAtStart?: number;
+  currentGeneration?: () => number;
+};
+
+export type ForwardReachAssignmentSubmitter = {
+  readonly inFlight: boolean;
+  submit: (
+    patientId: string,
+    form: ForwardReachAssignmentFormState,
+    options?: ForwardReachAssignmentSubmitOptions,
+  ) => Promise<ForwardReachAssignmentSubmitResult>;
+  getController: () => ForwardReachAssignmentAttemptController;
+};
+
+export function createForwardReachAssignmentSubmitter(): ForwardReachAssignmentSubmitter {
+  const controller = createForwardReachAssignmentAttemptController();
 
   return {
     get inFlight(): boolean {
-      return inFlight;
+      return controller.isInFlight();
+    },
+
+    getController(): ForwardReachAssignmentAttemptController {
+      return controller;
     },
 
     async submit(
       patientId: string,
       form: ForwardReachAssignmentFormState,
-      fetchImpl: typeof fetch = fetch,
+      options: ForwardReachAssignmentSubmitOptions = {},
     ): Promise<ForwardReachAssignmentSubmitResult> {
-      if (inFlight) {
-        return {
-          ok: false,
-          message: FORWARD_REACH_ASSIGNMENT_USER_MESSAGES.duplicateSubmit,
-          duplicateSubmit: true,
-        };
-      }
+      const fetchImpl = options.fetchImpl ?? fetch;
 
       const fieldValidation = validateForwardReachAssignmentForm(form);
       if (!fieldValidation.ok) {
@@ -363,24 +394,58 @@ export function createForwardReachAssignmentSubmitter() {
         };
       }
 
-      const payload = buildForwardReachAssignmentCreatePayload(patientId, form);
-      if (!payload) {
+      const basePayload = buildForwardReachAssignmentCreatePayload(patientId, form);
+      if (!basePayload) {
         return {
           ok: false,
           message: FORWARD_REACH_ASSIGNMENT_USER_MESSAGES.validation,
         };
       }
 
-      inFlight = true;
+      const fingerprint = buildForwardReachAssignmentFingerprint(basePayload);
+      const attempt = controller.beginSubmitAttempt(fingerprint);
+      if (!attempt.ok) {
+        return {
+          ok: false,
+          message: FORWARD_REACH_ASSIGNMENT_USER_MESSAGES.duplicateSubmit,
+          duplicateSubmit: true,
+        };
+      }
+
+      const payload: ForwardReachAssignmentRequestPayload = {
+        ...basePayload,
+        assignmentRequestId: attempt.requestId,
+      };
+
+      const generationAtStart = attempt.generation;
+      const scopeAtStart = options.scopeAtStart ?? 0;
+
       try {
+        if (options.signal?.aborted) {
+          controller.completeFailure();
+          return { ok: false, message: FORWARD_REACH_ASSIGNMENT_USER_MESSAGES.network };
+        }
+
         let response: Response;
         try {
           response = await fetchImpl("/api/upper-limb-motor-screen/assignments", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            cache: "no-store",
+            signal: options.signal,
             body: JSON.stringify(payload),
           });
         } catch {
+          controller.completeFailure();
+          return { ok: false, message: FORWARD_REACH_ASSIGNMENT_USER_MESSAGES.network };
+        }
+
+        if (
+          options.signal?.aborted ||
+          (options.currentScope && options.currentScope() !== scopeAtStart) ||
+          controller.getGeneration() !== generationAtStart
+        ) {
+          controller.completeFailure();
           return { ok: false, message: FORWARD_REACH_ASSIGNMENT_USER_MESSAGES.network };
         }
 
@@ -392,6 +457,13 @@ export function createForwardReachAssignmentSubmitter() {
         }
 
         if (!response.ok) {
+          if (response.status === 409) {
+            controller.completeConflict();
+          } else if (isRetryableAssignmentHttpStatus(response.status)) {
+            controller.completeFailure();
+          } else {
+            controller.completeFailure();
+          }
           return {
             ok: false,
             message: mapForwardReachAssignmentHttpError(response.status),
@@ -399,14 +471,22 @@ export function createForwardReachAssignmentSubmitter() {
           };
         }
 
-        const assignment = parseCreateSuccess(body);
-        if (!assignment) {
+        if (response.status !== 200 && response.status !== 201) {
+          controller.completeFailure();
           return { ok: false, message: FORWARD_REACH_ASSIGNMENT_USER_MESSAGES.unexpected };
         }
 
+        const assignment = parseCreateSuccess(body);
+        if (!assignment) {
+          controller.completeFailure();
+          return { ok: false, message: FORWARD_REACH_ASSIGNMENT_USER_MESSAGES.unexpected };
+        }
+
+        controller.completeSuccess(fingerprint);
         return { ok: true, assignment };
-      } finally {
-        inFlight = false;
+      } catch {
+        controller.completeFailure();
+        return { ok: false, message: FORWARD_REACH_ASSIGNMENT_USER_MESSAGES.unexpected };
       }
     },
   };

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   AFFECTED_ARM_SUPPORT_LEVELS,
   BACK_TRUNK_SUPPORT_LEVELS,
@@ -18,6 +18,9 @@ import {
   type ForwardReachAssignmentFormState,
   type ForwardReachFormFieldError,
 } from "@/app/lib/upper-limb-motor-screen/forward-reach-assignment-client";
+import {
+  shouldIgnoreForwardReachAssignmentResult,
+} from "@/app/lib/upper-limb-motor-screen/forward-reach-assignment-panel-lifecycle";
 
 type ForwardReachAssignmentClientProps = {
   patientId: string;
@@ -110,7 +113,10 @@ export function ForwardReachAssignmentClient({
   patientId,
   patientName,
 }: ForwardReachAssignmentClientProps) {
-  const submitter = useMemo(() => createForwardReachAssignmentSubmitter(), []);
+  const submitterRef = useRef(createForwardReachAssignmentSubmitter());
+  const assignAbortRef = useRef<AbortController | null>(null);
+  const patientScopeRef = useRef(0);
+
   const [form, setForm] = useState<ForwardReachAssignmentFormState>(
     createEmptyForwardReachAssignmentForm,
   );
@@ -119,10 +125,19 @@ export function ForwardReachAssignmentClient({
   const [submitting, setSubmitting] = useState(false);
   const [created, setCreated] = useState<ForwardReachAssignmentCreateSuccess | null>(null);
 
+  useEffect(() => {
+    const submitter = submitterRef.current;
+    return () => {
+      assignAbortRef.current?.abort();
+      submitter.getController().resetAll();
+    };
+  }, []);
+
   function updateField<K extends keyof ForwardReachAssignmentFormState>(
     key: K,
     value: ForwardReachAssignmentFormState[K],
   ) {
+    if (submitterRef.current.inFlight) return;
     setForm((current) => ({ ...current, [key]: value }));
     setFieldErrors((current) => current.filter((entry) => entry.field !== key));
     setSubmitError(null);
@@ -130,13 +145,39 @@ export function ForwardReachAssignmentClient({
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting || submitter.inFlight || created) return;
+    if (submitting || submitterRef.current.inFlight || created) return;
+
+    const scopeAtStart = patientScopeRef.current;
+    const generationAtStart = submitterRef.current.getController().getGeneration();
 
     setSubmitting(true);
     setSubmitError(null);
     setFieldErrors([]);
 
-    const result = await submitter.submit(patientId, form);
+    assignAbortRef.current?.abort();
+    const abort = new AbortController();
+    assignAbortRef.current = abort;
+
+    const result = await submitterRef.current.submit(patientId, form, {
+      signal: abort.signal,
+      scopeAtStart,
+      currentScope: () => patientScopeRef.current,
+      generationAtStart,
+      currentGeneration: () => submitterRef.current.getController().getGeneration(),
+    });
+
+    if (
+      shouldIgnoreForwardReachAssignmentResult({
+        scopeAtStart,
+        currentScope: patientScopeRef.current,
+        generationAtStart,
+        currentGeneration: submitterRef.current.getController().getGeneration(),
+        aborted: abort.signal.aborted,
+      })
+    ) {
+      return;
+    }
+
     setSubmitting(false);
 
     if (!result.ok) {
@@ -491,10 +532,10 @@ export function ForwardReachAssignmentClient({
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="submit"
-          disabled={submitting || submitter.inFlight}
+          disabled={submitting}
           className="rounded-[7px] bg-[#1D9E75] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {submitting || submitter.inFlight ? "Creating assignment…" : "Create assignment"}
+          {submitting ? "Creating assignment…" : "Create assignment"}
         </button>
         <Link
           href={`/clinician/patients/${encodeURIComponent(patientId)}`}

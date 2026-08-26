@@ -20,6 +20,11 @@ import {
   insertUpperLimbMotorScreenAssignment,
   toUpperLimbMotorScreenAssignmentPublic,
 } from "@/app/lib/upper-limb-motor-screen/assignment-persistence";
+import { hashForwardReachAssignmentRequestSnapshot } from "@/app/lib/upper-limb-motor-screen/create-upper-limb-motor-screen-assignment";
+import {
+  buildForwardReachAssignmentRequestSnapshot,
+  type ForwardReachAssignmentRequestSnapshotInput,
+} from "@/app/lib/upper-limb-motor-screen/assignment-request-payload";
 import { validatePatientOwnership } from "@/app/lib/validate-patient-ownership";
 import {
   checkClinicianWriteLimit,
@@ -38,7 +43,30 @@ type PostBody = {
   affectedSide?: unknown;
   configuration?: unknown;
   taskAssignmentGroups?: unknown;
+  assignmentRequestId?: unknown;
 };
+
+const POST_ALLOWED_KEYS = new Set([
+  "patientId",
+  "screenDefinitionId",
+  "affectedSide",
+  "configuration",
+  "taskAssignmentGroups",
+  "assignmentRequestId",
+]);
+
+function rejectUnknownPostKeys(body: PostBody): string | null {
+  for (const key of Object.keys(body)) {
+    if (!POST_ALLOWED_KEYS.has(key)) {
+      return `Unknown request field: ${key}.`;
+    }
+  }
+  return null;
+}
+
+function isUuidString(value: unknown): value is string {
+  return typeof value === "string" && UUID_RE.test(value.trim());
+}
 
 export type UpperLimbAssignmentPostDependencies = {
   /** Resolves the authenticated caller, or null if unauthenticated. */
@@ -49,13 +77,6 @@ export type UpperLimbAssignmentPostDependencies = {
   generateId: () => string;
   now: () => string;
 };
-
-// ── Dependency-injected handler ────────────────────────────────────────────────
-//
-// Mirrors app/api/plans/from-catalog-program/route.ts's factory
-// pattern: lets tests inject fakes for auth, rate limiting, the admin
-// client, id generation, and the clock directly, without module
-// mocking.
 
 export function createUpperLimbAssignmentPostHandler(deps: UpperLimbAssignmentPostDependencies) {
   return async function handlePost(req: NextRequest): Promise<NextResponse> {
@@ -72,6 +93,11 @@ export function createUpperLimbAssignmentPostHandler(deps: UpperLimbAssignmentPo
       return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
     }
 
+    const unknownKeyError = rejectUnknownPostKeys(body);
+    if (unknownKeyError) {
+      return NextResponse.json({ error: unknownKeyError }, { status: 400 });
+    }
+
     const patientId = typeof body.patientId === "string" ? body.patientId.trim() : "";
     if (!patientId) {
       return NextResponse.json({ error: "patientId is required." }, { status: 400 });
@@ -80,12 +106,16 @@ export function createUpperLimbAssignmentPostHandler(deps: UpperLimbAssignmentPo
       return NextResponse.json({ error: "patientId must be a valid UUID." }, { status: 400 });
     }
 
+    const assignmentRequestIdRaw =
+      typeof body.assignmentRequestId === "string" ? body.assignmentRequestId.trim() : "";
+    const assignmentRequestId = assignmentRequestIdRaw || null;
+    if (assignmentRequestId !== null && !isUuidString(assignmentRequestId)) {
+      return NextResponse.json({ error: "assignmentRequestId must be a valid UUID." }, { status: 400 });
+    }
+
     const ownership = await validatePatientOwnership(deps.adminClient, patientId, user.id);
     if (!ownership.ok) return ownershipErrorResponse(ownership);
 
-    // Explicit object literal: id/status/assignedAt/assignedBy are
-    // always server-decided, never taken from the request body even
-    // if the caller supplies them.
     const candidate = {
       id: deps.generateId(),
       screenDefinitionId: body.screenDefinitionId,
@@ -105,23 +135,43 @@ export function createUpperLimbAssignmentPostHandler(deps: UpperLimbAssignmentPo
       );
     }
 
+    const requestSnapshot = buildForwardReachAssignmentRequestSnapshot({
+      patientId,
+      screenDefinitionId:
+        validation.assignment.screenDefinitionId as ForwardReachAssignmentRequestSnapshotInput["screenDefinitionId"],
+      affectedSide: validation.assignment.affectedSide,
+      configuration: validation.assignment.configuration,
+      taskAssignmentGroups:
+        validation.assignment.taskAssignmentGroups as ForwardReachAssignmentRequestSnapshotInput["taskAssignmentGroups"],
+    });
+
+    const assignmentRequestPayloadHash = assignmentRequestId
+      ? hashForwardReachAssignmentRequestSnapshot(requestSnapshot)
+      : null;
+
     const row = buildUpperLimbMotorScreenAssignmentInsert({
       providerId: user.id,
       patientId,
       assignment: validation.assignment,
+      assignmentRequestId,
+      assignmentRequestPayloadHash,
     });
 
     const result = await insertUpperLimbMotorScreenAssignment(deps.adminClient, row);
     if (!result.ok) {
-      console.error("[POST /api/upper-limb-motor-screen/assignments]", result.message);
+      if (result.httpStatus >= 500) {
+        console.error("[POST /api/upper-limb-motor-screen/assignments]", result.message);
+      }
       return NextResponse.json({ error: CREATE_ERROR }, { status: result.httpStatus });
     }
 
-    return NextResponse.json(toUpperLimbMotorScreenAssignmentPublic(result.row), { status: 201 });
+    const status = result.created ? 201 : 200;
+    return NextResponse.json(
+      toUpperLimbMotorScreenAssignmentPublic(result.row, result.created),
+      { status },
+    );
   };
 }
-
-// ── Real production dependencies ───────────────────────────────────────────────
 
 async function buildRealDependencies(): Promise<UpperLimbAssignmentPostDependencies | null> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -161,8 +211,6 @@ async function buildRealDependencies(): Promise<UpperLimbAssignmentPostDependenc
     now: () => new Date().toISOString(),
   };
 }
-
-// ── POST /api/upper-limb-motor-screen/assignments ──────────────────────────────
 
 export async function POST(req: NextRequest) {
   const deps = await buildRealDependencies();

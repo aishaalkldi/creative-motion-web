@@ -18,6 +18,7 @@ import {
 const PROVIDER_ID = "11111111-1111-1111-1111-111111111111";
 const PATIENT_ID = "22222222-2222-2222-2222-222222222222";
 const GENERATED_ID = "33333333-3333-3333-3333-333333333333";
+const REQUEST_ID = "44444444-4444-4444-4444-444444444444";
 const NOW = "2026-08-17T10:00:00.000Z";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -62,30 +63,26 @@ const VALID_BODY = {
   affectedSide: "right",
   configuration: validConfiguration(),
   taskAssignmentGroups: [taskGroup()],
+  assignmentRequestId: REQUEST_ID,
 };
 
 type FakeResult = { data: unknown; error: { code?: string; message: string } | null };
 
 type FakeAdminOptions = {
   patientLookup?: FakeResult;
-  insertResult?: FakeResult;
+  rpcResult?: FakeResult | ((args: Record<string, unknown>) => FakeResult);
 };
 
 function buildFakeAdminClient(options: FakeAdminOptions = {}) {
-  const insertCalls: unknown[] = [];
-  // Records the exact (column, value) pairs the ownership lookup filters
-  // on, in call order — a regression test asserts against this so a
-  // swapped column or value (e.g. .eq("provider_id", patientId) instead
-  // of .eq("id", patientId)) fails the test even though the fake still
-  // "works" mechanically.
+  const rpcCalls: Record<string, unknown>[] = [];
   const patientEqCalls: [string, unknown][] = [];
   const patientLookup: FakeResult = options.patientLookup ?? {
     data: { id: PATIENT_ID, provider_id: PROVIDER_ID },
     error: null,
   };
-  const insertResult: FakeResult = options.insertResult ?? {
+  const defaultRpcResult: FakeResult = {
     data: null,
-    error: { message: "insert not configured for this test" },
+    error: { message: "rpc not configured for this test" },
   };
 
   const client = {
@@ -105,24 +102,19 @@ function buildFakeAdminClient(options: FakeAdminOptions = {}) {
           }),
         };
       }
-      if (table === "upper_limb_motor_screen_assignments") {
-        return {
-          insert: (payload: unknown) => {
-            insertCalls.push(payload);
-            return {
-              select: () => ({
-                single: async () => insertResult,
-              }),
-            };
-          },
-        };
-      }
       throw new Error(`unexpected table in fake admin client: ${table}`);
+    },
+    rpc: async (_fn: string, args: Record<string, unknown>) => {
+      rpcCalls.push(args);
+      if (typeof options.rpcResult === "function") {
+        return options.rpcResult(args);
+      }
+      return options.rpcResult ?? defaultRpcResult;
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 
-  return { client, insertCalls, patientEqCalls };
+  return { client, rpcCalls, patientEqCalls };
 }
 
 type BuildDepsOptions = {
@@ -132,7 +124,7 @@ type BuildDepsOptions = {
 };
 
 function buildDeps(options: BuildDepsOptions = {}) {
-  const { client, insertCalls, patientEqCalls } = buildFakeAdminClient(options.admin);
+  const { client, rpcCalls, patientEqCalls } = buildFakeAdminClient(options.admin);
   const deps: UpperLimbAssignmentPostDependencies = {
     getAuthenticatedUser: async () =>
       options.authenticated === false ? null : { id: PROVIDER_ID },
@@ -142,7 +134,7 @@ function buildDeps(options: BuildDepsOptions = {}) {
     generateId: () => GENERATED_ID,
     now: () => NOW,
   };
-  return { deps, insertCalls, patientEqCalls };
+  return { deps, rpcCalls, patientEqCalls };
 }
 
 const INSERTED_ROW = {
@@ -161,29 +153,36 @@ const INSERTED_ROW = {
     taskAssignmentGroups: VALID_BODY.taskAssignmentGroups,
   },
   schema_version: "upper-limb-motor-screen/v1",
-  screen_definition_id: null,
-  assigned_at: null,
-  affected_side: null,
-  delivery_mode: null,
-  token_hash: null,
-  token_expires_at: null,
   created_at: NOW,
   updated_at: NOW,
 };
 
+function successRpc(created = true): FakeResult {
+  return {
+    data: { ...INSERTED_ROW, created },
+    error: null,
+  };
+}
+
+function omitKey<T extends Record<string, unknown>>(body: T, key: keyof T): Omit<T, typeof key> {
+  const copy = { ...body };
+  delete copy[key];
+  return copy;
+}
+
 describe("POST /api/upper-limb-motor-screen/assignments", () => {
-  it("unauthenticated request -> 401, no ownership lookup or insert", async () => {
-    const { deps, insertCalls } = buildDeps({ authenticated: false });
+  it("unauthenticated request -> 401, no ownership lookup or rpc", async () => {
+    const { deps, rpcCalls } = buildDeps({ authenticated: false });
     const res = await createUpperLimbAssignmentPostHandler(deps)(fakeRequest(VALID_BODY));
     assert.equal(res.status, 401);
-    assert.deepEqual(insertCalls, []);
+    assert.deepEqual(rpcCalls, []);
   });
 
-  it("rate-limited -> 429, no insert", async () => {
-    const { deps, insertCalls } = buildDeps({ rateLimited: true });
+  it("rate-limited -> 429, no rpc", async () => {
+    const { deps, rpcCalls } = buildDeps({ rateLimited: true });
     const res = await createUpperLimbAssignmentPostHandler(deps)(fakeRequest(VALID_BODY));
     assert.equal(res.status, 429);
-    assert.deepEqual(insertCalls, []);
+    assert.deepEqual(rpcCalls, []);
   });
 
   it("invalid JSON body -> 400", async () => {
@@ -197,48 +196,45 @@ describe("POST /api/upper-limb-motor-screen/assignments", () => {
   });
 
   it("missing patientId -> 400, no ownership lookup", async () => {
-    const { deps, insertCalls, patientEqCalls } = buildDeps();
-    const { patientId: _drop, ...rest } = VALID_BODY;
-    const res = await createUpperLimbAssignmentPostHandler(deps)(fakeRequest(rest));
+    const { deps, rpcCalls, patientEqCalls } = buildDeps();
+    const res = await createUpperLimbAssignmentPostHandler(deps)(fakeRequest(omitKey(VALID_BODY, "patientId")));
     assert.equal(res.status, 400);
-    assert.deepEqual(insertCalls, []);
+    assert.deepEqual(rpcCalls, []);
     assert.deepEqual(patientEqCalls, []);
   });
 
-  it("malformed (non-UUID) patientId -> 400, no ownership lookup, no insert", async () => {
-    const { deps, insertCalls, patientEqCalls } = buildDeps();
+  it("malformed (non-UUID) patientId -> 400, no ownership lookup, no rpc", async () => {
+    const { deps, rpcCalls, patientEqCalls } = buildDeps();
     const res = await createUpperLimbAssignmentPostHandler(deps)(
       fakeRequest({ ...VALID_BODY, patientId: "not-a-uuid" }),
     );
     assert.equal(res.status, 400);
-    assert.deepEqual(insertCalls, []);
-    // The malformed id must never even reach the ownership lookup —
-    // this is the shape check being rejected before validatePatientOwnership runs.
+    assert.deepEqual(rpcCalls, []);
     assert.deepEqual(patientEqCalls, []);
   });
 
   it("malformed patientId rejects a numeric/demo-style id too (never silently treated as ownable)", async () => {
-    const { deps, insertCalls, patientEqCalls } = buildDeps();
+    const { deps, rpcCalls, patientEqCalls } = buildDeps();
     const res = await createUpperLimbAssignmentPostHandler(deps)(
       fakeRequest({ ...VALID_BODY, patientId: "42" }),
     );
     assert.equal(res.status, 400);
-    assert.deepEqual(insertCalls, []);
+    assert.deepEqual(rpcCalls, []);
     assert.deepEqual(patientEqCalls, []);
   });
 
-  it("patient ownership failure -> 404, no insert", async () => {
-    const { deps, insertCalls } = buildDeps({
+  it("patient ownership failure -> 404, no rpc", async () => {
+    const { deps, rpcCalls } = buildDeps({
       admin: { patientLookup: { data: null, error: { code: "PGRST116", message: "no rows" } } },
     });
     const res = await createUpperLimbAssignmentPostHandler(deps)(fakeRequest(VALID_BODY));
     assert.equal(res.status, 404);
-    assert.deepEqual(insertCalls, []);
+    assert.deepEqual(rpcCalls, []);
   });
 
   it("ownership lookup filters on exactly (id, patientId) then (provider_id, providerId) — regression guard against swapped columns/values", async () => {
     const { deps, patientEqCalls } = buildDeps({
-      admin: { insertResult: { data: INSERTED_ROW, error: null } },
+      admin: { rpcResult: successRpc() },
     });
     await createUpperLimbAssignmentPostHandler(deps)(fakeRequest(VALID_BODY));
     assert.deepEqual(patientEqCalls, [
@@ -247,38 +243,41 @@ describe("POST /api/upper-limb-motor-screen/assignments", () => {
     ]);
   });
 
-  it("invalid assignment shape (missing screenDefinitionId) -> 400, no insert", async () => {
-    const { deps, insertCalls } = buildDeps();
-    const { screenDefinitionId: _drop, ...rest } = VALID_BODY;
-    const res = await createUpperLimbAssignmentPostHandler(deps)(fakeRequest(rest));
+  it("invalid assignment shape (missing screenDefinitionId) -> 400, no rpc", async () => {
+    const { deps, rpcCalls } = buildDeps();
+    const res = await createUpperLimbAssignmentPostHandler(deps)(
+      fakeRequest(omitKey(VALID_BODY, "screenDefinitionId")),
+    );
     assert.equal(res.status, 400);
     const json = await res.json();
     assert.ok(json.reason);
-    assert.deepEqual(insertCalls, []);
+    assert.deepEqual(rpcCalls, []);
   });
 
   it("successful creation -> 201, id/status/assignedAt/assignedBy are server-decided", async () => {
-    const { deps, insertCalls } = buildDeps({
-      admin: { insertResult: { data: INSERTED_ROW, error: null } },
+    const { deps, rpcCalls } = buildDeps({
+      admin: { rpcResult: successRpc(true) },
     });
     const res = await createUpperLimbAssignmentPostHandler(deps)(fakeRequest(VALID_BODY));
     assert.equal(res.status, 201);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const insertedPayload = insertCalls[0] as any;
-    assert.equal(insertedPayload.id, GENERATED_ID);
-    assert.equal(insertedPayload.provider_id, PROVIDER_ID);
-    assert.equal(insertedPayload.patient_id, PATIENT_ID);
-    assert.equal(insertedPayload.status, "assigned");
-    assert.equal(insertedPayload.assignment_payload.assignedAt, NOW);
-    assert.equal(insertedPayload.assignment_payload.assignedBy, PROVIDER_ID);
+    const rpcArgs = rpcCalls[0] as any;
+    assert.equal(rpcArgs.p_assignment_id, GENERATED_ID);
+    assert.equal(rpcArgs.p_provider_id, PROVIDER_ID);
+    assert.equal(rpcArgs.p_patient_id, PATIENT_ID);
+    assert.equal(rpcArgs.p_status, "assigned");
+    assert.equal(rpcArgs.p_assignment_payload.assignedAt, NOW);
+    assert.equal(rpcArgs.p_assignment_payload.assignedBy, PROVIDER_ID);
+    assert.equal(rpcArgs.p_assignment_request_id, REQUEST_ID);
+    assert.equal(typeof rpcArgs.p_assignment_request_payload_hash, "string");
   });
 
-  it("attacker-supplied id/status/assignedBy/providerId in the body are ignored", async () => {
-    const { deps, insertCalls } = buildDeps({
-      admin: { insertResult: { data: INSERTED_ROW, error: null } },
+  it("attacker-supplied unknown top-level fields are rejected before rpc", async () => {
+    const { deps, rpcCalls } = buildDeps({
+      admin: { rpcResult: successRpc(true) },
     });
-    await createUpperLimbAssignmentPostHandler(deps)(
+    const res = await createUpperLimbAssignmentPostHandler(deps)(
       fakeRequest({
         ...VALID_BODY,
         id: "attacker-id",
@@ -287,21 +286,70 @@ describe("POST /api/upper-limb-motor-screen/assignments", () => {
         providerId: "attacker-provider",
       }),
     );
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const insertedPayload = insertCalls[0] as any;
-    assert.equal(insertedPayload.id, GENERATED_ID);
-    assert.equal(insertedPayload.status, "assigned");
-    assert.equal(insertedPayload.provider_id, PROVIDER_ID);
-    assert.equal(insertedPayload.assignment_payload.assignedBy, PROVIDER_ID);
+    assert.equal(res.status, 400);
+    assert.deepEqual(rpcCalls, []);
   });
 
-  it("insert failure -> sanitized 500", async () => {
+  it("idempotent replay -> 200 with created=false", async () => {
     const { deps } = buildDeps({
-      admin: { insertResult: { data: null, error: { message: "duplicate key value violates unique constraint" } } },
+      admin: { rpcResult: successRpc(false) },
+    });
+    const res = await createUpperLimbAssignmentPostHandler(deps)(fakeRequest(VALID_BODY));
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.created, false);
+  });
+
+  it("idempotency conflict -> sanitized 409", async () => {
+    const { deps } = buildDeps({
+      admin: {
+        rpcResult: {
+          data: null,
+          error: {
+            message:
+              "create_upper_limb_motor_screen_assignment: assignment_request_id was already used for a different assignment",
+          },
+        },
+      },
+    });
+    const res = await createUpperLimbAssignmentPostHandler(deps)(fakeRequest(VALID_BODY));
+    assert.equal(res.status, 409);
+    const json = await res.json();
+    assert.ok(!JSON.stringify(json).includes("different assignment"));
+  });
+
+  it("rpc failure -> sanitized 500", async () => {
+    const { deps } = buildDeps({
+      admin: { rpcResult: { data: null, error: { message: "unexpected database failure" } } },
     });
     const res = await createUpperLimbAssignmentPostHandler(deps)(fakeRequest(VALID_BODY));
     assert.equal(res.status, 500);
     const json = await res.json();
-    assert.ok(!JSON.stringify(json).includes("unique constraint"));
+    assert.ok(!JSON.stringify(json).includes("database failure"));
+  });
+
+  it("14. legacy caller without assignmentRequestId still reaches rpc with null idempotency fields", async () => {
+    const { deps, rpcCalls } = buildDeps({
+      admin: { rpcResult: successRpc(true) },
+    });
+    const res = await createUpperLimbAssignmentPostHandler(deps)(
+      fakeRequest(omitKey(VALID_BODY, "assignmentRequestId")),
+    );
+    assert.equal(res.status, 201);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const rpcArgs = rpcCalls[0] as any;
+    assert.equal(rpcArgs.p_assignment_request_id, null);
+    assert.equal(rpcArgs.p_assignment_request_payload_hash, null);
+  });
+
+  it("14b. cross-provider ownership failure remains 404 without rpc side effects", async () => {
+    const { deps, rpcCalls } = buildDeps({
+      admin: {
+        patientLookup: { data: null, error: { code: "PGRST116", message: "no rows" } },
+      },
+    });
+    const res = await createUpperLimbAssignmentPostHandler(deps)(fakeRequest(VALID_BODY));
+    assert.equal(res.status, 404);
+    assert.deepEqual(rpcCalls, []);
   });
 });

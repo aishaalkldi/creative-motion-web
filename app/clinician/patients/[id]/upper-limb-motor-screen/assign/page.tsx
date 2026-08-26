@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, notFound } from "next/navigation";
 import type { PatientRow } from "@/app/lib/validate-patient-ownership";
 import { isUuidPatientId } from "@/app/lib/api/patient-id-utils";
+import { shouldIgnoreForwardReachAssignmentResult } from "@/app/lib/upper-limb-motor-screen/forward-reach-assignment-panel-lifecycle";
 import { ForwardReachAssignmentClient } from "./ForwardReachAssignmentClient";
 
 export default function ForwardReachAssignmentPage() {
@@ -13,45 +14,106 @@ export default function ForwardReachAssignmentPage() {
   const [patient, setPatient] = useState<PatientRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
+  const patientScopeRef = useRef(0);
+  const loadAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
+    patientScopeRef.current += 1;
+    const scopeAtStart = patientScopeRef.current;
+
+    setLoading(true);
+    setLoadError(false);
+    setPatient(null);
+
+    loadAbortRef.current?.abort();
+    const abort = new AbortController();
+    loadAbortRef.current = abort;
+
     if (!patientId) {
       setLoading(false);
       setLoadError(true);
-      return;
+      return () => {
+        abort.abort();
+      };
     }
 
-    let cancelled = false;
     void (async () => {
       try {
-        const response = await fetch(`/api/patients/${encodeURIComponent(patientId)}`);
+        const response = await fetch(`/api/patients/${encodeURIComponent(patientId)}`, {
+          cache: "no-store",
+          signal: abort.signal,
+        });
+        if (
+          shouldIgnoreForwardReachAssignmentResult({
+            scopeAtStart,
+            currentScope: patientScopeRef.current,
+            generationAtStart: 0,
+            currentGeneration: 0,
+            aborted: abort.signal.aborted,
+          })
+        ) {
+          return;
+        }
         if (response.status === 404) {
-          if (!cancelled) {
-            setPatient(null);
-            setLoadError(true);
-          }
+          setPatient(null);
+          setLoadError(true);
           return;
         }
         if (!response.ok) {
-          if (!cancelled) setLoadError(true);
+          setLoadError(true);
           return;
         }
         const data = (await response.json()) as PatientRow;
-        if (!cancelled) {
-          setPatient(data);
-          setLoadError(false);
+        if (
+          shouldIgnoreForwardReachAssignmentResult({
+            scopeAtStart,
+            currentScope: patientScopeRef.current,
+            generationAtStart: 0,
+            currentGeneration: 0,
+            aborted: abort.signal.aborted,
+          })
+        ) {
+          return;
         }
+        setPatient(data);
+        setLoadError(false);
       } catch {
-        if (!cancelled) setLoadError(true);
+        if (
+          !shouldIgnoreForwardReachAssignmentResult({
+            scopeAtStart,
+            currentScope: patientScopeRef.current,
+            generationAtStart: 0,
+            currentGeneration: 0,
+            aborted: abort.signal.aborted,
+          })
+        ) {
+          setLoadError(true);
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (
+          !shouldIgnoreForwardReachAssignmentResult({
+            scopeAtStart,
+            currentScope: patientScopeRef.current,
+            generationAtStart: 0,
+            currentGeneration: 0,
+            aborted: abort.signal.aborted,
+          })
+        ) {
+          setLoading(false);
+        }
       }
     })();
 
     return () => {
-      cancelled = true;
+      abort.abort();
     };
   }, [patientId]);
+
+  useEffect(() => {
+    return () => {
+      loadAbortRef.current?.abort();
+    };
+  }, []);
 
   if (!isUuidPatientId(patientId)) {
     return (
@@ -104,7 +166,11 @@ export default function ForwardReachAssignmentPage() {
         </p>
 
         <div className="mt-6">
-          <ForwardReachAssignmentClient patientId={patient.id} patientName={patient.full_name} />
+          <ForwardReachAssignmentClient
+            key={patient.id}
+            patientId={patient.id}
+            patientName={patient.full_name}
+          />
         </div>
       </div>
     </main>
