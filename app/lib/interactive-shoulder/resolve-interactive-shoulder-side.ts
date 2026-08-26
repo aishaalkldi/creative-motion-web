@@ -1,3 +1,4 @@
+import { parseClinicalPrescribedSide } from "@/app/lib/clinical/clinical-prescribed-side";
 import type { ShoulderAbductionReachSide } from "@/app/lib/shoulder-rehabilitation";
 import type { MovementBlock, MovementBlockSide } from "@/app/lib/session-orchestrator/types";
 
@@ -42,6 +43,29 @@ export function resolveBlockSideFromSessionDefinition(
     if (side) return side;
   }
   return null;
+}
+
+export type ClinicalPrescribedSideRuntimeFailureReason = "missing" | "invalid";
+
+export type ClinicalPrescribedSideRuntimeResult =
+  | { ok: true; side: ShoulderAbductionReachSide; source: "prescribed" }
+  | { ok: false; reason: ClinicalPrescribedSideRuntimeFailureReason };
+
+/**
+ * Server-authoritative clinical laterality for patient-portal Interactive Shoulder.
+ * Accepts only exact stored `left`/`right` values — never block side or RIGHT fallback.
+ */
+export function resolveClinicalPrescribedSideForRuntime(
+  prescribedSide: string | null | undefined,
+): ClinicalPrescribedSideRuntimeResult {
+  const parsed = parseClinicalPrescribedSide(prescribedSide);
+  if (!parsed.ok) {
+    return { ok: false, reason: "invalid" };
+  }
+  if (parsed.value === null) {
+    return { ok: false, reason: "missing" };
+  }
+  return { ok: true, side: parsed.value, source: "prescribed" };
 }
 
 export function resolveInteractiveShoulderSide(input: {

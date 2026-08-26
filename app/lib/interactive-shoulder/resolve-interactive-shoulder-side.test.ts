@@ -12,6 +12,7 @@ import { SHOULDER_ABDUCTION_REACH_INTERACTIVE_SESSION } from "./shoulder-abducti
 import {
   INTERACTIVE_SHOULDER_DEFAULT_SIDE,
   resolveBlockSideFromSessionDefinition,
+  resolveClinicalPrescribedSideForRuntime,
   resolveInteractiveShoulderSide,
 } from "./resolve-interactive-shoulder-side";
 import { createInitialTargetLifecycle, tickTargetLifecycle } from "./target-lifecycle";
@@ -29,6 +30,27 @@ function movementBlock(overrides: Partial<MovementBlock> & Pick<MovementBlock, "
     ...overrides,
   };
 }
+
+describe("resolveClinicalPrescribedSideForRuntime", () => {
+  it("accepts exact left and right only", () => {
+    assert.deepEqual(resolveClinicalPrescribedSideForRuntime("left"), {
+      ok: true,
+      side: "left",
+      source: "prescribed",
+    });
+    assert.deepEqual(resolveClinicalPrescribedSideForRuntime("right"), {
+      ok: true,
+      side: "right",
+      source: "prescribed",
+    });
+  });
+
+  it("rejects null, invalid, and mixed-case without RIGHT fallback", () => {
+    assert.equal(resolveClinicalPrescribedSideForRuntime(null).ok, false);
+    assert.equal(resolveClinicalPrescribedSideForRuntime("Left").ok, false);
+    assert.equal(resolveClinicalPrescribedSideForRuntime("bilateral").ok, false);
+  });
+});
 
 describe("resolveInteractiveShoulderSide", () => {
   it("uses prescribed left side when supplied, overriding block side", () => {

@@ -51,6 +51,8 @@ type PatientExerciseSessionCardProps = {
   onRegisterCaptureConsent?: (getter: () => PatientCvCameraConsentRecord | null) => void;
   /** Guided session shell renders its own progress header */
   showTopProgress?: boolean;
+  /** Server-authored treatment side from GET /api/patient/plan — never from patient input. */
+  prescribedSide?: string | null;
 };
 
 function DoseTile({
@@ -101,6 +103,7 @@ export function PatientExerciseSessionCard({
   onRegisterStsPilotRecordFlush,
   onRegisterCaptureConsent,
   showTopProgress = true,
+  prescribedSide,
 }: PatientExerciseSessionCardProps) {
   const flowUi = sessionExerciseFlowUi(lang);
   const cardUi = sessionExerciseUi(lang);
@@ -215,6 +218,9 @@ export function PatientExerciseSessionCard({
           arClass={arClass}
           textDir={textDir}
           exerciseStep={step}
+          prescribedSide={prescribedSide}
+          clinicalPrescribedSideRequired={isInteractiveShoulder}
+          runtimeInstanceKey={`${view.exerciseId}:${prescribedSide ?? "none"}`}
           onCvMetricsUpdate={onCvMetricsUpdate}
           onCvSkipped={onCvSkipped}
           onRegisterCvMetricsFlush={onRegisterCvMetricsFlush}

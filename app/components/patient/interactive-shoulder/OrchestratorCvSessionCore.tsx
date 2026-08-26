@@ -72,6 +72,7 @@ import type { TherapeuticTarget } from "@/app/lib/interactive-shoulder/types";
 import { INTERACTIVE_SHOULDER_CV_EXERCISE_ID } from "@/app/lib/interactive-shoulder/interactive-shoulder-exercise-ids";
 import {
   resolveBlockSideFromSessionDefinition,
+  resolveClinicalPrescribedSideForRuntime,
   resolveInteractiveShoulderSide,
   type ResolvedInteractiveShoulderSide,
 } from "@/app/lib/interactive-shoulder/resolve-interactive-shoulder-side";
@@ -162,6 +163,7 @@ export function OrchestratorCvSessionCore({
   arClass = "",
   textDir = "ltr",
   prescribedSide,
+  clinicalPrescribedSideRequired = false,
   onSkipped,
   onRegisterMetricsFlush,
   onRegisterCaptureConsent,
@@ -174,10 +176,20 @@ export function OrchestratorCvSessionCore({
   const entry = getExerciseCvRegistryEntry(INTERACTIVE_SHOULDER_CV_EXERCISE_ID);
   const profile = entry?.calibrationProfile;
   const interactiveBlock = sessionDefinition.blocks[0];
-  const resolvedTherapeuticSide: ResolvedInteractiveShoulderSide = resolveInteractiveShoulderSide({
-    prescribedSide,
-    blockSide: resolveBlockSideFromSessionDefinition(sessionDefinition.blocks),
-  });
+  const clinicalSideResult = clinicalPrescribedSideRequired
+    ? resolveClinicalPrescribedSideForRuntime(prescribedSide)
+    : null;
+  const prescribedSideBlocked = clinicalSideResult !== null && !clinicalSideResult.ok;
+  const resolvedTherapeuticSide: ResolvedInteractiveShoulderSide = clinicalSideResult?.ok
+    ? {
+        side: clinicalSideResult.side,
+        source: clinicalSideResult.source,
+        usedFallback: false,
+      }
+    : resolveInteractiveShoulderSide({
+        prescribedSide,
+        blockSide: resolveBlockSideFromSessionDefinition(sessionDefinition.blocks),
+      });
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -394,9 +406,9 @@ export function OrchestratorCvSessionCore({
   }, [entry, handleOrchestratorEvent, profile, reportReadiness, resolvedTherapeuticSide.side]);
 
   useEffect(() => {
-    if (!consentAccepted || !profile) return;
+    if (!consentAccepted || !profile || prescribedSideBlocked) return;
     void startSession();
-  }, [consentAccepted, profile, startSession]);
+  }, [consentAccepted, prescribedSideBlocked, profile, startSession]);
 
   useEffect(() => {
     const loop = () => {
@@ -614,6 +626,22 @@ export function OrchestratorCvSessionCore({
   };
 
   if (!profile) return null;
+
+  if (prescribedSideBlocked) {
+    return (
+      <div className="px-4 pb-4 pt-3" dir={textDir} lang={language}>
+        <div
+          className={`rounded-[10px] border border-rose-200 bg-rose-50 p-4 ${arClass}`}
+          role="alert"
+        >
+          <p className="text-sm font-semibold text-rose-800">{ui.prescribedSideRequiredTitle}</p>
+          <p className="mt-2 text-[12px] leading-relaxed text-rose-700">
+            {ui.prescribedSideRequiredMessage}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const canvasWidth = profile.canvasWidth;
   const canvasHeight = profile.canvasHeight;

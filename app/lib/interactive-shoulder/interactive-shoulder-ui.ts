@@ -53,6 +53,8 @@ export type InteractiveShoulderUi = {
   patternMetricsSeparationNote: string;
   devMouseSimulation: string;
   therapeuticSideFallback: string;
+  prescribedSideRequiredTitle: string;
+  prescribedSideRequiredMessage: string;
   cameraPreviewAriaLabel: string;
   cameraAccessDenied: string;
   cameraNotFound: string;
@@ -125,6 +127,9 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
       "Development simulation: move the mouse over the preview when pose wrist is unavailable.",
     therapeuticSideFallback:
       "Reach guidance is using a temporary default side until your therapist assigns a specific arm.",
+    prescribedSideRequiredTitle: "Session cannot start",
+    prescribedSideRequiredMessage:
+      "The treatment side has not been prescribed. Please contact your therapist.",
     cameraPreviewAriaLabel: "Interactive shoulder rehabilitation camera preview",
     cameraAccessDenied:
       "Camera access was denied. Movement tracking could not start. Please check camera permission and try again.",
@@ -200,6 +205,9 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
       "محاكاة للتطوير: حرّك المؤشر فوق المعاينة عندما لا يتوفر معصم التتبع.",
     therapeuticSideFallback:
       "يستخدم توجيه الوصول جانبًا افتراضيًا مؤقتًا حتى يحدّد معالجك الذراع المطلوب.",
+    prescribedSideRequiredTitle: "تعذّر بدء الجلسة",
+    prescribedSideRequiredMessage:
+      "لم يُحدَّد جانب العلاج بعد. يرجى التواصل مع معالجك.",
     cameraPreviewAriaLabel: "معاينة كاميرا جلسة الكتف التفاعلية",
     cameraAccessDenied:
       "تم رفض الوصول إلى الكاميرا. تعذّر بدء تتبع الحركة. تحقّق من إذن الكاميرا وحاول مرة أخرى.",
