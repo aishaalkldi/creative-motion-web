@@ -79,6 +79,8 @@ describe("toUpperLimbMotorScreenAssignmentPublic", () => {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       assignment_payload: ASSIGNMENT as any,
       schema_version: UPPER_LIMB_MOTOR_SCREEN_SCHEMA_VERSION,
+      assignment_request_id: null,
+      assignment_request_payload_hash: null,
       screen_definition_id: null,
       assigned_at: null,
       affected_side: null,
@@ -89,7 +91,7 @@ describe("toUpperLimbMotorScreenAssignmentPublic", () => {
       updated_at: "2026-08-17T10:00:01.000Z",
     };
 
-    const publicRow = toUpperLimbMotorScreenAssignmentPublic(row);
+    const publicRow = toUpperLimbMotorScreenAssignmentPublic(row, true);
     assert.deepEqual(publicRow.assignment, ASSIGNMENT);
     assert.equal(publicRow.patientId, "patient-1");
     assert.equal(publicRow.providerId, "provider-1");

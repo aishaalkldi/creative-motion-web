@@ -1164,6 +1164,8 @@ export type Database = {
           affected_side: string | null
           assigned_at: string | null
           assignment_payload: Json
+          assignment_request_id: string | null
+          assignment_request_payload_hash: string | null
           created_at: string
           delivery_mode: string | null
           id: string
@@ -1180,6 +1182,8 @@ export type Database = {
           affected_side?: string | null
           assigned_at?: string | null
           assignment_payload: Json
+          assignment_request_id?: string | null
+          assignment_request_payload_hash?: string | null
           created_at?: string
           delivery_mode?: string | null
           id: string
@@ -1196,6 +1200,8 @@ export type Database = {
           affected_side?: string | null
           assigned_at?: string | null
           assignment_payload?: Json
+          assignment_request_id?: string | null
+          assignment_request_payload_hash?: string | null
           created_at?: string
           delivery_mode?: string | null
           id?: string
@@ -1292,6 +1298,19 @@ export type Database = {
           p_program_id: string
           p_provider_id: string
           p_session_prescribed_sides?: Json | null
+        }
+        Returns: Json
+      }
+      create_upper_limb_motor_screen_assignment: {
+        Args: {
+          p_provider_id: string
+          p_patient_id: string
+          p_assignment_request_id: string | null
+          p_assignment_request_payload_hash: string | null
+          p_assignment_id: string
+          p_status: string
+          p_assignment_payload: Json
+          p_schema_version: string
         }
         Returns: Json
       }
