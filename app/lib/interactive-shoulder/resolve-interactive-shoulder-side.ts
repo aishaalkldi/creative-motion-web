@@ -1,3 +1,4 @@
+import { parseClinicalPrescribedSide } from "@/app/lib/clinical/clinical-prescribed-side";
 import type { ShoulderAbductionReachSide } from "@/app/lib/shoulder-rehabilitation";
 import type { MovementBlock, MovementBlockSide } from "@/app/lib/session-orchestrator/types";
 
@@ -42,6 +43,57 @@ export function resolveBlockSideFromSessionDefinition(
     if (side) return side;
   }
   return null;
+}
+
+export type ClinicalPrescribedSideRuntimeFailureReason = "missing" | "invalid";
+
+export type ClinicalPrescribedSideRuntimeResult =
+  | { ok: true; side: ShoulderAbductionReachSide; source: "prescribed" }
+  | { ok: false; reason: ClinicalPrescribedSideRuntimeFailureReason };
+
+/**
+ * Server-authoritative clinical laterality for patient-portal Interactive Shoulder.
+ * Accepts only exact stored `left`/`right` values — never block side or RIGHT fallback.
+ */
+export function resolveClinicalPrescribedSideForRuntime(
+  prescribedSide: string | null | undefined,
+): ClinicalPrescribedSideRuntimeResult {
+  const parsed = parseClinicalPrescribedSide(prescribedSide);
+  if (!parsed.ok) {
+    return { ok: false, reason: "invalid" };
+  }
+  if (parsed.value === null) {
+    return { ok: false, reason: "missing" };
+  }
+  return { ok: true, side: parsed.value, source: "prescribed" };
+}
+
+/**
+ * Orchestrator runtime laterality. In strict clinical mode, missing or invalid
+ * prescribed side yields null — no legacy RIGHT fallback. Non-clinical flows
+ * keep the documented block/prescribed/fallback resolution.
+ */
+export function resolveOrchestratorTherapeuticSide(input: {
+  prescribedSide?: string | null;
+  clinicalPrescribedSideRequired?: boolean;
+  blocks: readonly Pick<MovementBlock, "side">[];
+}): ResolvedInteractiveShoulderSide | null {
+  if (input.clinicalPrescribedSideRequired) {
+    const clinical = resolveClinicalPrescribedSideForRuntime(input.prescribedSide);
+    if (!clinical.ok) {
+      return null;
+    }
+    return {
+      side: clinical.side,
+      source: clinical.source,
+      usedFallback: false,
+    };
+  }
+
+  return resolveInteractiveShoulderSide({
+    prescribedSide: input.prescribedSide,
+    blockSide: resolveBlockSideFromSessionDefinition(input.blocks),
+  });
 }
 
 export function resolveInteractiveShoulderSide(input: {

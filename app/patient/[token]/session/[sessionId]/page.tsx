@@ -562,6 +562,7 @@ export default function SessionPlayerPage() {
         view={currentView}
         step={exerciseStep}
         setsCompleted={setsCompleted}
+        prescribedSide={session.prescribedSide}
         onStartExercise={handleStartExercise}
         onCompleteSet={handleCompleteSet}
         onCompleteExercise={handleCompleteExercise}

@@ -313,10 +313,13 @@ export function CatalogPatientSessionPlayback({
       sessionTitle={session.title}
     >
       <CatalogSessionPlayer
+        key={`${session.id}:${session.prescribedSide ?? "none"}`}
         programSession={catalogSession}
         language={patientLanguage}
         arClass={arClass}
         textDir={textDir}
+        prescribedSide={session.prescribedSide}
+        clinicalPrescribedSideRequired
         onSessionComplete={handleCatalogSessionComplete}
       />
     </GuidedSessionShell>
