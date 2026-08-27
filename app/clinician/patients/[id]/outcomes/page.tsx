@@ -75,6 +75,7 @@ export default function PatientOutcomesPage() {
     const parts = [
       `${bundle.painTrend.length} logged session${bundle.painTrend.length === 1 ? "" : "s"}`,
       `${bundle.assessments.length} assessment${bundle.assessments.length === 1 ? "" : "s"}`,
+      `${bundle.interactiveShoulderOutcomes.length} Interactive Shoulder outcome${bundle.interactiveShoulderOutcomes.length === 1 ? "" : "s"}`,
       `${bundle.cvEvidence.length} camera session${bundle.cvEvidence.length === 1 ? "" : "s"}`,
     ];
     return parts.join(" · ");

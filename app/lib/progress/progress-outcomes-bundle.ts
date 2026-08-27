@@ -11,6 +11,11 @@ import {
 } from "@/app/lib/progress/extract-capture-quality-history";
 import { parseSessionCoachNotes } from "@/app/lib/session-coach-metadata";
 import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
+import { buildInteractiveShoulderOutcomeReportEntries } from "@/app/lib/interactive-shoulder/movement-outcome-report";
+import type { InteractiveShoulderOutcomeReportEntry } from "@/app/lib/interactive-shoulder/movement-outcome-report";
+import type { InteractiveShoulderOutcomeReportRow } from "@/app/lib/interactive-shoulder/movement-outcome-persistence";
+
+export type { InteractiveShoulderOutcomeReportEntry, InteractiveShoulderOutcomeBlockReport } from "@/app/lib/interactive-shoulder/movement-outcome-report";
 
 export const PROGRESS_OUTCOMES_SAFETY_BANNER =
   "Trends are patient-reported or derived observations and require therapist interpretation.";
@@ -27,7 +32,13 @@ export const PROGRESS_OUTCOMES_SECTION_BADGES = {
   assessmentHistory: "Derived observation",
   cameraObservation: "Camera-assisted observation",
   captureReliability: "Technical capture reliability only",
+  interactiveShoulderOutcomes: "Session-derived movement data",
 } as const;
+
+export const INTERACTIVE_SHOULDER_OUTCOMES_REVIEW_NOTE =
+  "Session-derived movement data for therapist review.";
+
+export const INTERACTIVE_SHOULDER_OUTCOMES_DISCLAIMER = "For therapist review only.";
 
 export type ProgressOutcomesAdherence = {
   planId: string;
@@ -95,6 +106,7 @@ export type ProgressOutcomesBundle = {
   assessments: ProgressOutcomesAssessmentEntry[];
   cvEvidence: ProgressOutcomesCvEvidenceEntry[];
   captureQualityHistory: CaptureQualityHistoryEntry[];
+  interactiveShoulderOutcomes: InteractiveShoulderOutcomeReportEntry[];
 };
 
 export type SessionLogInput = {
@@ -196,6 +208,7 @@ export function buildProgressOutcomesBundle(input: {
   sessionNumberById: Map<string, number>;
   assessmentRows: AssessmentPickInput[];
   cvMetricRows: CvMetricInput[];
+  interactiveShoulderOutcomeRows: InteractiveShoulderOutcomeReportRow[];
 }): ProgressOutcomesBundle {
   const adherence =
     input.planId && input.totalSessions > 0
@@ -230,6 +243,9 @@ export function buildProgressOutcomesBundle(input: {
     assessments: buildAssessmentHistory(input.assessmentRows),
     cvEvidence: buildCvEvidenceTimeline(input.cvMetricRows),
     captureQualityHistory: buildCaptureQualityHistory(input.cvMetricRows),
+    interactiveShoulderOutcomes: buildInteractiveShoulderOutcomeReportEntries(
+      input.interactiveShoulderOutcomeRows,
+    ),
   };
 }
 

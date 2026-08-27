@@ -134,6 +134,72 @@ export function toInteractiveShoulderMovementOutcomePublic(
   };
 }
 
+// ── Read (O3 — clinician Progress/Outcomes report) ──────────────────────
+
+/**
+ * Narrow read-optimized projection of a stored row — exactly the
+ * columns the clinician report DTO (movement-outcome-report.ts) needs.
+ * Deliberately omits provider_id/patient_id: the caller already knows
+ * both (they are the query's own scoping input) and neither is ever
+ * rendered in the clinician UI.
+ */
+export type InteractiveShoulderOutcomeReportRow = Pick<
+  InteractiveShoulderMovementOutcomesRow,
+  | "id"
+  | "plan_session_id"
+  | "plan_id"
+  | "prescribed_side"
+  | "session_state"
+  | "outcome_payload"
+  | "schema_version"
+  | "created_at"
+>;
+
+export type FetchInteractiveShoulderOutcomesForPatientInput = {
+  providerId: string;
+  patientId: string;
+  /** When set, scopes to one plan — matching how session_logs is scoped in the same hub. Null shows outcomes across all of the patient's plans. */
+  planId: string | null;
+};
+
+export type FetchInteractiveShoulderOutcomesForPatientResult =
+  | { ok: true; rows: InteractiveShoulderOutcomeReportRow[] }
+  | { ok: false };
+
+/**
+ * Read-only, provider- and patient-scoped list of this patient's
+ * recorded Interactive Shoulder movement outcomes, for the clinician
+ * Progress/Outcomes report (O3). Never reads or joins any volunteer/
+ * research table. Ordered most-recent-first, with a tie-broken
+ * secondary sort on id for deterministic pagination-free output.
+ */
+export async function fetchInteractiveShoulderOutcomesForPatient(
+  adminClient: SupabaseClient,
+  input: FetchInteractiveShoulderOutcomesForPatientInput,
+): Promise<FetchInteractiveShoulderOutcomesForPatientResult> {
+  let query = adminClient
+    .from("interactive_shoulder_movement_outcomes")
+    .select("id, plan_session_id, plan_id, prescribed_side, session_state, outcome_payload, schema_version, created_at")
+    .eq("provider_id", input.providerId)
+    .eq("patient_id", input.patientId);
+
+  if (input.planId) {
+    query = query.eq("plan_id", input.planId);
+  }
+
+  const { data, error } = await query
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
+    .returns<InteractiveShoulderOutcomeReportRow[]>();
+
+  if (error) {
+    console.error("[fetchInteractiveShoulderOutcomesForPatient] query failed:", error.message);
+    return { ok: false };
+  }
+
+  return { ok: true, rows: data ?? [] };
+}
+
 const UNIQUE_VIOLATION_ERROR_CODE = "23505";
 
 export type InsertInteractiveShoulderMovementOutcomeResult =

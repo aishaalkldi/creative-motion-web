@@ -76,7 +76,7 @@ function isNumberArray(value: unknown): value is number[] {
   return Array.isArray(value) && value.every((item) => isFiniteNumber(item));
 }
 
-type FieldResult<T> = { ok: true; value: T } | { ok: false; detail: string };
+export type FieldResult<T> = { ok: true; value: T } | { ok: false; detail: string };
 
 function validateInteractionPerformance(candidate: unknown, path: string): FieldResult<InteractionPerformance> {
   if (!isRecord(candidate)) return { ok: false, detail: `${path} must be an object` };
@@ -176,7 +176,15 @@ function validateInterpretedObservations(candidate: unknown, path: string): Fiel
   };
 }
 
-function validateMovementBlockResult(candidate: unknown, index: number): FieldResult<MovementBlockResult> {
+/**
+ * Exported (in addition to its use inside the top-level request
+ * validator above) so the clinician read path (O3,
+ * movement-outcome-report.ts) can defensively re-validate a persisted
+ * block's shape without duplicating this same interaction/measured/
+ * interpreted structural check. Read-only reuse — no change to what
+ * this function accepts or rejects.
+ */
+export function validateMovementBlockResult(candidate: unknown, index: number): FieldResult<MovementBlockResult> {
   const path = `blockResults[${index}]`;
   if (!isRecord(candidate)) return { ok: false, detail: `${path} must be an object` };
 
