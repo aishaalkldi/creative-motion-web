@@ -26,7 +26,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import type { MovementBlock } from "@/app/lib/rehab-programs/rehab-program-types";
+import type { MovementBlock } from "@/app/lib/session-orchestrator/types";
 import type { ShoulderAbductionReachSide } from "@/app/lib/shoulder-rehabilitation";
 import { toSessionDefinition } from "@/app/lib/rehab-programs/rehab-program-runtime-adapter";
 import { STROKE_UPPER_LIMB_RECOVERY_FOUNDATION_SESSION_1 } from "@/app/lib/rehab-programs/stroke-upper-limb-recovery-foundation";
