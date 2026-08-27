@@ -13,10 +13,17 @@
  * toInteractiveShoulderMovementOutcomePublic) — no parallel persistence
  * model.
  *
- * Server-authoritative: providerId, patientId, planId, and
- * prescribedSide are NEVER read from the request body — only token +
+ * Server-authoritative: providerId, patientId, planId, prescribedSide,
+ * and id are NEVER read from the request body — only token +
  * planSessionId + the real runtime session facts (sessionState,
- * elapsed time, block results) are client input. providerId/patientId/
+ * elapsed time, block results) are accepted at all. A body containing
+ * any of those forbidden fields — or any field outside this route's
+ * explicit allowlist, which is exactly O1's own allowlist
+ * (movement-outcome-request-validation.ts) plus "token" — is rejected
+ * outright with a generic 400 before any resolution, lookup, or
+ * persistence work happens (rejectUnknownRequestKeys below), mirroring
+ * the exact convention already used for
+ * POST /api/upper-limb-motor-screen/assignments. providerId/patientId/
  * planId come from the resolved token; prescribedSide comes from the
  * plan_sessions row O1 fetches server-side. O1's assembler
  * independently rejects any sessionState other than "completed" —
@@ -87,6 +94,40 @@ export function resolveInteractiveShoulderOutcomeSubmissionFeatureFlag(
   return envValue === "true";
 }
 
+/**
+ * Exactly O1's own request allowlist (movement-outcome-request-validation.ts)
+ * plus "token" — the one key this route adds beyond O1's contract, since O1
+ * has no concept of an auth token. Nothing else is ever accepted: a body
+ * carrying providerId/patientId/planId/prescribedSide/id, or any other
+ * clinical-authority or ownership field, is rejected outright by
+ * rejectUnknownRequestKeys below, before token extraction, before any
+ * resolution or persistence work.
+ */
+const REQUEST_ALLOWED_KEYS = new Set([
+  "token",
+  "planSessionId",
+  "sessionState",
+  "totalElapsedSeconds",
+  "blocksCompleted",
+  "blocksTotal",
+  "blockResults",
+]);
+
+/**
+ * Fails closed on any field outside REQUEST_ALLOWED_KEYS. Returns a generic
+ * message naming only the offending key, never why it is forbidden or what
+ * it would have controlled — this must not reveal internal ownership
+ * information to a caller probing the endpoint.
+ */
+function rejectUnknownRequestKeys(body: RequestBody): string | null {
+  for (const key of Object.keys(body)) {
+    if (!REQUEST_ALLOWED_KEYS.has(key)) {
+      return `Unknown request field: ${key}.`;
+    }
+  }
+  return null;
+}
+
 export type InteractiveShoulderOutcomeSubmissionDependencies = {
   featureEnabled: boolean;
   adminClient: SupabaseClient;
@@ -115,6 +156,14 @@ export function createInteractiveShoulderOutcomeSubmissionHandler(
       body = (await req.json()) as RequestBody;
     } catch {
       return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+    }
+
+    // Fail closed before any resolution, lookup, or persistence work: a body
+    // containing providerId/patientId/planId/prescribedSide/id, or any other
+    // field this route does not explicitly accept, is rejected outright.
+    const unknownKeyError = rejectUnknownRequestKeys(body);
+    if (unknownKeyError) {
+      return NextResponse.json({ error: unknownKeyError }, { status: 400 });
     }
 
     const tokenValue = typeof body.token === "string" ? body.token.trim() : "";

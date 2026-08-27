@@ -270,26 +270,21 @@ describe("POST /api/patient/interactive-shoulder-outcomes", () => {
     assert.equal(getResolveCalls(), 0);
   });
 
-  for (const forbidden of ["providerId", "patientId", "planId", "prescribedSide"]) {
-    it(`client-forged ${forbidden} in the body has zero effect — the route only ever reads the allowlisted movement-outcome fields, so a forged value is never trusted, never validated, and never reaches persistence`, async () => {
-      const { deps, insertCalls } = buildDeps({
+  for (const forbidden of ["providerId", "patientId", "planId", "prescribedSide", "id"]) {
+    it(`client-forged ${forbidden} in the body fails closed — the request is rejected before any resolution or persistence work, never silently ignored`, async () => {
+      const { deps, insertCalls, getResolveCalls } = buildDeps({
         admin: { insertResult: { data: INSERTED_ROW, error: null } },
       });
       const res = await createInteractiveShoulderOutcomeSubmissionHandler(deps)(
         fakeRequest(validBody({ [forbidden]: "attacker-value" })),
       );
-      // The request still succeeds — the forged field was simply never
-      // read — but the persisted row carries only server-resolved
-      // ownership/side, never "attacker-value".
-      assert.equal(res.status, 201);
-      assert.equal(insertCalls.length, 1);
-      const insertedPayload = insertCalls[0] as Record<string, unknown>;
-      assert.notEqual(insertedPayload.provider_id, "attacker-value");
-      assert.notEqual(insertedPayload.patient_id, "attacker-value");
-      assert.notEqual(insertedPayload.plan_id, "attacker-value");
-      assert.notEqual(insertedPayload.prescribed_side, "attacker-value");
-      assert.equal(insertedPayload.provider_id, PROVIDER_ID);
-      assert.equal(insertedPayload.prescribed_side, "right");
+      assert.equal(res.status, 400);
+      const json = await res.json();
+      // Generic message naming only the offending key — never explains why
+      // it is forbidden or what it would have controlled.
+      assert.equal(json.error, `Unknown request field: ${forbidden}.`);
+      assert.equal(insertCalls.length, 0);
+      assert.equal(getResolveCalls(), 0);
     });
   }
 
