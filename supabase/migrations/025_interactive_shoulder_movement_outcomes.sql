@@ -1,12 +1,20 @@
 -- ============================================================
 -- Migration 025 — interactive_shoulder_movement_outcomes (O1)
 --
--- Clinical persistence boundary for one completed Interactive
+-- Clinical persistence boundary for one fully completed Interactive
 -- Shoulder session's movement outcome. Schema-only, mirroring the
 -- Upper-Limb Motor Screen persistence pattern (019). No API route
 -- accompanies this migration — runtime submission (O2) and clinician
 -- review/finalize (O3) are deferred to later slices; this table has
 -- no status/finalize lifecycle column for that reason.
+--
+-- MVP scope, approved after review: only a fully completed session
+-- (session_state = 'completed') may be persisted through this
+-- contract. A cancelled, manually/safety-stopped, errored, or
+-- otherwise partial session is never eligible — there is no separate
+-- partial-session persistence model. An earlier draft of this
+-- migration also allowed 'stopped'; that was rejected in review and
+-- removed before this migration was ever applied anywhere.
 --
 -- Authority: prescribed_side here is a server-resolved copy of
 -- plan_sessions.prescribed_side (023) at the moment the outcome was
@@ -68,9 +76,10 @@ create table if not exists public.interactive_shoulder_movement_outcomes (
   -- unilaterally prescribed — never a silent default to a side.
   prescribed_side  text,
 
-  -- Terminal orchestrator session state at the moment this outcome was
-  -- recorded. Only genuinely-ended states are legitimate here — an
-  -- in-progress or errored session must never produce a row.
+  -- Orchestrator session state at the moment this outcome was recorded.
+  -- Only 'completed' is legitimate here — cancelled, stopped, errored,
+  -- safety-held, or otherwise partial/in-progress sessions must never
+  -- produce a row (ishmo_session_state_chk below).
   session_state    text        not null,
 
   outcome_payload  jsonb       not null,
@@ -81,8 +90,11 @@ create table if not exists public.interactive_shoulder_movement_outcomes (
   constraint ishmo_prescribed_side_chk
     check (prescribed_side is null or prescribed_side in ('left', 'right')),
 
+  -- MVP contract: only a fully completed session is eligible. No
+  -- cancelled/stopped/errored/safety-held/partial session can satisfy
+  -- this check — see the migration header note above.
   constraint ishmo_session_state_chk
-    check (session_state in ('completed', 'stopped')),
+    check (session_state = 'completed'),
 
   -- Payload/column consistency — IS NOT DISTINCT FROM so a missing/null
   -- payload key is a genuine mismatch, not silently satisfied by NULL.

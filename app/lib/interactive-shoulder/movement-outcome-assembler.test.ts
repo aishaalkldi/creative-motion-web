@@ -78,13 +78,24 @@ describe("assembleInteractiveShoulderMovementOutcomeSnapshot", () => {
     assert.equal(result.snapshot.schemaVersion, INTERACTIVE_SHOULDER_MOVEMENT_OUTCOME_SCHEMA_VERSION);
   });
 
-  it("round-trips a stopped session, preserving sessionState verbatim (never laundered to completed)", () => {
+  it("rejects a stopped session — MVP contract requires full completion, corrected per review", () => {
     const result = assembleInteractiveShoulderMovementOutcomeSnapshot(
       validInput({ sessionState: "stopped", blocksCompleted: 1, blocksTotal: 3 }),
     );
-    assert.equal(result.ok, true);
-    if (!result.ok) return;
-    assert.equal(result.snapshot.sessionState, "stopped");
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.reason, "session_not_eligible_for_outcome");
+  });
+
+  it("rejects cancelled/errored/safety-held sessions the same way — no partial-session persistence path exists", () => {
+    for (const sessionState of ["error", "safetyHold", "paused"] as const) {
+      const result = assembleInteractiveShoulderMovementOutcomeSnapshot(
+        validInput({ sessionState }),
+      );
+      assert.equal(result.ok, false, `sessionState "${sessionState}" must be rejected`);
+      if (result.ok) continue;
+      assert.equal(result.reason, "session_not_eligible_for_outcome");
+    }
   });
 
   it("preserves a null prescribedSide (session not unilaterally prescribed) — never defaults to a side", () => {

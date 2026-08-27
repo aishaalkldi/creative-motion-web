@@ -19,24 +19,24 @@ export const INTERACTIVE_SHOULDER_MOVEMENT_OUTCOME_SCHEMA_VERSION =
   "interactive-shoulder-movement-outcome/v1" as const;
 
 /**
- * The only SessionState values a movement outcome may legitimately be
- * recorded under — a session must have genuinely ended. "stopped" is
- * included deliberately: a manually/safety-stopped session still
- * produced real partial measured data worth recording for therapist
- * review, and sessionState is preserved verbatim (never laundered to
- * look like "completed"). Every other SessionState (idle, preparing,
- * calibrating, ready, active, resting, transitioning, paused,
- * safetyHold) is mid-session and must never produce a row; "error" is
- * a technical failure, not a movement outcome, and is excluded too.
+ * The only SessionState value a movement outcome may legitimately be
+ * recorded under — a fully completed session. Per the approved MVP
+ * clinical persistence contract, no other terminal or partial state is
+ * eligible: "stopped" (manually/safety-stopped), "error" (a technical
+ * failure, not a movement outcome), and every mid-session state (idle,
+ * preparing, calibrating, ready, active, resting, transitioning,
+ * paused, safetyHold) must never produce a row. A cancelled, stopped,
+ * errored, safety-held, or otherwise partial session cannot be
+ * persisted through this contract as a completed movement outcome —
+ * there is no separate partial-session persistence path.
  *
- * This is a deliberate policy choice made during O1 reconstruction —
- * flagged in the implementation report as an assumption to confirm,
- * not a value carried over from any prior design doc.
+ * Correction history: an earlier draft of this module additionally
+ * allowed "stopped" (reasoning that a manually-stopped session still
+ * produced real partial data worth recording). That was rejected in
+ * review — the approved design requires runtime submission only after
+ * full-session completion — and reduced to "completed" only.
  */
-export const INTERACTIVE_SHOULDER_OUTCOME_ELIGIBLE_SESSION_STATES = [
-  "completed",
-  "stopped",
-] as const;
+export const INTERACTIVE_SHOULDER_OUTCOME_ELIGIBLE_SESSION_STATES = ["completed"] as const;
 export type InteractiveShoulderOutcomeEligibleSessionState =
   (typeof INTERACTIVE_SHOULDER_OUTCOME_ELIGIBLE_SESSION_STATES)[number];
 

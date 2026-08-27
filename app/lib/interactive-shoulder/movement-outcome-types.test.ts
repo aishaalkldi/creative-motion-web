@@ -30,13 +30,9 @@ describe("isValidSessionState", () => {
 });
 
 describe("isInteractiveShoulderOutcomeEligibleSessionState", () => {
-  it("accepts exactly completed and stopped", () => {
-    assert.deepEqual([...INTERACTIVE_SHOULDER_OUTCOME_ELIGIBLE_SESSION_STATES].sort(), [
-      "completed",
-      "stopped",
-    ]);
+  it("accepts exactly completed — the MVP contract, nothing else", () => {
+    assert.deepEqual([...INTERACTIVE_SHOULDER_OUTCOME_ELIGIBLE_SESSION_STATES], ["completed"]);
     assert.equal(isInteractiveShoulderOutcomeEligibleSessionState("completed"), true);
-    assert.equal(isInteractiveShoulderOutcomeEligibleSessionState("stopped"), true);
   });
 
   it("rejects every in-progress/mid-session state", () => {
@@ -58,6 +54,10 @@ describe("isInteractiveShoulderOutcomeEligibleSessionState", () => {
         `"${state}" must not be outcome-eligible`,
       );
     }
+  });
+
+  it("rejects stopped — a cancelled/manually/safety-stopped session is not a completed outcome (corrected per review)", () => {
+    assert.equal(isInteractiveShoulderOutcomeEligibleSessionState("stopped"), false);
   });
 
   it("rejects the error state — a technical failure is not a movement outcome", () => {
