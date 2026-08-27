@@ -416,6 +416,74 @@ export type Database = {
           },
         ]
       }
+      interactive_shoulder_movement_outcomes: {
+        Row: {
+          created_at: string
+          id: string
+          outcome_payload: Json
+          plan_id: string
+          plan_session_id: string | null
+          prescribed_side: string | null
+          provider_id: string
+          patient_id: string
+          schema_version: string
+          session_state: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          outcome_payload: Json
+          plan_id: string
+          plan_session_id?: string | null
+          prescribed_side?: string | null
+          provider_id: string
+          patient_id: string
+          schema_version: string
+          session_state: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          outcome_payload?: Json
+          plan_id?: string
+          plan_session_id?: string | null
+          prescribed_side?: string | null
+          provider_id?: string
+          patient_id?: string
+          schema_version?: string
+          session_state?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "interactive_shoulder_movement_outcomes_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "treatment_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interactive_shoulder_movement_outcomes_plan_session_id_fkey"
+            columns: ["plan_session_id"]
+            isOneToOne: true
+            referencedRelation: "plan_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interactive_shoulder_movement_outcomes_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "interactive_shoulder_movement_outcomes_patient_id_fkey"
+            columns: ["patient_id"]
+            isOneToOne: false
+            referencedRelation: "patients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       patient_access_tokens: {
         Row: {
           created_at: string
@@ -1346,3 +1414,6 @@ export type ProgramSessionBlocksRow = Tables<"program_session_blocks">;
 /** Upper-limb motor screen persistence rows (migrations 019–020). */
 export type UpperLimbMotorScreenAssignmentsRow = Tables<"upper_limb_motor_screen_assignments">;
 export type UpperLimbMotorScreenSessionResultsRow = Tables<"upper_limb_motor_screen_session_results">;
+
+/** Interactive Shoulder clinical movement-outcome row (migration 025, O1). */
+export type InteractiveShoulderMovementOutcomesRow = Tables<"interactive_shoulder_movement_outcomes">;
