@@ -12,6 +12,7 @@ import {
 import { parseSessionCoachNotes } from "@/app/lib/session-coach-metadata";
 import type { CvSessionMetricPublic } from "@/app/lib/cv/cv-metrics-display";
 import { buildInteractiveShoulderOutcomeReportEntries } from "@/app/lib/interactive-shoulder/movement-outcome-report";
+export { describeRecordedBlockResults } from "@/app/lib/interactive-shoulder/movement-outcome-report";
 import type { InteractiveShoulderOutcomeReportEntry } from "@/app/lib/interactive-shoulder/movement-outcome-report";
 import type { InteractiveShoulderOutcomeReportRow } from "@/app/lib/interactive-shoulder/movement-outcome-persistence";
 

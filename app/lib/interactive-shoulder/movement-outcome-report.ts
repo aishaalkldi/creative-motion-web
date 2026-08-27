@@ -128,3 +128,23 @@ export function buildInteractiveShoulderOutcomeReportEntries(
 ): InteractiveShoulderOutcomeReportEntry[] {
   return rows.map(buildInteractiveShoulderOutcomeReportEntry);
 }
+
+/**
+ * Clinically neutral, strictly factual label for how many block
+ * results were actually recorded in this session — never an "X of Y"
+ * ratio and never a percentage.
+ *
+ * blocksCompleted/blocksTotal remain on the DTO for internal/
+ * compatibility use only: O2 documented that both are derived from
+ * accumulatedBlockResults.length in the current runtime integration
+ * and are not independently authoritative, so even presenting them
+ * side by side as a raw pair could imply a denominator we do not
+ * actually know. This label counts the real, already-parsed `blocks`
+ * array instead of trusting either field — the UI must call this
+ * function rather than reference blocksCompleted/blocksTotal directly.
+ */
+export function describeRecordedBlockResults(
+  entry: Pick<InteractiveShoulderOutcomeReportEntry, "blocks">,
+): string {
+  return `Recorded block results: ${entry.blocks.length}`;
+}

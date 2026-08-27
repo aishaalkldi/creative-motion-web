@@ -7,6 +7,7 @@ import { describe, it } from "node:test";
 import {
   buildInteractiveShoulderOutcomeReportEntries,
   buildInteractiveShoulderOutcomeReportEntry,
+  describeRecordedBlockResults,
 } from "./movement-outcome-report";
 import type { InteractiveShoulderOutcomeReportRow } from "./movement-outcome-persistence";
 import { INTERACTIVE_SHOULDER_MOVEMENT_OUTCOME_SCHEMA_VERSION } from "./movement-outcome-types";
@@ -148,6 +149,8 @@ describe("buildInteractiveShoulderOutcomeReportEntry — happy path", () => {
       "symmetryScore",
       "impairment",
       "recovery",
+      "completionRatio",
+      "blockRatio",
     ];
     for (const key of entryKeys) {
       for (const bad of forbidden) {
@@ -281,6 +284,50 @@ describe("buildInteractiveShoulderOutcomeReportEntry — missing/legacy/malforme
     const entry = buildInteractiveShoulderOutcomeReportEntry(row({ schema_version: undefined as never }));
     assert.equal(entry.schemaVersion, "");
     assert.equal(entry.recognizedSchemaVersion, false);
+  });
+});
+
+describe("describeRecordedBlockResults — clinician-display correction (no X/Y ratio, no percentage)", () => {
+  it("counts the real, already-parsed blocks array — not blocksCompleted or blocksTotal", () => {
+    const entry = buildInteractiveShoulderOutcomeReportEntry(
+      row({
+        // blocksCompleted/blocksTotal deliberately say something different
+        // from the real block count, exactly the O2-documented drift this
+        // correction exists to guard against.
+        outcome_payload: payload({ blocksCompleted: 1, blocksTotal: 3, blockResults: [blockResult(), blockResult({ blockId: "second" })] }) as never,
+      }),
+    );
+    assert.equal(entry.blocks.length, 2);
+    assert.equal(describeRecordedBlockResults(entry), "Recorded block results: 2");
+  });
+
+  it("never renders an X/Y ratio — no slash character anywhere in the output", () => {
+    const entry = buildInteractiveShoulderOutcomeReportEntry(row());
+    assert.equal(describeRecordedBlockResults(entry).includes("/"), false);
+  });
+
+  it("never renders a percentage — no percent sign anywhere in the output", () => {
+    const entry = buildInteractiveShoulderOutcomeReportEntry(row());
+    assert.equal(describeRecordedBlockResults(entry).includes("%"), false);
+  });
+
+  it("zero recorded blocks -> factual zero, not omitted or fabricated", () => {
+    const entry = buildInteractiveShoulderOutcomeReportEntry(
+      row({ outcome_payload: payload({ blockResults: [] }) as never }),
+    );
+    assert.equal(describeRecordedBlockResults(entry), "Recorded block results: 0");
+  });
+
+  it("a malformed block that gets omitted from the parsed array is not counted — the label reflects only real, validated blocks", () => {
+    const entry = buildInteractiveShoulderOutcomeReportEntry(
+      row({
+        outcome_payload: payload({
+          blockResults: [blockResult(), { totally: "malformed" }],
+        }) as never,
+      }),
+    );
+    assert.equal(entry.blocks.length, 1);
+    assert.equal(describeRecordedBlockResults(entry), "Recorded block results: 1");
   });
 });
 

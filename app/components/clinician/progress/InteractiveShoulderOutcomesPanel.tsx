@@ -9,6 +9,7 @@ import type {
 import {
   INTERACTIVE_SHOULDER_OUTCOMES_DISCLAIMER,
   INTERACTIVE_SHOULDER_OUTCOMES_REVIEW_NOTE,
+  describeRecordedBlockResults,
 } from "@/app/lib/progress/progress-outcomes-bundle";
 import type {
   MovementBlockCompletionReason,
@@ -178,7 +179,7 @@ function OutcomeEntryCard({ entry }: { entry: InteractiveShoulderOutcomeReportEn
 
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat label="Elapsed time" value={formatCvDuration(entry.totalElapsedSeconds)} />
-        <Stat label="Blocks completed" value={`${entry.blocksCompleted} of ${entry.blocksTotal}`} />
+        <Stat label="Block data" value={describeRecordedBlockResults(entry)} />
       </div>
 
       {!entry.recognizedSchemaVersion ? (
