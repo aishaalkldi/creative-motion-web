@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -179,11 +180,23 @@ export function OrchestratorCvSessionCore({
   const entry = getExerciseCvRegistryEntry(INTERACTIVE_SHOULDER_CV_EXERCISE_ID);
   const profile = entry?.calibrationProfile;
   const interactiveBlock = sessionDefinition.blocks[0];
-  const resolvedTherapeuticSide = resolveOrchestratorTherapeuticSide({
-    prescribedSide,
-    clinicalPrescribedSideRequired,
-    blocks: sessionDefinition.blocks,
-  });
+  /**
+   * Memoised so the resolved side keeps a stable identity across renders. It feeds
+   * the detector mount/dispose layout effect and the camera-start effect below, and
+   * React compares effect dependencies with `Object.is`: a fresh object each render
+   * re-ran both effects on every render, tearing down and rebuilding the pose
+   * detector and re-invoking `startSession()` in a loop that never settled (#273).
+   * `sessionDefinition` is referentially stable at both call sites.
+   */
+  const resolvedTherapeuticSide = useMemo(
+    () =>
+      resolveOrchestratorTherapeuticSide({
+        prescribedSide,
+        clinicalPrescribedSideRequired,
+        blocks: sessionDefinition.blocks,
+      }),
+    [prescribedSide, clinicalPrescribedSideRequired, sessionDefinition.blocks],
+  );
   const prescribedSideBlocked =
     clinicalPrescribedSideRequired && resolvedTherapeuticSide === null;
 
