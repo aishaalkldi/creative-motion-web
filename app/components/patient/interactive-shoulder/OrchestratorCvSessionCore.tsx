@@ -98,6 +98,14 @@ import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 
 registerAllBlockRunners();
 
+/**
+ * The capture-readiness payload shape, derived from the prop it is passed to so the
+ * two can never drift apart. Used only by the #276 change-on-value guard below.
+ */
+type CaptureReadinessPayload = Parameters<
+  NonNullable<OrchestratorCvSessionCoreProps["onCaptureReadinessChange"]>
+>[0];
+
 const PatientCameraVideoLayer = memo(function PatientCameraVideoLayer({
   videoRef,
   canvasRef,
@@ -220,6 +228,17 @@ export function OrchestratorCvSessionCore({
   const faultPauseAppliedRef = useRef(false);
   const devMouseRef = useRef<{ x: number; y: number } | null>(null);
   const snapshotRef = useRef<ShoulderAbductionReachPoseDetectorSnapshot | null>(null);
+  /**
+   * Last capture-readiness payload actually handed to the ancestor. Issue #276.
+   *
+   * `reportReadiness` runs once per published snapshot, and #276 raised that from one
+   * publication per 15 camera frames to one per frame. Readiness itself changes only
+   * when the patient's framing or tracking state changes — at most a few times a
+   * session — so without this the ancestor would receive ~30 identical payloads per
+   * second, each a fresh object, and re-render on every one. Value comparison only:
+   * the same payloads are delivered, just not re-delivered unchanged.
+   */
+  const lastReadinessPayloadRef = useRef<CaptureReadinessPayload | null>(null);
   const therapeuticSideRef = useRef<ShoulderAbductionReachSide | null>(null);
   therapeuticSideRef.current = resolvedTherapeuticSide?.side ?? null;
   /**
@@ -328,12 +347,24 @@ export function OrchestratorCvSessionCore({
             : framing === "low_visibility"
               ? "improve_lighting"
               : "adjust_position";
-      onCaptureReadinessChange({
+      const payload: CaptureReadinessPayload = {
         primaryGuidance,
         canStartTracking: Boolean(canStart),
         minimumMet: framing !== "checking",
         previewActive: Boolean(snap?.previewActive),
-      });
+      };
+      const previous = lastReadinessPayloadRef.current;
+      if (
+        previous &&
+        previous.primaryGuidance === payload.primaryGuidance &&
+        previous.canStartTracking === payload.canStartTracking &&
+        previous.minimumMet === payload.minimumMet &&
+        previous.previewActive === payload.previewActive
+      ) {
+        return;
+      }
+      lastReadinessPayloadRef.current = payload;
+      onCaptureReadinessChange(payload);
     },
     [onCaptureReadinessChange],
   );
