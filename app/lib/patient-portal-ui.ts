@@ -1290,6 +1290,9 @@ export type GuidedSessionUi = {
   restCountdownSeconds: (seconds: number) => string;
   restReadyForNext: string;
   manualExerciseNoCv: string;
+  cameraRequiredTitle: string;
+  cameraRequiredBody: string;
+  cameraRequiredRetry: string;
 };
 
 const GUIDED_SESSION: Record<PatientPortalLanguage, GuidedSessionUi> = {
@@ -1326,6 +1329,10 @@ const GUIDED_SESSION: Record<PatientPortalLanguage, GuidedSessionUi> = {
     restReadyForNext: "Ready for the next exercise",
     manualExerciseNoCv:
       "Camera tracking is not available for this exercise yet. Follow the instructions and complete it manually.",
+    cameraRequiredTitle: "Camera access is required",
+    cameraRequiredBody:
+      "This session uses your camera to guide the movement. Please continue and allow camera access to begin.",
+    cameraRequiredRetry: "Try again",
   },
   ar: {
     startEyebrow: "جاهز عندما تكون أنت",
@@ -1360,6 +1367,10 @@ const GUIDED_SESSION: Record<PatientPortalLanguage, GuidedSessionUi> = {
     restReadyForNext: "جاهز للتمرين التالي",
     manualExerciseNoCv:
       "التتبع بالكاميرا غير متاح لهذا التمرين حاليًا. اتبع التعليمات وأكمل التمرين يدويًا.",
+    cameraRequiredTitle: "الوصول إلى الكاميرا مطلوب",
+    cameraRequiredBody:
+      "تستخدم هذه الجلسة الكاميرا لتوجيه الحركة. يرجى المتابعة والسماح بالوصول إلى الكاميرا للبدء.",
+    cameraRequiredRetry: "حاول مرة أخرى",
   },
 };
 

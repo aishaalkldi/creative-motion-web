@@ -16,7 +16,11 @@ export { describeRecordedBlockResults } from "@/app/lib/interactive-shoulder/mov
 import type { InteractiveShoulderOutcomeReportEntry } from "@/app/lib/interactive-shoulder/movement-outcome-report";
 import type { InteractiveShoulderOutcomeReportRow } from "@/app/lib/interactive-shoulder/movement-outcome-persistence";
 
-export type { InteractiveShoulderOutcomeReportEntry, InteractiveShoulderOutcomeBlockReport } from "@/app/lib/interactive-shoulder/movement-outcome-report";
+export type {
+  InteractiveShoulderOutcomeReportEntry,
+  InteractiveShoulderOutcomeBlockReport,
+  InteractiveShoulderOutcomeBlockDisplayCategory,
+} from "@/app/lib/interactive-shoulder/movement-outcome-report";
 
 export const PROGRESS_OUTCOMES_SAFETY_BANNER =
   "Trends are patient-reported or derived observations and require therapist interpretation.";
