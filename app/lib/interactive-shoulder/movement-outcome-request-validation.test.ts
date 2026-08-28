@@ -180,4 +180,38 @@ describe("validateInteractiveShoulderMovementOutcomeRequest", () => {
     assert.equal(result.input.blockResults.length, 1);
     assert.equal(result.input.blockResults[0].measured.validRepetitions, 8);
   });
+
+  it("blockType/title are optional — a body without either still validates (existing block payloads stay valid)", () => {
+    const result = validateInteractiveShoulderMovementOutcomeRequest(validBody());
+    assert.equal(result.ok, true, result.ok ? undefined : result.detail);
+    if (!result.ok) return;
+    assert.equal(result.input.blockResults[0].blockType, undefined);
+    assert.equal(result.input.blockResults[0].title, undefined);
+  });
+
+  for (const blockType of ["movement-target", "movement-pattern", "instructional"]) {
+    it(`accepts and preserves a real blockType: "${blockType}"`, () => {
+      const result = validateInteractiveShoulderMovementOutcomeRequest(
+        validBody({ blockResults: [blockResult({ blockType, title: "Some Block" })] }),
+      );
+      assert.equal(result.ok, true, result.ok ? undefined : result.detail);
+      if (!result.ok) return;
+      assert.equal(result.input.blockResults[0].blockType, blockType);
+      assert.equal(result.input.blockResults[0].title, "Some Block");
+    });
+  }
+
+  it("an unrecognized blockType is rejected — never silently accepted or dropped", () => {
+    const result = validateInteractiveShoulderMovementOutcomeRequest(
+      validBody({ blockResults: [blockResult({ blockType: "some-future-block-type" })] }),
+    );
+    assert.equal(result.ok, false);
+  });
+
+  it("a non-string title is rejected", () => {
+    const result = validateInteractiveShoulderMovementOutcomeRequest(
+      validBody({ blockResults: [blockResult({ title: 12345 })] }),
+    );
+    assert.equal(result.ok, false);
+  });
 });

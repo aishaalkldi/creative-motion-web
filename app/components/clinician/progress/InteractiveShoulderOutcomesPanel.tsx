@@ -3,6 +3,7 @@
 import { formatCvDuration, formatCvRecordedAt } from "@/app/lib/cv/cv-metrics-display";
 import { formatPrescribedSideForReview } from "@/app/lib/clinical/clinical-prescribed-side-plan-draft";
 import type {
+  InteractiveShoulderOutcomeBlockDisplayCategory,
   InteractiveShoulderOutcomeBlockReport,
   InteractiveShoulderOutcomeReportEntry,
 } from "@/app/lib/progress/progress-outcomes-bundle";
@@ -11,10 +12,7 @@ import {
   INTERACTIVE_SHOULDER_OUTCOMES_REVIEW_NOTE,
   describeRecordedBlockResults,
 } from "@/app/lib/progress/progress-outcomes-bundle";
-import type {
-  MovementBlockCompletionReason,
-  InterpretedObservations,
-} from "@/app/lib/session-orchestrator/types";
+import type { MovementBlockCompletionReason } from "@/app/lib/session-orchestrator/types";
 
 type InteractiveShoulderOutcomesPanelProps = {
   outcomes: InteractiveShoulderOutcomeReportEntry[];
@@ -31,10 +29,17 @@ const COMPLETION_REASON_LABELS: Record<MovementBlockCompletionReason, string> = 
   safetyStop: "Safety stop",
 };
 
-const FATIGUE_TREND_LABELS: Record<InterpretedObservations["fatigueTrend"], string> = {
-  stable: "Stable",
-  declining: "Declining",
-  unknown: "Unknown",
+/**
+ * A block's category fallback label — used only when the persisted row has
+ * no `title` (a row recorded before that field existed). Never derived from
+ * blockId: a raw catalog identifier (e.g. "stroke-ulrf-v1-session-1-warm-up")
+ * must never reach the clinician-facing report.
+ */
+const CATEGORY_FALLBACK_LABELS: Record<InteractiveShoulderOutcomeBlockDisplayCategory, string> = {
+  target: "Target reach block",
+  pattern: "Movement pattern block",
+  instructional: "Instructional phase",
+  unknown: "Session block",
 };
 
 function formatCompletionReason(reason: MovementBlockCompletionReason | null): string {
@@ -42,10 +47,9 @@ function formatCompletionReason(reason: MovementBlockCompletionReason | null): s
   return COMPLETION_REASON_LABELS[reason] ?? "Not recorded";
 }
 
-function formatBlockLabel(blockId: string): string {
-  const spaced = blockId.replace(/[-_]+/g, " ").trim();
-  if (!spaced) return blockId;
-  return spaced.replace(/\b\w/g, (c) => c.toUpperCase());
+/** The block's own real title when persisted; otherwise a category-derived label — never a formatted blockId. */
+function formatBlockTitle(block: InteractiveShoulderOutcomeBlockReport): string {
+  return block.title ?? CATEGORY_FALLBACK_LABELS[block.displayCategory];
 }
 
 function formatNumberOrDash(value: number | null): string {
@@ -54,18 +58,6 @@ function formatNumberOrDash(value: number | null): string {
 
 function formatSecondsOrDash(value: number | null): string {
   return value != null ? `${value}s` : "—";
-}
-
-function formatListOrDash(values: readonly string[]): string {
-  return values.length > 0 ? values.join(", ") : "None recorded";
-}
-
-function formatMsListOrDash(values: readonly number[]): string {
-  return values.length > 0 ? values.map((v) => `${Math.round(v)}ms`).join(", ") : "—";
-}
-
-function formatDegreesListOrDash(values: readonly number[]): string {
-  return values.length > 0 ? values.map((v) => `${v}°`).join(", ") : "—";
 }
 
 function Stat({ label, value }: { label: string; value: string }) {
@@ -77,7 +69,78 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function BlockReportCard({
+/**
+ * Interactive (target/pattern) block card — the one interaction count that
+ * actually applies to this category, plus participation time. Never both
+ * targets and patterns on the same card, and never the measured/interpreted
+ * sections: no field in either currently has a runtime producer trustworthy
+ * enough to show at the same visual confidence as these two facts.
+ */
+function InteractiveBlockCard({
+  block,
+  index,
+}: {
+  block: InteractiveShoulderOutcomeBlockReport;
+  index: number;
+}) {
+  const primaryStat =
+    block.displayCategory === "pattern"
+      ? { label: "Patterns completed", value: formatNumberOrDash(block.interaction.patternsCompleted) }
+      : { label: "Targets contacted", value: formatNumberOrDash(block.interaction.targetsContacted) };
+
+  return (
+    <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220]/50 p-4">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-[12px] font-semibold text-[#F9FAFB]">
+          Block {index + 1} — {formatBlockTitle(block)}
+        </p>
+        <p className="text-[10px] text-white/35">
+          {formatCompletionReason(block.completionReason)} · {formatSecondsOrDash(block.durationSeconds)}
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <Stat label={primaryStat.label} value={primaryStat.value} />
+        <Stat
+          label="Participation time"
+          value={formatSecondsOrDash(block.interaction.participationDurationSeconds)}
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Instructional block (Warm-up/Cool-down) — a compact timeline fact, not a
+ * movement-performance card. No stat grid: this block never produces a rep,
+ * target, or pattern measurement, so a card that looked like the interactive
+ * ones above would imply a measurement that was never taken.
+ */
+function InstructionalBlockRow({
+  block,
+  index,
+}: {
+  block: InteractiveShoulderOutcomeBlockReport;
+  index: number;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-[#1E2D42]/60 bg-[#0B1220]/25 px-4 py-2.5">
+      <p className="text-[11px] font-medium text-white/60">
+        Block {index + 1} — {formatBlockTitle(block)}
+      </p>
+      <p className="text-[10px] text-white/35">
+        Instructional phase completed · {formatSecondsOrDash(block.durationSeconds)}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * A row with no recognized blockType (a legacy row persisted before this
+ * field existed). Shows whichever interaction counts are actually present
+ * rather than guessing a category — never labeled "target" or "pattern"
+ * when the record itself doesn't say which one it was.
+ */
+function UnknownCategoryBlockCard({
   block,
   index,
 }: {
@@ -88,78 +151,42 @@ function BlockReportCard({
     <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220]/50 p-4">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-[12px] font-semibold text-[#F9FAFB]">
-          Block {index + 1} — {formatBlockLabel(block.blockId)}
+          Block {index + 1} — {formatBlockTitle(block)}
         </p>
         <p className="text-[10px] text-white/35">
           {formatCompletionReason(block.completionReason)} · {formatSecondsOrDash(block.durationSeconds)}
         </p>
       </div>
-
-      <div className="space-y-3">
-        <div>
-          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[#5DCAA5]">
-            Movement performance — measured
-          </p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Stat label="Valid repetitions" value={formatNumberOrDash(block.measured.validRepetitions)} />
-            <Stat label="Invalid repetitions" value={formatNumberOrDash(block.measured.invalidRepetitions)} />
-            <Stat label="Range of motion" value={formatDegreesListOrDash(block.measured.rangeValuesDegrees)} />
-            <Stat label="Hold duration" value={formatSecondsOrDash(block.measured.holdDurationSeconds)} />
-            <Stat
-              label="Movement speed"
-              value={block.measured.movementSpeed != null ? String(block.measured.movementSpeed) : "—"}
-            />
-            <Stat
-              label="Return control"
-              value={block.measured.returnControl != null ? String(block.measured.returnControl) : "—"}
-            />
-            <Stat
-              label="Tracking confidence"
-              value={block.measured.trackingConfidence != null ? String(block.measured.trackingConfidence) : "—"}
-            />
-          </div>
-        </div>
-
-        <div>
-          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-[#5DCAA5]">
-            Interactive task performance — interaction
-          </p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Stat label="Targets contacted" value={formatNumberOrDash(block.interaction.targetsContacted)} />
-            <Stat label="Patterns completed" value={formatNumberOrDash(block.interaction.patternsCompleted)} />
-            <Stat label="Response timing" value={formatMsListOrDash(block.interaction.timingSamplesMs)} />
-            <Stat
-              label="Response consistency"
-              value={
-                block.interaction.responseConsistency != null
-                  ? String(block.interaction.responseConsistency)
-                  : "—"
-              }
-            />
-            <Stat
-              label="Participation time"
-              value={formatSecondsOrDash(block.interaction.participationDurationSeconds)}
-            />
-          </div>
-        </div>
-
-        <div>
-          <p className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.08em] text-amber-300/90">
-            Movement observations — for therapist review
-          </p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Stat label="Compensation events" value={formatNumberOrDash(block.interpreted.compensationEvents)} />
-            <Stat label="Fatigue trend" value={FATIGUE_TREND_LABELS[block.interpreted.fatigueTrend]} />
-            <Stat label="Reduced control observed" value={block.interpreted.reducedControl ? "Yes" : "No"} />
-          </div>
-          <div className="mt-2 space-y-1.5 text-[11px] text-white/55">
-            <p>Asymmetry observations: {formatListOrDash(block.interpreted.asymmetryObservations)}</p>
-            <p>Tracking limitations: {formatListOrDash(block.interpreted.trackingLimitations)}</p>
-          </div>
-        </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {block.interaction.targetsContacted > 0 ? (
+          <Stat label="Targets contacted" value={formatNumberOrDash(block.interaction.targetsContacted)} />
+        ) : null}
+        {block.interaction.patternsCompleted > 0 ? (
+          <Stat label="Patterns completed" value={formatNumberOrDash(block.interaction.patternsCompleted)} />
+        ) : null}
+        <Stat
+          label="Participation time"
+          value={formatSecondsOrDash(block.interaction.participationDurationSeconds)}
+        />
       </div>
     </div>
   );
+}
+
+function BlockReportCard({
+  block,
+  index,
+}: {
+  block: InteractiveShoulderOutcomeBlockReport;
+  index: number;
+}) {
+  if (block.displayCategory === "instructional") {
+    return <InstructionalBlockRow block={block} index={index} />;
+  }
+  if (block.displayCategory === "unknown") {
+    return <UnknownCategoryBlockCard block={block} index={index} />;
+  }
+  return <InteractiveBlockCard block={block} index={index} />;
 }
 
 function OutcomeEntryCard({ entry }: { entry: InteractiveShoulderOutcomeReportEntry }) {

@@ -33,14 +33,42 @@ import type {
   InterpretedObservations,
   MeasuredMovementPerformance,
   MovementBlockCompletionReason,
+  SessionBlockType,
 } from "@/app/lib/session-orchestrator/types";
 import { validateMovementBlockResult } from "./movement-outcome-request-validation";
 import { INTERACTIVE_SHOULDER_MOVEMENT_OUTCOME_SCHEMA_VERSION } from "./movement-outcome-types";
 import type { InteractiveShoulderOutcomeReportRow } from "./movement-outcome-persistence";
 
+/**
+ * How the clinician UI should present this block — derived from the
+ * block's own `blockType`, never guessed from which counters happen to
+ * be non-zero. "unknown" covers a row persisted before `blockType`
+ * existed on MovementBlockResult, or a genuinely unrecognized future
+ * value — the UI must degrade to a generic, still-honest rendering for
+ * "unknown", never assume a specific category.
+ */
+export type InteractiveShoulderOutcomeBlockDisplayCategory =
+  | "target"
+  | "pattern"
+  | "instructional"
+  | "unknown";
+
+function resolveBlockDisplayCategory(
+  blockType: SessionBlockType | undefined,
+): InteractiveShoulderOutcomeBlockDisplayCategory {
+  if (blockType === "movement-target") return "target";
+  if (blockType === "movement-pattern") return "pattern";
+  if (blockType === "instructional") return "instructional";
+  return "unknown";
+}
+
 export type InteractiveShoulderOutcomeBlockReport = {
   blockId: string;
   movementId: string;
+  /** The block's own authored title (e.g. "Reach the Light"), when persisted. Null for a legacy row — never derived from blockId. */
+  title: string | null;
+  blockType: SessionBlockType | null;
+  displayCategory: InteractiveShoulderOutcomeBlockDisplayCategory;
   completionReason: MovementBlockCompletionReason | null;
   /** Literal (completedAtMs - startedAtMs) in seconds; null when the block has no completedAtMs. Not an estimate. */
   durationSeconds: number | null;
@@ -84,6 +112,9 @@ function buildBlockReport(raw: unknown, index: number): InteractiveShoulderOutco
   return {
     blockId: block.blockId,
     movementId: block.movementId,
+    title: typeof block.title === "string" && block.title.trim() !== "" ? block.title : null,
+    blockType: block.blockType ?? null,
+    displayCategory: resolveBlockDisplayCategory(block.blockType),
     completionReason: block.completionReason,
     durationSeconds: safeBlockDurationSeconds(block.startedAtMs, block.completedAtMs),
     interaction: block.interaction,

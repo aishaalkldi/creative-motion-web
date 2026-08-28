@@ -176,6 +176,18 @@ describe("assembleInteractiveShoulderMovementOutcomeSnapshot", () => {
     assert.equal(result.reason, "invalid_block_counts");
   });
 
+  it("carries blockType/title through unchanged — the block-level copy is a deep spread, not a hand-picked field list", () => {
+    const result = assembleInteractiveShoulderMovementOutcomeSnapshot(
+      validInput({
+        blockResults: [blockResult({ blockType: "instructional", title: "Warm-up" })],
+      }),
+    );
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.snapshot.blockResults[0].blockType, "instructional");
+    assert.equal(result.snapshot.blockResults[0].title, "Warm-up");
+  });
+
   it("does not invent any clinical score/interpretation field on the assembled snapshot", () => {
     const result = assembleInteractiveShoulderMovementOutcomeSnapshot(validInput());
     assert.equal(result.ok, true);

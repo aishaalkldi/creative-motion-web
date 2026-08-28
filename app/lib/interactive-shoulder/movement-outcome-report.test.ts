@@ -331,6 +331,78 @@ describe("describeRecordedBlockResults — clinician-display correction (no X/Y 
   });
 });
 
+describe("buildInteractiveShoulderOutcomeReportEntry — block display category (O6, block-specific report)", () => {
+  it("a movement-target block resolves to displayCategory \"target\"", () => {
+    const entry = buildInteractiveShoulderOutcomeReportEntry(
+      row({
+        outcome_payload: payload({
+          blockResults: [blockResult({ blockType: "movement-target", title: "Reach the Light" })],
+        }) as never,
+      }),
+    );
+    assert.equal(entry.blocks[0]?.blockType, "movement-target");
+    assert.equal(entry.blocks[0]?.displayCategory, "target");
+    assert.equal(entry.blocks[0]?.title, "Reach the Light");
+  });
+
+  it("a movement-pattern block resolves to displayCategory \"pattern\"", () => {
+    const entry = buildInteractiveShoulderOutcomeReportEntry(
+      row({
+        outcome_payload: payload({
+          blockResults: [blockResult({ blockType: "movement-pattern", title: "D1-Inspired Diagonal Reach" })],
+        }) as never,
+      }),
+    );
+    assert.equal(entry.blocks[0]?.displayCategory, "pattern");
+  });
+
+  it("an instructional block resolves to displayCategory \"instructional\"", () => {
+    const entry = buildInteractiveShoulderOutcomeReportEntry(
+      row({
+        outcome_payload: payload({
+          blockResults: [blockResult({ blockType: "instructional", title: "Warm-up" })],
+        }) as never,
+      }),
+    );
+    assert.equal(entry.blocks[0]?.displayCategory, "instructional");
+    assert.equal(entry.blocks[0]?.title, "Warm-up");
+  });
+
+  it("a block with no blockType at all (a row persisted before this field existed) resolves to \"unknown\" — never guessed from other fields", () => {
+    const entry = buildInteractiveShoulderOutcomeReportEntry(row());
+    assert.equal(entry.blocks[0]?.blockType, null);
+    assert.equal(entry.blocks[0]?.displayCategory, "unknown");
+  });
+
+  it("an unrecognized future blockType also resolves to \"unknown\", not a crash and not a guessed category", () => {
+    const entry = buildInteractiveShoulderOutcomeReportEntry(
+      row({
+        outcome_payload: payload({
+          blockResults: [blockResult({ blockType: "some-future-block-type" })],
+        }) as never,
+      }),
+    );
+    // The unrecognized blockType fails validateMovementBlockResult's own
+    // enum check, so the whole malformed block is omitted rather than
+    // half-trusted — consistent with every other malformed-block case.
+    assert.equal(entry.blocks.length, 0);
+  });
+
+  it("title falls back to null (never a formatted blockId) when the row has no title", () => {
+    const entry = buildInteractiveShoulderOutcomeReportEntry(
+      row({ outcome_payload: payload({ blockResults: [blockResult({ blockType: "movement-target" })] }) as never }),
+    );
+    assert.equal(entry.blocks[0]?.title, null);
+  });
+
+  it("a blank/whitespace-only title is treated the same as absent — never renders empty", () => {
+    const entry = buildInteractiveShoulderOutcomeReportEntry(
+      row({ outcome_payload: payload({ blockResults: [blockResult({ title: "   " })] }) as never }),
+    );
+    assert.equal(entry.blocks[0]?.title, null);
+  });
+});
+
 describe("buildInteractiveShoulderOutcomeReportEntries", () => {
   it("maps every row independently, preserving caller-provided order (the persistence layer owns sort order)", () => {
     const rowA = row({ id: "aaaaaaaa-1111-1111-1111-111111111111", created_at: "2026-08-27T09:00:00.000Z" });
