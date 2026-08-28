@@ -17,6 +17,7 @@ import {
   type InteractiveShoulderOutcomeSubmissionDependencies,
 } from "./route";
 import type { ResolvePatientPortalAccessResult } from "@/app/lib/patient-portal-access";
+import type { InteractiveShoulderOutcomeServerFailureEvent } from "@/app/lib/interactive-shoulder/movement-outcome-telemetry";
 
 const TOKEN = "patient-token-abc123";
 const PROVIDER_ID = "11111111-1111-1111-1111-111111111111";
@@ -174,6 +175,7 @@ const OK_ACCESS: ResolvePatientPortalAccessResult = {
 function buildDeps(options: BuildDepsOptions = {}) {
   const { client, insertCalls } = buildFakeAdminClient(options.admin ?? {});
   let resolveCalls = 0;
+  const serverFailures: InteractiveShoulderOutcomeServerFailureEvent[] = [];
   const deps: InteractiveShoulderOutcomeSubmissionDependencies = {
     featureEnabled: options.featureEnabled ?? true,
     adminClient: client,
@@ -183,8 +185,16 @@ function buildDeps(options: BuildDepsOptions = {}) {
       resolveCalls += 1;
       return options.accessResult ?? OK_ACCESS;
     },
+    recordServerFailure: (event) => {
+      serverFailures.push(event);
+    },
   };
-  return { deps, insertCalls, getResolveCalls: () => resolveCalls };
+  return {
+    deps,
+    insertCalls,
+    getResolveCalls: () => resolveCalls,
+    getServerFailures: () => serverFailures,
+  };
 }
 
 const INSERTED_ROW = {
@@ -299,6 +309,30 @@ describe("POST /api/patient/interactive-shoulder-outcomes", () => {
     assert.deepEqual(insertCalls, []);
   });
 
+  it("invalid_token and plan_not_found are routine, expected rejections -> no server-failure telemetry recorded", async () => {
+    const invalidTokenRun = buildDeps({ accessResult: { ok: false, reason: "invalid_token" } });
+    await createInteractiveShoulderOutcomeSubmissionHandler(invalidTokenRun.deps)(fakeRequest(validBody()));
+    assert.deepEqual(invalidTokenRun.getServerFailures(), []);
+
+    const planNotFoundRun = buildDeps({ accessResult: { ok: false, reason: "plan_not_found" } });
+    await createInteractiveShoulderOutcomeSubmissionHandler(planNotFoundRun.deps)(fakeRequest(validBody()));
+    assert.deepEqual(planNotFoundRun.getServerFailures(), []);
+  });
+
+  it("an unexpected server_error resolving patient access -> 500, and exactly one safe telemetry event is recorded (O5)", async () => {
+    const { deps, insertCalls, getServerFailures } = buildDeps({
+      accessResult: { ok: false, reason: "server_error" },
+    });
+    const res = await createInteractiveShoulderOutcomeSubmissionHandler(deps)(
+      fakeRequest(validBody()),
+    );
+    assert.equal(res.status, 500);
+    assert.deepEqual(insertCalls, []);
+    const failures = getServerFailures();
+    assert.equal(failures.length, 1);
+    assert.deepEqual(failures[0], { reason: "patient_access_resolution_failed", httpStatus: 500 });
+  });
+
   it("plan session belongs to a different provider -> not found, not exposed", async () => {
     const { deps, insertCalls } = buildDeps({
       admin: {
@@ -357,7 +391,7 @@ describe("POST /api/patient/interactive-shoulder-outcomes", () => {
   });
 
   it("valid completed session -> 201, persisted with server-resolved ownership/side, never client input", async () => {
-    const { deps, insertCalls } = buildDeps({
+    const { deps, insertCalls, getServerFailures } = buildDeps({
       admin: { insertResult: { data: INSERTED_ROW, error: null } },
     });
     const res = await createInteractiveShoulderOutcomeSubmissionHandler(deps)(
@@ -374,10 +408,43 @@ describe("POST /api/patient/interactive-shoulder-outcomes", () => {
     const body = await res.json();
     assert.equal(body.id, ROW_ID);
     assert.equal(body.created, true);
+    // Observability (O5): the happy path never records a failure event.
+    assert.deepEqual(getServerFailures(), []);
+  });
+
+  it("a persistence insert failure with an unexpected 5xx status -> 500-class response, and exactly one safe telemetry event is recorded (O5)", async () => {
+    const { deps, getServerFailures } = buildDeps({
+      admin: {
+        insertResult: { data: null, error: { message: "unexpected database failure" } },
+      },
+    });
+    const res = await createInteractiveShoulderOutcomeSubmissionHandler(deps)(
+      fakeRequest(validBody()),
+    );
+    assert.equal(res.status, 500);
+    const failures = getServerFailures();
+    assert.equal(failures.length, 1);
+    assert.deepEqual(failures[0], { reason: "persistence_insert_failed", httpStatus: 500 });
+  });
+
+  it("telemetry events never carry a token, id, or any request/outcome payload field — only the closed reason enum and a numeric status (O5)", async () => {
+    const { deps, getServerFailures } = buildDeps({
+      accessResult: { ok: false, reason: "server_error" },
+    });
+    await createInteractiveShoulderOutcomeSubmissionHandler(deps)(
+      fakeRequest(validBody({ totalElapsedSeconds: 999 })),
+    );
+    const [event] = getServerFailures();
+    assert.ok(event);
+    assert.deepEqual(Object.keys(event).sort(), ["httpStatus", "reason"]);
+    const serialized = JSON.stringify(event);
+    for (const forbidden of [TOKEN, PROVIDER_ID, PATIENT_ID, PLAN_ID, PLAN_SESSION_ID]) {
+      assert.equal(serialized.includes(forbidden), false, `telemetry event leaked ${forbidden}`);
+    }
   });
 
   it("duplicate POST (retry) -> idempotent replay: 200, same existing outcome, not a second row", async () => {
-    const { deps, insertCalls } = buildDeps({
+    const { deps, insertCalls, getServerFailures } = buildDeps({
       admin: {
         insertResult: { data: null, error: { code: "23505", message: "duplicate key" } },
         reselectResult: { data: INSERTED_ROW, error: null },
@@ -388,6 +455,8 @@ describe("POST /api/patient/interactive-shoulder-outcomes", () => {
     );
     assert.equal(res.status, 200);
     assert.equal(insertCalls.length, 1);
+    // A 23505-conflict replay is handled and successful, not an unexpected failure.
+    assert.deepEqual(getServerFailures(), []);
     const body = await res.json();
     assert.equal(body.id, ROW_ID);
     assert.equal(body.created, false);
