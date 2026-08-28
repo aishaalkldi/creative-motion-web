@@ -190,11 +190,11 @@ describe("submitInteractiveShoulderOutcome — client telemetry (O5, observabili
     assert.deepEqual(events, []);
   });
 
-  it("a non-2xx server response still returns the same friendly-message result, and additionally records one safe telemetry event with the real HTTP status", async () => {
+  it("an unexpected non-2xx server response (e.g. 500) still returns the same friendly-message result, and additionally records one safe telemetry event with the real HTTP status", async () => {
     const events: { status: number }[] = [];
     const fetchImpl = (async () =>
       new Response(JSON.stringify({ error: "internal database failure detail" }), {
-        status: 503,
+        status: 500,
       })) as unknown as typeof fetch;
 
     const result = await submitInteractiveShoulderOutcome(validInput(), fetchImpl, (event) => {
@@ -204,7 +204,53 @@ describe("submitInteractiveShoulderOutcome — client telemetry (O5, observabili
     assert.equal(result.ok, false);
     if (!result.ok) assert.equal(result.error, "internal database failure detail");
     // Additive telemetry.
-    assert.deepEqual(events, [{ status: 503 }]);
+    assert.deepEqual(events, [{ status: 500 }]);
+  });
+
+  it("other unexpected 5xx statuses (502, 504) also record telemetry — not just 500", async () => {
+    for (const status of [502, 504]) {
+      const events: { status: number }[] = [];
+      const fetchImpl = (async () =>
+        new Response(JSON.stringify({ error: "detail" }), { status })) as unknown as typeof fetch;
+
+      const result = await submitInteractiveShoulderOutcome(validInput(), fetchImpl, (event) => {
+        events.push(event);
+      });
+      assert.equal(result.ok, false);
+      assert.deepEqual(events, [{ status }], `expected telemetry for status ${status}`);
+    }
+  });
+
+  for (const routineStatus of [400, 404, 429, 503]) {
+    it(`a routine/expected ${routineStatus} response returns the same result but records NO telemetry`, async () => {
+      const events: unknown[] = [];
+      const fetchImpl = (async () =>
+        new Response(JSON.stringify({ error: "expected rejection" }), {
+          status: routineStatus,
+        })) as unknown as typeof fetch;
+
+      const result = await submitInteractiveShoulderOutcome(validInput(), fetchImpl, (event) => {
+        events.push(event);
+      });
+      // The submission result itself is unchanged by this correction.
+      assert.equal(result.ok, false);
+      if (!result.ok) assert.equal(result.status, routineStatus);
+      // The only thing this correction changes: no telemetry for a routine status.
+      assert.deepEqual(events, []);
+    });
+  }
+
+  it("503 specifically — the feature-flag-disabled kill-switch response — never generates telemetry: a normal completed session while the flag is off is expected, not an incident", async () => {
+    const events: unknown[] = [];
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ error: "Service unavailable." }), {
+        status: 503,
+      })) as unknown as typeof fetch;
+
+    await submitInteractiveShoulderOutcome(validInput(), fetchImpl, (event) => {
+      events.push(event);
+    });
+    assert.deepEqual(events, []);
   });
 
   it("a network failure before any response exists still returns the same friendly-message result, and records status:0", async () => {

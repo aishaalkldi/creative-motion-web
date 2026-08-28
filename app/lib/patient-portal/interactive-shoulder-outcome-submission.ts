@@ -66,12 +66,27 @@ export function buildInteractiveShoulderOutcomeRequestBody(
 }
 
 /**
+ * Statuses the server returns for expected, routine outcomes of this
+ * endpoint — not failures worth alerting on: 400 (invalid body/shape),
+ * 404 (unknown token, ownership mismatch — never distinguished, by
+ * design), 429 (rate limited), 503 (feature flag intentionally
+ * disabled — the normal kill-switch state while
+ * RASQ_INTERACTIVE_SHOULDER_OUTCOME_SUBMISSION_V1 is off). A completed
+ * session while the flag is off is expected behavior, not an incident;
+ * telemetry must not fire for it.
+ */
+const ROUTINE_CLIENT_RESPONSE_STATUSES = new Set([400, 404, 429, 503]);
+
+/**
  * recordClientFailure is observability only (O5) — safe metadata (HTTP
  * status only, never the token/planSessionId/snapshot in `input`, never
  * the server's response body). Injectable for tests; defaults to the
- * real Sentry capture. Does not change the return shape below or add
- * any retry — the fire-and-forget behavior this function's caller
- * relies on is unchanged.
+ * real Sentry capture. Fires only for a network failure (status 0) or
+ * a non-2xx response whose status is not in
+ * ROUTINE_CLIENT_RESPONSE_STATUSES — i.e. a genuinely unexpected
+ * failure, not an expected/routine response. Does not change the
+ * return shape below or add any retry — the fire-and-forget behavior
+ * this function's caller relies on is unchanged.
  */
 export async function submitInteractiveShoulderOutcome(
   input: SubmitInteractiveShoulderOutcomeInput,
@@ -88,7 +103,9 @@ export async function submitInteractiveShoulderOutcome(
     const body = (await res.json().catch(() => ({}))) as { created?: boolean; error?: string };
 
     if (!res.ok) {
-      recordClientFailure({ status: res.status });
+      if (!ROUTINE_CLIENT_RESPONSE_STATUSES.has(res.status)) {
+        recordClientFailure({ status: res.status });
+      }
       return {
         ok: false,
         error: body.error ?? INTERACTIVE_SHOULDER_OUTCOME_NETWORK_ERROR,
