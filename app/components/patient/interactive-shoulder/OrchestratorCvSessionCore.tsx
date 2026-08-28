@@ -79,6 +79,10 @@ import {
 import {
   resolveOrchestratorTherapeuticSide,
 } from "@/app/lib/interactive-shoulder/resolve-interactive-shoulder-side";
+import {
+  MIRRORED_PREVIEW_TRANSFORM,
+  toMirroredPreviewPoint,
+} from "@/app/lib/interactive-shoulder/presentation-mirror";
 import type { ShoulderAbductionReachSide } from "@/app/lib/shoulder-rehabilitation";
 import type { OrchestratorCvSessionCoreProps } from "@/app/lib/interactive-shoulder/orchestrator-cv-session-types";
 import {
@@ -111,13 +115,28 @@ const PatientCameraVideoLayer = memo(function PatientCameraVideoLayer({
 }) {
   return (
     <>
-      <video ref={videoRef} autoPlay muted playsInline className="block h-full w-full object-cover opacity-95" />
+      {/*
+        Mirrored (selfie) preview — issue #277. The patient sees themselves as in a
+        mirror, which is the space every therapeutic-geometry module in this slice is
+        authored in (see presentation-mirror.ts). The canvas carries the SAME transform
+        because it is drawn with raw MediaPipe x and only stays registered to the video
+        if both flip about the same centerline.
+      */}
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        className="block h-full w-full object-cover opacity-95"
+        style={{ transform: MIRRORED_PREVIEW_TRANSFORM }}
+      />
       <canvas
         ref={canvasRef}
         width={canvasWidth}
         height={canvasHeight}
         aria-hidden
         className="pointer-events-none absolute inset-0 h-full w-full opacity-60 mix-blend-screen"
+        style={{ transform: MIRRORED_PREVIEW_TRANSFORM }}
       />
     </>
   );
@@ -520,8 +539,12 @@ export function OrchestratorCvSessionCore({
         }
 
         const poseSnap = snapshotRef.current;
+        // Measured wrist reflected into mirrored preview space (#277) so the hit test
+        // is evaluated in the SAME space the target and the marker are drawn in. The
+        // dev-mouse fallback is already a preview-space point — it comes from the
+        // container's own bounding rect — so it is deliberately not converted.
         const wrist =
-          poseSnap?.primaryWristNormalized ??
+          toMirroredPreviewPoint(poseSnap?.primaryWristNormalized) ??
           (isDevMouseSimulationEnabled() ? devMouseRef.current : null);
 
         if (shouldDispatchBlockRunner(runtimeFaultRef.current)) {
@@ -542,7 +565,12 @@ export function OrchestratorCvSessionCore({
           const adaptivePlacement = resolveAdaptiveTargetPlacement({
             adaptiveState,
             affectedSide: activeTherapeuticSide,
-            shoulderAnchorNormalized: poseSnap?.primaryShoulderNormalized ?? null,
+            // Same conversion as the wrist above: the placement geometry this feeds is
+            // authored in mirrored preview space (#277). `reachRadiusNormalized` below
+            // is a scalar distance and is mirror-invariant, so it is passed unchanged.
+            shoulderAnchorNormalized: toMirroredPreviewPoint(
+              poseSnap?.primaryShoulderNormalized,
+            ),
             reachRadiusNormalized: poseSnap?.estimatedArmLengthNormalized ?? null,
             bounds: DEFAULT_SAFE_TARGET_BOUNDS,
           });
@@ -806,7 +834,7 @@ export function OrchestratorCvSessionCore({
                       <>
                         <TrackedHandCursor
                           wrist={
-                            snapshot?.primaryWristNormalized ??
+                            toMirroredPreviewPoint(snapshot?.primaryWristNormalized) ??
                             (isDevMouseSimulationEnabled() ? devMouseRef.current : null)
                           }
                           visible={hudSnapshot.sessionState === "active" || hudSnapshot.sessionState === "safetyHold"}
