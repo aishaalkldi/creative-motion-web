@@ -21,6 +21,7 @@ import {
   mapProgressCvEvidenceToMetrics,
 } from "@/app/lib/progress/progress-outcomes-bundle";
 import { LongitudinalComparisonPanel } from "@/app/components/clinician/progress/LongitudinalComparisonPanel";
+import { InteractiveShoulderOutcomesPanel } from "@/app/components/clinician/progress/InteractiveShoulderOutcomesPanel";
 
 const QUALITY_BADGE_CLASS: Record<CaptureQualityLevel, string> = {
   high: "border-[#1D9E75]/35 bg-[#1D9E75]/12 text-[#5DCAA5]",
@@ -32,6 +33,7 @@ const SECTION_NAV = [
   { id: "session-activity", label: "Session activity" },
   { id: "patient-reported-pain", label: "Patient-reported pain" },
   { id: "assessment-history", label: "Assessments" },
+  { id: "interactive-shoulder-outcomes", label: "Interactive Shoulder" },
   { id: "camera-assisted-observation", label: "Camera-assisted observation" },
   { id: "technical-capture-reliability", label: "Capture reliability" },
 ] as const;
@@ -128,7 +130,8 @@ function hubIsFullyEmpty(bundle: ProgressOutcomesBundle): boolean {
     bundle.painTrend.length === 0 &&
     bundle.assessments.length === 0 &&
     bundle.cvEvidence.length === 0 &&
-    bundle.captureQualityHistory.length === 0
+    bundle.captureQualityHistory.length === 0 &&
+    bundle.interactiveShoulderOutcomes.length === 0
   );
 }
 
@@ -328,6 +331,21 @@ export function ProgressOutcomesHub({ bundle }: ProgressOutcomesHubProps) {
               </li>
             ))}
           </ul>
+        )}
+      </SectionShell>
+
+      <SectionShell
+        id="interactive-shoulder-outcomes"
+        title="Interactive Shoulder — movement outcomes"
+        typeBadge={PROGRESS_OUTCOMES_SECTION_BADGES.interactiveShoulderOutcomes}
+        description="Session-derived movement data for therapist review. For therapist review only — not a diagnosis or clinical score."
+      >
+        {bundle.interactiveShoulderOutcomes.length === 0 ? (
+          <EmptyState message="No Interactive Shoulder movement outcomes recorded yet. A record appears here after the patient completes an Interactive Shoulder session.">
+            <EmptyLink href="/clinician/assessments">Assessment Center</EmptyLink>
+          </EmptyState>
+        ) : (
+          <InteractiveShoulderOutcomesPanel outcomes={bundle.interactiveShoulderOutcomes} />
         )}
       </SectionShell>
 

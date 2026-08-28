@@ -19,6 +19,7 @@ import {
   buildProgressOutcomesBundle,
   type ProgressOutcomesBundle,
 } from "@/app/lib/progress/progress-outcomes-bundle";
+import { fetchInteractiveShoulderOutcomesForPatient } from "@/app/lib/interactive-shoulder/movement-outcome-persistence";
 
 export type { ProgressOutcomesBundle };
 
@@ -251,6 +252,21 @@ export async function GET(req: NextRequest) {
     return genericServerErrorResponse();
   }
 
+  // Same plan-scoping rule as sessionLogsQuery above: scoped to the
+  // resolved plan when one exists, otherwise shown across all of the
+  // patient's plans. Ownership is enforced by provider_id + patient_id
+  // inside fetchInteractiveShoulderOutcomesForPatient itself — never
+  // trusted from client input.
+  const outcomesResult = await fetchInteractiveShoulderOutcomesForPatient(adminClient, {
+    providerId: user.id,
+    patientId,
+    planId,
+  });
+  if (!outcomesResult.ok) {
+    console.error("[GET /api/clinician/progress-outcomes] interactive shoulder outcomes query failed");
+    return genericServerErrorResponse();
+  }
+
   const bundle = buildProgressOutcomesBundle({
     patientId,
     patientName: patient.full_name,
@@ -262,6 +278,7 @@ export async function GET(req: NextRequest) {
     sessionNumberById,
     assessmentRows: assessmentRows ?? [],
     cvMetricRows: cvRows ?? [],
+    interactiveShoulderOutcomeRows: outcomesResult.rows,
   });
 
   return NextResponse.json(bundle);

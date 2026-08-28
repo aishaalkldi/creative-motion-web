@@ -468,7 +468,14 @@ export function OrchestratorCvSessionCore({
           });
           if (shouldFireSessionCompleteCallback(snap.sessionState, sessionCompleteFiredRef.current)) {
             sessionCompleteFiredRef.current = true;
-            onSessionComplete?.();
+            // Forwards the same local `snap` this tick already computed — no
+            // new state, no new effect dependency, no change to camera-start
+            // or detector mount/dispose lifecycle. See orchestrator-cv-session-types.ts.
+            onSessionComplete?.({
+              sessionState: snap.sessionState,
+              sessionElapsedSeconds: snap.sessionElapsedSeconds,
+              accumulatedBlockResults: snap.accumulatedBlockResults,
+            });
           }
           setShowBlockSummary(true);
         }

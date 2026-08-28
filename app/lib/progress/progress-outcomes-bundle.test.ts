@@ -130,9 +130,11 @@ describe("buildProgressOutcomesBundle", () => {
       sessionNumberById: new Map(),
       assessmentRows: [],
       cvMetricRows: [],
+      interactiveShoulderOutcomeRows: [],
     });
     assert.equal(bundle.adherence?.progressPct, 50);
     assert.deepEqual(bundle.painTrend, []);
     assert.deepEqual(bundle.cvEvidence, []);
+    assert.deepEqual(bundle.interactiveShoulderOutcomes, []);
   });
 });

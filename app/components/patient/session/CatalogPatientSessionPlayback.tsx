@@ -15,6 +15,11 @@ import {
   submitPatientSessionComplete,
 } from "@/app/lib/patient-portal/catalog-session-playback";
 import {
+  shouldSubmitInteractiveShoulderOutcome,
+  submitInteractiveShoulderOutcome,
+} from "@/app/lib/patient-portal/interactive-shoulder-outcome-submission";
+import type { InteractiveShoulderSessionCompletionSnapshot } from "@/app/lib/interactive-shoulder/orchestrator-cv-session-types";
+import {
   guidedSessionUi,
   sessionExerciseFlowUi,
   sessionShellUi,
@@ -85,12 +90,27 @@ export function CatalogPatientSessionPlayback({
   } | null>(null);
   const cvSessionCompleteRef = useRef(false);
   const submitStartedRef = useRef(false);
+  /**
+   * Independent of cvSessionCompleteRef/submitStartedRef above — the
+   * clinical movement-outcome submission (O2) and the patient-reported
+   * completion submission must never gate, overwrite, or impersonate
+   * each other. "submitted" is set only on a genuine success or an
+   * idempotent-replay response from the server; a failure leaves it at
+   * "idle" so a future call (not built in this slice) could safely
+   * retry without ever double-submitting a success.
+   */
+  const movementOutcomeSubmissionRef = useRef<"idle" | "submitting" | "submitted">("idle");
 
   const shellUi = sessionShellUi(patientLanguage);
   const guidedUi = guidedSessionUi(patientLanguage);
   const flowUi = sessionExerciseFlowUi(patientLanguage);
   const catalogSession = session.catalogSession ?? null;
 
+  // Reset-on-prop-change effect, matching the established suppression
+  // convention already used elsewhere in this codebase for this exact
+  // rule (e.g. app/clinician/motor-screen-lab/page.tsx) — pre-existing
+  // pattern, unrelated to the O2 addition below beyond the one new ref reset.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     setPhase("start");
     setEffortScore(null);
@@ -102,13 +122,34 @@ export function CatalogPatientSessionPlayback({
     setCompletionSummary(null);
     cvSessionCompleteRef.current = false;
     submitStartedRef.current = false;
+    movementOutcomeSubmissionRef.current = "idle";
   }, [token, session.id]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
-  const handleCatalogSessionComplete = useCallback(() => {
-    if (cvSessionCompleteRef.current) return;
-    cvSessionCompleteRef.current = true;
-    setPhase("wrapup");
-  }, []);
+  const handleCatalogSessionComplete = useCallback(
+    (snapshot: InteractiveShoulderSessionCompletionSnapshot) => {
+      if (cvSessionCompleteRef.current) return;
+      cvSessionCompleteRef.current = true;
+      setPhase("wrapup");
+
+      // Fire-and-forget, independent of the patient-reported completion
+      // flow below: this never blocks or gates the wrap-up UI, and the
+      // wrap-up UI never waits on or reflects this submission's outcome.
+      // A poor network connection or a disabled feature flag must not
+      // interrupt the patient's own session-complete flow.
+      if (shouldSubmitInteractiveShoulderOutcome(movementOutcomeSubmissionRef.current)) {
+        movementOutcomeSubmissionRef.current = "submitting";
+        void submitInteractiveShoulderOutcome({
+          token,
+          planSessionId: session.id,
+          snapshot,
+        }).then((result) => {
+          movementOutcomeSubmissionRef.current = result.ok ? "submitted" : "idle";
+        });
+      }
+    },
+    [token, session.id],
+  );
 
   const handleSubmitSession = useCallback(async () => {
     if (effortScore === null || painAfter === null) return;
