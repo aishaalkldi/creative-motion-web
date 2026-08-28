@@ -10,6 +10,10 @@
  * blocked by, the patient-reported session-complete submission.
  */
 import type { InteractiveShoulderSessionCompletionSnapshot } from "@/app/lib/interactive-shoulder/orchestrator-cv-session-types";
+import {
+  recordInteractiveShoulderOutcomeClientFailure,
+  type InteractiveShoulderOutcomeClientFailureEvent,
+} from "@/app/lib/interactive-shoulder/movement-outcome-telemetry";
 
 export type InteractiveShoulderOutcomeSubmissionStatus = "idle" | "submitting" | "submitted";
 
@@ -61,9 +65,18 @@ export function buildInteractiveShoulderOutcomeRequestBody(
   };
 }
 
+/**
+ * recordClientFailure is observability only (O5) — safe metadata (HTTP
+ * status only, never the token/planSessionId/snapshot in `input`, never
+ * the server's response body). Injectable for tests; defaults to the
+ * real Sentry capture. Does not change the return shape below or add
+ * any retry — the fire-and-forget behavior this function's caller
+ * relies on is unchanged.
+ */
 export async function submitInteractiveShoulderOutcome(
   input: SubmitInteractiveShoulderOutcomeInput,
   fetchImpl: typeof fetch = fetch,
+  recordClientFailure: (event: InteractiveShoulderOutcomeClientFailureEvent) => void = recordInteractiveShoulderOutcomeClientFailure,
 ): Promise<SubmitInteractiveShoulderOutcomeResult> {
   try {
     const res = await fetchImpl("/api/patient/interactive-shoulder-outcomes", {
@@ -75,6 +88,7 @@ export async function submitInteractiveShoulderOutcome(
     const body = (await res.json().catch(() => ({}))) as { created?: boolean; error?: string };
 
     if (!res.ok) {
+      recordClientFailure({ status: res.status });
       return {
         ok: false,
         error: body.error ?? INTERACTIVE_SHOULDER_OUTCOME_NETWORK_ERROR,
@@ -84,6 +98,7 @@ export async function submitInteractiveShoulderOutcome(
 
     return { ok: true, created: body.created ?? false };
   } catch {
+    recordClientFailure({ status: 0 });
     return { ok: false, error: INTERACTIVE_SHOULDER_OUTCOME_NETWORK_ERROR, status: 0 };
   }
 }
