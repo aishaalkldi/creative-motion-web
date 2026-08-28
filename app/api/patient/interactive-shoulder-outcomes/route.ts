@@ -42,6 +42,14 @@
  * resolveAdaptiveDifficultyFeatureFlag) or this route returns 503 —
  * an honest "service unavailable", never a fake success while quietly
  * not persisting anything.
+ *
+ * Observability (O5): the two genuinely unexpected 5xx branches
+ * (patient-access resolution's server_error path, and a persistence
+ * insert failure) also call deps.recordServerFailure — safe metadata
+ * only (a closed reason enum + numeric HTTP status), never a token,
+ * id, request body, or outcome payload. See movement-outcome-
+ * telemetry.ts. This does not change what either branch returns to
+ * the caller, and does not add any retry.
  */
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -72,6 +80,10 @@ import {
   serviceUnavailableResponse,
   unableToCompleteResponse,
 } from "@/app/lib/api/safe-errors";
+import {
+  recordInteractiveShoulderOutcomeServerFailure,
+  type InteractiveShoulderOutcomeServerFailureEvent,
+} from "@/app/lib/interactive-shoulder/movement-outcome-telemetry";
 
 const CREATE_ERROR = "Failed to save movement outcome.";
 const PRESCRIBED_SIDE_REQUIRED_MESSAGE =
@@ -136,6 +148,8 @@ export type InteractiveShoulderOutcomeSubmissionDependencies = {
     admin: SupabaseClient,
     token: string,
   ) => Promise<ResolvePatientPortalAccessResult>;
+  /** Observability only — see movement-outcome-telemetry.ts. Defaults to the real Sentry capture in production. */
+  recordServerFailure: (event: InteractiveShoulderOutcomeServerFailureEvent) => void;
 };
 
 // ── Dependency-injected handler ────────────────────────────────────────────────
@@ -193,6 +207,9 @@ export function createInteractiveShoulderOutcomeSubmissionHandler(
     if (!resolved.ok) {
       if (resolved.reason === "invalid_token") return invalidPatientTokenResponse(req);
       if (resolved.reason === "plan_not_found") return unableToCompleteResponse(404);
+      // resolved.reason === "server_error" here — the one genuinely
+      // unexpected branch of this check, not a routine auth rejection.
+      deps.recordServerFailure({ reason: "patient_access_resolution_failed", httpStatus: 500 });
       return NextResponse.json({ error: API_ERRORS.GENERIC }, { status: 500 });
     }
     const { access } = resolved;
@@ -256,6 +273,7 @@ export function createInteractiveShoulderOutcomeSubmissionHandler(
     if (!inserted.ok) {
       if (inserted.httpStatus >= 500) {
         console.error("[POST /api/patient/interactive-shoulder-outcomes]", inserted.message);
+        deps.recordServerFailure({ reason: "persistence_insert_failed", httpStatus: inserted.httpStatus });
       }
       return NextResponse.json({ error: CREATE_ERROR }, { status: inserted.httpStatus });
     }
@@ -288,6 +306,7 @@ async function buildRealDependencies(): Promise<InteractiveShoulderOutcomeSubmis
     adminClient,
     checkWriteLimit: (req) => checkPatientGeneralLimit(req, "interactive-shoulder-outcomes"),
     resolvePatientAccess: resolvePatientPortalAccess,
+    recordServerFailure: recordInteractiveShoulderOutcomeServerFailure,
   };
 }
 
