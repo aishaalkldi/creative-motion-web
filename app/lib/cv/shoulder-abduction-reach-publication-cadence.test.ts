@@ -32,6 +32,13 @@ import {
 } from "@/app/lib/interactive-shoulder/target-lifecycle";
 import { DEFAULT_SAFE_TARGET_BOUNDS } from "@/app/lib/interactive-shoulder/target-generator";
 import { DEFAULT_TARGET_HIT_CONFIG } from "@/app/lib/interactive-shoulder/target-hit";
+import {
+  captureReadinessPayloadsEqual,
+  resolveCaptureReadinessPayload,
+  shouldDeliverCaptureReadiness,
+  READINESS_MIN_DELIVERY_INTERVAL_MS,
+  type CaptureReadinessPayload,
+} from "@/app/lib/interactive-shoulder/orchestrator-cv-capture-readiness";
 
 /* ── Landmark fixtures ─────────────────────────────────────────────────────── */
 
@@ -503,47 +510,223 @@ describe("#276 reaction timing consumes the fresher published measurement", () =
   });
 });
 
-/* ── C. Ancestor-callback safeguard ────────────────────────────────────────── */
 
-describe("#276 capture-readiness is not re-emitted unchanged at the new cadence", () => {
-  // `reportReadiness` runs once per published snapshot, so raising publication from
-  // one snapshot per 15 frames to one per frame multiplies these ancestor callbacks
-  // 15x. Readiness is a slow, framing-derived value, so the payload is almost always
-  // identical. Asserted against the component source, matching the convention
-  // `orchestrator-cv-session-core.test.ts` already uses for this component.
-  const source = readFileSync(
-    join(
-      process.cwd(),
-      "app/components/patient/interactive-shoulder/OrchestratorCvSessionCore.tsx",
-    ),
-    "utf8",
-  );
+/* ── C. Ancestor-callback fan-out ──────────────────────────────────────────── */
 
-  it("keeps the last emitted readiness payload for comparison", () => {
-    assert.match(
-      source,
-      /lastReadinessPayloadRef\s*=\s*useRef<CaptureReadinessPayload \| null>\(null\)/,
-      "the change-on-value guard needs the previously emitted payload",
+/**
+ * `onCaptureReadinessChange` is the only per-snapshot callback that leaves the
+ * Interactive Shoulder runtime — it lands in `PatientExerciseSessionCard`, which
+ * re-renders its whole card tree. Publishing every frame instead of every fifteenth
+ * multiplied this seam's fan-out rate by fifteen as a side effect, so it is the one
+ * place the #276 cadence could turn a responsiveness fix into a main-thread problem.
+ *
+ * These drive the REAL decision functions the component calls, so they cover shipped
+ * behaviour rather than a copy of it.
+ */
+describe("#276 capture-readiness fan-out stays bounded at the new cadence", () => {
+  const GOOD: CaptureReadinessPayload = {
+    primaryGuidance: "ready",
+    canStartTracking: true,
+    minimumMet: true,
+    previewActive: true,
+  };
+  const POOR: CaptureReadinessPayload = {
+    primaryGuidance: "improve_lighting",
+    canStartTracking: false,
+    minimumMet: true,
+    previewActive: true,
+  };
+
+  it("delivers the first payload of a session immediately", () => {
+    assert.equal(
+      shouldDeliverCaptureReadiness({
+        previous: null,
+        next: GOOD,
+        nowMs: 0,
+        lastDeliveredAtMs: 0,
+      }),
+      true,
     );
   });
 
-  it("compares every readiness field before calling the ancestor", () => {
-    ["primaryGuidance", "canStartTracking", "minimumMet", "previewActive"].forEach(
-      (field) => {
-        assert.match(
-          source,
-          new RegExp(`previous\\.${field} === payload\\.${field}`),
-          `readiness dedup must compare ${field} — a field left out would suppress a real change`,
-        );
-      },
+  it("never re-delivers an unchanged payload, however long has passed", () => {
+    assert.equal(
+      shouldDeliverCaptureReadiness({
+        previous: GOOD,
+        next: { ...GOOD },
+        nowMs: 60_000,
+        lastDeliveredAtMs: 0,
+      }),
+      false,
+      "an unchanged value is not news at any cadence",
     );
   });
 
-  it("still delivers the payload whenever a field changed", () => {
+  it("holds a changed payload back until the pre-#276 interval has elapsed", () => {
+    assert.equal(
+      shouldDeliverCaptureReadiness({
+        previous: GOOD,
+        next: POOR,
+        nowMs: 100,
+        lastDeliveredAtMs: 0,
+      }),
+      false,
+      "33ms after the last delivery is camera rate, not UI rate",
+    );
+    assert.equal(
+      shouldDeliverCaptureReadiness({
+        previous: GOOD,
+        next: POOR,
+        nowMs: READINESS_MIN_DELIVERY_INTERVAL_MS,
+        lastDeliveredAtMs: 0,
+      }),
+      true,
+      "once the floor elapses the current value must get through",
+    );
+  });
+
+  it("delivers a previewActive transition immediately, bypassing the floor", () => {
+    // stop() emits the final snapshot of the session. If the floor could swallow it,
+    // the ancestor would be left holding a stale "tracking" banner with no further
+    // publication to correct it.
+    assert.equal(
+      shouldDeliverCaptureReadiness({
+        previous: GOOD,
+        next: { ...GOOD, previewActive: false, canStartTracking: false },
+        nowMs: 1,
+        lastDeliveredAtMs: 0,
+      }),
+      true,
+      "camera start/stop must never be delayed or dropped by the rate floor",
+    );
+  });
+
+  it("bounds ancestor deliveries to the pre-#276 rate when framing churns every frame", () => {
+    // `evaluateBodyFraming` is a pure per-frame threshold test with no hysteresis, so a
+    // patient sitting ON a threshold flips framing state frame to frame. Every flip is
+    // a genuine value change, which a change-only guard cannot suppress. Ten seconds of
+    // worst-case churn at 30fps.
+    const FRAMES = 300;
+    const FRAME_MS = 1000 / 30;
+
+    const deliver = (floorEnabled: boolean) => {
+      let previous: CaptureReadinessPayload | null = null;
+      let lastDeliveredAtMs = 0;
+      let deliveries = 0;
+      for (let frame = 0; frame < FRAMES; frame += 1) {
+        const nowMs = frame * FRAME_MS;
+        const next = frame % 2 === 0 ? GOOD : POOR;
+        const changed = previous === null || !captureReadinessPayloadsEqual(previous, next);
+        const ok = floorEnabled
+          ? shouldDeliverCaptureReadiness({ previous, next, nowMs, lastDeliveredAtMs })
+          : changed;
+        if (!ok) continue;
+        deliveries += 1;
+        previous = next;
+        lastDeliveredAtMs = nowMs;
+      }
+      return deliveries;
+    };
+
+    const withoutFloor = deliver(false);
+    const withFloor = deliver(true);
+
+    assert.equal(
+      withoutFloor,
+      FRAMES,
+      "guard-only must be shown to storm, otherwise this test proves nothing",
+    );
+    // 15 frames at 30fps is the interval this seam had before #276.
+    const preFixDeliveries = FRAMES / 15;
+    assert.ok(
+      withFloor <= preFixDeliveries,
+      `ancestor fan-out must not exceed the pre-#276 rate (${preFixDeliveries}), saw ${withFloor}`,
+    );
+  });
+
+  it("keeps publishing the wrist every frame while readiness is being held back", () => {
+    // The whole point of #276. The floor must throttle the ancestor callback ONLY —
+    // never the measurement the hand marker is drawn from.
+    const h = createCadenceHarness();
+    let previous: CaptureReadinessPayload | null = null;
+    let lastDeliveredAtMs = 0;
+    let deliveries = 0;
+
+    for (let frame = 0; frame < 60; frame += 1) {
+      h.decodeFrame({ x: 0.3 + frame * 0.005, y: 0.5 });
+      const snap = h.snapshots[h.snapshots.length - 1];
+      const next = resolveCaptureReadinessPayload(snap);
+      const nowMs = frame * (1000 / 30);
+      if (
+        shouldDeliverCaptureReadiness({ previous, next, nowMs, lastDeliveredAtMs })
+      ) {
+        deliveries += 1;
+        previous = next;
+        lastDeliveredAtMs = nowMs;
+      }
+    }
+
+    assert.equal(h.snapshots.length, 60, "every camera frame must still publish a snapshot");
+    const wrists = h.snapshots.map((s) => s.primaryWristNormalized?.x);
+    assert.equal(new Set(wrists).size, 60, "every frame must publish its own fresh wrist x");
+    assert.ok(deliveries <= 5, `readiness deliveries must stay bounded, saw ${deliveries}`);
+  });
+
+  it("derives the same readiness payload the component used before the extraction", () => {
+    // Behaviour-preservation check for moving the derivation out of the component.
+    assert.deepEqual(
+      resolveCaptureReadinessPayload({
+        bodyFramingState: "good_distance",
+        trackingStatus: "tracking",
+        previewActive: true,
+      }),
+      GOOD,
+    );
+    assert.deepEqual(resolveCaptureReadinessPayload(null), {
+      primaryGuidance: "adjust_position",
+      canStartTracking: false,
+      minimumMet: false,
+      previewActive: false,
+    });
+    assert.equal(
+      resolveCaptureReadinessPayload({ bodyFramingState: "move_closer" }).primaryGuidance,
+      "step_into_frame",
+    );
+    assert.equal(
+      resolveCaptureReadinessPayload({ bodyFramingState: "move_back" }).primaryGuidance,
+      "move_farther",
+    );
+    assert.equal(
+      resolveCaptureReadinessPayload({ bodyFramingState: "low_visibility" }).primaryGuidance,
+      "improve_lighting",
+    );
+    assert.equal(
+      resolveCaptureReadinessPayload({
+        bodyFramingState: "good_distance",
+        trackingStatus: "lost",
+      }).canStartTracking,
+      false,
+      "good framing without live tracking is not permission to start",
+    );
+  });
+
+  it("wires the shipped component to that decision, and records a delivery only on delivery", () => {
+    const source = readFileSync(
+      join(
+        process.cwd(),
+        "app/components/patient/interactive-shoulder/OrchestratorCvSessionCore.tsx",
+      ),
+      "utf8",
+    );
     assert.match(
       source,
-      /lastReadinessPayloadRef\.current = payload;\s*\n\s*onCaptureReadinessChange\(payload\);/,
-      "a changed payload must still reach the ancestor, and be recorded as the new baseline",
+      /if \(\s*!shouldDeliverCaptureReadiness\(\{/,
+      "the component must gate the ancestor callback on the tested decision",
+    );
+    assert.match(
+      source,
+      /lastReadinessPayloadRef\.current = payload;\s*\n\s*lastReadinessDeliveredAtRef\.current = now;\s*\n\s*onCaptureReadinessChange\(payload\);/,
+      "payload and timestamp must be recorded together, and only alongside a real delivery",
     );
   });
 });
