@@ -702,6 +702,28 @@ export function OrchestratorCvSessionCore({
     ui.targetReached,
   ]);
 
+  /**
+   * The hand marker's position in mirrored preview space (#277).
+   *
+   * MEMOISED ON THE MEASURED REFERENCE, and that is load-bearing rather than
+   * cosmetic. `TrackedHandCursor` compares `wrist` by IDENTITY in its effect
+   * dependencies, and that effect is what advances the cursor's smoothing lerp and
+   * pushes the motion trail. The rAF loop above calls `setOrchestratorSnapshot` with a
+   * fresh object every tick, so this component re-renders at display rate (~60 Hz)
+   * while the detector publishes at camera rate (~30 Hz). Mirroring inline in the JSX
+   * would therefore hand the cursor a brand-new object on every render and step the
+   * smoothing twice per camera frame — changing the cursor's feel and halving the
+   * trail's time span, which is #276 behaviour this fix must not touch.
+   *
+   * `primaryWristNormalized` keeps a stable reference between publications, so this
+   * memo changes identity exactly once per published measurement — the same cadence
+   * the cursor saw before the mirror was introduced.
+   */
+  const mirroredCursorWrist = useMemo(
+    () => toMirroredPreviewPoint(snapshot?.primaryWristNormalized),
+    [snapshot?.primaryWristNormalized],
+  );
+
   const acceptConsent = () => {
     if (!consentChecked) return;
     writePatientCvCameraConsentToSession(createPatientCvCameraConsentRecord());
@@ -853,7 +875,7 @@ export function OrchestratorCvSessionCore({
                       <>
                         <TrackedHandCursor
                           wrist={
-                            toMirroredPreviewPoint(snapshot?.primaryWristNormalized) ??
+                            mirroredCursorWrist ??
                             (isDevMouseSimulationEnabled() ? devMouseRef.current : null)
                           }
                           visible={hudSnapshot.sessionState === "active" || hudSnapshot.sessionState === "safetyHold"}

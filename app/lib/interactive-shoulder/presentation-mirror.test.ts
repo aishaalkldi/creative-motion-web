@@ -431,4 +431,38 @@ describe("#277 marker, target and hit test share one coordinate space", () => {
     assert.match(source, /toMirroredPreviewPoint\(snapshot\?\.primaryWristNormalized\)/);
     assert.match(source, /toMirroredPreviewPoint\(\s*poseSnap\?\.primaryShoulderNormalized,?\s*\)/);
   });
+
+  it("does not step the cursor's smoothing faster than the detector publishes", () => {
+    // #276 protection. `TrackedHandCursor` compares `wrist` by IDENTITY in its effect
+    // deps, and that effect advances the smoothing lerp and pushes the motion trail.
+    // The orchestrator re-renders at display rate while the detector publishes at
+    // camera rate, so mirroring inline in the JSX would hand the cursor a new object
+    // every render and step the smoothing twice per camera frame — changing cursor feel
+    // and halving the trail's time span. The memo is what prevents that.
+    const measured = { x: 0.3, y: 0.4 };
+    assert.notEqual(
+      toMirroredPreviewPoint(measured),
+      toMirroredPreviewPoint(measured),
+      "the mirror allocates per call, so memoising it at the cursor is load-bearing",
+    );
+
+    const source = readFileSync(
+      join(
+        process.cwd(),
+        "app/components/patient/interactive-shoulder/OrchestratorCvSessionCore.tsx",
+      ),
+      "utf8",
+    );
+    assert.match(
+      source,
+      /const mirroredCursorWrist = useMemo\(\s*\(\) => toMirroredPreviewPoint\(snapshot\?\.primaryWristNormalized\),\s*\[snapshot\?\.primaryWristNormalized\],\s*\)/,
+      "the cursor's mirrored point must be memoised on the MEASURED reference, so its " +
+        "identity changes once per published measurement and not once per render",
+    );
+    assert.match(
+      source,
+      /wrist=\{\s*mirroredCursorWrist \?\?/,
+      "the cursor must consume the memoised point, not a fresh inline conversion",
+    );
+  });
 });
