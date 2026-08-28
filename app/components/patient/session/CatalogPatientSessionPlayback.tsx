@@ -25,7 +25,7 @@ import {
   sessionShellUi,
 } from "@/app/lib/patient-portal-ui";
 
-type CatalogPhase = "start" | "playback" | "wrapup";
+type CatalogPhase = "start" | "playback" | "cameraDeclined" | "wrapup";
 
 function PainScale({
   label,
@@ -125,6 +125,19 @@ export function CatalogPatientSessionPlayback({
     movementOutcomeSubmissionRef.current = "idle";
   }, [token, session.id]);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  /**
+   * Interactive Shoulder is camera-dependent — there is no non-camera
+   * fallback experience. Declining camera consent must not leave the
+   * "Skip camera" button silently doing nothing (it previously had no
+   * `onSkipped` handler at all): show a clear, honest stop state instead.
+   * "Try again" simply returns to "start", which re-mounts
+   * CatalogSessionPlayer fresh on the next Begin click, giving the
+   * patient another chance at the consent screen.
+   */
+  const handleCameraSkipped = useCallback(() => {
+    setPhase("cameraDeclined");
+  }, []);
 
   const handleCatalogSessionComplete = useCallback(
     (snapshot: InteractiveShoulderSessionCompletionSnapshot) => {
@@ -279,6 +292,34 @@ export function CatalogPatientSessionPlayback({
     );
   }
 
+  if (phase === "cameraDeclined") {
+    return (
+      <GuidedSessionShell
+        lang={patientLanguage}
+        arClass={arClass}
+        textDir={textDir}
+        token={token}
+        sessionTitle={session.title}
+      >
+        <div className={`space-y-6 ${arClass}`} dir={textDir}>
+          <section className="rounded-[20px] border border-[#E2E8E5] bg-white p-5 shadow-[0_8px_30px_rgba(10,15,26,0.06)]">
+            <p className="text-[18px] font-bold text-[#0A0F1A]">{guidedUi.cameraRequiredTitle}</p>
+            <p className="mt-3 text-[13px] leading-relaxed text-[#6B7280]">
+              {guidedUi.cameraRequiredBody}
+            </p>
+          </section>
+          <button
+            type="button"
+            onClick={() => setPhase("start")}
+            className={GUIDED_PRIMARY_BTN}
+          >
+            {guidedUi.cameraRequiredRetry}
+          </button>
+        </div>
+      </GuidedSessionShell>
+    );
+  }
+
   if (phase === "wrapup") {
     return (
       <GuidedSessionShell
@@ -362,6 +403,7 @@ export function CatalogPatientSessionPlayback({
         prescribedSide={session.prescribedSide}
         clinicalPrescribedSideRequired
         onSessionComplete={handleCatalogSessionComplete}
+        onSkipped={handleCameraSkipped}
       />
     </GuidedSessionShell>
   );

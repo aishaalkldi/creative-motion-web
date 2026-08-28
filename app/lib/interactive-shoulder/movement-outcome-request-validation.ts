@@ -22,6 +22,7 @@ import type {
   InterpretedObservations,
   MeasuredMovementPerformance,
   MovementBlockResult,
+  SessionBlockType,
 } from "@/app/lib/session-orchestrator/types";
 
 export type InteractiveShoulderMovementOutcomeRequestValidationFailure =
@@ -55,6 +56,8 @@ const MOVEMENT_BLOCK_COMPLETION_REASONS = [
 ] as const;
 
 const FATIGUE_TRENDS = ["stable", "declining", "unknown"] as const;
+
+const SESSION_BLOCK_TYPES = ["movement-target", "movement-pattern", "instructional"] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -207,6 +210,21 @@ export function validateMovementBlockResult(candidate: unknown, index: number): 
     return { ok: false, detail: `${path}.completionReason is invalid` };
   }
 
+  // Both optional and purely descriptive — echoed straight from the
+  // client's own MovementBlock definition, exactly like blockId/
+  // movementId above. Never used for ownership or authority, so this
+  // does not need the same server-resolution discipline as
+  // prescribedSide/providerId/patientId.
+  if (
+    candidate.blockType !== undefined &&
+    !(SESSION_BLOCK_TYPES as readonly string[]).includes(candidate.blockType as string)
+  ) {
+    return { ok: false, detail: `${path}.blockType is invalid` };
+  }
+  if (candidate.title !== undefined && typeof candidate.title !== "string") {
+    return { ok: false, detail: `${path}.title must be a string` };
+  }
+
   const interaction = validateInteractionPerformance(candidate.interaction, `${path}.interaction`);
   if (!interaction.ok) return interaction;
   const measured = validateMeasuredMovementPerformance(candidate.measured, `${path}.measured`);
@@ -222,6 +240,10 @@ export function validateMovementBlockResult(candidate: unknown, index: number): 
       startedAtMs: candidate.startedAtMs as number,
       completedAtMs: candidate.completedAtMs as number | null,
       completionReason: candidate.completionReason as MovementBlockResult["completionReason"],
+      ...(candidate.blockType !== undefined
+        ? { blockType: candidate.blockType as SessionBlockType }
+        : {}),
+      ...(candidate.title !== undefined ? { title: candidate.title as string } : {}),
       interaction: interaction.value,
       measured: measured.value,
       interpreted: interpreted.value,

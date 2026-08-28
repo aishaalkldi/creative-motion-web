@@ -395,6 +395,7 @@ describe("SessionOrchestrator — result category separation", () => {
     const result = o.getSessionPerformanceSummary(T0 + 2_000).blockResults[0];
     assert.deepEqual(Object.keys(result).sort(), [
       "blockId",
+      "blockType",
       "completedAtMs",
       "completionReason",
       "interaction",
@@ -402,6 +403,7 @@ describe("SessionOrchestrator — result category separation", () => {
       "measured",
       "movementId",
       "startedAtMs",
+      "title",
     ]);
     assert.equal(result.interaction.targetsContacted, 1);
     assert.equal(result.interaction.patternsCompleted, 0);
@@ -412,6 +414,52 @@ describe("SessionOrchestrator — result category separation", () => {
     assert.equal("patternsCompleted" in result.measured, false);
     assert.equal("validRepetitions" in result.interaction, false);
     assert.equal("compensationEvents" in result.measured, false);
+  });
+
+  it("echoes the originating block's own blockType and title onto the result — not derived, not guessed", () => {
+    const def: SessionDefinition = {
+      sessionId: "block-type-session",
+      title: "Block type session",
+      blocks: [
+        minimalBlock({
+          blockId: "warm-up",
+          blockType: "instructional",
+          title: "Warm-up",
+          completionMode: "duration",
+          targetDurationSeconds: 5,
+          restAfterSeconds: 0,
+        }),
+        minimalBlock({
+          blockId: "reach",
+          blockType: "movement-target",
+          title: "Reach the Light",
+          completionMode: "duration",
+          targetDurationSeconds: 5,
+          restAfterSeconds: 0,
+        }),
+      ],
+    };
+    const o = startedOrchestrator(def);
+    o.tick(T0 + 5_000);
+    o.tick(T0 + 10_000);
+
+    const results = o.getSessionPerformanceSummary(T0 + 10_000).blockResults;
+    assert.equal(results[0]?.blockType, "instructional");
+    assert.equal(results[0]?.title, "Warm-up");
+    assert.equal(results[1]?.blockType, "movement-target");
+    assert.equal(results[1]?.title, "Reach the Light");
+  });
+
+  it("a block that declares no blockType leaves the result's blockType undefined — never a fabricated guess", () => {
+    const def: SessionDefinition = {
+      sessionId: "no-block-type-session",
+      title: "No block type session",
+      blocks: [minimalBlock({ blockType: undefined, completionMode: "manualCompletion", targetDurationSeconds: undefined })],
+    };
+    const o = startedOrchestrator(def);
+    o.completeBlockManually(T0 + 1_000);
+    const result = o.getSessionPerformanceSummary(T0 + 1_000).blockResults[0];
+    assert.equal(result?.blockType, undefined);
   });
 
   it("records patternCompleted separately from targetsContacted and validRepetitions", () => {
