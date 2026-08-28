@@ -42,6 +42,10 @@ import {
   resolveInteractiveShoulderStartError,
 } from "@/app/lib/interactive-shoulder/interactive-shoulder-ui";
 import { resolveHitExitTransitionMs } from "@/app/lib/interactive-shoulder/reach-the-light-motion";
+import {
+  MIRRORED_PREVIEW_TRANSFORM,
+  toMirroredPreviewPoint,
+} from "@/app/lib/interactive-shoulder/presentation-mirror";
 import { registerAllBlockRunners } from "@/app/lib/interactive-shoulder/block-engine/register-all-block-runners";
 import { DEFAULT_SAFE_TARGET_BOUNDS } from "@/app/lib/interactive-shoulder/target-generator";
 import type { ActiveBlockRunnerStates } from "@/app/lib/interactive-shoulder/block-engine/tick-active-block-runner";
@@ -79,10 +83,6 @@ import {
 import {
   resolveOrchestratorTherapeuticSide,
 } from "@/app/lib/interactive-shoulder/resolve-interactive-shoulder-side";
-import {
-  MIRRORED_PREVIEW_TRANSFORM,
-  toMirroredPreviewPoint,
-} from "@/app/lib/interactive-shoulder/presentation-mirror";
 import type { ShoulderAbductionReachSide } from "@/app/lib/shoulder-rehabilitation";
 import type { OrchestratorCvSessionCoreProps } from "@/app/lib/interactive-shoulder/orchestrator-cv-session-types";
 import {
