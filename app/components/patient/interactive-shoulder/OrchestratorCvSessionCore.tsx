@@ -21,7 +21,6 @@ import {
   readPatientCvCameraConsentFromSession,
   writePatientCvCameraConsentToSession,
 } from "@/app/lib/cv/patient-cv-consent";
-import type { CaptureSetupGuidance } from "@/app/lib/cv/patient-cv-capture-readiness";
 import {
   createInitialTargetLifecycle,
   type TargetLifecycleState,
@@ -79,6 +78,11 @@ import {
 import {
   resolveOrchestratorTherapeuticSide,
 } from "@/app/lib/interactive-shoulder/resolve-interactive-shoulder-side";
+import {
+  resolveCaptureReadinessPayload,
+  shouldDeliverCaptureReadiness,
+  type CaptureReadinessPayload,
+} from "@/app/lib/interactive-shoulder/orchestrator-cv-capture-readiness";
 import type { ShoulderAbductionReachSide } from "@/app/lib/shoulder-rehabilitation";
 import type { OrchestratorCvSessionCoreProps } from "@/app/lib/interactive-shoulder/orchestrator-cv-session-types";
 import {
@@ -220,6 +224,20 @@ export function OrchestratorCvSessionCore({
   const faultPauseAppliedRef = useRef(false);
   const devMouseRef = useRef<{ x: number; y: number } | null>(null);
   const snapshotRef = useRef<ShoulderAbductionReachPoseDetectorSnapshot | null>(null);
+  /**
+   * The last capture-readiness payload actually handed to the ancestor, and the
+   * `performance.now()` at which it was handed over. Issue #276.
+   *
+   * `reportReadiness` runs once per published snapshot, and #276 raised that from one
+   * publication per 15 camera frames to one per frame — so this seam, the only
+   * per-snapshot callback that escapes this component, had its fan-out rate multiplied
+   * by fifteen as a side effect. Together these two refs are the delivery record that
+   * `shouldDeliverCaptureReadiness` reads to suppress unchanged payloads and to hold
+   * the ancestor's re-render rate at the interval it had before #276. The decision
+   * itself lives in orchestrator-cv-capture-readiness.ts, under test.
+   */
+  const lastReadinessPayloadRef = useRef<CaptureReadinessPayload | null>(null);
+  const lastReadinessDeliveredAtRef = useRef(0);
   const therapeuticSideRef = useRef<ShoulderAbductionReachSide | null>(null);
   therapeuticSideRef.current = resolvedTherapeuticSide?.side ?? null;
   /**
@@ -317,23 +335,24 @@ export function OrchestratorCvSessionCore({
   const reportReadiness = useCallback(
     (snap: ShoulderAbductionReachPoseDetectorSnapshot | null) => {
       if (!onCaptureReadinessChange) return;
-      const framing = snap?.bodyFramingState ?? "checking";
-      const canStart = framing === "good_distance" && snap?.trackingStatus === "tracking";
-      const primaryGuidance: CaptureSetupGuidance = canStart
-        ? "ready"
-        : framing === "move_closer"
-          ? "step_into_frame"
-          : framing === "move_back"
-            ? "move_farther"
-            : framing === "low_visibility"
-              ? "improve_lighting"
-              : "adjust_position";
-      onCaptureReadinessChange({
-        primaryGuidance,
-        canStartTracking: Boolean(canStart),
-        minimumMet: framing !== "checking",
-        previewActive: Boolean(snap?.previewActive),
-      });
+      const payload = resolveCaptureReadinessPayload(snap);
+      const now = performance.now();
+      if (
+        !shouldDeliverCaptureReadiness({
+          previous: lastReadinessPayloadRef.current,
+          next: payload,
+          nowMs: now,
+          lastDeliveredAtMs: lastReadinessDeliveredAtRef.current,
+        })
+      ) {
+        // Deliberately records nothing on a skip. Leaving the last DELIVERED payload in
+        // place is what makes the next publication re-offer the current state instead of
+        // treating this skipped one as already sent — a skip delays, never drops.
+        return;
+      }
+      lastReadinessPayloadRef.current = payload;
+      lastReadinessDeliveredAtRef.current = now;
+      onCaptureReadinessChange(payload);
     },
     [onCaptureReadinessChange],
   );

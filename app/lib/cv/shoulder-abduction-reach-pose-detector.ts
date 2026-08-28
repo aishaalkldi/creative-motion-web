@@ -172,7 +172,30 @@ const SHOULDER_ABDUCTION_REACH_POSE_SHELL = {
   canvasWidth: DEFAULT_STS_CONFIG.canvasWidth,
   canvasHeight: DEFAULT_STS_CONFIG.canvasHeight,
   initTimeoutMs: DEFAULT_STS_CONFIG.initTimeoutMs,
-  uiFrameUpdateInterval: DEFAULT_STS_CONFIG.uiFrameUpdateInterval,
+  /**
+   * Snapshot publication cadence, in processed camera frames — deliberately NOT
+   * `DEFAULT_STS_CONFIG.uiFrameUpdateInterval` (15). Issue #276.
+   *
+   * The shared default is tuned for the reporting-style detectors that consume it
+   * (sit-to-stand, heel raise, functional reach, single-leg stance, step-up, lateral
+   * step), whose snapshots carry slow clinical readouts — rep counts, hold seconds,
+   * framing guidance — where a ~2 Hz refresh is invisible. It is left untouched here
+   * for exactly that reason; this override is local to Shoulder Abduction Reach.
+   *
+   * Interactive Shoulder is the only surface that publishes an INTERACTIVE
+   * measurement: `primaryWristNormalized` drives both the on-screen hand marker and
+   * the target hit test. Since the decoded-frame dedup added in #258, `framesTotal`
+   * counts real camera frames rather than rAF ticks, so an interval of 15 at ~30 fps
+   * published a new wrist roughly every 500 ms — while MediaPipe had already computed
+   * a fresh one on every one of those frames. The throttle was discarding
+   * measurements that already existed, and `TrackedHandCursor` then smoothed toward
+   * each stale value one lerp step per publication, compounding the visible lag.
+   *
+   * Publishing on every processed frame costs no additional inference: it emits what
+   * the frame already computed. The dedup guard above still gates this — one
+   * inference and at most one publication per decoded camera frame.
+   */
+  uiFrameUpdateInterval: 1,
   prototypeVersion: "cv-neuro-1-shoulder-abduction-reach",
 } as const;
 
