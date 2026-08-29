@@ -19,6 +19,11 @@ type TargetPoint = {
   y: number;
 };
 
+const COIN_HIT_ANIMATION_MS = 520;
+const ACTIVE_COIN_RADIUS = 22;
+const IDLE_COIN_RADIUS = 16;
+const HIT_COIN_RADIUS = 22;
+
 const FUNCTIONAL_REACH_TARGETS: TargetPoint[] = [
   // Alternating vertical pattern: up -> down -> up -> down -> up
   { x: 0.66, y: 0.30 },
@@ -53,6 +58,7 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
   const lastVideoTimeRef = useRef<number>(-1);
   const targetIndexRef = useRef<number>(0);
   const targetHitFlashUntilRef = useRef<number>(0);
+  const targetHitEffectsRef = useRef<Record<number, number>>({});
   const lastTargetHitAtRef = useRef<number>(0);
   const audioContextRef = useRef<AudioContext | null>(null);
   const lastHitSoundAtRef = useRef<number>(0);
@@ -71,7 +77,7 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
   const showGuidedTargets = assessmentId === "functional-reach";
   const activeTargets = FUNCTIONAL_REACH_TARGETS;
   const ui = {
-    introTargets: isArabic ? "مد يدك إلى نقطة الهدف المضيئة." : "Reach your hand to the glowing target point.",
+    introTargets: isArabic ? "مد يدك إلى العملة المضيئة." : "Reach your hand to the glowing coin.",
     introAssessment: isArabic ? "اتبع تعليمات التقييم على الشاشة." : "Follow the assessment instructions on screen.",
     poseUnavailable: isArabic ? "نظام تتبع الوضعية غير متاح في هذا المتصفح." : "Pose engine unavailable in this browser.",
     poseFailed: isArabic ? "فشل تتبع الوضعية. جرّب Chrome أو Edge." : "Pose tracking failed. Try Chrome/Edge.",
@@ -82,13 +88,13 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
     keepGoing: isArabic ? "تابع: قف ثم اجلس." : "Keep going: stand up, then sit down.",
     liftFoot: isArabic ? "ارفع قدمًا واحدة وحافظ على توازنك." : "Lift one foot and hold your balance.",
     holdBalance: isArabic ? "ممتاز. واصل الحفاظ على توازنك." : "Excellent. Keep your balance and hold.",
-    reachTarget: isArabic ? "مد يدك إلى نقطة الهدف المضيئة." : "Reach your hand to the glowing target point.",
+    reachTarget: isArabic ? "مد يدك إلى العملة المضيئة." : "Reach your hand to the glowing coin.",
     holdArmSteady: isArabic ? "ممتاز. حافظ على ثبات ذراعك." : "Excellent reach. Hold your arm steady.",
     walkBack: isArabic ? "جيد. امشِ بضع خطوات للخلف ثم عد واجلس." : "Good. Walk back a few steps, then return and sit.",
     startWalking: isArabic ? "قف الآن وابدأ المشي." : "Stand up now and start walking.",
     keepCentered: isArabic ? "حافظ على تمركز جسمك داخل الكاميرا." : "Keep your full body centered in the camera.",
     bodyVisible: isArabic ? "قف بحيث يظهر جسمك بالكامل في الكاميرا." : "Stand where your full body is visible in camera.",
-    raiseHand: isArabic ? "ارفع يدك للعثور على نقطة الهدف." : "Raise your hand to find the target point.",
+    raiseHand: isArabic ? "ارفع يدك للعثور على العملة." : "Raise your hand to find the coin.",
     positionBody: isArabic ? "ضع جسمك بحيث نتمكن من اكتشاف وضعيتك." : "Position your body so we can detect your pose.",
     cameraDenied: isArabic ? "تم رفض إذن الكاميرا" : "Camera Permission Denied",
     cameraDeniedHelp: isArabic ? "يرجى تفعيل الوصول إلى الكاميرا من إعدادات المتصفح للمتابعة" : "Please enable camera access in your browser settings to continue",
@@ -99,8 +105,8 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
     poseStarting: isArabic ? "بدء التتبّع" : "POSE STARTING",
     handReachGuide: isArabic ? "دليل الوصول باليد" : "Hand Reach Guide",
     targetsComplete: isArabic ? "اكتملت الأهداف" : "Targets complete",
-    reachGlow: isArabic ? "صل إلى النقطة المضيئة" : "Reach the glowing point",
-    targetLabel: isArabic ? "الهدف" : "Target",
+    reachGlow: isArabic ? "صل إلى العملة المضيئة" : "Reach the glowing coin",
+    targetLabel: isArabic ? "عملة" : "Coin",
     excellentReach: isArabic ? "وصول ممتاز" : "Excellent reach",
     defaultCue: isArabic ? "اتبع الإرشادات المعروضة على الشاشة." : "Follow the on-screen guidance.",
   };
@@ -119,6 +125,7 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
     targetIndexRef.current = 0;
     setTargetSequenceDone(false);
     targetHitFlashUntilRef.current = 0;
+    targetHitEffectsRef.current = {};
     lastTargetHitAtRef.current = 0;
     const introCue = showGuidedTargets ? ui.introTargets : ui.introAssessment;
     setLiveCue(introCue);
@@ -143,7 +150,7 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
   const playTargetHitSound = useCallback(() => {
     if (typeof window === "undefined") return;
     const now = performance.now();
-    if (now - lastHitSoundAtRef.current < 180) return;
+    if (now - lastHitSoundAtRef.current < 220) return;
     lastHitSoundAtRef.current = now;
 
     const AudioCtx =
@@ -163,21 +170,77 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
       }
 
       const startAt = ctx.currentTime;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
+      const compressor = ctx.createDynamicsCompressor();
+      compressor.threshold.setValueAtTime(-20, startAt);
+      compressor.knee.setValueAtTime(14, startAt);
+      compressor.ratio.setValueAtTime(10, startAt);
+      compressor.attack.setValueAtTime(0.002, startAt);
+      compressor.release.setValueAtTime(0.12, startAt);
 
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(880, startAt);
-      osc.frequency.exponentialRampToValueAtTime(1320, startAt + 0.08);
+      const master = ctx.createGain();
+      master.gain.setValueAtTime(0.34, startAt);
+      master.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.46);
+      master.connect(compressor);
+      compressor.connect(ctx.destination);
 
-      gain.gain.setValueAtTime(0.0001, startAt);
-      gain.gain.exponentialRampToValueAtTime(0.14, startAt + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.16);
+      const toneBus = ctx.createGain();
+      toneBus.gain.setValueAtTime(1, startAt);
+      const air = ctx.createBiquadFilter();
+      air.type = "highshelf";
+      air.frequency.setValueAtTime(2500, startAt);
+      air.gain.setValueAtTime(8, startAt);
+      toneBus.connect(air);
+      air.connect(master);
 
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(startAt);
-      osc.stop(startAt + 0.17);
+      const partials = [
+        { frequency: 1710, decay: 0.28, gain: 0.2 },
+        { frequency: 2620, decay: 0.2, gain: 0.14 },
+        { frequency: 4020, decay: 0.14, gain: 0.09 },
+      ];
+
+      partials.forEach((partial, index) => {
+        const osc = ctx.createOscillator();
+        const g = ctx.createGain();
+        osc.type = index === 1 ? "triangle" : "sine";
+        osc.frequency.setValueAtTime(partial.frequency, startAt);
+        osc.frequency.exponentialRampToValueAtTime(partial.frequency * 0.93, startAt + partial.decay);
+        g.gain.setValueAtTime(0.0001, startAt);
+        g.gain.exponentialRampToValueAtTime(partial.gain, startAt + 0.003);
+        g.gain.exponentialRampToValueAtTime(0.0001, startAt + partial.decay);
+        osc.connect(g);
+        g.connect(toneBus);
+        osc.start(startAt);
+        osc.stop(startAt + partial.decay + 0.02);
+      });
+
+      const noiseDuration = 0.085;
+      const frameCount = Math.max(1, Math.floor(ctx.sampleRate * noiseDuration));
+      const noiseBuffer = ctx.createBuffer(1, frameCount, ctx.sampleRate);
+      const noiseData = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < frameCount; i += 1) {
+        noiseData[i] = (Math.random() * 2 - 1) * 0.42;
+      }
+
+      const makeImpact = (impactAt: number, level: number) => {
+        const source = ctx.createBufferSource();
+        source.buffer = noiseBuffer;
+        const bandPass = ctx.createBiquadFilter();
+        bandPass.type = "bandpass";
+        bandPass.frequency.setValueAtTime(3600, impactAt);
+        bandPass.Q.setValueAtTime(7.5, impactAt);
+        const gainNode = ctx.createGain();
+        gainNode.gain.setValueAtTime(0.0001, impactAt);
+        gainNode.gain.exponentialRampToValueAtTime(level, impactAt + 0.004);
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, impactAt + noiseDuration);
+        source.connect(bandPass);
+        bandPass.connect(gainNode);
+        gainNode.connect(master);
+        source.start(impactAt);
+        source.stop(impactAt + noiseDuration);
+      };
+
+      makeImpact(startAt, 0.11);
+      makeImpact(startAt + 0.05, 0.065);
     } catch {
       // Ignore audio-device errors to keep camera loop stable
     }
@@ -319,6 +382,94 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
   ) => {
     const currentIndex = Math.min(targetIndexRef.current, activeTargets.length - 1);
     const now = performance.now();
+    const drawCoin = (
+      x: number,
+      y: number,
+      radius: number,
+      alpha: number,
+      pulse: number,
+      spinProgress: number | null,
+    ) => {
+      const spin = spinProgress ?? 0;
+      const faceWidth = spinProgress === null ? 1 : Math.max(0.12, Math.abs(Math.cos(spin * Math.PI * 5)));
+      const fade = spinProgress === null ? 1 : 1 - spin;
+      const rise = spinProgress === null ? 0 : 14 * spin;
+
+      ctx.save();
+      ctx.translate(x, y - rise);
+      ctx.scale(faceWidth, 1);
+
+      const glowSize = radius * (2.8 + pulse * 0.26);
+      const glow = ctx.createRadialGradient(0, 0, radius * 0.2, 0, 0, glowSize);
+      glow.addColorStop(0, `rgba(253, 224, 71, ${0.42 * alpha * fade})`);
+      glow.addColorStop(1, "rgba(253, 224, 71, 0)");
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(0, 0, glowSize, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = `rgba(35, 22, 8, ${0.34 * alpha * fade})`;
+      ctx.beginPath();
+      ctx.ellipse(radius * 0.22, radius * 0.28, radius * 0.95, radius * 0.52, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      const coinFill = ctx.createRadialGradient(-radius * 0.32, -radius * 0.38, radius * 0.1, 0, 0, radius);
+      coinFill.addColorStop(0, `rgba(255, 252, 210, ${alpha * fade})`);
+      coinFill.addColorStop(0.45, `rgba(255, 216, 72, ${alpha * fade})`);
+      coinFill.addColorStop(0.75, `rgba(227, 163, 19, ${alpha * fade})`);
+      coinFill.addColorStop(1, `rgba(160, 92, 10, ${alpha * fade})`);
+      ctx.fillStyle = coinFill;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fill();
+
+      const rimGradient = ctx.createRadialGradient(0, 0, radius * 0.4, 0, 0, radius);
+      rimGradient.addColorStop(0, `rgba(245, 179, 41, ${0.5 * alpha * fade})`);
+      rimGradient.addColorStop(1, `rgba(118, 63, 6, ${0.95 * alpha * fade})`);
+      ctx.strokeStyle = rimGradient;
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius - 1, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Coin edge ridges for a more realistic coin look
+      const ridgeCount = 28;
+      const ridgeLength = radius * 0.14;
+      ctx.strokeStyle = `rgba(120, 53, 15, ${0.7 * alpha * fade})`;
+      ctx.lineWidth = 1.25;
+      for (let i = 0; i < ridgeCount; i += 1) {
+        const angle = (i / ridgeCount) * Math.PI * 2;
+        const cos = Math.cos(angle);
+        const sin = Math.sin(angle);
+        const r1 = radius - 0.8;
+        const r2 = r1 - ridgeLength;
+        ctx.beginPath();
+        ctx.moveTo(cos * r1, sin * r1);
+        ctx.lineTo(cos * r2, sin * r2);
+        ctx.stroke();
+      }
+
+      const innerRing = ctx.createRadialGradient(0, 0, radius * 0.15, 0, 0, radius * 0.72);
+      innerRing.addColorStop(0, `rgba(255, 246, 186, ${0.9 * alpha * fade})`);
+      innerRing.addColorStop(1, `rgba(186, 112, 10, ${0.65 * alpha * fade})`);
+      ctx.strokeStyle = innerRing;
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius * 0.62, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.5 * alpha * fade})`;
+      ctx.beginPath();
+      ctx.ellipse(-radius * 0.22, -radius * 0.3, radius * 0.22, radius * 0.15, -0.4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = `rgba(107, 52, 8, ${0.95 * alpha * fade})`;
+      ctx.font = `${Math.max(13, radius * 0.88)}px serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("◉", 0, 1);
+      ctx.restore();
+    };
 
     // Soft path between targets
     ctx.save();
@@ -345,35 +496,31 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
       const y = point.y * height;
       const reached = idx < currentIndex || targetSequenceDone;
       const active = idx === currentIndex && !targetSequenceDone;
+      const hitAt = targetHitEffectsRef.current[idx] ?? 0;
+      const hitAge = hitAt > 0 ? now - hitAt : Number.POSITIVE_INFINITY;
+      const hitProgress = Math.min(1, hitAge / COIN_HIT_ANIMATION_MS);
+      const hitAnimating = hitAt > 0 && hitAge < COIN_HIT_ANIMATION_MS;
 
       if (reached) {
-        ctx.save();
-        ctx.fillStyle = "rgba(29,158,117,0.35)";
-        ctx.strokeStyle = "#1D9E75";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(x, y, 11, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        ctx.restore();
+        if (hitAnimating) {
+          drawCoin(x, y, HIT_COIN_RADIUS, 1, 0.2, hitProgress);
+        }
         return;
       }
 
       if (active) {
         const pulse = 1 + 0.18 * Math.sin(now / 180);
         ctx.save();
-        ctx.strokeStyle = "rgba(80, 235, 182, 0.95)";
+        ctx.strokeStyle = "rgba(254, 240, 138, 0.95)";
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.arc(x, y, 18 * pulse, 0, Math.PI * 2);
+        ctx.arc(x, y, (ACTIVE_COIN_RADIUS + 7) * pulse, 0, Math.PI * 2);
         ctx.stroke();
-
-        ctx.fillStyle = "rgba(29,158,117,0.92)";
-        ctx.beginPath();
-        ctx.arc(x, y, 9, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.restore();
+        drawCoin(x, y, ACTIVE_COIN_RADIUS, 1, pulse, null);
 
         // decorative sparkle ring
+        ctx.save();
         ctx.strokeStyle = "rgba(255,255,255,0.75)";
         ctx.lineWidth = 1.5;
         ctx.beginPath();
@@ -390,12 +537,7 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
         }
         ctx.restore();
       } else {
-        ctx.save();
-        ctx.fillStyle = "rgba(255,255,255,0.18)";
-        ctx.beginPath();
-        ctx.arc(x, y, 8, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        drawCoin(x, y, IDLE_COIN_RADIUS, 0.5, 0, null);
       }
     });
 
@@ -427,9 +569,10 @@ export default function MockCameraCapture({ isActive, assessmentId, onLiveCue }:
       ctx.stroke();
       ctx.restore();
 
-      if (!targetSequenceDone && distance < 42 && now - lastTargetHitAtRef.current > 460) {
+      if (!targetSequenceDone && distance < 52 && now - lastTargetHitAtRef.current > 460) {
         lastTargetHitAtRef.current = now;
         targetHitFlashUntilRef.current = now + 220;
+        targetHitEffectsRef.current[targetIndexRef.current] = now;
         playTargetHitSound();
         setTargetIndex((prev) => {
           const next = prev + 1;

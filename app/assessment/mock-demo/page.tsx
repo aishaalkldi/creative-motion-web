@@ -245,7 +245,7 @@ export default function MockAssessmentPage() {
       allowCamera: isArabic ? "يرجى السماح بالوصول إلى الكاميرا عند الطلب" : "Please allow camera access when prompted",
       targetGuide: isArabic ? "دليل الوصول باليد" : "Hand Reach Guide",
       targetComplete: isArabic ? "اكتملت الأهداف" : "Targets complete",
-      reachPoint: isArabic ? "صل إلى النقطة المضيئة" : "Reach the glowing point",
+      reachPoint: isArabic ? "صل إلى العملة المضيئة" : "Reach the glowing coin",
     },
   };
 
