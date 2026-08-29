@@ -60,6 +60,63 @@ function formatSecondsOrDash(value: number | null): string {
   return value != null ? `${value}s` : "—";
 }
 
+function formatPercentOrDash(value: number | null): string {
+  if (value == null) return "—";
+  return `${Math.round(value * 100)}%`;
+}
+
+function averageTimingSampleMs(samples: number[]): number | null {
+  if (samples.length === 0) return null;
+  const total = samples.reduce((sum, value) => sum + value, 0);
+  return Math.round(total / samples.length);
+}
+
+function aggregateSessionMetrics(entry: InteractiveShoulderOutcomeReportEntry) {
+  let targetsContacted = 0;
+  let patternsCompleted = 0;
+  let validRepetitions = 0;
+  let timingSamples: number[] = [];
+  let movementSpeed: number | null = null;
+  let trackingConfidence: number | null = null;
+  let responseConsistency: number | null = null;
+  let compensationEvents = 0;
+  const trackingLimitations: string[] = [];
+
+  for (const block of entry.blocks) {
+    targetsContacted += block.interaction.targetsContacted;
+    patternsCompleted += block.interaction.patternsCompleted;
+    validRepetitions += block.measured.validRepetitions;
+    timingSamples = timingSamples.concat(block.interaction.timingSamplesMs);
+    if (block.measured.movementSpeed != null) movementSpeed = block.measured.movementSpeed;
+    if (block.measured.trackingConfidence != null) trackingConfidence = block.measured.trackingConfidence;
+    if (block.interaction.responseConsistency != null) {
+      responseConsistency = block.interaction.responseConsistency;
+    }
+    compensationEvents += block.interpreted.compensationEvents;
+    for (const limitation of block.interpreted.trackingLimitations) {
+      if (!trackingLimitations.includes(limitation)) trackingLimitations.push(limitation);
+    }
+  }
+
+  return {
+    targetsContacted,
+    patternsCompleted,
+    validRepetitions,
+    averageReactionMs: averageTimingSampleMs(timingSamples),
+    movementSpeed,
+    trackingConfidence,
+    responseConsistency,
+    compensationEvents,
+    trackingLimitations,
+  };
+}
+
+function SectionHeading({ children }: { children: string }) {
+  return (
+    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#5DCAA5]/85">{children}</p>
+  );
+}
+
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2">
@@ -87,6 +144,11 @@ function InteractiveBlockCard({
     block.displayCategory === "pattern"
       ? { label: "Patterns completed", value: formatNumberOrDash(block.interaction.patternsCompleted) }
       : { label: "Targets contacted", value: formatNumberOrDash(block.interaction.targetsContacted) };
+  const avgReactionMs = averageTimingSampleMs(block.interaction.timingSamplesMs);
+  const romDegrees =
+    block.measured.rangeValuesDegrees.length > 0
+      ? Math.max(...block.measured.rangeValuesDegrees)
+      : null;
 
   return (
     <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220]/50 p-4">
@@ -101,9 +163,34 @@ function InteractiveBlockCard({
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <Stat label={primaryStat.label} value={primaryStat.value} />
         <Stat
+          label="Valid repetitions"
+          value={formatNumberOrDash(block.measured.validRepetitions > 0 ? block.measured.validRepetitions : null)}
+        />
+        <Stat
           label="Participation time"
           value={formatSecondsOrDash(block.interaction.participationDurationSeconds)}
         />
+        {avgReactionMs != null ? (
+          <Stat label="Avg reaction time" value={`${avgReactionMs}ms`} />
+        ) : null}
+        {block.measured.movementSpeed != null ? (
+          <Stat label="Movement speed" value={formatNumberOrDash(block.measured.movementSpeed)} />
+        ) : null}
+        {romDegrees != null ? (
+          <Stat label="Peak ROM (deg)" value={formatNumberOrDash(romDegrees)} />
+        ) : null}
+        {block.interaction.responseConsistency != null ? (
+          <Stat
+            label="Response consistency"
+            value={formatPercentOrDash(block.interaction.responseConsistency)}
+          />
+        ) : null}
+        {block.measured.trackingConfidence != null ? (
+          <Stat
+            label="Tracking confidence"
+            value={formatPercentOrDash(block.measured.trackingConfidence)}
+          />
+        ) : null}
       </div>
     </div>
   );
@@ -190,13 +277,22 @@ function BlockReportCard({
 }
 
 function OutcomeEntryCard({ entry }: { entry: InteractiveShoulderOutcomeReportEntry }) {
+  const metrics = aggregateSessionMetrics(entry);
+  const hasPerformanceMetrics =
+    metrics.averageReactionMs != null ||
+    metrics.movementSpeed != null ||
+    metrics.trackingConfidence != null ||
+    metrics.responseConsistency != null ||
+    metrics.compensationEvents > 0 ||
+    metrics.trackingLimitations.length > 0;
+
   return (
     <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-[13px] font-semibold text-[#F9FAFB]">{formatCvRecordedAt(entry.createdAt)}</p>
           <p className="mt-0.5 text-[10px] text-[#6B7280]">
-            Side: {formatPrescribedSideForReview(entry.prescribedSide)}
+            Treatment side: {formatPrescribedSideForReview(entry.prescribedSide)}
           </p>
         </div>
         <span className="inline-flex items-center rounded-[5px] border border-[#1D9E75]/35 bg-[#1D9E75]/12 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-[#5DCAA5]">
@@ -204,9 +300,17 @@ function OutcomeEntryCard({ entry }: { entry: InteractiveShoulderOutcomeReportEn
         </span>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Stat label="Elapsed time" value={formatCvDuration(entry.totalElapsedSeconds)} />
-        <Stat label="Block data" value={describeRecordedBlockResults(entry)} />
+      <div className="mb-5 space-y-3">
+        <SectionHeading>Session summary</SectionHeading>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <Stat label="Session duration" value={formatCvDuration(entry.totalElapsedSeconds)} />
+          <Stat
+            label="Blocks completed"
+            value={`${entry.blocksCompleted}/${entry.blocksTotal}`}
+          />
+          <Stat label="Valid repetitions" value={formatNumberOrDash(metrics.validRepetitions > 0 ? metrics.validRepetitions : null)} />
+          <Stat label="Block data" value={describeRecordedBlockResults(entry)} />
+        </div>
       </div>
 
       {!entry.recognizedSchemaVersion ? (
@@ -218,6 +322,7 @@ function OutcomeEntryCard({ entry }: { entry: InteractiveShoulderOutcomeReportEn
 
       {entry.blocks.length > 0 ? (
         <div className="space-y-3">
+          <SectionHeading>Movement outcomes</SectionHeading>
           {entry.blocks.map((block, index) => (
             <BlockReportCard key={`${entry.id}-${block.blockId}-${index}`} block={block} index={index} />
           ))}
@@ -226,7 +331,45 @@ function OutcomeEntryCard({ entry }: { entry: InteractiveShoulderOutcomeReportEn
         <p className="text-[11px] text-white/45">No block-level movement data recorded for this session.</p>
       )}
 
-      <p className="mt-3 text-[9px] text-white/25">Schema {entry.schemaVersion || "not recorded"}</p>
+      {hasPerformanceMetrics ? (
+        <div className="mt-5 space-y-3">
+          <SectionHeading>Performance / quality</SectionHeading>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {metrics.targetsContacted > 0 ? (
+              <Stat label="Targets contacted" value={formatNumberOrDash(metrics.targetsContacted)} />
+            ) : null}
+            {metrics.patternsCompleted > 0 ? (
+              <Stat label="Patterns completed" value={formatNumberOrDash(metrics.patternsCompleted)} />
+            ) : null}
+            {metrics.averageReactionMs != null ? (
+              <Stat label="Avg reaction time" value={`${metrics.averageReactionMs}ms`} />
+            ) : null}
+            {metrics.movementSpeed != null ? (
+              <Stat label="Movement speed" value={formatNumberOrDash(metrics.movementSpeed)} />
+            ) : null}
+            {metrics.responseConsistency != null ? (
+              <Stat
+                label="Response consistency"
+                value={formatPercentOrDash(metrics.responseConsistency)}
+              />
+            ) : null}
+            {metrics.trackingConfidence != null ? (
+              <Stat
+                label="Tracking confidence"
+                value={formatPercentOrDash(metrics.trackingConfidence)}
+              />
+            ) : null}
+            {metrics.compensationEvents > 0 ? (
+              <Stat label="Compensation events" value={formatNumberOrDash(metrics.compensationEvents)} />
+            ) : null}
+          </div>
+          {metrics.trackingLimitations.length > 0 ? (
+            <p className="text-[10px] leading-relaxed text-white/45">
+              Tracking limitations noted: {metrics.trackingLimitations.join(", ")}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

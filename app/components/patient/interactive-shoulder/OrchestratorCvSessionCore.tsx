@@ -103,6 +103,11 @@ import { TrackedHandCursor } from "./TrackedHandCursor";
 import { TherapeuticPathLayer } from "./TherapeuticPathLayer";
 import { ReachTheLightEnvironment } from "./ReachTheLightEnvironment";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
+import { ReadyCountdownOverlay } from "./ReadyCountdownOverlay";
+import { SessionCompleteOverlay } from "./SessionCompleteOverlay";
+import { SoundToggleButton } from "./SoundToggleButton";
+import { TargetSuccessPulse } from "./TargetSuccessPulse";
+import { createInteractiveShoulderSoundPlayer } from "@/app/lib/interactive-shoulder/interactive-shoulder-sounds";
 
 registerAllBlockRunners();
 
@@ -288,6 +293,33 @@ export function OrchestratorCvSessionCore({
   const [hitBurstTarget, setHitBurstTarget] = useState<TherapeuticTarget | null>(null);
   const [hitBurstProgress, setHitBurstProgress] = useState<number | null>(null);
   const hitFeedbackTimeoutRef = useRef<number | null>(null);
+  const soundPlayerRef = useRef(createInteractiveShoulderSoundPlayer(prefersReducedMotion));
+  const previousBlockIdForSoundRef = useRef<string | null>(null);
+
+  const [countdownActive, setCountdownActive] = useState(false);
+  const [soundMuted, setSoundMuted] = useState(() => soundPlayerRef.current.isMuted());
+
+  useEffect(() => {
+    soundPlayerRef.current = createInteractiveShoulderSoundPlayer(prefersReducedMotion);
+  }, [prefersReducedMotion]);
+
+  const handleSoundToggle = useCallback(() => {
+    const muted = soundPlayerRef.current.toggleMuted();
+    setSoundMuted(muted);
+  }, []);
+
+  const handleCountdownComplete = useCallback(() => {
+    const orchestrator = orchestratorRef.current;
+    if (orchestrator) {
+      orchestrator.resume(performance.now());
+    }
+    soundPlayerRef.current.play("sessionStart");
+    setCountdownActive(false);
+  }, []);
+
+  const handleCountdownTick = useCallback(() => {
+    soundPlayerRef.current.play("countdown");
+  }, []);
 
   const clearHitFeedback = useCallback(() => {
     if (hitFeedbackTimeoutRef.current !== null) {
@@ -399,6 +431,9 @@ export function OrchestratorCvSessionCore({
       orchestrator.start(now);
       orchestrator.beginCalibration(now);
       orchestrator.completeCalibration(now);
+      orchestrator.pause(now);
+      setCountdownActive(true);
+      previousBlockIdForSoundRef.current = null;
       sessionStartedRef.current = true;
       sessionCompleteFiredRef.current = false;
       // SESSION BOUNDARY for adaptation. `startSession` is the only place a session
@@ -506,6 +541,7 @@ export function OrchestratorCvSessionCore({
           });
           if (shouldFireSessionCompleteCallback(snap.sessionState, sessionCompleteFiredRef.current)) {
             sessionCompleteFiredRef.current = true;
+            soundPlayerRef.current.play("sessionComplete");
             // Forwards the same local `snap` this tick already computed — no
             // new state, no new effect dependency, no change to camera-start
             // or detector mount/dispose lifecycle. See orchestrator-cv-session-types.ts.
@@ -529,6 +565,10 @@ export function OrchestratorCvSessionCore({
           activeBlockIdRef.current !== currentBlockId &&
           currentBlock
         ) {
+          if (activeBlockIdRef.current !== null) {
+            soundPlayerRef.current.play("blockComplete");
+          }
+          previousBlockIdForSoundRef.current = activeBlockIdRef.current;
           activeBlockIdRef.current = currentBlockId;
           clearHitFeedback();
           setPresentationProgress(null);
@@ -647,7 +687,8 @@ export function OrchestratorCvSessionCore({
               if (burstTarget) {
                 setHitBurstTarget(burstTarget);
               }
-              setTargetHitAnnouncement(ui.targetReached);
+              soundPlayerRef.current.play("targetHit");
+              setTargetHitAnnouncement(ui.goodReachFeedback);
               if (hitFeedbackTimeoutRef.current !== null) {
                 window.clearTimeout(hitFeedbackTimeoutRef.current);
               }
@@ -663,6 +704,7 @@ export function OrchestratorCvSessionCore({
                 now,
               );
               setHitBurstProgress(dispatch.states.pattern?.exitingProgress ?? null);
+              soundPlayerRef.current.play("repetition");
               setTargetHitAnnouncement(ui.patternPathComplete);
               if (hitFeedbackTimeoutRef.current !== null) {
                 window.clearTimeout(hitFeedbackTimeoutRef.current);
@@ -798,7 +840,11 @@ export function OrchestratorCvSessionCore({
             >
               {ui.continueCamera}
             </button>
-            <button type="button" className="rounded-[8px] border border-[#E2E8E5] px-4 py-2 text-sm" onClick={onSkipped}>
+            <button
+              type="button"
+              className="rounded-[8px] border border-[#CBD5E1] bg-white px-4 py-2 text-sm font-medium text-[#374151] shadow-sm transition hover:border-[#94A3B8] hover:bg-[#F8FAFC] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D9E75]"
+              onClick={onSkipped}
+            >
               {ui.skipCamera}
             </button>
           </div>
@@ -815,6 +861,9 @@ export function OrchestratorCvSessionCore({
               {ui.devMouseSimulation}
             </p>
           )}
+          <div className="mb-2 flex items-center justify-end">
+            <SoundToggleButton language={language} muted={soundMuted} onToggle={handleSoundToggle} />
+          </div>
           <PreviewStack
             videoRef={videoRef}
             canvasRef={canvasRef}
@@ -826,23 +875,24 @@ export function OrchestratorCvSessionCore({
             overlay={
               <>
                 <ReachTheLightEnvironment reducedMotion={prefersReducedMotion} />
-                {showBlockSummary ? (
-                  <ShoulderSessionHud
+                {countdownActive ? (
+                  <ReadyCountdownOverlay
                     language={language}
                     arClass={arClass}
-                    snapshot={hudSnapshot}
-                    feedbackMode={resolvedHudFeedbackMode}
-                    targetInteraction={targetState.interaction}
-                    patternInteraction={patternState?.interaction ?? createEmptyPatternInteractionMetrics()}
-                    measuredReps={measuredReps}
-                    onPause={handlePause}
-                    onResume={handleResume}
-                    showBlockSummary={showBlockSummary}
-                    blockSummaryTargetsReached={summaryMetrics.targets}
-                    blockSummaryPatternsCompleted={summaryMetrics.patterns}
-                    blockSummaryMeasuredReps={summaryMetrics.reps}
-                    blockSummaryDurationSeconds={summaryMetrics.durationSeconds}
-                    targetHitAnnouncement={targetHitAnnouncement}
+                    reducedMotion={prefersReducedMotion}
+                    onTick={handleCountdownTick}
+                    onComplete={handleCountdownComplete}
+                  />
+                ) : null}
+                {showBlockSummary ? (
+                  <SessionCompleteOverlay
+                    language={language}
+                    arClass={arClass}
+                    blocksCompleted={hudSnapshot.accumulatedBlockResults.length}
+                    repetitionsCompleted={summaryMetrics.reps}
+                    durationSeconds={summaryMetrics.durationSeconds}
+                    targetsReached={summaryMetrics.targets}
+                    patternsCompleted={summaryMetrics.patterns}
                   />
                 ) : isInstructionalBlock ? (
                   <InstructionalBlockLayer
@@ -898,6 +948,9 @@ export function OrchestratorCvSessionCore({
                           blockSummaryDurationSeconds={summaryMetrics.durationSeconds}
                           targetHitAnnouncement={targetHitAnnouncement}
                         />
+                        {targetHitAnnouncement ? (
+                          <TargetSuccessPulse message={targetHitAnnouncement} arClass={arClass} />
+                        ) : null}
                       </>
                     )}
                     {runtimeFaultMessage ? (
