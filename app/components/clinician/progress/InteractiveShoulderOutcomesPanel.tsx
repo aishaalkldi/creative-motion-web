@@ -13,6 +13,7 @@ import {
   describeRecordedBlockResults,
 } from "@/app/lib/progress/progress-outcomes-bundle";
 import type { MovementBlockCompletionReason } from "@/app/lib/session-orchestrator/types";
+import { aggregateInteractiveShoulderSessionMetrics } from "@/app/lib/progress/aggregate-interactive-shoulder-session-metrics";
 
 type InteractiveShoulderOutcomesPanelProps = {
   outcomes: InteractiveShoulderOutcomeReportEntry[];
@@ -69,46 +70,6 @@ function averageTimingSampleMs(samples: number[]): number | null {
   if (samples.length === 0) return null;
   const total = samples.reduce((sum, value) => sum + value, 0);
   return Math.round(total / samples.length);
-}
-
-function aggregateSessionMetrics(entry: InteractiveShoulderOutcomeReportEntry) {
-  let targetsContacted = 0;
-  let patternsCompleted = 0;
-  let validRepetitions = 0;
-  let timingSamples: number[] = [];
-  let movementSpeed: number | null = null;
-  let trackingConfidence: number | null = null;
-  let responseConsistency: number | null = null;
-  let compensationEvents = 0;
-  const trackingLimitations: string[] = [];
-
-  for (const block of entry.blocks) {
-    targetsContacted += block.interaction.targetsContacted;
-    patternsCompleted += block.interaction.patternsCompleted;
-    validRepetitions += block.measured.validRepetitions;
-    timingSamples = timingSamples.concat(block.interaction.timingSamplesMs);
-    if (block.measured.movementSpeed != null) movementSpeed = block.measured.movementSpeed;
-    if (block.measured.trackingConfidence != null) trackingConfidence = block.measured.trackingConfidence;
-    if (block.interaction.responseConsistency != null) {
-      responseConsistency = block.interaction.responseConsistency;
-    }
-    compensationEvents += block.interpreted.compensationEvents;
-    for (const limitation of block.interpreted.trackingLimitations) {
-      if (!trackingLimitations.includes(limitation)) trackingLimitations.push(limitation);
-    }
-  }
-
-  return {
-    targetsContacted,
-    patternsCompleted,
-    validRepetitions,
-    averageReactionMs: averageTimingSampleMs(timingSamples),
-    movementSpeed,
-    trackingConfidence,
-    responseConsistency,
-    compensationEvents,
-    trackingLimitations,
-  };
 }
 
 function SectionHeading({ children }: { children: string }) {
@@ -277,12 +238,11 @@ function BlockReportCard({
 }
 
 function OutcomeEntryCard({ entry }: { entry: InteractiveShoulderOutcomeReportEntry }) {
-  const metrics = aggregateSessionMetrics(entry);
+  const metrics = aggregateInteractiveShoulderSessionMetrics(entry);
   const hasPerformanceMetrics =
+    metrics.targetsContacted > 0 ||
+    metrics.patternsCompleted > 0 ||
     metrics.averageReactionMs != null ||
-    metrics.movementSpeed != null ||
-    metrics.trackingConfidence != null ||
-    metrics.responseConsistency != null ||
     metrics.compensationEvents > 0 ||
     metrics.trackingLimitations.length > 0;
 
@@ -343,21 +303,6 @@ function OutcomeEntryCard({ entry }: { entry: InteractiveShoulderOutcomeReportEn
             ) : null}
             {metrics.averageReactionMs != null ? (
               <Stat label="Avg reaction time" value={`${metrics.averageReactionMs}ms`} />
-            ) : null}
-            {metrics.movementSpeed != null ? (
-              <Stat label="Movement speed" value={formatNumberOrDash(metrics.movementSpeed)} />
-            ) : null}
-            {metrics.responseConsistency != null ? (
-              <Stat
-                label="Response consistency"
-                value={formatPercentOrDash(metrics.responseConsistency)}
-              />
-            ) : null}
-            {metrics.trackingConfidence != null ? (
-              <Stat
-                label="Tracking confidence"
-                value={formatPercentOrDash(metrics.trackingConfidence)}
-              />
             ) : null}
             {metrics.compensationEvents > 0 ? (
               <Stat label="Compensation events" value={formatNumberOrDash(metrics.compensationEvents)} />
