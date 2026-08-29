@@ -41,6 +41,10 @@ import {
   resolveInteractiveShoulderStartError,
 } from "@/app/lib/interactive-shoulder/interactive-shoulder-ui";
 import { resolveHitExitTransitionMs } from "@/app/lib/interactive-shoulder/reach-the-light-motion";
+import {
+  MIRRORED_PREVIEW_TRANSFORM,
+  toMirroredPreviewPoint,
+} from "@/app/lib/interactive-shoulder/presentation-mirror";
 import { registerAllBlockRunners } from "@/app/lib/interactive-shoulder/block-engine/register-all-block-runners";
 import { DEFAULT_SAFE_TARGET_BOUNDS } from "@/app/lib/interactive-shoulder/target-generator";
 import type { ActiveBlockRunnerStates } from "@/app/lib/interactive-shoulder/block-engine/tick-active-block-runner";
@@ -115,13 +119,28 @@ const PatientCameraVideoLayer = memo(function PatientCameraVideoLayer({
 }) {
   return (
     <>
-      <video ref={videoRef} autoPlay muted playsInline className="block h-full w-full object-cover opacity-95" />
+      {/*
+        Mirrored (selfie) preview — issue #277. The patient sees themselves as in a
+        mirror, which is the space every therapeutic-geometry module in this slice is
+        authored in (see presentation-mirror.ts). The canvas carries the SAME transform
+        because it is drawn with raw MediaPipe x and only stays registered to the video
+        if both flip about the same centerline.
+      */}
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        className="block h-full w-full object-cover opacity-95"
+        style={{ transform: MIRRORED_PREVIEW_TRANSFORM }}
+      />
       <canvas
         ref={canvasRef}
         width={canvasWidth}
         height={canvasHeight}
         aria-hidden
         className="pointer-events-none absolute inset-0 h-full w-full opacity-60 mix-blend-screen"
+        style={{ transform: MIRRORED_PREVIEW_TRANSFORM }}
       />
     </>
   );
@@ -539,8 +558,12 @@ export function OrchestratorCvSessionCore({
         }
 
         const poseSnap = snapshotRef.current;
+        // Measured wrist reflected into mirrored preview space (#277) so the hit test
+        // is evaluated in the SAME space the target and the marker are drawn in. The
+        // dev-mouse fallback is already a preview-space point — it comes from the
+        // container's own bounding rect — so it is deliberately not converted.
         const wrist =
-          poseSnap?.primaryWristNormalized ??
+          toMirroredPreviewPoint(poseSnap?.primaryWristNormalized) ??
           (isDevMouseSimulationEnabled() ? devMouseRef.current : null);
 
         if (shouldDispatchBlockRunner(runtimeFaultRef.current)) {
@@ -561,7 +584,12 @@ export function OrchestratorCvSessionCore({
           const adaptivePlacement = resolveAdaptiveTargetPlacement({
             adaptiveState,
             affectedSide: activeTherapeuticSide,
-            shoulderAnchorNormalized: poseSnap?.primaryShoulderNormalized ?? null,
+            // Same conversion as the wrist above: the placement geometry this feeds is
+            // authored in mirrored preview space (#277). `reachRadiusNormalized` below
+            // is a scalar distance and is mirror-invariant, so it is passed unchanged.
+            shoulderAnchorNormalized: toMirroredPreviewPoint(
+              poseSnap?.primaryShoulderNormalized,
+            ),
             reachRadiusNormalized: poseSnap?.estimatedArmLengthNormalized ?? null,
             bounds: DEFAULT_SAFE_TARGET_BOUNDS,
           });
@@ -673,6 +701,28 @@ export function OrchestratorCvSessionCore({
     ui.patternPathComplete,
     ui.targetReached,
   ]);
+
+  /**
+   * The hand marker's position in mirrored preview space (#277).
+   *
+   * MEMOISED ON THE MEASURED REFERENCE, and that is load-bearing rather than
+   * cosmetic. `TrackedHandCursor` compares `wrist` by IDENTITY in its effect
+   * dependencies, and that effect is what advances the cursor's smoothing lerp and
+   * pushes the motion trail. The rAF loop above calls `setOrchestratorSnapshot` with a
+   * fresh object every tick, so this component re-renders at display rate (~60 Hz)
+   * while the detector publishes at camera rate (~30 Hz). Mirroring inline in the JSX
+   * would therefore hand the cursor a brand-new object on every render and step the
+   * smoothing twice per camera frame — changing the cursor's feel and halving the
+   * trail's time span, which is #276 behaviour this fix must not touch.
+   *
+   * `primaryWristNormalized` keeps a stable reference between publications, so this
+   * memo changes identity exactly once per published measurement — the same cadence
+   * the cursor saw before the mirror was introduced.
+   */
+  const mirroredCursorWrist = useMemo(
+    () => toMirroredPreviewPoint(snapshot?.primaryWristNormalized),
+    [snapshot?.primaryWristNormalized],
+  );
 
   const acceptConsent = () => {
     if (!consentChecked) return;
@@ -825,7 +875,7 @@ export function OrchestratorCvSessionCore({
                       <>
                         <TrackedHandCursor
                           wrist={
-                            snapshot?.primaryWristNormalized ??
+                            mirroredCursorWrist ??
                             (isDevMouseSimulationEnabled() ? devMouseRef.current : null)
                           }
                           visible={hudSnapshot.sessionState === "active" || hudSnapshot.sessionState === "safetyHold"}
