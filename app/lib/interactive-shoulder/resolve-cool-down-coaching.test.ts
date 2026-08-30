@@ -4,38 +4,66 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
-  isCoolDownAlmostDonePhase,
   resolveCoolDownCoachingMessage,
+  resolveCoolDownCoachingPhase,
 } from "./resolve-cool-down-coaching";
 
+const SAFETY_EN =
+  "If you feel shoulder pain or cannot control the arm comfortably, stop and support the arm.";
+const SAFETY_AR =
+  "إذا شعرت بألم في الكتف أو لم تستطع التحكم بالذراع براحة، توقف وضع الذراع على المسند.";
+
 describe("resolveCoolDownCoachingMessage", () => {
-  it("rotates Arabic cool-down coaching copy by remaining time", () => {
+  it("rotates Arabic supported-return coaching copy by elapsed time", () => {
+    assert.equal(resolveCoolDownCoachingMessage("ar", 2), "اكتمل التمرين.");
     assert.equal(
-      resolveCoolDownCoachingMessage("ar", 80),
-      "اخفض ذراعك ببطء إلى وضع مريح.",
+      resolveCoolDownCoachingMessage("ar", 10),
+      "أعد ذراعك ببطء إلى وضع مريح ومدعوم. لا تُجبر الحركة.",
     );
     assert.equal(
-      resolveCoolDownCoachingMessage("ar", 20),
-      "أرخِ كتفك وخذ نفسًا هادئًا.",
+      resolveCoolDownCoachingMessage("ar", 25),
+      `دع ذراعك يستقر بشكل مريح على المسند. ${SAFETY_AR}`,
     );
-    assert.equal(resolveCoolDownCoachingMessage("ar", 4), "أوشكت على الانتهاء.");
+    assert.equal(
+      resolveCoolDownCoachingMessage("ar", 35),
+      `أبقِ ذراعك مدعومًا وتنفس بهدوء. ${SAFETY_AR}`,
+    );
   });
 
-  it("rotates English cool-down coaching copy by remaining time", () => {
+  it("rotates English supported-return coaching copy by elapsed time", () => {
+    assert.equal(resolveCoolDownCoachingMessage("en", 2), "Exercise complete.");
     assert.equal(
-      resolveCoolDownCoachingMessage("en", 60),
-      "Slowly lower your arm to a comfortable resting position.",
+      resolveCoolDownCoachingMessage("en", 10),
+      "Slowly bring your arm back to a comfortable, supported position. Do not force the movement.",
     );
     assert.equal(
-      resolveCoolDownCoachingMessage("en", 15),
-      "Relax your shoulder and take a calm breath.",
+      resolveCoolDownCoachingMessage("en", 25),
+      `Let your arm rest comfortably on the support. ${SAFETY_EN}`,
     );
-    assert.equal(resolveCoolDownCoachingMessage("en", 3), "Almost done.");
+    assert.equal(
+      resolveCoolDownCoachingMessage("en", 35),
+      `Keep your arm supported and breathe normally. ${SAFETY_EN}`,
+    );
   });
 
-  it("detects the final almost-done phase without altering metrics", () => {
-    assert.equal(isCoolDownAlmostDonePhase(5), true);
-    assert.equal(isCoolDownAlmostDonePhase(6), false);
-    assert.equal(isCoolDownAlmostDonePhase(null), false);
+  it("does not include removed return-to-neutral or lowering copy", () => {
+    for (const elapsed of [0, 5, 15, 30, 60, 85]) {
+      const en = resolveCoolDownCoachingMessage("en", elapsed);
+      const ar = resolveCoolDownCoachingMessage("ar", elapsed);
+      assert.ok(!en.includes("lower your arm"));
+      assert.ok(!en.includes("Relax your shoulder"));
+      assert.ok(!ar.includes("اخفض ذراعك"));
+      assert.ok(!ar.includes("أرخِ كتفك"));
+    }
+  });
+});
+
+describe("resolveCoolDownCoachingPhase", () => {
+  it("maps elapsed seconds to supported-return phases", () => {
+    assert.equal(resolveCoolDownCoachingPhase(2), "complete");
+    assert.equal(resolveCoolDownCoachingPhase(10), "protectedReturn");
+    assert.equal(resolveCoolDownCoachingPhase(25), "restOnSupport");
+    assert.equal(resolveCoolDownCoachingPhase(35), "supportedStillness");
+    assert.equal(resolveCoolDownCoachingPhase(80), "supportedStillness");
   });
 });

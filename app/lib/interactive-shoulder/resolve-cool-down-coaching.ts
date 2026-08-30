@@ -2,34 +2,65 @@ import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 
 const COOL_DOWN_COACHING: Record<
   PatientExerciseLanguage,
-  { start: string; middle: string; almostDone: string }
+  {
+    complete: string;
+    protectedReturn: string;
+    restOnSupport: string;
+    supportedStillness: string;
+    safety: string;
+  }
 > = {
   en: {
-    start: "Slowly lower your arm to a comfortable resting position.",
-    middle: "Relax your shoulder and take a calm breath.",
-    almostDone: "Almost done.",
+    complete: "Exercise complete.",
+    protectedReturn:
+      "Slowly bring your arm back to a comfortable, supported position. Do not force the movement.",
+    restOnSupport: "Let your arm rest comfortably on the support.",
+    supportedStillness: "Keep your arm supported and breathe normally.",
+    safety:
+      "If you feel shoulder pain or cannot control the arm comfortably, stop and support the arm.",
   },
   ar: {
-    start: "اخفض ذراعك ببطء إلى وضع مريح.",
-    middle: "أرخِ كتفك وخذ نفسًا هادئًا.",
-    almostDone: "أوشكت على الانتهاء.",
+    complete: "اكتمل التمرين.",
+    protectedReturn: "أعد ذراعك ببطء إلى وضع مريح ومدعوم. لا تُجبر الحركة.",
+    restOnSupport: "دع ذراعك يستقر بشكل مريح على المسند.",
+    supportedStillness: "أبقِ ذراعك مدعومًا وتنفس بهدوء.",
+    safety:
+      "إذا شعرت بألم في الكتف أو لم تستطع التحكم بالذراع براحة، توقف وضع الذراع على المسند.",
   },
 };
 
-export function resolveCoolDownCoachingMessage(
+function resolveCoolDownPhaseMessage(
   language: PatientExerciseLanguage,
-  remainingSeconds: number | null,
+  elapsedSeconds: number,
 ): string {
   const copy = COOL_DOWN_COACHING[language];
-  if (remainingSeconds !== null && remainingSeconds <= 5) {
-    return copy.almostDone;
-  }
-  if (remainingSeconds !== null && remainingSeconds <= 30) {
-    return copy.middle;
-  }
-  return copy.start;
+  if (elapsedSeconds < 5) return copy.complete;
+  if (elapsedSeconds < 20) return copy.protectedReturn;
+  if (elapsedSeconds < 30) return copy.restOnSupport;
+  return copy.supportedStillness;
 }
 
-export function isCoolDownAlmostDonePhase(remainingSeconds: number | null): boolean {
-  return remainingSeconds !== null && remainingSeconds <= 5;
+/**
+ * Supported-return coaching for the cool-down instructional block.
+ * Uses elapsed block time — presentation only, no measured dose.
+ */
+export function resolveCoolDownCoachingMessage(
+  language: PatientExerciseLanguage,
+  elapsedSeconds: number,
+): string {
+  const primary = resolveCoolDownPhaseMessage(language, Math.max(0, Math.floor(elapsedSeconds)));
+  if (elapsedSeconds >= 20) {
+    return `${primary} ${COOL_DOWN_COACHING[language].safety}`;
+  }
+  return primary;
+}
+
+export function resolveCoolDownCoachingPhase(
+  elapsedSeconds: number,
+): "complete" | "protectedReturn" | "restOnSupport" | "supportedStillness" {
+  const elapsed = Math.max(0, Math.floor(elapsedSeconds));
+  if (elapsed < 5) return "complete";
+  if (elapsed < 20) return "protectedReturn";
+  if (elapsed < 30) return "restOnSupport";
+  return "supportedStillness";
 }

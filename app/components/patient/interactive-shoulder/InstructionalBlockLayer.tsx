@@ -4,10 +4,7 @@ import { useEffect, useRef } from "react";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import type { InteractiveShoulderSoundCue } from "@/app/lib/interactive-shoulder/interactive-shoulder-sounds";
 import { interactiveShoulderUi } from "@/app/lib/interactive-shoulder/interactive-shoulder-ui";
-import {
-  isCoolDownAlmostDonePhase,
-  resolveCoolDownCoachingMessage,
-} from "@/app/lib/interactive-shoulder/resolve-cool-down-coaching";
+import { resolveCoolDownCoachingMessage } from "@/app/lib/interactive-shoulder/resolve-cool-down-coaching";
 import {
   isCoolDownBlock,
   isWarmUpBlock,
@@ -77,11 +74,9 @@ export function InstructionalBlockLayer({
   const isCoolDown = isCoolDownBlock(block?.blockId);
   const phaseAccent = isCoolDown ? "cooldown" : isWarmUp ? "warmup" : "exercise";
   const coolDownEntryPlayedRef = useRef(false);
-  const coolDownAlmostDonePlayedRef = useRef(false);
 
   useEffect(() => {
     coolDownEntryPlayedRef.current = false;
-    coolDownAlmostDonePlayedRef.current = false;
   }, [block?.blockId]);
 
   useEffect(() => {
@@ -90,14 +85,10 @@ export function InstructionalBlockLayer({
       coolDownEntryPlayedRef.current = true;
       onPlaySound("sessionStart");
     }
-    if (isCoolDownAlmostDonePhase(remaining) && !coolDownAlmostDonePlayedRef.current) {
-      coolDownAlmostDonePlayedRef.current = true;
-      onPlaySound("countdown");
-    }
-  }, [isCoolDown, onPlaySound, remaining]);
+  }, [isCoolDown, onPlaySound]);
 
   const stripMessage = isCoolDown
-    ? resolveCoolDownCoachingMessage(language, remaining)
+    ? resolveCoolDownCoachingMessage(language, snapshot.blockElapsedSeconds)
     : resolvePatientLiveInstructionStrip({
         language,
         blockId: block?.blockId,

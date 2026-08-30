@@ -351,10 +351,25 @@ body {
   100% { transform: scale(1); opacity: 1; }
 }
 
-@keyframes cooldown-arm-return {
-  0%, 12% { transform: rotate(-48deg); }
-  55%, 70% { transform: rotate(14deg); }
-  100% { transform: rotate(-48deg); }
+@keyframes cooldown-toward-support {
+  0%, 18% { transform: rotate(-38deg); }
+  72%, 100% { transform: rotate(52deg); }
+}
+
+@keyframes cooldown-arm-supported {
+  from, to { transform: rotate(52deg); }
+}
+
+@keyframes cooldown-arm-raised {
+  from, to { transform: rotate(-38deg); }
+}
+
+.cooldown-arm-raised {
+  transform: rotate(-38deg);
+}
+
+.cooldown-arm-supported {
+  transform: rotate(52deg);
 }
 
 @keyframes cooldown-breath {

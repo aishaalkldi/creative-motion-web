@@ -1,69 +1,78 @@
 "use client";
 
+import { resolveCoolDownCoachingPhase } from "@/app/lib/interactive-shoulder/resolve-cool-down-coaching";
+
 type CoolDownMotionGuideProps = {
   reducedMotion: boolean;
+  elapsedSeconds?: number;
 };
 
 /**
- * Presentation-only return-to-neutral guide. Shows a subtle arm path from a
- * comfortable reach position down to rest — no reps, targets, or measurement.
+ * Presentation-only supported-return guide. Communicates direction toward a
+ * visible support surface and a final forearm-supported rest — not an exact
+ * trajectory, neutral position, or measured movement.
  */
-export function CoolDownMotionGuide({ reducedMotion }: CoolDownMotionGuideProps) {
+export function CoolDownMotionGuide({ reducedMotion, elapsedSeconds = 0 }: CoolDownMotionGuideProps) {
+  const phase = resolveCoolDownCoachingPhase(elapsedSeconds);
+  const onSupport = phase === "restOnSupport" || phase === "supportedStillness";
+  const armClass = reducedMotion
+    ? onSupport
+      ? "cooldown-arm-supported"
+      : "cooldown-arm-raised"
+    : onSupport
+      ? "motion-safe:animate-[cooldown-arm-supported_0.01s_linear_forwards]"
+      : "motion-safe:animate-[cooldown-toward-support_7s_ease-in-out_infinite]";
+
   return (
     <div
-      className="pointer-events-none absolute inset-y-0 left-3 z-20 flex w-[26%] max-w-[132px] items-center sm:left-4 sm:max-w-[148px]"
+      className="pointer-events-none absolute inset-y-0 left-3 z-20 flex w-[28%] max-w-[140px] items-center sm:left-4 sm:max-w-[152px]"
       aria-hidden
     >
       <svg
         viewBox="0 0 120 200"
-        className="h-auto w-full opacity-[0.24]"
+        className="h-auto w-full opacity-[0.26]"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
       >
-        <ellipse cx="60" cy="30" rx="14" ry="16" stroke="#8CB4FF" strokeWidth="1.25" opacity="0.7" />
-        <path d="M60 46v54" stroke="#8CB4FF" strokeWidth="1.25" strokeLinecap="round" opacity="0.55" />
+        <ellipse cx="60" cy="30" rx="14" ry="16" stroke="#8CB4FF" strokeWidth="1.25" opacity="0.65" />
+        <path d="M60 46v48" stroke="#8CB4FF" strokeWidth="1.25" strokeLinecap="round" opacity="0.5" />
         <path
-          d="M60 100 L50 168 M60 100 L70 168"
+          d="M60 94 L52 168 M60 94 L68 168"
           stroke="#8CB4FF"
           strokeWidth="1.25"
           strokeLinecap="round"
-          opacity="0.45"
+          opacity="0.4"
         />
 
-        {/* Return-to-neutral path: raised hand → resting at side */}
-        <path
-          d="M88 68 Q 72 92 50 118"
-          stroke="#5B8DEF"
+        {/* Padded support surface — armrest / table-like */}
+        <rect
+          x="18"
+          y="128"
+          width="84"
+          height="14"
+          rx="5"
+          fill="#5B8DEF"
+          fillOpacity="0.14"
+          stroke="#8CB4FF"
           strokeWidth="1.25"
-          strokeLinecap="round"
-          strokeDasharray="3 5"
-          opacity="0.55"
         />
-        <circle cx="88" cy="68" r="2.5" fill="#8CB4FF" opacity="0.35" />
-        <circle cx="50" cy="118" r="2.5" fill="#8CB4FF" opacity="0.55" />
+        <rect x="22" y="132" width="76" height="6" rx="3" fill="#8CB4FF" fillOpacity="0.12" />
 
-        {/* Animated arm follows the return path */}
-        <g
-          style={{ transformOrigin: "60px 58px" }}
-          className={reducedMotion ? "" : "motion-safe:animate-[cooldown-arm-return_5s_ease-in-out_infinite]"}
-        >
+        {/* Arm: raised → toward support → forearm resting on surface */}
+        <g style={{ transformOrigin: "60px 58px" }} className={armClass}>
+          <path d="M60 58 L78 74" stroke="#A8C7FF" strokeWidth="2" strokeLinecap="round" />
           <path
-            d="M60 58 L88 68"
+            d="M78 74 L46 132"
             stroke="#A8C7FF"
             strokeWidth="2"
             strokeLinecap="round"
+            strokeLinejoin="round"
           />
-          <circle cx="88" cy="68" r="3" fill="#8CB4FF" opacity="0.75" />
         </g>
 
-        {/* Resting arm ghost at neutral */}
-        <path
-          d="M60 58 L50 118"
-          stroke="#8CB4FF"
-          strokeWidth="1.25"
-          strokeLinecap="round"
-          opacity="0.25"
-        />
+        {onSupport ? (
+          <ellipse cx="46" cy="132" rx="8" ry="3" fill="#8CB4FF" fillOpacity="0.35" />
+        ) : null}
       </svg>
     </div>
   );

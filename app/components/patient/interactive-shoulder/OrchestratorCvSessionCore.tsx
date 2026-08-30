@@ -908,7 +908,10 @@ export function OrchestratorCvSessionCore({
                     ) : isInstructionalBlock ? (
                       <>
                         {isCoolDownInstructional ? (
-                          <CoolDownMotionGuide reducedMotion={prefersReducedMotion} />
+                          <CoolDownMotionGuide
+                            reducedMotion={prefersReducedMotion}
+                            elapsedSeconds={hudSnapshot.blockElapsedSeconds}
+                          />
                         ) : null}
                         <InstructionalBlockLayer
                           language={language}
