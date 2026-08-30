@@ -19,7 +19,7 @@ const BLOCK_COPY: Record<
     ar: {
       phaseLabel: "الإحماء",
       title: "الإحماء",
-      instructions: "امدُد ببطء وراحة لتحضير كتفك.",
+      instructions: "حرّك ذراعك ببطء وضمن مدى مريح لتهيئة كتفك.",
     },
   },
   "stroke-ulrf-v1-session-1-cool-down": {
@@ -31,7 +31,7 @@ const BLOCK_COPY: Record<
     ar: {
       phaseLabel: "التهدئة",
       title: "التهدئة",
-      instructions: "أبطئ حركتك واسترخِ كتفك.",
+      instructions: "خفّف سرعة الحركة وأرخِ كتفك.",
     },
   },
   "stroke-ulrf-v1-session-1-reach-the-light": {
@@ -44,7 +44,7 @@ const BLOCK_COPY: Record<
     ar: {
       phaseLabel: "التمرين",
       title: "الوصول إلى الضوء",
-      instructions: "ارفع ذراعك جانبًا وامدُد نحو كل ضوء علاجي. تحرّك بوتيرة مريحة.",
+      instructions: "ارفع ذراعك باتجاه الضوء وتحرك بوتيرة مريحة.",
     },
   },
   "stroke-ulrf-v1-session-1-d1-diagonal-reach": {
@@ -56,11 +56,18 @@ const BLOCK_COPY: Record<
     },
     ar: {
       phaseLabel: "التمرين",
-      title: "الوصول القطري المستوحى من D1",
-      instructions: "اتبع الضوء العلاجي على المسار القطري. تحرّك بسلاسة وبوتيرة مريحة.",
+      title: "الوصول القطري D1",
+      instructions: "اتبع الضوء على المسار القطري وتحرك بسلاسة وضمن مدى مريح.",
     },
   },
 };
+
+export function hasLocalizedBlockCopy(
+  language: PatientExerciseLanguage,
+  blockId: string | undefined,
+): boolean {
+  return Boolean(blockId && BLOCK_COPY[blockId]?.[language]);
+}
 
 export function resolveBlockDisplayCopy(
   language: PatientExerciseLanguage,

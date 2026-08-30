@@ -1,12 +1,19 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
+import type { InteractiveShoulderSoundCue } from "@/app/lib/interactive-shoulder/interactive-shoulder-sounds";
 import { interactiveShoulderUi } from "@/app/lib/interactive-shoulder/interactive-shoulder-ui";
+import {
+  isCoolDownAlmostDonePhase,
+  resolveCoolDownCoachingMessage,
+} from "@/app/lib/interactive-shoulder/resolve-cool-down-coaching";
 import {
   isCoolDownBlock,
   isWarmUpBlock,
   resolveBlockDisplayCopy,
 } from "@/app/lib/interactive-shoulder/resolve-block-display-copy";
+import { resolvePatientLiveInstructionStrip } from "@/app/lib/interactive-shoulder/resolve-patient-live-instruction";
 import type { SessionOrchestratorSnapshot } from "@/app/lib/session-orchestrator/types";
 import { ShoulderLiveInstructionStrip } from "./ShoulderLiveInstructionStrip";
 import { ShoulderLiveStatusRail } from "./ShoulderLiveStatusRail";
@@ -21,6 +28,7 @@ type InstructionalBlockLayerProps = {
   controlsLocked?: boolean;
   soundMuted: boolean;
   onSoundToggle: () => void;
+  onPlaySound?: (cue: InteractiveShoulderSoundCue) => void;
   placement: "rail" | "strip";
 };
 
@@ -47,6 +55,7 @@ export function InstructionalBlockLayer({
   controlsLocked = false,
   soundMuted,
   onSoundToggle,
+  onPlaySound,
   placement,
 }: InstructionalBlockLayerProps) {
   const ui = interactiveShoulderUi(language);
@@ -67,9 +76,37 @@ export function InstructionalBlockLayer({
   const isWarmUp = isWarmUpBlock(block?.blockId);
   const isCoolDown = isCoolDownBlock(block?.blockId);
   const phaseAccent = isCoolDown ? "cooldown" : isWarmUp ? "warmup" : "exercise";
+  const coolDownEntryPlayedRef = useRef(false);
+  const coolDownAlmostDonePlayedRef = useRef(false);
+
+  useEffect(() => {
+    coolDownEntryPlayedRef.current = false;
+    coolDownAlmostDonePlayedRef.current = false;
+  }, [block?.blockId]);
+
+  useEffect(() => {
+    if (!isCoolDown || !onPlaySound) return;
+    if (!coolDownEntryPlayedRef.current) {
+      coolDownEntryPlayedRef.current = true;
+      onPlaySound("sessionStart");
+    }
+    if (isCoolDownAlmostDonePhase(remaining) && !coolDownAlmostDonePlayedRef.current) {
+      coolDownAlmostDonePlayedRef.current = true;
+      onPlaySound("countdown");
+    }
+  }, [isCoolDown, onPlaySound, remaining]);
+
+  const stripMessage = isCoolDown
+    ? resolveCoolDownCoachingMessage(language, remaining)
+    : resolvePatientLiveInstructionStrip({
+        language,
+        blockId: block?.blockId,
+        fallbackTitle: block?.title ?? ui.movementBlockLabel,
+        fallbackInstructions: block?.instructions ?? ui.blockInstructions,
+      });
 
   if (placement === "strip") {
-    return <ShoulderLiveInstructionStrip message={copy.instructions} arClass={arClass} />;
+    return <ShoulderLiveInstructionStrip message={stripMessage} arClass={arClass} />;
   }
 
   return (

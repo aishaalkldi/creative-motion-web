@@ -98,6 +98,9 @@ import { SessionOrchestrator } from "@/app/lib/session-orchestrator/session-orch
 import type { SessionOrchestratorSnapshot } from "@/app/lib/session-orchestrator/types";
 import { ShoulderSessionHud } from "./ShoulderSessionHud";
 import { InstructionalBlockLayer } from "./InstructionalBlockLayer";
+import { CoolDownMotionGuide } from "./CoolDownMotionGuide";
+import { isCoolDownBlock } from "@/app/lib/interactive-shoulder/resolve-block-display-copy";
+import type { InteractiveShoulderSoundCue } from "@/app/lib/interactive-shoulder/interactive-shoulder-sounds";
 import { ShoulderTargetLayer } from "./ShoulderTargetLayer";
 import { TrackedHandCursor } from "./TrackedHandCursor";
 import { TherapeuticPathLayer } from "./TherapeuticPathLayer";
@@ -305,6 +308,10 @@ export function OrchestratorCvSessionCore({
   const handleSoundToggle = useCallback(() => {
     const muted = soundPlayerRef.current.toggleMuted();
     setSoundMuted(muted);
+  }, []);
+
+  const handlePlaySound = useCallback((cue: InteractiveShoulderSoundCue) => {
+    soundPlayerRef.current.play(cue);
   }, []);
 
   const handleCountdownComplete = useCallback(() => {
@@ -823,6 +830,8 @@ export function OrchestratorCvSessionCore({
     !showBlockSummary &&
     !countdownActive &&
     (isInstructionalBlock || isMovementPatternBlock || isMovementTargetBlock);
+  const isCoolDownInstructional =
+    isInstructionalBlock && isCoolDownBlock(hudSnapshot.currentBlock?.blockId);
 
   return (
     <div className="px-4 pb-4 pt-3" dir={textDir} lang={language}>
@@ -897,18 +906,24 @@ export function OrchestratorCvSessionCore({
                         patternsCompleted={summaryMetrics.patterns}
                       />
                     ) : isInstructionalBlock ? (
-                      <InstructionalBlockLayer
-                        language={language}
-                        arClass={arClass}
-                        snapshot={hudSnapshot}
-                        presentationProgress={presentationProgress}
-                        onPause={handlePause}
-                        onResume={handleResume}
-                        controlsLocked={controlsLocked}
-                        soundMuted={soundMuted}
-                        onSoundToggle={handleSoundToggle}
-                        placement="strip"
-                      />
+                      <>
+                        {isCoolDownInstructional ? (
+                          <CoolDownMotionGuide reducedMotion={prefersReducedMotion} />
+                        ) : null}
+                        <InstructionalBlockLayer
+                          language={language}
+                          arClass={arClass}
+                          snapshot={hudSnapshot}
+                          presentationProgress={presentationProgress}
+                          onPause={handlePause}
+                          onResume={handleResume}
+                          controlsLocked={controlsLocked}
+                          soundMuted={soundMuted}
+                          onSoundToggle={handleSoundToggle}
+                          onPlaySound={handlePlaySound}
+                          placement="strip"
+                        />
+                      </>
                     ) : (
                       <>
                         {isMovementPatternBlock && activeMotionPattern && patternState ? (
@@ -987,6 +1002,7 @@ export function OrchestratorCvSessionCore({
                     controlsLocked={controlsLocked}
                     soundMuted={soundMuted}
                     onSoundToggle={handleSoundToggle}
+                    onPlaySound={handlePlaySound}
                     placement="rail"
                   />
                 ) : (

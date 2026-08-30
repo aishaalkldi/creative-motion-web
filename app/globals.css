@@ -350,3 +350,13 @@ body {
   0% { transform: scale(0.9); opacity: 0.4; }
   100% { transform: scale(1); opacity: 1; }
 }
+
+@keyframes cooldown-arm-settle {
+  0%, 100% { transform: rotate(10deg); }
+  50% { transform: rotate(-2deg); }
+}
+
+@keyframes cooldown-breath {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.6; }
+}

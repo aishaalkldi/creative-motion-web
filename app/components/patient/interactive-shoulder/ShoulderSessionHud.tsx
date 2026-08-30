@@ -6,11 +6,11 @@ import type { PatternInteractionMetrics } from "@/app/lib/interactive-shoulder/m
 import type { FeedbackInteractionMode } from "@/app/lib/interactive-shoulder/motion-patterns/motion-pattern-registry";
 import {
   interactiveShoulderUi,
-  resolveInteractiveShoulderEncouragement,
   resolveInteractiveShoulderExperienceTitle,
   resolveInteractiveShoulderLiveMessage,
 } from "@/app/lib/interactive-shoulder/interactive-shoulder-ui";
 import { resolveBlockDisplayCopy } from "@/app/lib/interactive-shoulder/resolve-block-display-copy";
+import { resolvePatientLiveInstructionStrip } from "@/app/lib/interactive-shoulder/resolve-patient-live-instruction";
 import type { SessionOrchestratorSnapshot } from "@/app/lib/session-orchestrator/types";
 import { ShoulderLiveInstructionStrip } from "./ShoulderLiveInstructionStrip";
 import { ShoulderLiveStatusRail } from "./ShoulderLiveStatusRail";
@@ -70,10 +70,14 @@ export function ShoulderSessionHud({
   const remaining = formatRemainingSeconds(snapshot);
   const pausedOrHold = snapshot.isPaused || snapshot.safetyStatus === "hold";
   const liveMessage = resolveInteractiveShoulderLiveMessage(language, snapshot);
-  const encouragement = resolveInteractiveShoulderEncouragement(language, snapshot);
-  const primaryLiveAnnouncement = targetHitAnnouncement ?? liveMessage;
-  const stripMessage =
-    primaryLiveAnnouncement ?? (snapshot.safetyStatus === "normal" ? encouragement : null);
+  const stripMessage = resolvePatientLiveInstructionStrip({
+    language,
+    blockId: snapshot.currentBlock?.blockId,
+    fallbackTitle: blockCopy.title,
+    fallbackInstructions: snapshot.currentBlock?.instructions ?? ui.blockInstructions,
+    targetHitAnnouncement,
+    safetyLiveMessage: liveMessage,
+  });
   const blockProgressPercent = Math.round(snapshot.blockProgress * 100);
   const sessionProgressPercent = Math.round(snapshot.sessionProgress * 100);
   const prescribedReps = snapshot.currentBlock?.prescribedRepetitions ?? null;
@@ -85,7 +89,6 @@ export function ShoulderSessionHud({
     : targetInteraction.targetsShown;
 
   if (placement === "strip") {
-    if (!stripMessage) return null;
     return <ShoulderLiveInstructionStrip message={stripMessage} arClass={arClass} />;
   }
 

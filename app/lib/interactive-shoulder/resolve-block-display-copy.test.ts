@@ -26,7 +26,7 @@ describe("resolveBlockDisplayCopy", () => {
     assert.equal(warmUpEn.phaseLabel, "Warm-up");
     assert.ok(warmUpEn.instructions.includes("shoulder"));
     assert.equal(warmUpAr.phaseLabel, "الإحماء");
-    assert.notEqual(warmUpEn.instructions, warmUpAr.instructions);
+    assert.equal(warmUpAr.instructions, "حرّك ذراعك ببطء وضمن مدى مريح لتهيئة كتفك.");
 
     const coolDownEn = resolveBlockDisplayCopy(
       "en",
@@ -34,8 +34,27 @@ describe("resolveBlockDisplayCopy", () => {
       "Fallback",
       "Fallback instructions",
     );
+    const coolDownAr = resolveBlockDisplayCopy(
+      "ar",
+      "stroke-ulrf-v1-session-1-cool-down",
+      "Fallback",
+      "English fallback instructions",
+    );
     assert.equal(coolDownEn.phaseLabel, "Cool-down");
     assert.ok(coolDownEn.instructions.toLowerCase().includes("relax"));
+    assert.equal(coolDownAr.instructions, "خفّف سرعة الحركة وأرخِ كتفك.");
+    assert.ok(!coolDownAr.instructions.includes("English"));
+  });
+
+  it("returns simplified Arabic D1 patient title", () => {
+    const d1Ar = resolveBlockDisplayCopy(
+      "ar",
+      "stroke-ulrf-v1-session-1-d1-diagonal-reach",
+      "Fallback",
+      "Fallback",
+    );
+    assert.equal(d1Ar.title, "الوصول القطري D1");
+    assert.equal(d1Ar.instructions, "اتبع الضوء على المسار القطري وتحرك بسلاسة وضمن مدى مريح.");
   });
 
   it("falls back to provided title and instructions for unknown blocks", () => {
