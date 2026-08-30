@@ -810,7 +810,6 @@ export function OrchestratorCvSessionCore({
 
   const canvasWidth = profile.canvasWidth;
   const canvasHeight = profile.canvasHeight;
-  const measuredReps = snapshot?.primaryRepCount ?? 0;
   const hudSnapshot =
     orchestratorSnapshot ??
     ({
@@ -966,7 +965,6 @@ export function OrchestratorCvSessionCore({
                               feedbackMode={resolvedHudFeedbackMode}
                               targetInteraction={targetState.interaction}
                               patternInteraction={patternState?.interaction ?? createEmptyPatternInteractionMetrics()}
-                              measuredReps={measuredReps}
                               onPause={handlePause}
                               onResume={handleResume}
                               soundMuted={soundMuted}
@@ -1021,7 +1019,6 @@ export function OrchestratorCvSessionCore({
                     feedbackMode={resolvedHudFeedbackMode}
                     targetInteraction={targetState.interaction}
                     patternInteraction={patternState?.interaction ?? createEmptyPatternInteractionMetrics()}
-                    measuredReps={measuredReps}
                     onPause={handlePause}
                     onResume={handleResume}
                     soundMuted={soundMuted}

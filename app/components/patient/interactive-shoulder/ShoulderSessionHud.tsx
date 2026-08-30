@@ -11,6 +11,7 @@ import {
 } from "@/app/lib/interactive-shoulder/interactive-shoulder-ui";
 import { resolveBlockDisplayCopy } from "@/app/lib/interactive-shoulder/resolve-block-display-copy";
 import { resolvePatientLiveInstructionStrip } from "@/app/lib/interactive-shoulder/resolve-patient-live-instruction";
+import { resolveShoulderLiveHudMetrics } from "@/app/lib/interactive-shoulder/resolve-shoulder-live-hud-metrics";
 import type { SessionOrchestratorSnapshot } from "@/app/lib/session-orchestrator/types";
 import { ShoulderLiveInstructionStrip } from "./ShoulderLiveInstructionStrip";
 import { ShoulderLiveStatusRail } from "./ShoulderLiveStatusRail";
@@ -22,7 +23,6 @@ type ShoulderSessionHudProps = {
   feedbackMode: FeedbackInteractionMode;
   targetInteraction: ShoulderInteractionMetrics;
   patternInteraction: PatternInteractionMetrics;
-  measuredReps: number;
   onPause: () => void;
   onResume: () => void;
   soundMuted: boolean;
@@ -51,7 +51,6 @@ export function ShoulderSessionHud({
   feedbackMode,
   targetInteraction,
   patternInteraction,
-  measuredReps,
   onPause,
   onResume,
   soundMuted,
@@ -60,7 +59,6 @@ export function ShoulderSessionHud({
   placement,
 }: ShoulderSessionHudProps) {
   const ui = interactiveShoulderUi(language);
-  const isPatternMode = feedbackMode === "motion-pattern";
   const blockCopy = resolveBlockDisplayCopy(
     language,
     snapshot.currentBlock?.blockId,
@@ -80,21 +78,17 @@ export function ShoulderSessionHud({
   });
   const blockProgressPercent = Math.round(snapshot.blockProgress * 100);
   const sessionProgressPercent = Math.round(snapshot.sessionProgress * 100);
-  const prescribedReps = snapshot.currentBlock?.prescribedRepetitions ?? null;
-  const interactionCompleted = isPatternMode
-    ? patternInteraction.patternsCompleted
-    : targetInteraction.targetsReached;
-  const interactionTotal = isPatternMode
-    ? patternInteraction.patternsShown
-    : targetInteraction.targetsShown;
 
   if (placement === "strip") {
     return <ShoulderLiveInstructionStrip message={stripMessage} arClass={arClass} />;
   }
 
-  const interactionLabel = isPatternMode
-    ? ui.interactionPatternsLabel(0, 0).split(":")[0]
-    : ui.interactionTargetsLabel(0, 0).split(":")[0];
+  const metrics = resolveShoulderLiveHudMetrics({
+    language,
+    feedbackMode,
+    targetInteraction,
+    patternInteraction,
+  });
 
   return (
     <ShoulderLiveStatusRail
@@ -104,13 +98,7 @@ export function ShoulderSessionHud({
       phaseAccent="exercise"
       title={blockCopy.title}
       timer={remaining !== null ? formatClinicalClock(remaining) : null}
-      metrics={[
-        { label: interactionLabel, value: `${interactionCompleted}/${interactionTotal || "—"}` },
-        {
-          label: ui.measuredRepsLabel(0).replace(/:.*/, ""),
-          value: ui.repProgressLabel(measuredReps, prescribedReps),
-        },
-      ]}
+      metrics={metrics}
       showBlockProgress
       blockProgressPercent={blockProgressPercent}
       sessionProgressPercent={sessionProgressPercent}
