@@ -7,7 +7,6 @@ type SessionCompleteOverlayProps = {
   language: PatientExerciseLanguage;
   arClass?: string;
   blocksCompleted: number;
-  repetitionsCompleted: number;
   durationSeconds: number;
   targetsReached: number;
   patternsCompleted: number;
@@ -17,7 +16,6 @@ export function SessionCompleteOverlay({
   language,
   arClass = "",
   blocksCompleted,
-  repetitionsCompleted,
   durationSeconds,
   targetsReached,
   patternsCompleted,
@@ -45,12 +43,6 @@ export function SessionCompleteOverlay({
             <dt className="text-white/50">{ui.blocksCompletedLabel}</dt>
             <dd className="mt-0.5 text-base font-semibold tabular-nums text-white" dir="ltr">
               {blocksCompleted}
-            </dd>
-          </div>
-          <div className="rounded-[8px] border border-white/10 bg-white/5 px-3 py-2">
-            <dt className="text-white/50">{ui.repetitionsCompletedLabel}</dt>
-            <dd className="mt-0.5 text-base font-semibold tabular-nums text-white" dir="ltr">
-              {repetitionsCompleted}
             </dd>
           </div>
           {interactionsCompleted > 0 ? (

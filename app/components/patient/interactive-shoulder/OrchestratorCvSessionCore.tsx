@@ -904,7 +904,6 @@ export function OrchestratorCvSessionCore({
                         language={language}
                         arClass={arClass}
                         blocksCompleted={hudSnapshot.accumulatedBlockResults.length}
-                        repetitionsCompleted={summaryMetrics.reps}
                         durationSeconds={summaryMetrics.durationSeconds}
                         targetsReached={summaryMetrics.targets}
                         patternsCompleted={summaryMetrics.patterns}
