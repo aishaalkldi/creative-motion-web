@@ -20,13 +20,15 @@ export default function PatientTokenLayout({ children }: { children: React.React
 }
 
 function PatientTokenLayoutShell({ children }: { children: React.ReactNode }) {
-  const { language, assignedBy, textDir, arClass } = usePatientLanguage();
+  const { language, assignedBy, textDir, arClass, isArabic } = usePatientLanguage();
   const layoutUi = tokenLayoutUi(language);
+  const readableArabicClass = isArabic ? "patient-arabic-readable" : "";
 
   return (
     <div
-      className={`min-h-screen bg-[#EEF2F0] ${arClass}`}
+      className={`min-h-screen bg-[#EEF2F0] ${arClass} ${readableArabicClass}`}
       dir={textDir}
+      lang={language}
       style={{ fontFamily: "var(--font-inter, ui-sans-serif, sans-serif)" }}
     >
       <nav className="sticky top-0 z-10 flex h-[52px] items-center justify-between border-b border-[#E2E8E5] bg-white px-5">

@@ -63,6 +63,22 @@ body {
   font-family: var(--font-sans);
 }
 
+/* Patient portal — Arabic body readability (IBM Plex Sans Arabic via arClass). */
+.patient-arabic-readable {
+  line-height: 1.78;
+  letter-spacing: 0;
+}
+
+.patient-arabic-readable p,
+.patient-arabic-readable li {
+  margin-bottom: 0.625rem;
+}
+
+.patient-arabic-readable p:last-child,
+.patient-arabic-readable li:last-child {
+  margin-bottom: 0;
+}
+
 /* ── Disable glassmorphism globally (RASQ: flat surfaces only) ── */
 @layer utilities {
   .backdrop-blur-sm,

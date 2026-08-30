@@ -2,6 +2,7 @@
 
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import { interactiveShoulderUi } from "@/app/lib/interactive-shoulder/interactive-shoulder-ui";
+import { PATIENT_ICON_TOUCH_TARGET_CLASS, PATIENT_PRIMARY_TOUCH_MIN_CLASS } from "@/app/lib/patient-portal-touch-targets";
 
 type SoundToggleButtonProps = {
   language: PatientExerciseLanguage;
@@ -57,7 +58,7 @@ export function SoundToggleButton({
     return (
       <button
         type="button"
-        className={`rounded-[10px] border border-white/20 bg-[#0F1825]/88 px-3 py-2 text-[11px] font-semibold text-white/90 backdrop-blur-sm transition hover:border-[#1D9E75]/40 hover:bg-[#0F1825] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5DCAA5] ${className}`}
+        className={`rounded-[10px] border border-white/20 bg-[#0F1825]/88 px-3 text-[11px] font-semibold text-white/90 backdrop-blur-sm transition hover:border-[#1D9E75]/40 hover:bg-[#0F1825] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5DCAA5] ${PATIENT_PRIMARY_TOUCH_MIN_CLASS} ${className}`}
         onClick={onToggle}
         aria-pressed={muted}
         aria-label={ariaLabel}
@@ -71,7 +72,7 @@ export function SoundToggleButton({
     <button
       type="button"
       title={ariaLabel}
-      className={`inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-[#D1D9E0] bg-white text-[#374151] transition hover:border-[#94A3B8] hover:bg-[#F8FAFC] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D9E75] ${className}`}
+      className={`${PATIENT_ICON_TOUCH_TARGET_CLASS} rounded-[10px] border border-[#D1D9E0] bg-white text-[#374151] transition hover:border-[#94A3B8] hover:bg-[#F8FAFC] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D9E75] ${className}`}
       onClick={onToggle}
       aria-pressed={muted}
       aria-label={ariaLabel}
