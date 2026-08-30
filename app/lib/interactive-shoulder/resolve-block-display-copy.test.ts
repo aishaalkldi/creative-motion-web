@@ -41,8 +41,8 @@ describe("resolveBlockDisplayCopy", () => {
       "English fallback instructions",
     );
     assert.equal(coolDownEn.phaseLabel, "Cool-down");
-    assert.ok(coolDownEn.instructions.toLowerCase().includes("relax"));
-    assert.equal(coolDownAr.instructions, "خفّف سرعة الحركة وأرخِ كتفك.");
+    assert.ok(coolDownEn.instructions.toLowerCase().includes("supported"));
+    assert.equal(coolDownAr.instructions, "أعد ذراعك ببطء إلى وضع مريح ومدعوم.");
     assert.ok(!coolDownAr.instructions.includes("English"));
   });
 

@@ -48,9 +48,10 @@ export function resolveCoolDownCoachingMessage(
   language: PatientExerciseLanguage,
   elapsedSeconds: number,
 ): string {
-  const primary = resolveCoolDownPhaseMessage(language, Math.max(0, Math.floor(elapsedSeconds)));
-  if (elapsedSeconds >= 20) {
-    return `${primary} ${COOL_DOWN_COACHING[language].safety}`;
+  const elapsed = Math.max(0, elapsedSeconds);
+  const primary = resolveCoolDownPhaseMessage(language, Math.floor(elapsed));
+  if (elapsed >= 5) {
+    return `${primary}\n${COOL_DOWN_COACHING[language].safety}`;
   }
   return primary;
 }

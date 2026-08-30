@@ -26,12 +26,12 @@ const BLOCK_COPY: Record<
     en: {
       phaseLabel: "Cool-down",
       title: "Cool-down",
-      instructions: "Slow down your movement and relax your shoulder.",
+      instructions: "Slowly bring your arm back to a comfortable, supported position.",
     },
     ar: {
       phaseLabel: "التهدئة",
       title: "التهدئة",
-      instructions: "خفّف سرعة الحركة وأرخِ كتفك.",
+      instructions: "أعد ذراعك ببطء إلى وضع مريح ومدعوم.",
     },
   },
   "stroke-ulrf-v1-session-1-reach-the-light": {

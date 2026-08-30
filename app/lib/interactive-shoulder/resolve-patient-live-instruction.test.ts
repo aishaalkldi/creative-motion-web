@@ -46,7 +46,7 @@ describe("resolvePatientLiveInstructionStrip", () => {
       fallbackTitle: "Cool-down",
       fallbackInstructions: "Slow down your movement and relax your shoulder.",
     });
-    assert.equal(coolDown, "خفّف سرعة الحركة وأرخِ كتفك.");
+    assert.equal(coolDown, "أعد ذراعك ببطء إلى وضع مريح ومدعوم.");
   });
 
   it("prefers target-hit announcement over localized instruction", () => {

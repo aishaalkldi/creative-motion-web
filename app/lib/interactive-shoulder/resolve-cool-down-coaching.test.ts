@@ -18,15 +18,15 @@ describe("resolveCoolDownCoachingMessage", () => {
     assert.equal(resolveCoolDownCoachingMessage("ar", 2), "اكتمل التمرين.");
     assert.equal(
       resolveCoolDownCoachingMessage("ar", 10),
-      "أعد ذراعك ببطء إلى وضع مريح ومدعوم. لا تُجبر الحركة.",
+      `أعد ذراعك ببطء إلى وضع مريح ومدعوم. لا تُجبر الحركة.\n${SAFETY_AR}`,
     );
     assert.equal(
       resolveCoolDownCoachingMessage("ar", 25),
-      `دع ذراعك يستقر بشكل مريح على المسند. ${SAFETY_AR}`,
+      `دع ذراعك يستقر بشكل مريح على المسند.\n${SAFETY_AR}`,
     );
     assert.equal(
       resolveCoolDownCoachingMessage("ar", 35),
-      `أبقِ ذراعك مدعومًا وتنفس بهدوء. ${SAFETY_AR}`,
+      `أبقِ ذراعك مدعومًا وتنفس بهدوء.\n${SAFETY_AR}`,
     );
   });
 
@@ -34,15 +34,15 @@ describe("resolveCoolDownCoachingMessage", () => {
     assert.equal(resolveCoolDownCoachingMessage("en", 2), "Exercise complete.");
     assert.equal(
       resolveCoolDownCoachingMessage("en", 10),
-      "Slowly bring your arm back to a comfortable, supported position. Do not force the movement.",
+      `Slowly bring your arm back to a comfortable, supported position. Do not force the movement.\n${SAFETY_EN}`,
     );
     assert.equal(
       resolveCoolDownCoachingMessage("en", 25),
-      `Let your arm rest comfortably on the support. ${SAFETY_EN}`,
+      `Let your arm rest comfortably on the support.\n${SAFETY_EN}`,
     );
     assert.equal(
       resolveCoolDownCoachingMessage("en", 35),
-      `Keep your arm supported and breathe normally. ${SAFETY_EN}`,
+      `Keep your arm supported and breathe normally.\n${SAFETY_EN}`,
     );
   });
 
@@ -50,8 +50,8 @@ describe("resolveCoolDownCoachingMessage", () => {
     for (const elapsed of [0, 5, 15, 30, 60, 85]) {
       const en = resolveCoolDownCoachingMessage("en", elapsed);
       const ar = resolveCoolDownCoachingMessage("ar", elapsed);
-      assert.ok(!en.includes("lower your arm"));
-      assert.ok(!en.includes("Relax your shoulder"));
+      assert.ok(!en.toLowerCase().includes("lower your arm"));
+      assert.ok(!en.toLowerCase().includes("relax your shoulder"));
       assert.ok(!ar.includes("اخفض ذراعك"));
       assert.ok(!ar.includes("أرخِ كتفك"));
     }

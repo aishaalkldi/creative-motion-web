@@ -97,7 +97,9 @@ export function InstructionalBlockLayer({
       });
 
   if (placement === "strip") {
-    return <ShoulderLiveInstructionStrip message={stripMessage} arClass={arClass} />;
+    return (
+      <ShoulderLiveInstructionStrip message={stripMessage} arClass={arClass} multiline={isCoolDown} />
+    );
   }
 
   return (
