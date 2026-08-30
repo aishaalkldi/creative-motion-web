@@ -414,6 +414,8 @@ describe("SessionOrchestrator — result category separation", () => {
     assert.equal("patternsCompleted" in result.measured, false);
     assert.equal("validRepetitions" in result.interaction, false);
     assert.equal("compensationEvents" in result.measured, false);
+    assert.deepEqual(result.interaction.timingSamplesMs, []);
+    assert.deepEqual(result.measured.rangeValuesDegrees, []);
   });
 
   it("echoes the originating block's own blockType and title onto the result — not derived, not guessed", () => {
@@ -512,6 +514,105 @@ describe("SessionOrchestrator — mock Neuro Upper-Limb session fixture", () => 
       summary.blockResults.map((r) => r.blockId),
       ["warm-up", "main-movement", "functional-challenge", "cool-down"],
     );
+  });
+});
+
+describe("SessionOrchestrator — measured sample persistence", () => {
+  function manualCompletionSession(): SessionDefinition {
+    return {
+      sessionId: "sample-persistence",
+      title: "Sample persistence",
+      blocks: [
+        minimalBlock({
+          completionMode: "manualCompletion",
+          targetDurationSeconds: undefined,
+          restAfterSeconds: 0,
+        }),
+      ],
+    };
+  }
+
+  it("appends reactionTimeMs samples for valid target contacts without changing target counts", () => {
+    const o = startedOrchestrator(manualCompletionSession());
+    o.reportInputEvent(
+      { type: "targetContact", capturedAtMs: T0 + 1_000, reactionTimeMs: 420 },
+      T0 + 1_000,
+    );
+    o.reportInputEvent(
+      { type: "targetContact", capturedAtMs: T0 + 2_000, reactionTimeMs: 510 },
+      T0 + 2_000,
+    );
+    o.completeBlockManually(T0 + 3_000);
+
+    const result = o.getSessionPerformanceSummary(T0 + 3_000).blockResults[0];
+    assert.equal(result.interaction.targetsContacted, 2);
+    assert.deepEqual(result.interaction.timingSamplesMs, [420, 510]);
+    assert.equal(result.measured.validRepetitions, 0);
+  });
+
+  it("does not fabricate timing samples when reactionTimeMs is missing or invalid", () => {
+    const o = startedOrchestrator(manualCompletionSession());
+    o.reportInputEvent({ type: "targetContact", capturedAtMs: T0 + 1_000 }, T0 + 1_000);
+    o.reportInputEvent(
+      { type: "targetContact", capturedAtMs: T0 + 2_000, reactionTimeMs: Number.NaN },
+      T0 + 2_000,
+    );
+    o.completeBlockManually(T0 + 3_000);
+
+    const result = o.getSessionPerformanceSummary(T0 + 3_000).blockResults[0];
+    assert.equal(result.interaction.targetsContacted, 2);
+    assert.deepEqual(result.interaction.timingSamplesMs, []);
+  });
+
+  it("appends peakAngleDegrees samples for valid repetitions without changing rep counts", () => {
+    const o = startedOrchestrator(manualCompletionSession());
+    o.reportInputEvent(
+      { type: "validRepetition", capturedAtMs: T0 + 1_000, metrics: { peakAngleDegrees: 82 } },
+      T0 + 1_000,
+    );
+    o.reportInputEvent(
+      { type: "validRepetition", capturedAtMs: T0 + 2_000, metrics: { peakAngleDegrees: 95.5 } },
+      T0 + 2_000,
+    );
+    o.completeBlockManually(T0 + 3_000);
+
+    const result = o.getSessionPerformanceSummary(T0 + 3_000).blockResults[0];
+    assert.equal(result.measured.validRepetitions, 2);
+    assert.deepEqual(result.measured.rangeValuesDegrees, [82, 95.5]);
+    assert.equal(result.interaction.targetsContacted, 0);
+  });
+
+  it("does not fabricate range samples when peakAngleDegrees is missing or invalid", () => {
+    const o = startedOrchestrator(manualCompletionSession());
+    o.reportInputEvent({ type: "validRepetition", capturedAtMs: T0 + 1_000 }, T0 + 1_000);
+    o.reportInputEvent(
+      { type: "validRepetition", capturedAtMs: T0 + 2_000, metrics: { peakAngleDegrees: Number.NaN } },
+      T0 + 2_000,
+    );
+    o.completeBlockManually(T0 + 3_000);
+
+    const result = o.getSessionPerformanceSummary(T0 + 3_000).blockResults[0];
+    assert.equal(result.measured.validRepetitions, 2);
+    assert.deepEqual(result.measured.rangeValuesDegrees, []);
+  });
+
+  it("records one timing sample and one range sample per distinct event — no cross-conversion", () => {
+    const o = startedOrchestrator(manualCompletionSession());
+    o.reportInputEvent(
+      { type: "targetContact", capturedAtMs: T0 + 1_000, reactionTimeMs: 900 },
+      T0 + 1_000,
+    );
+    o.reportInputEvent(
+      { type: "validRepetition", capturedAtMs: T0 + 1_500, metrics: { peakAngleDegrees: 75 } },
+      T0 + 1_500,
+    );
+    o.completeBlockManually(T0 + 2_000);
+
+    const result = o.getSessionPerformanceSummary(T0 + 2_000).blockResults[0];
+    assert.equal(result.interaction.targetsContacted, 1);
+    assert.equal(result.measured.validRepetitions, 1);
+    assert.deepEqual(result.interaction.timingSamplesMs, [900]);
+    assert.deepEqual(result.measured.rangeValuesDegrees, [75]);
   });
 });
 
