@@ -27,9 +27,11 @@ import {
 } from "@/app/lib/progress/interactive-shoulder-outcome-clinician-display";
 import {
   AVG_TARGET_RESPONSE_TIME_LABEL,
+  D1_PATH_TRACES_COMPLETED_HELPER,
+  D1_PATH_TRACES_COMPLETED_LABEL,
   MOTION_PROFILE_HEADING,
-  PEAK_MOVEMENT_ANGLE_LABEL,
-  PEAK_MOVEMENT_ANGLE_HELPER,
+  PEAK_HIP_SHOULDER_ELBOW_ANGLE_HELPER,
+  PEAK_HIP_SHOULDER_ELBOW_ANGLE_LABEL,
   RECORDED_SESSION_OBSERVATION_HEADING,
   averageTargetResponseTimeMs,
   buildBlockMotionProfile,
@@ -233,8 +235,11 @@ function InteractiveBlockCard({
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {block.displayCategory === "pattern" ? (
           <Stat
-            label="Patterns completed"
+            label={D1_PATH_TRACES_COMPLETED_LABEL}
             value={formatNumberOrDash(block.interaction.patternsCompleted)}
+            helper={
+              block.interaction.patternsCompleted > 0 ? D1_PATH_TRACES_COMPLETED_HELPER : undefined
+            }
           />
         ) : (
           <Stat
@@ -255,9 +260,9 @@ function InteractiveBlockCard({
         ) : null}
         {peakAngle != null ? (
           <Stat
-            label={PEAK_MOVEMENT_ANGLE_LABEL}
+            label={PEAK_HIP_SHOULDER_ELBOW_ANGLE_LABEL}
             value={formatMovementAngleDegrees(peakAngle)}
-            helper={PEAK_MOVEMENT_ANGLE_HELPER}
+            helper={PEAK_HIP_SHOULDER_ELBOW_ANGLE_HELPER}
           />
         ) : null}
         {repDosed ? (
@@ -341,8 +346,9 @@ function UnknownCategoryBlockCard({
         ) : null}
         {block.interaction.patternsCompleted > 0 ? (
           <Stat
-            label="Patterns completed"
+            label={D1_PATH_TRACES_COMPLETED_LABEL}
             value={formatNumberOrDash(block.interaction.patternsCompleted)}
+            helper={D1_PATH_TRACES_COMPLETED_HELPER}
           />
         ) : null}
         <Stat
@@ -357,9 +363,9 @@ function UnknownCategoryBlockCard({
         ) : null}
         {peakAngle != null ? (
           <Stat
-            label={PEAK_MOVEMENT_ANGLE_LABEL}
+            label={PEAK_HIP_SHOULDER_ELBOW_ANGLE_LABEL}
             value={formatMovementAngleDegrees(peakAngle)}
-            helper={PEAK_MOVEMENT_ANGLE_HELPER}
+            helper={PEAK_HIP_SHOULDER_ELBOW_ANGLE_HELPER}
           />
         ) : null}
         {repDosed ? (

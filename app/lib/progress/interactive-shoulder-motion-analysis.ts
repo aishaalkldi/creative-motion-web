@@ -9,15 +9,21 @@ import {
   shouldShowDetectedReachReturnCycles,
 } from "@/app/lib/progress/interactive-shoulder-outcome-clinician-display";
 
-export const PEAK_MOVEMENT_ANGLE_LABEL = "Peak movement angle";
-export const PEAK_MOVEMENT_ANGLE_HELPER =
-  "Highest recorded shoulder angle during detected movement.";
+export const PEAK_HIP_SHOULDER_ELBOW_ANGLE_LABEL =
+  "Peak recorded hip–shoulder–elbow angle (2D camera)";
+export const PEAK_HIP_SHOULDER_ELBOW_ANGLE_HELPER =
+  "Interior angle at the shoulder between hip–shoulder and shoulder–elbow landmarks in normalized image space; not clinical shoulder ROM. For therapist review.";
+
+/** Shorter session-snapshot label; full geometric qualification lives in the helper. */
+export const PEAK_2D_CAMERA_ANGLE_SNAPSHOT_LABEL = "Peak 2D camera angle";
 
 export const AVG_TARGET_RESPONSE_TIME_LABEL = "Avg target response time";
 export const AVG_TARGET_RESPONSE_TIME_HELPER =
   "Average time from target appearance to successful interaction.";
 
-export const PATTERNS_COMPLETED_LABEL = "Patterns completed";
+export const D1_PATH_TRACES_COMPLETED_LABEL = "D1 path traces completed";
+export const D1_PATH_TRACES_COMPLETED_HELPER =
+  "Automated completions of the configured D1-inspired path; not prescribed repetition dose.";
 
 export const RECORDED_SESSION_OBSERVATION_HEADING = "Recorded session observation";
 export const RECORDED_SESSION_OBSERVATION_FOOTER = "For therapist review only.";
@@ -113,7 +119,7 @@ export function buildBlockMotionProfile(
 
   if (peakAngle != null) {
     lines.push({
-      label: PEAK_MOVEMENT_ANGLE_LABEL,
+      label: PEAK_HIP_SHOULDER_ELBOW_ANGLE_LABEL,
       value: formatMovementAngleDegrees(peakAngle),
     });
   }
@@ -127,7 +133,7 @@ export function buildBlockMotionProfile(
 
   if (block.displayCategory === "pattern" && block.interaction.patternsCompleted > 0) {
     lines.push({
-      label: PATTERNS_COMPLETED_LABEL,
+      label: D1_PATH_TRACES_COMPLETED_LABEL,
       value: String(block.interaction.patternsCompleted),
     });
   } else if (
@@ -160,9 +166,9 @@ export function buildSessionMotionSnapshot(
   const sessionPeak = sessionPeakMovementAngleDegrees(entry);
   if (sessionPeak != null) {
     snapshot.push({
-      label: PEAK_MOVEMENT_ANGLE_LABEL,
+      label: PEAK_2D_CAMERA_ANGLE_SNAPSHOT_LABEL,
       value: formatMovementAngleDegrees(sessionPeak),
-      helper: PEAK_MOVEMENT_ANGLE_HELPER,
+      helper: PEAK_HIP_SHOULDER_ELBOW_ANGLE_HELPER,
     });
   }
 
@@ -176,8 +182,9 @@ export function buildSessionMotionSnapshot(
 
   if (metrics.patternsCompleted > 0) {
     snapshot.push({
-      label: PATTERNS_COMPLETED_LABEL,
+      label: D1_PATH_TRACES_COMPLETED_LABEL,
       value: String(metrics.patternsCompleted),
+      helper: D1_PATH_TRACES_COMPLETED_HELPER,
     });
   }
 
@@ -214,7 +221,7 @@ export function buildRecordedSessionObservation(
     ) {
       const interactions = block.interaction.targetsContacted;
       const avgMs = averageTargetResponseTimeMs(block.interaction.timingSamplesMs);
-      let sentence = `The ${title} block included ${interactions} successful interaction${
+      let sentence = `The ${title} block recorded ${interactions} successful target interaction${
         interactions === 1 ? "" : "s"
       }`;
       if (avgMs != null) {
@@ -229,11 +236,18 @@ export function buildRecordedSessionObservation(
         (block.displayCategory === "unknown" && block.interaction.patternsCompleted > 0)) &&
       block.interaction.patternsCompleted > 0
     ) {
-      const patterns = block.interaction.patternsCompleted;
+      const traces = block.interaction.patternsCompleted;
       fragments.push(
-        `The ${title} block recorded ${patterns} completed pattern${patterns === 1 ? "" : "s"}.`,
+        `The ${title} block recorded ${traces} automated path trace completion${traces === 1 ? "" : "s"}.`,
       );
     }
+  }
+
+  const sessionPeak = sessionPeakMovementAngleDegrees(entry);
+  if (sessionPeak != null) {
+    fragments.push(
+      `The highest recorded 2D hip–shoulder–elbow angle was ${formatMovementAngleDegrees(sessionPeak)}.`,
+    );
   }
 
   const sessionMetrics = aggregateInteractiveShoulderSessionMetrics(entry);
