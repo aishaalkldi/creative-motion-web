@@ -126,7 +126,7 @@ export type SessionInputEvent =
   | { type: "calibrationCompleted"; capturedAtMs: number }
   | { type: "validRepetition"; capturedAtMs: number; metrics?: Record<string, unknown> }
   | { type: "invalidRepetition"; capturedAtMs: number; reason?: string }
-  | { type: "targetContact"; capturedAtMs: number }
+  | { type: "targetContact"; capturedAtMs: number; reactionTimeMs?: number }
   | { type: "patternCompleted"; patternId: string; capturedAtMs: number }
   | { type: "holdStarted"; capturedAtMs: number }
   | { type: "holdCompleted"; capturedAtMs: number; durationSeconds: number }
