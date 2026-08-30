@@ -1,5 +1,8 @@
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
-import { resolveBlockDisplayCopy } from "./resolve-block-display-copy";
+import {
+  hasLocalizedBlockCopy,
+  resolveBlockDisplayCopy,
+} from "./resolve-block-display-copy";
 
 export type PatientLiveInstructionInput = {
   language: PatientExerciseLanguage;
@@ -25,6 +28,18 @@ export function resolvePatientLiveInstructionStrip({
 }: PatientLiveInstructionInput): string {
   const blockCopy = resolveBlockDisplayCopy(language, blockId, fallbackTitle, fallbackInstructions);
   if (targetHitAnnouncement) return targetHitAnnouncement;
-  if (safetyLiveMessage) return safetyLiveMessage;
+
+  // Session orchestrator echoes English catalog block.instructions into
+  // patientFeedbackState.message. Prefer localized block copy over that echo.
+  if (
+    safetyLiveMessage &&
+    !(
+      hasLocalizedBlockCopy(language, blockId) &&
+      safetyLiveMessage === fallbackInstructions
+    )
+  ) {
+    return safetyLiveMessage;
+  }
+
   return blockCopy.instructions;
 }

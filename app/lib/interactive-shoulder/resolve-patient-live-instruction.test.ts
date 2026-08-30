@@ -59,4 +59,16 @@ describe("resolvePatientLiveInstructionStrip", () => {
     });
     assert.equal(message, "وصول جيد");
   });
+
+  it("prefers localized instruction over orchestrator English block.instructions echo", () => {
+    const message = resolvePatientLiveInstructionStrip({
+      language: "ar",
+      blockId: "stroke-ulrf-v1-session-1-reach-the-light",
+      fallbackTitle: "Reach the Light",
+      fallbackInstructions: ENGLISH_FALLBACK,
+      safetyLiveMessage: ENGLISH_FALLBACK,
+    });
+    assert.equal(message, "ارفع ذراعك باتجاه الضوء وتحرك بوتيرة مريحة.");
+    assert.ok(!message.includes("Lift your arm"));
+  });
 });

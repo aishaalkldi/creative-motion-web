@@ -24,6 +24,7 @@ import {
   sessionExerciseFlowUi,
   sessionShellUi,
 } from "@/app/lib/patient-portal-ui";
+import { resolveCatalogSessionDisplay } from "@/app/lib/interactive-shoulder/resolve-catalog-session-display";
 
 type CatalogPhase = "start" | "playback" | "cameraDeclined" | "wrapup";
 
@@ -105,6 +106,12 @@ export function CatalogPatientSessionPlayback({
   const guidedUi = guidedSessionUi(patientLanguage);
   const flowUi = sessionExerciseFlowUi(patientLanguage);
   const catalogSession = session.catalogSession ?? null;
+  const sessionDisplay = resolveCatalogSessionDisplay(
+    patientLanguage,
+    catalogSession?.id,
+    session.title,
+    catalogSession?.goal,
+  );
 
   // Reset-on-prop-change effect, matching the established suppression
   // convention already used elsewhere in this codebase for this exact
@@ -228,7 +235,7 @@ export function CatalogPatientSessionPlayback({
         arClass={arClass}
         textDir={textDir}
         token={token}
-        sessionTitle={session.title}
+        sessionTitle={sessionDisplay.title}
         totalExercises={0}
         completedLabel={completedLabel}
         hideExerciseCount
@@ -243,7 +250,7 @@ export function CatalogPatientSessionPlayback({
         arClass={arClass}
         textDir={textDir}
         token={token}
-        sessionTitle={session.title}
+        sessionTitle={sessionDisplay.title}
         exercisesCompleted={0}
         effortScore={completionSummary.effortScore}
         painAfter={completionSummary.painAfter}
@@ -261,16 +268,16 @@ export function CatalogPatientSessionPlayback({
         arClass={arClass}
         textDir={textDir}
         token={token}
-        sessionTitle={session.title}
+        sessionTitle={sessionDisplay.title}
       >
         <div className={`space-y-6 ${arClass}`} dir={textDir}>
           <section className="rounded-[20px] border border-[#E2E8E5] bg-white p-5 shadow-[0_8px_30px_rgba(10,15,26,0.06)]">
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]">
               {guidedUi.startEyebrow}
             </p>
-            <p className="mt-2 text-[18px] font-bold text-[#0A0F1A]">{session.title}</p>
-            {catalogSession?.goal ? (
-              <p className="mt-3 text-[13px] leading-relaxed text-[#6B7280]">{catalogSession.goal}</p>
+            <p className="mt-2 text-[18px] font-bold text-[#0A0F1A]">{sessionDisplay.title}</p>
+            {sessionDisplay.goal ? (
+              <p className="mt-3 text-[13px] leading-relaxed text-[#6B7280]">{sessionDisplay.goal}</p>
             ) : (
               <p className="mt-3 text-[13px] leading-relaxed text-[#6B7280]">
                 {flowUi.sessionOverviewBody}
@@ -299,7 +306,7 @@ export function CatalogPatientSessionPlayback({
         arClass={arClass}
         textDir={textDir}
         token={token}
-        sessionTitle={session.title}
+        sessionTitle={sessionDisplay.title}
       >
         <div className={`space-y-6 ${arClass}`} dir={textDir}>
           <section className="rounded-[20px] border border-[#E2E8E5] bg-white p-5 shadow-[0_8px_30px_rgba(10,15,26,0.06)]">
@@ -327,7 +334,7 @@ export function CatalogPatientSessionPlayback({
         arClass={arClass}
         textDir={textDir}
         token={token}
-        sessionTitle={session.title}
+        sessionTitle={sessionDisplay.title}
       >
         <div className="space-y-6 pb-4">
           <div className="rounded-[20px] border border-[#D1E7DE] bg-[#F0FAF6] px-5 py-6 text-center">
@@ -392,7 +399,7 @@ export function CatalogPatientSessionPlayback({
       arClass={arClass}
       textDir={textDir}
       token={token}
-      sessionTitle={session.title}
+      sessionTitle={sessionDisplay.title}
     >
       <CatalogSessionPlayer
         key={`${session.id}:${session.prescribedSide ?? "none"}`}

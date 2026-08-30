@@ -228,8 +228,7 @@ const INTERACTIVE_SHOULDER_UI: Record<PatientExerciseLanguage, InteractiveShould
       "فُقد التتبع لفترة — لنعيد المعايرة قبل المتابعة.",
     trackingRecovered: "عاد التتبع — يمكنك متابعة الوصول.",
     paused: "متوقف مؤقتًا.",
-    blockInstructions:
-      "ارفع ذراعك جانبًا وامدُد نحو كل ضوء علاجي. تحرّك بوتيرة مريحة.",
+    blockInstructions: "ارفع ذراعك باتجاه الضوء وتحرك بوتيرة مريحة.",
     targetReached: "تم الوصول للضوء — وصول متحكم وجيد.",
     patternPathComplete: "اكتمل المسار — حركة متحكم وجيدة.",
     encouragementNiceWork: "عمل رائع.",
