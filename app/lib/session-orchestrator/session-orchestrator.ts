@@ -29,6 +29,10 @@ import {
   type SessionState,
   type TransitionState,
 } from "./types";
+import {
+  extractPeakAngleSampleDegrees,
+  extractReactionTimeSampleMs,
+} from "./measured-sample-extraction";
 
 const DEFAULT_RECALIBRATION_GRACE_SECONDS = 5;
 
@@ -294,6 +298,10 @@ export class SessionOrchestrator {
     switch (event.type) {
       case "validRepetition": {
         this.currentBlockResult.measured.validRepetitions += 1;
+        const peakAngleDegrees = extractPeakAngleSampleDegrees(event.metrics);
+        if (peakAngleDegrees !== null) {
+          this.currentBlockResult.measured.rangeValuesDegrees.push(peakAngleDegrees);
+        }
         if (
           block.completionMode === "validRepetitions" &&
           block.prescribedRepetitions !== undefined &&
@@ -306,9 +314,14 @@ export class SessionOrchestrator {
       case "invalidRepetition":
         this.currentBlockResult.measured.invalidRepetitions += 1;
         return;
-      case "targetContact":
+      case "targetContact": {
         this.currentBlockResult.interaction.targetsContacted += 1;
+        const reactionTimeMs = extractReactionTimeSampleMs(event.reactionTimeMs);
+        if (reactionTimeMs !== null) {
+          this.currentBlockResult.interaction.timingSamplesMs.push(reactionTimeMs);
+        }
         return;
+      }
       case "patternCompleted":
         this.currentBlockResult.interaction.patternsCompleted += 1;
         return;

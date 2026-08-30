@@ -224,11 +224,15 @@ describe("interactive shoulder — result category separation", () => {
     assert.equal(live.sessionState, "active");
     assert.equal(live.accumulatedBlockResults[0]?.measured.validRepetitions, 1);
     assert.equal(live.accumulatedBlockResults[0]?.interaction.targetsContacted, 1);
+    assert.deepEqual(live.accumulatedBlockResults[0]?.measured.rangeValuesDegrees, [82]);
+    assert.deepEqual(live.accumulatedBlockResults[0]?.interaction.timingSamplesMs, [900]);
 
     o.tick(T0 + 91_000);
     const summary = o.getSessionPerformanceSummary(T0 + 91_000).blockResults[0];
     assert.equal(summary.measured.validRepetitions, 1);
     assert.equal(summary.interaction.targetsContacted, 1);
+    assert.deepEqual(summary.measured.rangeValuesDegrees, [82]);
+    assert.deepEqual(summary.interaction.timingSamplesMs, [900]);
     assert.equal("targetsContacted" in summary.measured, false);
     assert.equal("validRepetitions" in summary.interaction, false);
   });
