@@ -3,8 +3,6 @@
 import { formatCvDuration, formatCvRecordedAt } from "@/app/lib/cv/cv-metrics-display";
 import { formatPrescribedSideForReview } from "@/app/lib/clinical/clinical-prescribed-side-plan-draft";
 import {
-  INTERACTIVE_SHOULDER_OUTCOMES_DISCLAIMER,
-  INTERACTIVE_SHOULDER_OUTCOMES_REVIEW_NOTE,
   describeRecordedBlockResults,
 } from "@/app/lib/progress/progress-outcomes-bundle";
 import type {
@@ -15,6 +13,8 @@ import type {
 import {
   buildBlockDetailsMetrics,
   buildTechnicalObservationMetrics,
+  formatRecordedBlockDuration,
+  isInstructionalPhaseBlock,
   RECORDED_BLOCK_DETAILS_COMPENSATION_FOOTNOTE,
   RECORDED_BLOCK_DETAILS_CTA,
   RECORDED_BLOCK_DETAILS_SUBTITLE,
@@ -23,6 +23,12 @@ import {
   TECHNICAL_OBSERVATIONS_LABEL,
   type BlockDetailMetric,
 } from "@/app/lib/progress/interactive-shoulder-block-details-display";
+import {
+  getInteractiveShoulderTrackingNotes,
+  hasInteractiveShoulderTrackingNotes,
+  INTERACTIVE_SHOULDER_TRACKING_NOTES_TITLE,
+} from "@/app/lib/progress/interactive-shoulder-report-layout";
+import { INTERACTIVE_SHOULDER_TRACKING_NOTES_FRAMING } from "@/app/lib/progress/progress-outcomes-hub-layout";
 import {
   MOTION_PROFILE_HEADING,
   PEAK_HIP_SHOULDER_ELBOW_ANGLE_LABEL,
@@ -213,6 +219,41 @@ function TechnicalObservationsSubsection({ block }: { block: InteractiveShoulder
   );
 }
 
+function InstructionalPhaseRow({ block }: { block: InteractiveShoulderOutcomeBlockReport }) {
+  return (
+    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-[11px]">
+      <span className="font-medium text-white/65">{formatBlockTitle(block)}</span>
+      <span className="text-white/40">
+        Completed · {formatRecordedBlockDuration(block.durationSeconds)}
+      </span>
+    </div>
+  );
+}
+
+function TrackingCaptureNotesSection({ entry }: { entry: InteractiveShoulderOutcomeReportEntry }) {
+  if (!hasInteractiveShoulderTrackingNotes(entry)) return null;
+
+  const notes = getInteractiveShoulderTrackingNotes(entry);
+
+  return (
+    <div className="mt-4 space-y-2 border-t border-[#1E2D42]/50 pt-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-white/45">
+        {INTERACTIVE_SHOULDER_TRACKING_NOTES_TITLE}
+      </p>
+      <p className="text-[9px] leading-relaxed text-white/30">
+        {INTERACTIVE_SHOULDER_TRACKING_NOTES_FRAMING}
+      </p>
+      <ul className="space-y-1.5">
+        {notes.map((note) => (
+          <li key={note} className="text-[11px] text-white/55">
+            {note}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function RecordedBlockDetailRow({
   block,
   index,
@@ -220,6 +261,14 @@ function RecordedBlockDetailRow({
   block: InteractiveShoulderOutcomeBlockReport;
   index: number;
 }) {
+  if (isInstructionalPhaseBlock(block)) {
+    return (
+      <div className={index > 0 ? "border-t border-[#1E2D42]/50 pt-3" : undefined}>
+        <InstructionalPhaseRow block={block} />
+      </div>
+    );
+  }
+
   const metrics = buildBlockDetailsMetrics(block);
 
   return (
@@ -316,6 +365,8 @@ function OutcomeEntryCard({ entry }: { entry: InteractiveShoulderOutcomeReportEn
       ) : (
         <p className="text-[11px] text-white/45">No block-level movement data recorded for this session.</p>
       )}
+
+      <TrackingCaptureNotesSection entry={entry} />
     </div>
   );
 }
@@ -323,15 +374,9 @@ function OutcomeEntryCard({ entry }: { entry: InteractiveShoulderOutcomeReportEn
 export function InteractiveShoulderOutcomesPanel({ outcomes }: InteractiveShoulderOutcomesPanelProps) {
   return (
     <div className="space-y-4">
-      <div className="space-y-4">
-        {outcomes.map((entry) => (
-          <OutcomeEntryCard key={entry.id} entry={entry} />
-        ))}
-      </div>
-      <div className="rounded-[7px] border border-amber-400/20 bg-amber-400/6 px-3.5 py-2.5">
-        <p className="text-[11px] font-medium text-amber-200/90">{INTERACTIVE_SHOULDER_OUTCOMES_REVIEW_NOTE}</p>
-        <p className="mt-0.5 text-[10px] text-white/40">{INTERACTIVE_SHOULDER_OUTCOMES_DISCLAIMER}</p>
-      </div>
+      {outcomes.map((entry) => (
+        <OutcomeEntryCard key={entry.id} entry={entry} />
+      ))}
     </div>
   );
 }
