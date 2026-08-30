@@ -361,7 +361,9 @@ export function ProgressOutcomesHub({ bundle }: ProgressOutcomesHubProps) {
         ) : (
           <InteractiveShoulderOutcomesPanel
             outcomes={bundle.interactiveShoulderOutcomes}
+            chartOutcomes={bundle.interactiveShoulderChartOutcomes}
             painTrend={bundle.painTrend}
+            chartPainTrend={bundle.interactiveShoulderChartPainTrend}
           />
         )}
       </SectionShell>

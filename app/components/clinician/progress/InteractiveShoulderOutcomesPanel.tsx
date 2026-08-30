@@ -45,7 +45,9 @@ import {
 
 type InteractiveShoulderOutcomesPanelProps = {
   outcomes: InteractiveShoulderOutcomeReportEntry[];
+  chartOutcomes?: InteractiveShoulderOutcomeReportEntry[];
   painTrend?: ProgressOutcomesPainPoint[];
+  chartPainTrend?: ProgressOutcomesPainPoint[];
 };
 
 const CATEGORY_FALLBACK_LABELS: Record<InteractiveShoulderOutcomeBlockDisplayCategory, string> = {
@@ -379,11 +381,19 @@ function OutcomeEntryCard({ entry }: { entry: InteractiveShoulderOutcomeReportEn
 
 export function InteractiveShoulderOutcomesPanel({
   outcomes,
+  chartOutcomes,
   painTrend = [],
+  chartPainTrend,
 }: InteractiveShoulderOutcomesPanelProps) {
+  const longitudinalOutcomes = chartOutcomes ?? outcomes;
+  const longitudinalPainTrend = chartPainTrend ?? painTrend;
+
   return (
     <div className="space-y-4">
-      <InteractiveShoulderClinicianProgressCharts outcomes={outcomes} painTrend={painTrend} />
+      <InteractiveShoulderClinicianProgressCharts
+        outcomes={longitudinalOutcomes}
+        painTrend={longitudinalPainTrend}
+      />
       {outcomes.map((entry) => (
         <OutcomeEntryCard key={entry.id} entry={entry} />
       ))}

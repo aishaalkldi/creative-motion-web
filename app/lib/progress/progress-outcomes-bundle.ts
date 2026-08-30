@@ -113,6 +113,10 @@ export type ProgressOutcomesBundle = {
   cvEvidence: ProgressOutcomesCvEvidenceEntry[];
   captureQualityHistory: CaptureQualityHistoryEntry[];
   interactiveShoulderOutcomes: InteractiveShoulderOutcomeReportEntry[];
+  /** Cross-plan Interactive Shoulder outcomes for longitudinal charts only. */
+  interactiveShoulderChartOutcomes: InteractiveShoulderOutcomeReportEntry[];
+  /** Patient-reported pain/effort joined across plans for longitudinal charts only. */
+  interactiveShoulderChartPainTrend: ProgressOutcomesPainPoint[];
 };
 
 export type SessionLogInput = {
@@ -216,6 +220,9 @@ export function buildProgressOutcomesBundle(input: {
   assessmentRows: AssessmentPickInput[];
   cvMetricRows: CvMetricInput[];
   interactiveShoulderOutcomeRows: InteractiveShoulderOutcomeReportRow[];
+  interactiveShoulderChartOutcomeRows: InteractiveShoulderOutcomeReportRow[];
+  interactiveShoulderChartSessionLogs: SessionLogInput[];
+  interactiveShoulderChartSessionNumberById: Map<string, number>;
 }): ProgressOutcomesBundle {
   const adherence =
     input.planId && input.totalSessions > 0
@@ -252,6 +259,13 @@ export function buildProgressOutcomesBundle(input: {
     captureQualityHistory: buildCaptureQualityHistory(input.cvMetricRows),
     interactiveShoulderOutcomes: buildInteractiveShoulderOutcomeReportEntries(
       input.interactiveShoulderOutcomeRows,
+    ),
+    interactiveShoulderChartOutcomes: buildInteractiveShoulderOutcomeReportEntries(
+      input.interactiveShoulderChartOutcomeRows,
+    ),
+    interactiveShoulderChartPainTrend: buildPainTrendFromSessionLogs(
+      input.interactiveShoulderChartSessionLogs,
+      input.interactiveShoulderChartSessionNumberById,
     ),
   };
 }

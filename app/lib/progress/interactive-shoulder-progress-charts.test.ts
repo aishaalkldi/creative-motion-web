@@ -8,12 +8,10 @@ import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import type { InteractiveShoulderOutcomeBlockReport } from "@/app/lib/interactive-shoulder/movement-outcome-report";
 import type { InteractiveShoulderOutcomeReportEntry } from "@/app/lib/progress/progress-outcomes-bundle";
-import type { PatientPlanData } from "@/app/api/patient/plan/route";
-import type { SessionLogEntry } from "@/app/api/patient/logs/route";
 import {
   buildClinicianProgressChartSeries,
   buildInteractiveShoulderSessionChartPoints,
-  buildPatientShoulderProgressPoints,
+  buildPatientShoulderProgressPointsFromSessions,
   MIN_SESSIONS_FOR_PROGRESS_CHARTS,
   shouldShowInteractiveShoulderProgressCharts,
   SINGLE_SESSION_CHART_EMPTY_STATE,
@@ -73,11 +71,12 @@ function sessionEntry(
   createdAt: string,
   blocks: InteractiveShoulderOutcomeBlockReport[] = [block()],
   planSessionId: string | null = null,
+  planId = "plan-1",
 ): InteractiveShoulderOutcomeReportEntry {
   return {
     id,
     planSessionId,
-    planId: "plan-1",
+    planId,
     prescribedSide: "LEFT",
     totalElapsedSeconds: 300,
     blocksCompleted: blocks.length,
@@ -98,7 +97,7 @@ describe("interactive-shoulder-progress-charts", () => {
   it("builds clinician chart points from persisted session aggregates only", () => {
     const points = buildInteractiveShoulderSessionChartPoints(
       [
-        sessionEntry("s1", "2026-08-28T10:00:00.000Z", [block()], "ps-1"),
+        sessionEntry("s1", "2026-08-28T10:00:00.000Z", [block()], "ps-1", "plan-a"),
         sessionEntry(
           "s2",
           "2026-08-29T10:00:00.000Z",
@@ -113,6 +112,7 @@ describe("interactive-shoulder-progress-charts", () => {
             }),
           ],
           "ps-2",
+          "plan-b",
         ),
       ],
       [
@@ -150,54 +150,26 @@ describe("interactive-shoulder-progress-charts", () => {
     assert.equal(series.some((item) => item.label.toLowerCase().includes("rom")), false);
   });
 
-  it("builds patient progress points from interactive shoulder session logs only", () => {
-    const plan = {
-      planId: "plan-1",
-      sessions: [
-        {
-          id: "ps-1",
-          sessionNumber: 1,
-          title: "Session 1",
-          exercises: [{ exerciseId: "upper-limb-reaching-seated" }],
-          status: "completed",
-          catalogSession: { id: "catalog-1" },
-        },
-        {
-          id: "ps-2",
-          sessionNumber: 2,
-          title: "Session 2",
-          exercises: [{ exerciseId: "upper-limb-reaching-seated" }],
-          status: "completed",
-          catalogSession: { id: "catalog-2" },
-        },
-      ],
-    } as unknown as PatientPlanData;
-
-    const logs: SessionLogEntry[] = [
+  it("builds patient progress points from cross-plan outcome sessions", () => {
+    const points = buildPatientShoulderProgressPointsFromSessions([
       {
-        id: "log-1",
-        planSessionId: "ps-1",
-        effortScore: 5,
-        painScore: 4,
-        exercisesCompleted: 1,
-        notes: null,
+        id: "outcome-a",
         completedAt: "2026-08-28T10:05:00.000Z",
+        painAfter: 4,
+        effortScore: 5,
       },
       {
-        id: "log-2",
-        planSessionId: "ps-2",
+        id: "outcome-b",
+        completedAt: "2026-08-30T10:05:00.000Z",
+        painAfter: 3,
         effortScore: 6,
-        painScore: 3,
-        exercisesCompleted: 1,
-        notes: null,
-        completedAt: "2026-08-29T10:05:00.000Z",
       },
-    ];
+    ]);
 
-    const points = buildPatientShoulderProgressPoints(plan, logs);
     assert.equal(points.length, 2);
     assert.equal(points[0]?.painAfter, 4);
     assert.equal(points[1]?.effortScore, 6);
+    assert.ok(shouldShowInteractiveShoulderProgressCharts(points.length));
   });
 });
 
@@ -220,12 +192,13 @@ describe("progress chart UI wiring", () => {
       "utf8",
     );
     assert.ok(PANEL_SOURCE.includes("InteractiveShoulderClinicianProgressCharts"));
-    assert.ok(PANEL_SOURCE.includes("painTrend"));
+    assert.ok(PANEL_SOURCE.includes("chartOutcomes"));
     assert.ok(clinicianChartsSource.includes("SINGLE_SESSION_CHART_EMPTY_STATE"));
   });
 
   it("shows patient charts without technical clinician-only series", () => {
     assert.ok(PATIENT_SOURCE.includes("InteractiveShoulderPatientProgressCharts"));
+    assert.ok(PATIENT_SOURCE.includes("token={token}"));
     assert.ok(!PATIENT_SOURCE.includes("Compensation signal"));
     assert.ok(!PATIENT_SOURCE.includes("2D camera angle"));
     assert.ok(!PATIENT_SOURCE.includes("Technical observations"));

@@ -1,9 +1,8 @@
 import { ProgressSessionBarChart } from "@/app/components/clinician/progress/ProgressSessionBarChart";
-import type { SessionLogEntry } from "@/app/api/patient/logs/route";
-import type { PatientPlanData } from "@/app/api/patient/plan/route";
+import { usePatientInteractiveShoulderProgress } from "@/app/hooks/usePatientInteractiveShoulderProgress";
 import {
   buildPatientProgressChartSeries,
-  buildPatientShoulderProgressPoints,
+  buildPatientShoulderProgressPointsFromSessions,
   PATIENT_PROGRESS_OVER_TIME_SUBTITLE,
   PATIENT_PROGRESS_OVER_TIME_TITLE,
   shouldShowInteractiveShoulderProgressCharts,
@@ -12,15 +11,15 @@ import {
 } from "@/app/lib/progress/interactive-shoulder-progress-charts";
 
 type InteractiveShoulderPatientProgressChartsProps = {
-  plan: PatientPlanData;
-  logs: SessionLogEntry[];
+  token: string;
 };
 
 export function InteractiveShoulderPatientProgressCharts({
-  plan,
-  logs,
+  token,
 }: InteractiveShoulderPatientProgressChartsProps) {
-  const points = buildPatientShoulderProgressPoints(plan, logs);
+  const { progress } = usePatientInteractiveShoulderProgress(token);
+  const points = buildPatientShoulderProgressPointsFromSessions(progress?.sessions ?? []);
+
   if (points.length === 0) return null;
 
   if (!shouldShowInteractiveShoulderProgressCharts(points.length)) {

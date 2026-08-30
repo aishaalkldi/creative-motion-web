@@ -100,7 +100,7 @@ export function PatientProgressPortal({
         arClass={arClass}
       />
 
-      <InteractiveShoulderPatientProgressCharts plan={plan} logs={logs} />
+      <InteractiveShoulderPatientProgressCharts token={token} />
 
       {/* 2 — Quick Stats */}
       <section className="rounded-[10px] border border-[#E2E8E5] bg-white p-4">

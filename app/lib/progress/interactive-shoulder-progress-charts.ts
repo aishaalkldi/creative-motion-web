@@ -1,9 +1,12 @@
-import type { SessionLogEntry } from "@/app/api/patient/logs/route";
-import type { PatientPlanData, PatientSession } from "@/app/api/patient/plan/route";
-import { isInteractiveShoulderSessionWired } from "@/app/lib/interactive-shoulder/interactive-shoulder-exercise-ids";
-import { aggregateInteractiveShoulderSessionMetrics } from "@/app/lib/progress/aggregate-interactive-shoulder-session-metrics";
 import type { InteractiveShoulderOutcomeReportEntry } from "@/app/lib/progress/progress-outcomes-bundle";
 import type { ProgressOutcomesPainPoint } from "@/app/lib/progress/progress-outcomes-bundle";
+import { aggregateInteractiveShoulderSessionMetrics } from "@/app/lib/progress/aggregate-interactive-shoulder-session-metrics";
+import type { PatientShoulderProgressPoint } from "@/app/lib/progress/interactive-shoulder-patient-progress";
+
+export {
+  buildPatientShoulderProgressPointsFromSessions,
+  type PatientShoulderProgressPoint,
+} from "@/app/lib/progress/interactive-shoulder-patient-progress";
 
 export const PROGRESS_OVER_SESSIONS_TITLE = "Progress over sessions";
 export const PROGRESS_OVER_SESSIONS_REVIEW_NOTE = "For therapist review";
@@ -40,14 +43,6 @@ export type ProgressChartSeries = {
   secondary?: boolean;
   values: Array<number | null>;
   valueFormatter: (value: number) => string;
-};
-
-export type PatientShoulderProgressPoint = {
-  sessionId: string;
-  sessionLabel: string;
-  completedAt: string;
-  painAfter: number | null;
-  effortScore: number | null;
 };
 
 export function sortInteractiveShoulderOutcomesChronologically(
@@ -180,42 +175,6 @@ export function buildClinicianProgressChartSeries(
 
 export function shouldShowInteractiveShoulderProgressCharts(sessionCount: number): boolean {
   return sessionCount >= MIN_SESSIONS_FOR_PROGRESS_CHARTS;
-}
-
-export function planSessionIncludesInteractiveShoulder(session: PatientSession): boolean {
-  if (session.catalogSession != null) return true;
-  return session.exercises.some((exercise) =>
-    isInteractiveShoulderSessionWired(exercise.exerciseId),
-  );
-}
-
-export function buildPatientShoulderProgressPoints(
-  plan: PatientPlanData,
-  logs: SessionLogEntry[],
-): PatientShoulderProgressPoint[] {
-  const shoulderSessionIds = new Set(
-    plan.sessions
-      .filter((session) => planSessionIncludesInteractiveShoulder(session))
-      .map((session) => session.id),
-  );
-
-  const sessionMeta = new Map(
-    plan.sessions.map((session) => [session.id, session] as const),
-  );
-
-  return [...logs]
-    .filter((log) => log.planSessionId != null && shoulderSessionIds.has(log.planSessionId))
-    .sort((a, b) => new Date(a.completedAt).getTime() - new Date(b.completedAt).getTime())
-    .map((log, index) => {
-      const session = log.planSessionId ? sessionMeta.get(log.planSessionId) : undefined;
-      return {
-        sessionId: log.id,
-        sessionLabel: session ? `Session ${session.sessionNumber}` : `Session ${index + 1}`,
-        completedAt: log.completedAt,
-        painAfter: log.painScore,
-        effortScore: log.effortScore,
-      };
-    });
 }
 
 export function buildPatientProgressChartSeries(
