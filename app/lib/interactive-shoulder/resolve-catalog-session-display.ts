@@ -21,8 +21,27 @@ const CATALOG_SESSION_DISPLAY: Record<
   },
 };
 
-export function hasLocalizedCatalogSessionDisplay(catalogSessionId: string | undefined): boolean {
-  return Boolean(catalogSessionId && CATALOG_SESSION_DISPLAY[catalogSessionId]);
+/** Playback loads program_sessions.id (UUID); catalog keys use session_key. */
+const CATALOG_SESSION_KEY_BY_ENGLISH_TITLE: Record<string, string> = {
+  "Session 1 — Activation and Functional Reaching":
+    "stroke-upper-limb-recovery-foundation-v1-session-1",
+};
+
+function resolveCatalogSessionKey(
+  catalogSessionId: string | undefined,
+  fallbackTitle: string,
+): string | undefined {
+  if (catalogSessionId && CATALOG_SESSION_DISPLAY[catalogSessionId]) {
+    return catalogSessionId;
+  }
+  return CATALOG_SESSION_KEY_BY_ENGLISH_TITLE[fallbackTitle];
+}
+
+export function hasLocalizedCatalogSessionDisplay(
+  catalogSessionId: string | undefined,
+  fallbackTitle?: string,
+): boolean {
+  return Boolean(resolveCatalogSessionKey(catalogSessionId, fallbackTitle ?? ""));
 }
 
 export function resolveCatalogSessionDisplay(
@@ -31,7 +50,8 @@ export function resolveCatalogSessionDisplay(
   fallbackTitle: string,
   fallbackGoal: string | null | undefined,
 ): CatalogSessionDisplay {
-  const localized = catalogSessionId ? CATALOG_SESSION_DISPLAY[catalogSessionId]?.[language] : undefined;
+  const catalogKey = resolveCatalogSessionKey(catalogSessionId, fallbackTitle);
+  const localized = catalogKey ? CATALOG_SESSION_DISPLAY[catalogKey]?.[language] : undefined;
   return {
     title: localized?.title ?? fallbackTitle,
     goal: localized?.goal ?? fallbackGoal ?? null,

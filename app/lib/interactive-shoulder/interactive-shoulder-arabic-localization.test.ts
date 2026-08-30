@@ -38,7 +38,7 @@ describe("interactive shoulder Arabic localization QA", () => {
   it("localizes catalog session title and goal", () => {
     const display = resolveCatalogSessionDisplay(
       "ar",
-      SESSION_ID,
+      "8f3c2a10-4b5d-4e6f-9a0b-1c2d3e4f5a6b",
       ENGLISH_SESSION_TITLE,
       "Activation and Functional Reaching",
     );

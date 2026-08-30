@@ -25,6 +25,18 @@ describe("resolveCatalogSessionDisplay", () => {
     assert.equal(display.goal, ENGLISH_GOAL);
   });
 
+  it("resolves Arabic title when catalogSession.id is a database UUID", () => {
+    const display = resolveCatalogSessionDisplay(
+      "ar",
+      "8f3c2a10-4b5d-4e6f-9a0b-1c2d3e4f5a6b",
+      ENGLISH_TITLE,
+      ENGLISH_GOAL,
+    );
+    assert.equal(display.title, "الجلسة 1 — التنشيط والوصول الوظيفي");
+    assert.ok(!display.title.includes("Session 1"));
+    assert.ok(!display.title.includes("Activation"));
+  });
+
   it("falls back to provided title and goal for unknown catalog sessions", () => {
     const display = resolveCatalogSessionDisplay("ar", "unknown-session", "Custom title", "Custom goal");
     assert.equal(display.title, "Custom title");
