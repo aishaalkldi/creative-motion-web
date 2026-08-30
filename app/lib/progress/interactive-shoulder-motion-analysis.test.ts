@@ -110,7 +110,7 @@ describe("interactive-shoulder-motion-analysis wording", () => {
     assert.ok(MOTION_ANALYSIS_SOURCE.includes(D1_PATH_TRACES_COMPLETED_HELPER));
     assert.ok(!MOTION_ANALYSIS_SOURCE.includes('"Patterns completed"'));
     assert.ok(D1_PATH_TRACES_COMPLETED_HELPER.includes("not prescribed repetition dose"));
-    assert.ok(PANEL_SOURCE.includes("D1_PATH_TRACES_COMPLETED_LABEL"));
+    assert.ok(PANEL_SOURCE.includes("buildBlockDetailsMetrics"));
     assert.ok(!PANEL_SOURCE.includes('label="Patterns completed"'));
   });
 });

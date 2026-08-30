@@ -2,60 +2,40 @@
 
 import { formatCvDuration, formatCvRecordedAt } from "@/app/lib/cv/cv-metrics-display";
 import { formatPrescribedSideForReview } from "@/app/lib/clinical/clinical-prescribed-side-plan-draft";
+import {
+  INTERACTIVE_SHOULDER_OUTCOMES_DISCLAIMER,
+  INTERACTIVE_SHOULDER_OUTCOMES_REVIEW_NOTE,
+  describeRecordedBlockResults,
+} from "@/app/lib/progress/progress-outcomes-bundle";
 import type {
   InteractiveShoulderOutcomeBlockDisplayCategory,
   InteractiveShoulderOutcomeBlockReport,
   InteractiveShoulderOutcomeReportEntry,
 } from "@/app/lib/progress/progress-outcomes-bundle";
 import {
-  INTERACTIVE_SHOULDER_OUTCOMES_DISCLAIMER,
-  INTERACTIVE_SHOULDER_OUTCOMES_REVIEW_NOTE,
-  describeRecordedBlockResults,
-} from "@/app/lib/progress/progress-outcomes-bundle";
-import type { MovementBlockCompletionReason } from "@/app/lib/session-orchestrator/types";
+  buildBlockDetailsMetrics,
+  buildTechnicalObservationMetrics,
+  RECORDED_BLOCK_DETAILS_COMPENSATION_FOOTNOTE,
+  RECORDED_BLOCK_DETAILS_CTA,
+  RECORDED_BLOCK_DETAILS_SUBTITLE,
+  RECORDED_BLOCK_DETAILS_TITLE,
+  shouldShowBlockDetailsCompensationFootnote,
+  TECHNICAL_OBSERVATIONS_LABEL,
+  type BlockDetailMetric,
+} from "@/app/lib/progress/interactive-shoulder-block-details-display";
 import {
-  COMPENSATION_SIGNAL_CAVEAT,
-  COMPENSATION_SIGNAL_LABEL,
-  DETECTED_REACH_RETURN_CYCLES_HELPER,
-  DETECTED_REACH_RETURN_CYCLES_LABEL,
-  TARGET_INTERACTIONS_HELPER,
-  TARGET_INTERACTIONS_LABEL,
-  VALID_REPETITIONS_LABEL,
-  isRepetitionDosedBlock,
-  peakRomDegrees,
-  shouldShowDetectedReachReturnCycles,
-} from "@/app/lib/progress/interactive-shoulder-outcome-clinician-display";
-import {
-  AVG_TARGET_RESPONSE_TIME_LABEL,
-  D1_PATH_TRACES_COMPLETED_HELPER,
-  D1_PATH_TRACES_COMPLETED_LABEL,
   MOTION_PROFILE_HEADING,
-  PEAK_HIP_SHOULDER_ELBOW_ANGLE_HELPER,
   PEAK_HIP_SHOULDER_ELBOW_ANGLE_LABEL,
   RECORDED_SESSION_OBSERVATION_HEADING,
-  averageTargetResponseTimeMs,
   buildBlockMotionProfile,
   buildRecordedSessionObservation,
   buildSessionMotionSnapshot,
-  formatMovementAngleDegrees,
-  formatTargetResponseTimeSeconds,
   hasMotionAnalysisContent,
   isActiveExerciseBlock,
 } from "@/app/lib/progress/interactive-shoulder-motion-analysis";
 
 type InteractiveShoulderOutcomesPanelProps = {
   outcomes: InteractiveShoulderOutcomeReportEntry[];
-};
-
-const COMPLETION_REASON_LABELS: Record<MovementBlockCompletionReason, string> = {
-  duration: "Duration reached",
-  validRepetitions: "Valid repetitions reached",
-  holdDuration: "Hold duration reached",
-  clinicianDefined: "Clinician-defined criteria reached",
-  manualCompletion: "Manually completed",
-  blockTimeout: "Block timed out",
-  movementInterrupted: "Movement interrupted",
-  safetyStop: "Safety stop",
 };
 
 const CATEGORY_FALLBACK_LABELS: Record<InteractiveShoulderOutcomeBlockDisplayCategory, string> = {
@@ -65,21 +45,8 @@ const CATEGORY_FALLBACK_LABELS: Record<InteractiveShoulderOutcomeBlockDisplayCat
   unknown: "Session block",
 };
 
-function formatCompletionReason(reason: MovementBlockCompletionReason | null): string {
-  if (reason === null) return "Not recorded";
-  return COMPLETION_REASON_LABELS[reason] ?? "Not recorded";
-}
-
 function formatBlockTitle(block: InteractiveShoulderOutcomeBlockReport): string {
   return block.title ?? CATEGORY_FALLBACK_LABELS[block.displayCategory];
-}
-
-function formatNumberOrDash(value: number | null): string {
-  return value != null ? String(value) : "—";
-}
-
-function formatSecondsOrDash(value: number | null): string {
-  return value != null ? `${value}s` : "—";
 }
 
 function SectionHeading({ children }: { children: string }) {
@@ -210,208 +177,102 @@ function MotionAnalysisSection({ entry }: { entry: InteractiveShoulderOutcomeRep
   );
 }
 
-function InteractiveBlockCard({
-  block,
-  index,
-}: {
-  block: InteractiveShoulderOutcomeBlockReport;
-  index: number;
-}) {
-  const repDosed = isRepetitionDosedBlock(block);
-  const showDetectedCycles = shouldShowDetectedReachReturnCycles(block);
-  const avgResponseMs = averageTargetResponseTimeMs(block.interaction.timingSamplesMs);
-  const peakAngle = peakRomDegrees(block);
-
+function CompactDetailMetric({ metric }: { metric: BlockDetailMetric }) {
   return (
-    <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220]/50 p-4">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-[12px] font-semibold text-[#F9FAFB]">
-          Block {index + 1} — {formatBlockTitle(block)}
-        </p>
-        <p className="text-[10px] text-white/35">
-          {formatCompletionReason(block.completionReason)} · {formatSecondsOrDash(block.durationSeconds)}
-        </p>
-      </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {block.displayCategory === "pattern" ? (
-          <Stat
-            label={D1_PATH_TRACES_COMPLETED_LABEL}
-            value={formatNumberOrDash(block.interaction.patternsCompleted)}
-            helper={
-              block.interaction.patternsCompleted > 0 ? D1_PATH_TRACES_COMPLETED_HELPER : undefined
-            }
-          />
-        ) : (
-          <Stat
-            label={TARGET_INTERACTIONS_LABEL}
-            value={formatNumberOrDash(block.interaction.targetsContacted)}
-            helper={block.interaction.targetsContacted > 0 ? TARGET_INTERACTIONS_HELPER : undefined}
-          />
-        )}
-        <Stat
-          label="Participation time"
-          value={formatSecondsOrDash(block.interaction.participationDurationSeconds)}
-        />
-        {avgResponseMs != null ? (
-          <Stat
-            label={AVG_TARGET_RESPONSE_TIME_LABEL}
-            value={formatTargetResponseTimeSeconds(avgResponseMs)}
-          />
-        ) : null}
-        {peakAngle != null ? (
-          <Stat
-            label={PEAK_HIP_SHOULDER_ELBOW_ANGLE_LABEL}
-            value={formatMovementAngleDegrees(peakAngle)}
-            helper={PEAK_HIP_SHOULDER_ELBOW_ANGLE_HELPER}
-          />
-        ) : null}
-        {repDosed ? (
-          <Stat
-            label={VALID_REPETITIONS_LABEL}
-            value={formatNumberOrDash(
-              block.measured.validRepetitions > 0 ? block.measured.validRepetitions : null,
-            )}
-          />
-        ) : null}
-        {block.interpreted.compensationEvents > 0 ? (
-          <Stat
-            label={COMPENSATION_SIGNAL_LABEL}
-            value={formatNumberOrDash(block.interpreted.compensationEvents)}
-            helper={COMPENSATION_SIGNAL_CAVEAT}
-          />
-        ) : null}
-      </div>
-      {showDetectedCycles ? (
-        <div className="mt-3 border-t border-[#1E2D42]/70 pt-3">
-          <Stat
-            subdued
-            label={DETECTED_REACH_RETURN_CYCLES_LABEL}
-            value={formatNumberOrDash(block.measured.validRepetitions)}
-            helper={DETECTED_REACH_RETURN_CYCLES_HELPER}
-          />
-        </div>
+    <div className="min-w-0">
+      <p className="text-[9px] uppercase tracking-[0.1em] text-white/35">{metric.label}</p>
+      <p className="mt-0.5 text-[12px] font-medium text-white/80">{metric.value}</p>
+      {metric.helper ? (
+        <p className="mt-1 text-[9px] leading-relaxed text-white/30">{metric.helper}</p>
       ) : null}
     </div>
   );
 }
 
-function InstructionalBlockRow({
+function TechnicalObservationsSubsection({ block }: { block: InteractiveShoulderOutcomeBlockReport }) {
+  const metrics = buildTechnicalObservationMetrics(block);
+  if (metrics.length === 0) return null;
+
+  return (
+    <details className="mt-3 rounded-[6px] border border-[#1E2D42]/40 bg-[#0B1220]/30 px-3 py-2">
+      <summary className="cursor-pointer list-none text-[10px] font-medium uppercase tracking-[0.12em] text-white/35 marker:content-none [&::-webkit-details-marker]:hidden">
+        {TECHNICAL_OBSERVATIONS_LABEL}
+      </summary>
+      <div className="mt-2 space-y-2 border-t border-[#1E2D42]/40 pt-2">
+        {metrics.map((metric) => (
+          <div key={metric.label} className="text-[10px] text-white/45">
+            <span className="text-white/30">{metric.label}:</span>{" "}
+            <span className="font-medium text-white/55">{metric.value}</span>
+            {metric.helper ? (
+              <p className="mt-1 text-[9px] leading-relaxed text-white/28">{metric.helper}</p>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function RecordedBlockDetailRow({
   block,
   index,
 }: {
   block: InteractiveShoulderOutcomeBlockReport;
   index: number;
 }) {
+  const metrics = buildBlockDetailsMetrics(block);
+
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-[8px] border border-[#1E2D42]/60 bg-[#0B1220]/25 px-4 py-2.5">
-      <p className="text-[11px] font-medium text-white/60">
-        Block {index + 1} — {formatBlockTitle(block)}
-      </p>
-      <p className="text-[10px] text-white/35">
-        Instructional phase completed · {formatSecondsOrDash(block.durationSeconds)}
-      </p>
+    <div className={index > 0 ? "border-t border-[#1E2D42]/50 pt-4" : undefined}>
+      <p className="text-[12px] font-semibold text-[#F9FAFB]">{formatBlockTitle(block)}</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        {metrics.map((metric) => (
+          <CompactDetailMetric key={`${block.blockId}-${metric.label}`} metric={metric} />
+        ))}
+      </div>
+      <TechnicalObservationsSubsection block={block} />
     </div>
   );
 }
 
-function UnknownCategoryBlockCard({
-  block,
-  index,
+function RecordedBlockDetailsSection({
+  blocks,
 }: {
-  block: InteractiveShoulderOutcomeBlockReport;
-  index: number;
+  blocks: InteractiveShoulderOutcomeBlockReport[];
 }) {
-  const repDosed = isRepetitionDosedBlock(block);
-  const showDetectedCycles = shouldShowDetectedReachReturnCycles(block);
-  const avgResponseMs = averageTargetResponseTimeMs(block.interaction.timingSamplesMs);
-  const peakAngle = peakRomDegrees(block);
+  const showCompensationFootnote = shouldShowBlockDetailsCompensationFootnote(blocks);
 
   return (
-    <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220]/50 p-4">
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-[12px] font-semibold text-[#F9FAFB]">
-          Block {index + 1} — {formatBlockTitle(block)}
-        </p>
-        <p className="text-[10px] text-white/35">
-          {formatCompletionReason(block.completionReason)} · {formatSecondsOrDash(block.durationSeconds)}
-        </p>
-      </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {block.interaction.targetsContacted > 0 ? (
-          <Stat
-            label={TARGET_INTERACTIONS_LABEL}
-            value={formatNumberOrDash(block.interaction.targetsContacted)}
-            helper={TARGET_INTERACTIONS_HELPER}
-          />
-        ) : null}
-        {block.interaction.patternsCompleted > 0 ? (
-          <Stat
-            label={D1_PATH_TRACES_COMPLETED_LABEL}
-            value={formatNumberOrDash(block.interaction.patternsCompleted)}
-            helper={D1_PATH_TRACES_COMPLETED_HELPER}
-          />
-        ) : null}
-        <Stat
-          label="Participation time"
-          value={formatSecondsOrDash(block.interaction.participationDurationSeconds)}
-        />
-        {avgResponseMs != null ? (
-          <Stat
-            label={AVG_TARGET_RESPONSE_TIME_LABEL}
-            value={formatTargetResponseTimeSeconds(avgResponseMs)}
-          />
-        ) : null}
-        {peakAngle != null ? (
-          <Stat
-            label={PEAK_HIP_SHOULDER_ELBOW_ANGLE_LABEL}
-            value={formatMovementAngleDegrees(peakAngle)}
-            helper={PEAK_HIP_SHOULDER_ELBOW_ANGLE_HELPER}
-          />
-        ) : null}
-        {repDosed ? (
-          <Stat
-            label={VALID_REPETITIONS_LABEL}
-            value={formatNumberOrDash(
-              block.measured.validRepetitions > 0 ? block.measured.validRepetitions : null,
-            )}
-          />
-        ) : null}
-        {block.interpreted.compensationEvents > 0 ? (
-          <Stat
-            label={COMPENSATION_SIGNAL_LABEL}
-            value={formatNumberOrDash(block.interpreted.compensationEvents)}
-            helper={COMPENSATION_SIGNAL_CAVEAT}
-          />
-        ) : null}
-      </div>
-      {showDetectedCycles ? (
-        <div className="mt-3 border-t border-[#1E2D42]/70 pt-3">
-          <Stat
-            subdued
-            label={DETECTED_REACH_RETURN_CYCLES_LABEL}
-            value={formatNumberOrDash(block.measured.validRepetitions)}
-            helper={DETECTED_REACH_RETURN_CYCLES_HELPER}
-          />
+    <details className="group mt-1">
+      <summary className="cursor-pointer list-none rounded-[7px] border border-[#1E2D42]/70 bg-[#0B1220]/40 px-4 py-3 text-[11px] font-medium text-[#5DCAA5]/90 transition hover:border-[#1E2D42] hover:bg-[#0B1220]/70 marker:content-none [&::-webkit-details-marker]:hidden">
+        {RECORDED_BLOCK_DETAILS_CTA}
+      </summary>
+      <div className="mt-4 space-y-4 rounded-[8px] border border-[#1E2D42]/50 bg-[#080E18]/60 px-4 py-4">
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/70">
+            {RECORDED_BLOCK_DETAILS_TITLE}
+          </p>
+          <p className="mt-1 text-[10px] leading-relaxed text-white/40">
+            {RECORDED_BLOCK_DETAILS_SUBTITLE}
+          </p>
         </div>
-      ) : null}
-    </div>
+        <div className="space-y-4">
+          {blocks.map((block, index) => (
+            <RecordedBlockDetailRow
+              key={`${block.blockId}-${index}`}
+              block={block}
+              index={index}
+            />
+          ))}
+        </div>
+        {showCompensationFootnote ? (
+          <p className="border-t border-[#1E2D42]/40 pt-3 text-[9px] leading-relaxed text-white/35">
+            {RECORDED_BLOCK_DETAILS_COMPENSATION_FOOTNOTE}
+          </p>
+        ) : null}
+      </div>
+    </details>
   );
-}
-
-function BlockReportCard({
-  block,
-  index,
-}: {
-  block: InteractiveShoulderOutcomeBlockReport;
-  index: number;
-}) {
-  if (block.displayCategory === "instructional") {
-    return <InstructionalBlockRow block={block} index={index} />;
-  }
-  if (block.displayCategory === "unknown") {
-    return <UnknownCategoryBlockCard block={block} index={index} />;
-  }
-  return <InteractiveBlockCard block={block} index={index} />;
 }
 
 function OutcomeEntryCard({ entry }: { entry: InteractiveShoulderOutcomeReportEntry }) {
@@ -451,12 +312,7 @@ function OutcomeEntryCard({ entry }: { entry: InteractiveShoulderOutcomeReportEn
       <MotionAnalysisSection entry={entry} />
 
       {entry.blocks.length > 0 ? (
-        <div className="space-y-3">
-          <SectionHeading>Detailed block data</SectionHeading>
-          {entry.blocks.map((block, index) => (
-            <BlockReportCard key={`${entry.id}-${block.blockId}-${index}`} block={block} index={index} />
-          ))}
-        </div>
+        <RecordedBlockDetailsSection blocks={entry.blocks} />
       ) : (
         <p className="text-[11px] text-white/45">No block-level movement data recorded for this session.</p>
       )}

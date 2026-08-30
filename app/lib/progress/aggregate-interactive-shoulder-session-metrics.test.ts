@@ -133,17 +133,17 @@ describe("aggregateInteractiveShoulderSessionMetrics", () => {
 describe("InteractiveShoulderOutcomesPanel session summary", () => {
   it("does not render movement speed, tracking confidence, or response consistency at session level", () => {
     const motionStart = PANEL_SOURCE.indexOf("function MotionAnalysisSection");
-    const detailedStart = PANEL_SOURCE.indexOf("<SectionHeading>Detailed block data</SectionHeading>");
+    const detailedStart = PANEL_SOURCE.indexOf("function RecordedBlockDetailsSection");
     assert.ok(motionStart >= 0, "expected MotionAnalysisSection");
-    assert.ok(detailedStart > motionStart, "expected Detailed block data section");
+    assert.ok(detailedStart > motionStart, "expected Recorded block details section");
     const motionSection = PANEL_SOURCE.slice(motionStart, detailedStart);
     assert.ok(!motionSection.includes("metrics.movementSpeed"));
     assert.ok(!motionSection.includes("metrics.trackingConfidence"));
     assert.ok(!motionSection.includes("metrics.responseConsistency"));
     assert.ok(motionSection.includes("buildSessionMotionSnapshot"));
     assert.ok(motionSection.includes("buildRecordedSessionObservation"));
-    assert.ok(motionSection.includes("COMPENSATION_SIGNAL_LABEL"));
-    assert.ok(!PANEL_SOURCE.includes('label="Valid repetitions"') || PANEL_SOURCE.includes("isRepetitionDosedBlock"));
+    assert.ok(motionSection.includes("buildBlockMotionProfile"));
+    assert.ok(!PANEL_SOURCE.includes('label="Valid repetitions"') || PANEL_SOURCE.includes("buildBlockDetailsMetrics"));
     const summaryStart = PANEL_SOURCE.indexOf("<SectionHeading>Session summary</SectionHeading>");
     assert.ok(!PANEL_SOURCE.slice(summaryStart, detailedStart).includes("metrics.validRepetitions"));
     assert.ok(PANEL_SOURCE.includes("buildSessionMotionSnapshot"));

@@ -103,39 +103,33 @@ describe("interactive-shoulder-outcome-clinician-display", () => {
 describe("InteractiveShoulderOutcomesPanel clinician semantics", () => {
   it("does not show a session-wide valid repetition total", () => {
     const summaryStart = PANEL_SOURCE.indexOf("<SectionHeading>Session summary</SectionHeading>");
-    const detailedStart = PANEL_SOURCE.indexOf("<SectionHeading>Detailed block data</SectionHeading>");
+    const detailsUsage = PANEL_SOURCE.indexOf("<RecordedBlockDetailsSection blocks={entry.blocks} />");
     assert.ok(summaryStart >= 0);
-    assert.ok(detailedStart > summaryStart);
-    const sessionSummary = PANEL_SOURCE.slice(summaryStart, detailedStart);
+    assert.ok(detailsUsage > summaryStart);
+    const sessionSummary = PANEL_SOURCE.slice(summaryStart, detailsUsage);
     assert.ok(!sessionSummary.includes(VALID_REPETITIONS_LABEL));
     assert.ok(!sessionSummary.includes("metrics.validRepetitions"));
   });
 
-  it("relabels targets contacted to target interactions and adds compensation caveat", () => {
-    assert.ok(PANEL_SOURCE.includes("TARGET_INTERACTIONS_LABEL"));
-    assert.ok(PANEL_SOURCE.includes("TARGET_INTERACTIONS_HELPER"));
+  it("relabels targets contacted to target interactions and uses section-level compensation footnote", () => {
+    assert.ok(PANEL_SOURCE.includes("buildBlockDetailsMetrics"));
     assert.ok(!PANEL_SOURCE.includes("Targets contacted"));
-    assert.ok(PANEL_SOURCE.includes("COMPENSATION_SIGNAL_LABEL"));
-    assert.ok(PANEL_SOURCE.includes("COMPENSATION_SIGNAL_CAVEAT"));
+    assert.ok(PANEL_SOURCE.includes("RECORDED_BLOCK_DETAILS_COMPENSATION_FOOTNOTE"));
     assert.ok(!PANEL_SOURCE.includes("Compensation events"));
   });
 
-  it("uses detected reach-return cycles for incidental arm cycles on gameplay blocks", () => {
-    assert.ok(PANEL_SOURCE.includes("DETECTED_REACH_RETURN_CYCLES_LABEL"));
-    assert.ok(PANEL_SOURCE.includes("DETECTED_REACH_RETURN_CYCLES_HELPER"));
-    assert.ok(PANEL_SOURCE.includes("isRepetitionDosedBlock"));
-    assert.ok(PANEL_SOURCE.includes("shouldShowDetectedReachReturnCycles"));
+  it("uses detected reach-return cycles in technical observations", () => {
+    assert.ok(PANEL_SOURCE.includes("TECHNICAL_OBSERVATIONS_LABEL"));
+    assert.ok(PANEL_SOURCE.includes("buildTechnicalObservationMetrics"));
+    assert.ok(PANEL_SOURCE.includes("buildBlockDetailsMetrics"));
   });
 
   it("keeps valid repetitions only for repetition-dosed blocks", () => {
-    assert.ok(PANEL_SOURCE.includes("VALID_REPETITIONS_LABEL"));
-    assert.ok(PANEL_SOURCE.includes("isRepetitionDosedBlock(block)"));
+    assert.ok(PANEL_SOURCE.includes("buildBlockDetailsMetrics"));
   });
 
-  it("hides empty reaction and ROM fields", () => {
-    assert.ok(PANEL_SOURCE.includes("avgResponseMs != null"));
-    assert.ok(PANEL_SOURCE.includes("peakRomDegrees(block)"));
+  it("hides empty reaction and ROM fields in motion analysis", () => {
     assert.ok(PANEL_SOURCE.includes("buildSessionMotionSnapshot"));
-    assert.ok(PANEL_SOURCE.includes("Detailed block data"));
+    assert.ok(PANEL_SOURCE.includes("RECORDED_BLOCK_DETAILS_TITLE"));
   });
 });
