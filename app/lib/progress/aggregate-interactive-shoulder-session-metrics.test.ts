@@ -143,6 +143,9 @@ describe("InteractiveShoulderOutcomesPanel session summary", () => {
     assert.ok(!performanceSection.includes("metrics.responseConsistency"));
     assert.ok(performanceSection.includes("metrics.averageReactionMs"));
     assert.ok(performanceSection.includes("metrics.compensationEvents"));
+    assert.ok(performanceSection.includes("COMPENSATION_SIGNAL_LABEL"));
+    assert.ok(!PANEL_SOURCE.includes('label="Valid repetitions"') || PANEL_SOURCE.includes("isRepetitionDosedBlock"));
+    assert.ok(!PANEL_SOURCE.slice(0, PANEL_SOURCE.indexOf("<SectionHeading>Movement outcomes</SectionHeading>")).includes("metrics.validRepetitions"));
     assert.ok(PANEL_SOURCE.includes("aggregateInteractiveShoulderSessionMetrics"));
   });
 });
