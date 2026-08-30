@@ -27,20 +27,20 @@ export function SessionCompleteOverlay({
 
   return (
     <div
-      className="pointer-events-none absolute inset-0 z-40 flex items-end justify-center bg-gradient-to-t from-[#0A0F1A]/80 via-[#0A0F1A]/35 to-transparent p-3 sm:p-4"
+      className="pointer-events-none absolute inset-0 z-40 flex items-center justify-center bg-[#0A0F1A]/55 p-4 sm:p-6"
       role="status"
       aria-live="polite"
     >
       <div
-        className={`w-full max-w-md rounded-[12px] border border-[#1D9E75]/35 bg-[#0F1825]/95 px-4 py-4 text-white shadow-[0_12px_40px_rgba(10,15,26,0.35)] sm:px-5 sm:py-5 ${arClass}`}
+        className={`w-full max-w-lg rounded-[14px] border border-[#1D9E75]/35 bg-[#0F1825]/96 px-5 py-5 text-white shadow-[0_16px_48px_rgba(10,15,26,0.4)] sm:px-6 sm:py-6 ${arClass}`}
       >
-        <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#5DCAA5]">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#5DCAA5] sm:text-[12px]">
           {ui.sessionCompleteTitle}
         </p>
-        <p className="mt-2 text-[14px] font-semibold text-white">{ui.sessionCompleteHeadline}</p>
-        <p className="mt-1 text-[12px] leading-relaxed text-white/70">{ui.sessionCompleteEncouragement}</p>
+        <p className="mt-3 text-[18px] font-semibold text-white sm:text-[20px]">{ui.sessionCompleteHeadline}</p>
+        <p className="mt-2 text-[13px] leading-relaxed text-white/70 sm:text-[14px]">{ui.sessionCompleteEncouragement}</p>
 
-        <dl className="mt-4 grid grid-cols-2 gap-2 text-[11px]">
+        <dl className="mt-5 grid grid-cols-2 gap-3 text-[11px] sm:gap-4">
           <div className="rounded-[8px] border border-white/10 bg-white/5 px-3 py-2">
             <dt className="text-white/50">{ui.blocksCompletedLabel}</dt>
             <dd className="mt-0.5 text-base font-semibold tabular-nums text-white" dir="ltr">

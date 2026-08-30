@@ -105,7 +105,6 @@ import { ReachTheLightEnvironment } from "./ReachTheLightEnvironment";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
 import { ReadyCountdownOverlay } from "./ReadyCountdownOverlay";
 import { SessionCompleteOverlay } from "./SessionCompleteOverlay";
-import { SoundToggleButton } from "./SoundToggleButton";
 import { TargetSuccessPulse } from "./TargetSuccessPulse";
 import { createInteractiveShoulderSoundPlayer } from "@/app/lib/interactive-shoulder/interactive-shoulder-sounds";
 
@@ -861,9 +860,6 @@ export function OrchestratorCvSessionCore({
               {ui.devMouseSimulation}
             </p>
           )}
-          <div className="mb-2 flex items-center justify-end">
-            <SoundToggleButton language={language} muted={soundMuted} onToggle={handleSoundToggle} />
-          </div>
           <PreviewStack
             videoRef={videoRef}
             canvasRef={canvasRef}
@@ -903,6 +899,8 @@ export function OrchestratorCvSessionCore({
                     onPause={handlePause}
                     onResume={handleResume}
                     controlsLocked={controlsLocked}
+                    soundMuted={soundMuted}
+                    onSoundToggle={handleSoundToggle}
                   />
                 ) : (
                   <>
@@ -947,6 +945,8 @@ export function OrchestratorCvSessionCore({
                           blockSummaryMeasuredReps={summaryMetrics.reps}
                           blockSummaryDurationSeconds={summaryMetrics.durationSeconds}
                           targetHitAnnouncement={targetHitAnnouncement}
+                          soundMuted={soundMuted}
+                          onSoundToggle={handleSoundToggle}
                         />
                         {targetHitAnnouncement ? (
                           <TargetSuccessPulse message={targetHitAnnouncement} arClass={arClass} />
