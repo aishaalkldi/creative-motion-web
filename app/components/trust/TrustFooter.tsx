@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { TrustFooterUi } from "@/app/lib/patient-portal-ui";
 
 type TrustFooterProps = {
-  variant?: "light" | "dark";
+  variant?: "light" | "dark" | "auto";
   labels?: TrustFooterUi;
   className?: string;
 };
@@ -20,12 +20,14 @@ export function TrustFooter({
   className = "",
 }: TrustFooterProps) {
   const linkClass =
-    variant === "dark"
-      ? "text-white/35 transition hover:text-white/60"
-      : "text-[#9CA3AF] transition hover:text-[#6B7280]";
+    variant === "auto"
+      ? "text-[var(--muted)] transition hover:text-[var(--foreground)]"
+      : variant === "dark"
+        ? "text-white/35 transition hover:text-white/60"
+        : "text-[#9CA3AF] transition hover:text-[#6B7280]";
 
   const borderClass =
-    variant === "dark" ? "border-white/10" : "border-[#E2E8E5]";
+    variant === "auto" ? "border-[var(--border)]" : variant === "dark" ? "border-white/10" : "border-[#E2E8E5]";
 
   const links = [
     { href: "/privacy", label: labels.privacy },

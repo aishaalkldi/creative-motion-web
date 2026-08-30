@@ -98,7 +98,10 @@ function normalizeTrackingQuality(
 /** Patient functional reach detector - MediaPipe shell + forward reach rep engine. */
 export class FunctionalReachPoseDetector {
   private readonly callbacks: FunctionalReachPoseDetectorCallbacks;
-  private readonly shellConfig: typeof PATIENT_FUNCTIONAL_REACH_POSE_SHELL;
+  private readonly shellConfig: Omit<
+    typeof PATIENT_FUNCTIONAL_REACH_POSE_SHELL,
+    "landmarksOverlayOnly"
+  > & { landmarksOverlayOnly: boolean };
   private readonly repConfig: FunctionalReachRepConfig;
   private readonly repEngine: FunctionalReachDetector;
 
@@ -124,7 +127,10 @@ export class FunctionalReachPoseDetector {
   constructor(
     callbacks: FunctionalReachPoseDetectorCallbacks,
     repConfig: FunctionalReachRepConfig = PATIENT_FUNCTIONAL_REACH_REP_CONFIG,
-    shellConfig: typeof PATIENT_FUNCTIONAL_REACH_POSE_SHELL = PATIENT_FUNCTIONAL_REACH_POSE_SHELL,
+    shellConfig: Omit<
+      typeof PATIENT_FUNCTIONAL_REACH_POSE_SHELL,
+      "landmarksOverlayOnly"
+    > & { landmarksOverlayOnly: boolean } = PATIENT_FUNCTIONAL_REACH_POSE_SHELL,
   ) {
     this.callbacks = callbacks;
     this.repConfig = repConfig;

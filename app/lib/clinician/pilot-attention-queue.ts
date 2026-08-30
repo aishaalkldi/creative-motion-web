@@ -8,6 +8,8 @@ export type PilotAttentionPriority = "high" | "medium" | "low";
 
 export type PilotAttentionSource = "review" | "assessment" | "plan" | "progress";
 
+export type PilotAttentionLanguage = "en" | "ar";
+
 export type PilotAttentionItem = {
   patientId: string;
   patientName: string;
@@ -42,8 +44,9 @@ const PRIORITY_RANK: Record<PilotAttentionPriority, number> = {
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const RECENT_ACTIVITY_DAYS = 14;
 
-function patientNameById(patients: PatientRow[], patientId: string): string {
-  return patients.find((p) => p.id === patientId)?.full_name?.trim() || "Patient";
+function patientNameById(patients: PatientRow[], patientId: string, language: PilotAttentionLanguage = "en"): string {
+  const fallback = language === "ar" ? "مريض" : "Patient";
+  return patients.find((p) => p.id === patientId)?.full_name?.trim() || fallback;
 }
 
 function pickPrimaryRehabPlan(cards: ClinicianResultCard[]): ClinicianResultCard | null {
@@ -116,9 +119,10 @@ function buildPatientContexts(
   }));
 }
 
-function deriveAttentionItem(ctx: PatientContext): PilotAttentionItem | null {
+function deriveAttentionItem(ctx: PatientContext, language: PilotAttentionLanguage): PilotAttentionItem | null {
   const profileHref = `/clinician/patients/${ctx.patientId}`;
   const plan = ctx.primaryPlan;
+  const isArabic = language === "ar";
 
   if (
     plan &&
@@ -130,8 +134,8 @@ function deriveAttentionItem(ctx: PatientContext): PilotAttentionItem | null {
       patientId: ctx.patientId,
       patientName: ctx.patientName,
       priority: "high",
-      reason: "Needs clinician review",
-      actionLabel: "Open chart",
+      reason: isArabic ? "يحتاج إلى مراجعة الطبيب" : "Needs clinician review",
+      actionLabel: isArabic ? "فتح الملف" : "Open chart",
       href: `${profileHref}#progress-snapshot`,
       source: "review",
     };
@@ -142,8 +146,8 @@ function deriveAttentionItem(ctx: PatientContext): PilotAttentionItem | null {
       patientId: ctx.patientId,
       patientName: ctx.patientName,
       priority: "medium",
-      reason: "Assessment available for review",
-      actionLabel: "View assessment",
+      reason: isArabic ? "التقييم متاح للمراجعة" : "Assessment available for review",
+      actionLabel: isArabic ? "عرض التقييم" : "View assessment",
       href: reportHref(ctx.patientId, ctx.assessment.assessmentId),
       source: "assessment",
     };
@@ -154,8 +158,8 @@ function deriveAttentionItem(ctx: PatientContext): PilotAttentionItem | null {
       patientId: ctx.patientId,
       patientName: ctx.patientName,
       priority: "low",
-      reason: "No recent activity recorded",
-      actionLabel: "Open chart",
+      reason: isArabic ? "لا توجد نشاطات حديثة مسجلة" : "No recent activity recorded",
+      actionLabel: isArabic ? "فتح الملف" : "Open chart",
       href: `${profileHref}#rehabilitation-plan`,
       source: "progress",
     };
@@ -166,8 +170,8 @@ function deriveAttentionItem(ctx: PatientContext): PilotAttentionItem | null {
       patientId: ctx.patientId,
       patientName: ctx.patientName,
       priority: "medium",
-      reason: "Plan may need assignment",
-      actionLabel: "Assign plan",
+      reason: isArabic ? "قد يلزم تعيين خطة" : "Plan may need assignment",
+      actionLabel: isArabic ? "تعيين خطة" : "Assign plan",
       href: `/clinician/plans/new?patientId=${encodeURIComponent(ctx.patientId)}`,
       source: "plan",
     };
@@ -178,8 +182,8 @@ function deriveAttentionItem(ctx: PatientContext): PilotAttentionItem | null {
       patientId: ctx.patientId,
       patientName: ctx.patientName,
       priority: "low",
-      reason: "Patient activity available",
-      actionLabel: "Open chart",
+      reason: isArabic ? "نشاط المريض متاح" : "Patient activity available",
+      actionLabel: isArabic ? "فتح الملف" : "Open chart",
       href: `${profileHref}#progress-snapshot`,
       source: "progress",
     };
@@ -192,8 +196,8 @@ function deriveAttentionItem(ctx: PatientContext): PilotAttentionItem | null {
         patientId: ctx.patientId,
         patientName: ctx.patientName,
         priority: "low",
-        reason: "No recent activity recorded",
-        actionLabel: "Open chart",
+        reason: isArabic ? "لا توجد نشاطات حديثة مسجلة" : "No recent activity recorded",
+        actionLabel: isArabic ? "فتح الملف" : "Open chart",
         href: profileHref,
         source: "progress",
       };
@@ -212,12 +216,13 @@ export function buildPilotAttentionQueue(input: {
   stats: DashboardStats | null;
   results: ClinicianResultsResponse | null;
   limit?: number;
+  language?: PilotAttentionLanguage;
 }): PilotAttentionItem[] {
-  const { patients, stats, results, limit = 8 } = input;
+  const { patients, stats, results, limit = 8, language = "en" } = input;
   const contexts = buildPatientContexts(patients, results);
 
   const items = contexts
-    .map(deriveAttentionItem)
+    .map((ctx) => deriveAttentionItem(ctx, language))
     .filter((item): item is PilotAttentionItem => item != null)
     .sort(compareAttentionItems);
 
@@ -229,10 +234,10 @@ export function buildPilotAttentionQueue(input: {
   ) {
     items.push({
       patientId: "",
-      patientName: "Review queue",
+      patientName: language === "ar" ? "قائمة المراجعة" : "Review queue",
       priority: "high",
-      reason: "Needs clinician review",
-      actionLabel: "Review results",
+      reason: language === "ar" ? "يحتاج إلى مراجعة الطبيب" : "Needs clinician review",
+      actionLabel: language === "ar" ? "مراجعة النتائج" : "Review results",
       href: "/clinician/results",
       source: "review",
     });

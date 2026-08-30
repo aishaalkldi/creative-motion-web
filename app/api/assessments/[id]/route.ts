@@ -17,6 +17,12 @@ import {
   serviceUnavailableResponse,
 } from "../../../lib/api/safe-errors";
 import {
+  demoFallbackIfUnavailable,
+  demoFallbackResponse,
+  isLocalDemoFallbackEnabled,
+} from "../../../lib/api/demo-fallback-server";
+import { getDemoAssessmentDetail } from "../../../lib/demo/local-demo-fallback";
+import {
   checkClinicianWriteLimit,
   rateLimitExceededResponse,
 } from "../../../lib/rate-limit";
@@ -86,6 +92,11 @@ export async function GET(
 
   const clients = await buildClients();
   if (!clients) {
+    const demoDetail = getDemoAssessmentDetail(assessmentId);
+    if (demoDetail) {
+      const demo = demoFallbackIfUnavailable(clients, demoDetail);
+      if (demo) return demo;
+    }
     return serviceUnavailableResponse();
   }
   const { sessionClient, adminClient } = clients;
@@ -154,8 +165,44 @@ export async function PATCH(
     return NextResponse.json({ error: "Assessment ID is required." }, { status: 400 });
   }
 
+  let body: {
+    draft?: GeneralAssessmentDraft;
+    notes?: string;
+    fieldKey?: string;
+    markTranslationReviewed?: boolean;
+  };
+  try {
+    body = (await req.json()) as typeof body;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
+  }
+
   const clients = await buildClients();
   if (!clients) {
+    const demoDetail = isLocalDemoFallbackEnabled() ? getDemoAssessmentDetail(assessmentId) : null;
+    if (demoDetail) {
+      if (body.markTranslationReviewed) {
+        return demoFallbackResponse({ reviewed: true });
+      }
+      const existingDraft = extractGeneralDraft(demoDetail.structured_data, demoDetail.type);
+      const merged: GeneralAssessmentDraft | null = body.draft
+        ? existingDraft
+          ? {
+              ...existingDraft,
+              ...body.draft,
+              soap: { ...existingDraft.soap, ...body.draft.soap },
+              subjective: { ...existingDraft.subjective, ...body.draft.subjective },
+              updatedAt: new Date().toISOString(),
+            }
+          : body.draft
+        : existingDraft;
+      return demoFallbackResponse({
+        ...demoDetail,
+        structured_data: merged ? buildGeneralMskPayload(merged) : demoDetail.structured_data,
+        notes: body.notes?.trim() ?? demoDetail.notes,
+        updated_at: new Date().toISOString(),
+      });
+    }
     return serviceUnavailableResponse();
   }
   const { sessionClient, adminClient } = clients;
@@ -171,18 +218,6 @@ export async function PATCH(
   const limited = checkClinicianWriteLimit(user.id, "assessments:update");
   if (!limited.allowed) {
     return rateLimitExceededResponse(limited.retryAfterSec);
-  }
-
-  let body: {
-    draft?: GeneralAssessmentDraft;
-    notes?: string;
-    fieldKey?: string;
-    markTranslationReviewed?: boolean;
-  };
-  try {
-    body = (await req.json()) as typeof body;
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
   if (body.markTranslationReviewed && body.fieldKey?.trim()) {

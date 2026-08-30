@@ -12,11 +12,11 @@ export function ReportExportToolbar({
   onExportClick,
 }: Props) {
   return (
-    <header className="screen-only sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220]">
+    <header className="screen-only sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--surface)]">
       <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
         <Link
           href={backHref}
-          className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white"
+          className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-xs font-semibold text-[var(--foreground)]"
         >
           {backLabel}
         </Link>
@@ -24,11 +24,11 @@ export function ReportExportToolbar({
           <button
             type="button"
             onClick={() => (onExportClick ? onExportClick() : window.print())}
-            className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/55 hover:text-white"
+            className="rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 text-xs font-semibold text-[var(--muted)] hover:text-[var(--foreground)]"
           >
             Export Clinical Report (PDF)
           </button>
-          <p className="max-w-[260px] text-right text-[10px] leading-snug text-white/35">
+          <p className="max-w-[260px] text-right text-[10px] leading-snug text-[var(--muted-soft)]">
             To save as PDF, choose Save as PDF or Microsoft Print to PDF in the print dialog.
           </p>
         </div>

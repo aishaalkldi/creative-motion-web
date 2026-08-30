@@ -7,19 +7,19 @@ const SEVERITY_STYLES: Record<
   { badge: string; border: string; bg: string }
 > = {
   high: {
-    badge: "border-rose-400/30 bg-rose-400/10 text-rose-300",
-    border: "border-rose-400/25",
-    bg: "bg-rose-400/5",
+    badge: "border-[var(--danger)]/30 bg-[var(--danger-soft)] text-[var(--danger)]",
+    border: "border-[var(--danger)]/25",
+    bg: "bg-[var(--danger-soft)]",
   },
   medium: {
-    badge: "border-amber-400/30 bg-amber-400/10 text-amber-300",
-    border: "border-amber-400/25",
-    bg: "bg-amber-400/5",
+    badge: "border-[var(--warning)]/30 bg-[var(--warning-soft)] text-[var(--warning)]",
+    border: "border-[var(--warning)]/25",
+    bg: "bg-[var(--warning-soft)]",
   },
   low: {
-    badge: "border-[#1D9E75]/30 bg-[#1D9E75]/10 text-[#5DCAA5]",
-    border: "border-[#1D9E75]/20",
-    bg: "bg-[#1D9E75]/5",
+    badge: "border-[var(--brand)]/30 bg-[var(--brand-soft)] text-[var(--brand)]",
+    border: "border-[var(--brand)]/20",
+    bg: "bg-[var(--brand-soft)]",
   },
 };
 
@@ -48,30 +48,30 @@ export function ClinicalActionCard({
   const styles = SEVERITY_STYLES[action.severity];
 
   return (
-    <div className={`rounded-[8px] border ${styles.border} ${styles.bg} ${compact ? "p-3" : "p-4"}`}>
+    <div className={`rounded-[12px] border ${styles.border} ${styles.bg} ${compact ? "p-3" : "p-4"}`}>
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted)]">
           Clinical action
         </p>
         <span
-          className={`rounded-[5px] border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${styles.badge}`}
+          className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${styles.badge}`}
         >
           {action.title}
         </span>
       </div>
-      <p className={`mt-2 leading-relaxed text-white/75 ${compact ? "text-xs" : "text-sm"}`}>
+      <p className={`mt-2 leading-relaxed text-[var(--foreground)] ${compact ? "text-xs" : "text-sm"}`}>
         {action.reason}
       </p>
-      <p className={`mt-2 leading-relaxed text-white/55 ${compact ? "text-xs" : "text-sm"}`}>
-        <span className="font-semibold text-white/70">Clinician follow-up note: </span>
+      <p className={`mt-2 leading-relaxed text-[var(--muted)] ${compact ? "text-xs" : "text-sm"}`}>
+        <span className="font-semibold text-[var(--foreground)]">Clinician follow-up note: </span>
         {action.suggestedClinicianAction}
       </p>
       {patientNote?.trim() && (
-        <div className="mt-3 rounded-[6px] border border-[#1E2D42] bg-[#0B1220]/60 px-3 py-2.5">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">
+        <div className="mt-3 rounded-[10px] border border-[var(--border)] bg-[var(--surface)]/60 px-3 py-2.5">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted-soft)]">
             Patient note
           </p>
-          <p className="mt-1 text-xs leading-relaxed text-white/70 whitespace-pre-wrap">
+          <p className="mt-1 text-xs leading-relaxed text-[var(--foreground)] whitespace-pre-wrap">
             {patientNote}
           </p>
         </div>
@@ -79,7 +79,7 @@ export function ClinicalActionCard({
       {planSessionsHref && (
         <Link
           href={planSessionsHref}
-          className="mt-3 inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
+          className="mt-3 inline-flex rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--foreground)] transition hover:border-[var(--brand)]/40"
         >
           View Plan &amp; Sessions
         </Link>

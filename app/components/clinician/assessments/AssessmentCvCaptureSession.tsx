@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import ConfirmModal from "@/app/components/ConfirmModal";
+import { useSpeechSynthesis } from "@/hooks/useSpeechSynthesis";
 import { DEFAULT_STS_CONFIG } from "@/app/lib/cv/bio-0-contracts";
 import {
   FunctionalReachPoseDetector,
@@ -16,6 +18,12 @@ import {
 } from "@/app/lib/cv/single-leg-stance-pose-detector";
 import type { StanceLeg } from "@/app/lib/cv/single-leg-stance-detector";
 import {
+  PATIENT_FUNCTIONAL_REACH_POSE_SHELL,
+  PATIENT_FUNCTIONAL_REACH_REP_CONFIG,
+  PATIENT_SLS_HOLD_CONFIG,
+  PATIENT_SLS_POSE_SHELL,
+} from "@/app/lib/cv/cv-patient-config";
+import {
   formatSitToStandDuration,
   type SitToStandDetectorSnapshot,
   type SitToStandInitPhase,
@@ -24,6 +32,18 @@ import {
 } from "@/app/lib/cv/sit-to-stand-detector";
 
 const { canvasWidth: CANVAS_WIDTH, canvasHeight: CANVAS_HEIGHT } = DEFAULT_STS_CONFIG;
+
+// Clinician-supervised capture needs the live camera feed visible (not just the
+// skeleton dots) so the clinician can frame the patient correctly. Patient portal
+// shells default to landmarksOverlayOnly: true — override just for this context.
+const CLINICIAN_FUNCTIONAL_REACH_SHELL = {
+  ...PATIENT_FUNCTIONAL_REACH_POSE_SHELL,
+  landmarksOverlayOnly: false as const,
+};
+const CLINICIAN_SLS_SHELL = {
+  ...PATIENT_SLS_POSE_SHELL,
+  landmarksOverlayOnly: false as const,
+};
 
 export type AssessmentCaptureMetrics = {
   exerciseId: string;
@@ -117,6 +137,14 @@ export function AssessmentCvCaptureSession({
   const [framesWithPose, setFramesWithPose] = useState(0);
   const [framesTotal, setFramesTotal] = useState(0);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [voiceGuidanceEnabled, setVoiceGuidanceEnabled] = useState(true);
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+
+  const { mounted: speechMounted, isSupported: speechSupported, speak, stop: stopSpeaking } =
+    useSpeechSynthesis();
+  const hasSpokenInstructionsRef = useRef(false);
+  const lastSpokenTrackingStatusRef = useRef<SitToStandTrackingStatus>("idle");
+  const lastSpokenSaveStatusRef = useRef<"idle" | "saving" | "saved" | "error">("idle");
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -216,6 +244,32 @@ export function AssessmentCvCaptureSession({
     }
   }, [framesTotal, framesWithPose, movementDetected, saveSessionMetrics, sessionSeconds, syncFromDetector]);
 
+  /** Cancels the in-progress capture and discards it — no metrics are saved. */
+  const handleCancelSession = useCallback(() => {
+    const detector = detectorRef.current;
+    stopSpeaking();
+    detector?.stop();
+    syncFromDetector({
+      trackingStatus: "idle",
+      trackingQuality: null,
+      poseReadiness: "checking",
+      bodyFramingState: "checking",
+      repCount: 0,
+      sessionSeconds: 0,
+      movementDetected: false,
+      framesWithPose: 0,
+      framesTotal: 0,
+      initPhase: null,
+      previewActive: false,
+      trackingError: null,
+      isBaselineCalibrating: false,
+    });
+    setSessionStarted(false);
+    setSaveStatus("idle");
+    setError(null);
+    setCancelModalOpen(false);
+  }, [stopSpeaking, syncFromDetector]);
+
   const startSession = useCallback(async () => {
     const detector = detectorRef.current;
     if (!consented || !detector || startInProgressRef.current || loading || detector.isPreviewActive()) {
@@ -232,6 +286,9 @@ export function AssessmentCvCaptureSession({
     setTrackingError(null);
     setSessionStarted(true);
     setSaveStatus("idle");
+    hasSpokenInstructionsRef.current = false;
+    lastSpokenTrackingStatusRef.current = "idle";
+    lastSpokenSaveStatusRef.current = "idle";
     try {
       await detector.start(video, canvas);
     } catch (err) {
@@ -245,6 +302,37 @@ export function AssessmentCvCaptureSession({
   useEffect(() => {
     return () => detectorRef.current?.stop();
   }, []);
+
+  // Voice guidance: read the task instructions aloud once pose tracking begins,
+  // and announce pose-lost / save outcomes so the patient doesn't need to watch the screen.
+  useEffect(() => {
+    if (!voiceGuidanceEnabled || !speechSupported) return;
+    if (trackingStatus === lastSpokenTrackingStatusRef.current) return;
+    lastSpokenTrackingStatusRef.current = trackingStatus;
+
+    if (trackingStatus === "pose-found" && !hasSpokenInstructionsRef.current) {
+      hasSpokenInstructionsRef.current = true;
+      speak(`Pose detected. ${instructions.join(". ")}`, "en");
+    } else if (trackingStatus === "pose-lost" && hasSpokenInstructionsRef.current) {
+      speak("Pose lost. Please adjust the camera framing.", "en");
+    }
+  }, [voiceGuidanceEnabled, speechSupported, trackingStatus, instructions, speak]);
+
+  useEffect(() => {
+    if (!voiceGuidanceEnabled || !speechSupported) return;
+    if (saveStatus === lastSpokenSaveStatusRef.current) return;
+    lastSpokenSaveStatusRef.current = saveStatus;
+
+    if (saveStatus === "saved") {
+      speak("Observation saved for therapist review.", "en");
+    } else if (saveStatus === "error") {
+      speak("Could not save the observation. Please try again.", "en");
+    }
+  }, [voiceGuidanceEnabled, speechSupported, saveStatus, speak]);
+
+  useEffect(() => {
+    return () => stopSpeaking();
+  }, [stopSpeaking]);
 
   const loadingLabel =
     initPhase === "import"
@@ -301,15 +389,40 @@ export function AssessmentCvCaptureSession({
         </div>
       )}
       {!previewActive && preCapture}
-      {!previewActive && (
+      {speechMounted && speechSupported && (
         <button
           type="button"
-          disabled={loading}
-          onClick={() => void startSession()}
-          className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#179165] disabled:opacity-50"
+          onClick={() => {
+            setVoiceGuidanceEnabled((v) => {
+              if (v) stopSpeaking();
+              return !v;
+            });
+          }}
+          className="inline-flex items-center gap-1.5 rounded-[7px] border border-[#1E2D42] bg-transparent px-3 py-1.5 text-xs font-medium text-[#9CA3AF] transition hover:text-white"
         >
-          {loading ? loadingLabel : startButtonLabel}
+          {voiceGuidanceEnabled ? "🔊 Voice guidance on" : "🔇 Voice guidance off"}
         </button>
+      )}
+      {!previewActive && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => void startSession()}
+            className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-[#179165] disabled:opacity-50"
+          >
+            {loading ? loadingLabel : startButtonLabel}
+          </button>
+          {sessionStarted && loading && (
+            <button
+              type="button"
+              onClick={() => setCancelModalOpen(true)}
+              className="rounded-[7px] border border-rose-400/30 bg-transparent px-4 py-2 text-sm font-semibold text-rose-700 dark:text-rose-300 transition hover:bg-rose-400/10"
+            >
+              Cancel assessment
+            </button>
+          )}
+        </div>
       )}
       <video ref={videoRef} autoPlay muted playsInline className="pointer-events-none fixed left-0 top-0 h-px w-px opacity-0" aria-hidden />
       <canvas
@@ -320,15 +433,33 @@ export function AssessmentCvCaptureSession({
         style={{ display: showPreview ? "block" : "none" }}
       />
       {previewActive && (
-        <button
-          type="button"
-          disabled={stopInProgressRef.current || saveInProgressRef.current}
-          onClick={handleStopSession}
-          className="rounded-[7px] border border-[#1E2D42] bg-transparent px-4 py-2 text-sm font-semibold text-[#9CA3AF] transition hover:text-white disabled:opacity-50"
-        >
-          {stopButtonLabel}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            disabled={stopInProgressRef.current || saveInProgressRef.current}
+            onClick={handleStopSession}
+            className="rounded-[7px] border border-[#1E2D42] bg-transparent px-4 py-2 text-sm font-semibold text-[#9CA3AF] transition hover:text-white disabled:opacity-50"
+          >
+            {stopButtonLabel}
+          </button>
+          <button
+            type="button"
+            disabled={stopInProgressRef.current || saveInProgressRef.current}
+            onClick={() => setCancelModalOpen(true)}
+            className="rounded-[7px] border border-rose-400/30 bg-transparent px-4 py-2 text-sm font-semibold text-rose-700 dark:text-rose-300 transition hover:bg-rose-400/10 disabled:opacity-50"
+          >
+            Cancel assessment
+          </button>
+        </div>
       )}
+      <ConfirmModal
+        open={cancelModalOpen}
+        title="Cancel this assessment?"
+        message="This will stop the camera and discard everything captured so far. The observation will not be saved."
+        confirmLabel="Cancel assessment"
+        onConfirm={handleCancelSession}
+        onCancel={() => setCancelModalOpen(false)}
+      />
       {sessionStarted && (
         <div className="space-y-2 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-4">
           <p className="text-xs text-[#F9FAFB]">
@@ -373,7 +504,12 @@ export function createSingleLegStanceCaptureDetector(
   stanceLeg: StanceLeg,
   onSnapshot: (snapshot: SitToStandDetectorSnapshot) => void,
 ): AssessmentCaptureDetector {
-  const detector = new SingleLegStancePoseDetector({ onSnapshot }, stanceLeg);
+  const detector = new SingleLegStancePoseDetector(
+    { onSnapshot },
+    stanceLeg,
+    PATIENT_SLS_HOLD_CONFIG,
+    CLINICIAN_SLS_SHELL,
+  );
   return {
     start: (video, canvas) => detector.start(video, canvas),
     stop: () => detector.stop(),
@@ -386,7 +522,11 @@ export function createSingleLegStanceCaptureDetector(
 export function createFunctionalReachCaptureDetector(
   onSnapshot: (snapshot: SitToStandDetectorSnapshot) => void,
 ): AssessmentCaptureDetector {
-  const detector = new FunctionalReachPoseDetector({ onSnapshot });
+  const detector = new FunctionalReachPoseDetector(
+    { onSnapshot },
+    PATIENT_FUNCTIONAL_REACH_REP_CONFIG,
+    CLINICIAN_FUNCTIONAL_REACH_SHELL,
+  );
   return {
     start: (video, canvas) => detector.start(video, canvas),
     stop: () => detector.stop(),

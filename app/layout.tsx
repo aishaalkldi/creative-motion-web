@@ -1,6 +1,23 @@
 import type { Metadata } from "next";
-import { Inter, IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
+import Script from "next/script";
+import { Inter, IBM_Plex_Mono, Space_Grotesk, Noto_Sans_Arabic } from "next/font/google";
+import { GlobalLanguageProvider } from "@/app/components/GlobalLanguageProvider";
+import { ThemeProvider } from "@/app/components/ThemeProvider";
 import "./globals.css";
+
+/* Runs before hydration to set the .dark class synchronously — avoids a flash of the wrong theme. */
+const NO_FLASH_THEME_SCRIPT = `
+(function () {
+  try {
+    var stored = localStorage.getItem('rasq-theme');
+    var resolved = stored === 'light' || stored === 'dark'
+      ? stored
+      : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    if (resolved === 'dark') document.documentElement.classList.add('dark');
+    document.documentElement.style.colorScheme = resolved;
+  } catch (e) {}
+})();
+`;
 
 /* ── Fonts ────────────────────────────────────────────────────────────────── */
 
@@ -9,6 +26,14 @@ const inter = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
   variable: "--font-inter",
+  display: "swap",
+});
+
+// Arabic body — Noto Sans Arabic (clear, friendly, and highly readable)
+const notoSansArabic = Noto_Sans_Arabic({
+  subsets: ["arabic"],
+  weight: ["400", "500", "700"],
+  variable: "--font-noto-sans-arabic",
   display: "swap",
 });
 
@@ -31,11 +56,11 @@ const ibmPlexMono = IBM_Plex_Mono({
 /* ── Metadata ─────────────────────────────────────────────────────────────── */
 
 export const metadata: Metadata = {
-  title: "RASQ — Rehabilitation, precisely.",
+  title: "RASQ Rehabilitation, precisely.",
   description:
     "RASQ by Creative Motion Lab — clinic-led remote rehabilitation platform. Assess patients, assign plans, track adherence, and export clinical reports.",
   openGraph: {
-    title: "RASQ — Rehabilitation, precisely.",
+    title: "RASQ Rehabilitation, precisely.",
     description:
       "RASQ by Creative Motion Lab — clinic-led remote rehabilitation platform. Assess patients, assign plans, track adherence, and export clinical reports.",
   },
@@ -49,10 +74,22 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`h-full antialiased ${inter.variable} ${ibmPlexMono.variable} ${spaceGrotesk.variable}`}
+      suppressHydrationWarning
+      className={`h-full antialiased ${inter.variable} ${notoSansArabic.variable} ${ibmPlexMono.variable} ${spaceGrotesk.variable}`}
     >
-      <body className="min-h-full flex flex-col bg-[#080E14] text-[#e8edf2]" style={{ fontFamily: "var(--font-inter, ui-sans-serif, system-ui, sans-serif)" }}>
-        {children}
+      <head>
+        <Script id="rasq-no-flash-theme" strategy="beforeInteractive">
+          {NO_FLASH_THEME_SCRIPT}
+        </Script>
+      </head>
+      <body
+        suppressHydrationWarning
+        className="min-h-full flex flex-col bg-[var(--background)] text-[var(--foreground)]"
+        style={{ fontFamily: "var(--app-font-body, var(--font-inter, ui-sans-serif, system-ui, sans-serif))" }}
+      >
+        <ThemeProvider>
+          <GlobalLanguageProvider>{children}</GlobalLanguageProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

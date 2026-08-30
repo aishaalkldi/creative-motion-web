@@ -104,18 +104,18 @@ function stateBadge(state: PipelineState): { label: string; className: string } 
   if (state.kind === "in_rehab") {
     return {
       label: `In rehab · ${state.completed} of ${state.total} sessions`,
-      className: "border-[#1D9E75]/30 bg-[#1D9E75]/10 text-[#5DCAA5]",
+      className: "border-[var(--brand)]/30 bg-[var(--brand-soft)] text-[var(--brand)]",
     };
   }
   if (state.kind === "plan_assigned") {
     return {
       label: "Plan assigned",
-      className: "border-cyan-300/25 bg-cyan-400/10 text-cyan-200",
+      className: "border-[var(--info)]/25 bg-[var(--info-soft)] text-[var(--info)]",
     };
   }
   return {
     label: "Assessment submitted",
-    className: "border-lime-300/20 bg-lime-400/10 text-lime-300",
+    className: "border-[var(--success)]/25 bg-[var(--success-soft)] text-[var(--success)]",
   };
 }
 
@@ -335,15 +335,15 @@ export default function UnifiedResultsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
+    <main className="min-h-screen bg-[var(--background)] px-4 py-6 text-[var(--foreground)] md:px-6 md:py-8">
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
+        <div className="mb-8 flex flex-wrap items-start justify-between gap-4 rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-card)]">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">
               Clinician workspace
             </p>
-            <h1 className="mt-2 text-2xl font-bold text-white">Results</h1>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/45">
+            <h1 className="mt-2 text-[28px] font-bold tracking-[-0.02em] text-[var(--foreground)]">Results</h1>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--muted)]">
               {reviewQueue.length > 0
                 ? `Start with ${reviewQueue.length} patient${reviewQueue.length > 1 ? "s" : ""} in the review queue below, then browse the full pipeline.`
                 : "One card per patient — assessment status, rehab progress, and suggested clinician follow-up."}
@@ -351,7 +351,7 @@ export default function UnifiedResultsPage() {
           </div>
           <Link
             href="/clinician"
-            className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-4 py-2.5 text-sm font-semibold text-white/70 transition hover:text-white"
+            className="rounded-[11px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-2.5 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--brand)]/40 hover:text-[var(--brand)]"
           >
             ← Dashboard
           </Link>
@@ -360,10 +360,10 @@ export default function UnifiedResultsPage() {
         <DemoOfflineBanner visible={demoMode} notice={demoNotice} />
 
         {!loading && !error && reviewQueue.length > 0 && (
-          <section className="mb-6 rounded-[10px] border border-amber-400/20 bg-[#0F1825] p-6">
+          <section className="mb-6 rounded-[16px] border border-[var(--warning)]/30 bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
             <div className="mb-4">
-              <h2 className="text-lg font-bold text-white">Patients Needing Review</h2>
-              <p className="mt-1 text-sm text-white/45">
+              <h2 className="text-lg font-bold text-[var(--foreground)]">Patients Needing Review</h2>
+              <p className="mt-1 text-sm text-[var(--muted)]">
                 Patients with recent responses that may need therapist attention.
               </p>
             </div>
@@ -381,16 +381,7 @@ export default function UnifiedResultsPage() {
           </section>
         )}
 
-        {!loading && !error && reviewQueue.length === 0 && (
-          <section className="mb-6 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] px-6 py-5">
-            <h2 className="text-sm font-semibold text-white">Review queue</h2>
-            <p className="mt-1 text-sm text-white/45">
-              No active review flags. All patient responses are within expected parameters.
-            </p>
-          </section>
-        )}
-
-        <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+        <section className="rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-card)]">
           <div className="mb-6 grid gap-3 sm:grid-cols-4">
             <MiniStat label="Patients in pipeline" value={String(pipeline.length)} />
             <MiniStat label="Assessments to review" value={String(assessmentCount)} />
@@ -400,34 +391,34 @@ export default function UnifiedResultsPage() {
 
           <div className="mb-6 flex flex-wrap items-center gap-2">
             <FilterButton active={filter === "all"} onClick={() => setFilter("all")} label="All" count={pipeline.length} />
-            <FilterButton active={filter === "assessment"} onClick={() => setFilter("assessment")} label="Assessment submitted" count={assessmentCount} />
-            <FilterButton active={filter === "in_rehab"} onClick={() => setFilter("in_rehab")} label="In rehab or plan assigned" count={inRehabCount + planAssignedCount} />
-            <FilterButton active={filter === "needs_review"} onClick={() => setFilter("needs_review")} label="Needs therapist review" count={needsReviewCount} />
+            <FilterButton active={filter === "assessment"} onClick={() => setFilter("assessment")} label="Assessment" count={assessmentCount} />
+            <FilterButton active={filter === "in_rehab"} onClick={() => setFilter("in_rehab")} label="In rehab" count={inRehabCount + planAssignedCount} />
+            <FilterButton active={filter === "needs_review"} onClick={() => setFilter("needs_review")} label="Needs review" count={needsReviewCount} />
             <FilterButton active={filter === "completed"} onClick={() => setFilter("completed")} label="Completed" count={completedCount} />
           </div>
 
           {loading ? (
             <div className="flex flex-col items-center gap-3 py-12" aria-busy="true" aria-label="Loading patient pipeline">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#1E2D42] border-t-[#1D9E75]" />
-              <p className="text-sm text-white/40">Loading patient pipeline…</p>
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--brand)]" />
+              <p className="text-sm text-[var(--muted)]">Loading patient pipeline…</p>
             </div>
           ) : error ? (
             <ClinicianInlineError message={error} />
           ) : filtered.length === 0 ? (
             <div className="py-12 text-center">
-              <p className="text-sm text-white/40">
+              <p className="text-sm text-[var(--muted)]">
                 No patient results yet. Send a remote assessment or assign a treatment plan to start the pipeline.
               </p>
               <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                 <Link
                   href="/clinician/patients"
-                  className="rounded-[7px] bg-[#1D9E75] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]"
+                  className="rounded-[11px] bg-[var(--brand)] px-4 py-2.5 text-sm font-bold text-white transition hover:bg-[var(--brand-dark)]"
                 >
                   Open patients
                 </Link>
                 <Link
                   href="/clinician/plans/new"
-                  className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-2.5 text-sm font-semibold text-white/60 transition hover:text-white"
+                  className="rounded-[11px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-2.5 text-sm font-semibold text-[var(--foreground)] transition hover:border-[var(--brand)]/40 hover:text-[var(--brand)]"
                 >
                   Build plan
                 </Link>
@@ -462,20 +453,20 @@ function ReviewQueueCard({
   const planHref = `${profileHref}#rehabilitation-plan`;
   const styles =
     card.clinicalAction.severity === "high"
-      ? "border-rose-400/25 bg-rose-400/5"
-      : "border-amber-400/20 bg-amber-400/5";
+      ? "border-[var(--danger)]/30 bg-[var(--danger-soft)]"
+      : "border-[var(--warning)]/30 bg-[var(--warning-soft)]";
 
   return (
-    <article className={`rounded-[8px] border p-4 ${styles}`}>
+    <article className={`rounded-[14px] border p-4 ${styles}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-white">{card.patientName}</p>
-          <p className="mt-1 text-xs font-semibold text-amber-200/90">
+          <p className="truncate text-sm font-bold text-[var(--foreground)]">{card.patientName}</p>
+          <p className="mt-1 text-xs font-semibold text-[var(--warning)]">
             {card.clinicalAction.title} · review recommended
           </p>
-          <p className="mt-2 text-xs leading-relaxed text-white/60">{card.clinicalAction.reason}</p>
+          <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">{card.clinicalAction.reason}</p>
         </div>
-        <span className="shrink-0 rounded-[5px] border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300">
+        <span className="shrink-0 rounded-full border border-[var(--warning)]/30 bg-[var(--warning-soft)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--warning)]">
           Therapist attention
         </span>
       </div>
@@ -496,24 +487,18 @@ function ReviewQueueCard({
         />
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap items-center gap-3">
         <Link
           href={profileHref}
-          className="inline-flex rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-3 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
+          className="inline-flex rounded-[10px] bg-[var(--brand)] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[var(--brand-dark)]"
         >
-          Review patient chart
+          Open patient chart
         </Link>
-        <Link
-          href={planHref}
-          className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
-        >
-          View plan &amp; sessions
+        <Link href={planHref} className="text-xs font-semibold text-[var(--muted)] transition hover:text-[var(--brand)]">
+          Plan &amp; sessions
         </Link>
-        <Link
-          href={outcomesHref}
-          className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
-        >
-          Progress &amp; outcomes
+        <Link href={outcomesHref} className="text-xs font-semibold text-[var(--muted)] transition hover:text-[var(--brand)]">
+          Progress
         </Link>
       </div>
 
@@ -544,31 +529,31 @@ function PatientPipelineCardView({
   const outcomesHref = `/clinician/patients/${card.patientId}/outcomes`;
 
   return (
-    <article className="rounded-[10px] border border-[#1E2D42] bg-[#0B1220] p-5">
+    <article className="rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-card)] transition hover:shadow-[var(--shadow-card-hover)]">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-base font-bold text-white">{card.patientName}</p>
+          <p className="truncate text-base font-bold text-[var(--foreground)]">{card.patientName}</p>
           {card.condition && (
-            <p className="mt-0.5 truncate text-sm text-white/55">{card.condition}</p>
+            <p className="mt-0.5 truncate text-sm text-[var(--muted)]">{card.condition}</p>
           )}
           {card.lastActivityAt && (
-            <p className="mt-1 text-xs text-white/35">
+            <p className="mt-1 text-xs text-[var(--muted-soft)]">
               Last activity {new Date(card.lastActivityAt).toLocaleString()}
             </p>
           )}
           {card.assessment && (
-            <p className="mt-1 text-xs text-white/35">
+            <p className="mt-1 text-xs text-[var(--muted-soft)]">
               {assessmentTypeLabel(card.assessment.assessmentType)}
             </p>
           )}
         </div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
           {card.rehab?.needsReview && (
-            <span className="rounded-[5px] border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300">
+            <span className="rounded-full border border-[var(--warning)]/30 bg-[var(--warning-soft)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--warning)]">
               {card.rehab.clinicalAction.title}
             </span>
           )}
-          <span className={`rounded-[5px] border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${badge.className}`}>
+          <span className={`rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${badge.className}`}>
             {badge.label}
           </span>
         </div>
@@ -623,34 +608,25 @@ function PatientPipelineCardView({
         </div>
       )}
 
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <Link
+          href={card.assessment ? reportHref(card.patientId, card.assessment.assessmentId) : profileHref}
+          className="inline-flex rounded-[10px] bg-[var(--brand)] px-3 py-2 text-xs font-semibold text-white transition hover:bg-[var(--brand-dark)]"
+        >
+          {card.assessment ? "Review assessment report" : "Open patient chart"}
+        </Link>
         {card.assessment && (
-          <Link
-            href={reportHref(card.patientId, card.assessment.assessmentId)}
-            className="inline-flex rounded-[7px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-3 py-2 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
-          >
-            Review assessment report
+          <Link href={profileHref} className="text-xs font-semibold text-[var(--muted)] transition hover:text-[var(--brand)]">
+            Patient chart
           </Link>
         )}
         {card.rehab && (
-          <Link
-            href={`${profileHref}#rehabilitation-plan`}
-            className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
-          >
-            View plan &amp; sessions
+          <Link href={`${profileHref}#rehabilitation-plan`} className="text-xs font-semibold text-[var(--muted)] transition hover:text-[var(--brand)]">
+            Plan &amp; sessions
           </Link>
         )}
-        <Link
-          href={outcomesHref}
-          className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
-        >
-          Progress &amp; outcomes
-        </Link>
-        <Link
-          href={profileHref}
-          className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white/70 transition hover:text-white"
-        >
-          Open patient chart
+        <Link href={outcomesHref} className="text-xs font-semibold text-[var(--muted)] transition hover:text-[var(--brand)]">
+          Progress
         </Link>
       </div>
     </article>
@@ -667,10 +643,10 @@ function Metric({
   className?: string;
 }) {
   return (
-    <div className={`rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 ${className}`}>
-      <p className="text-[10px] text-white/35">{label}</p>
+    <div className={`rounded-[10px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2 ${className}`}>
+      <p className="text-[10px] text-[var(--muted)]">{label}</p>
       <p
-        className="mt-0.5 truncate text-sm font-semibold text-[#5DCAA5]"
+        className="mt-0.5 truncate text-sm font-semibold text-[var(--brand)]"
         style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
       >
         {value}
@@ -694,10 +670,10 @@ function FilterButton({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-[7px] px-3 py-2 text-xs font-semibold transition ${
+      className={`rounded-[10px] px-3 py-2 text-xs font-semibold transition ${
         active
-          ? "bg-[#1D9E75] text-white"
-          : "border border-[#1E2D42] bg-[#0B1220] text-white/45 hover:text-white/70"
+          ? "bg-[var(--brand)] text-white"
+          : "border border-[var(--border)] bg-[var(--surface-alt)] text-[var(--muted)] hover:text-[var(--foreground)]"
       }`}
     >
       {label}
@@ -708,10 +684,10 @@ function FilterButton({
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-[10px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3">
-      <p className="text-[10px] text-white/35">{label}</p>
+    <div className="rounded-[14px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3">
+      <p className="text-[10px] text-[var(--muted)]">{label}</p>
       <p
-        className="mt-1 text-lg font-bold text-[#5DCAA5]"
+        className="mt-1 text-lg font-bold text-[var(--brand)]"
         style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
       >
         {value}

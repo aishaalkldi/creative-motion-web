@@ -46,10 +46,10 @@ function DraftSubsection({
   const titleClass =
     variant === "print"
       ? "text-[10px] font-bold uppercase tracking-wider text-gray-600"
-      : "text-[11px] font-bold uppercase tracking-wider text-white/40";
+      : "text-[11px] font-bold uppercase tracking-wider text-[var(--muted-soft)]";
 
   const bodyClass =
-    variant === "print" ? "text-sm leading-relaxed text-gray-900" : "text-sm leading-relaxed text-white/75";
+    variant === "print" ? "text-sm leading-relaxed text-gray-900" : "text-sm leading-relaxed text-[var(--foreground)]";
 
   return (
     <div className={variant === "print" ? "mt-4" : "mt-5"}>
@@ -67,12 +67,12 @@ function DraftBody({ draft, variant }: { draft: AssessmentInterpretationDraft; v
 
   if (!hasFunctional && !hasBiomechanical) {
     const emptyClass =
-      variant === "print" ? "mt-4 text-sm text-gray-700" : "text-sm italic text-white/45";
+      variant === "print" ? "mt-4 text-sm text-gray-700" : "text-sm italic text-[var(--muted)]";
     return <p className={emptyClass}>{INTERPRETATION_DRAFT_EMPTY_NOTE}</p>;
   }
 
   const noteClass =
-    variant === "print" ? "mt-4 text-sm text-gray-700" : "mt-4 text-sm italic text-white/45";
+    variant === "print" ? "mt-4 text-sm text-gray-700" : "mt-4 text-sm italic text-[var(--muted)]";
 
   return (
     <>
@@ -132,21 +132,21 @@ export function AssessmentInterpretationDraftSection({ draft, variant = "screen"
   return (
     <section
       id="interpretation-draft"
-      className="print-section overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825]"
+      className="print-section overflow-hidden rounded-[10px] border border-[var(--border)] bg-[var(--surface)]"
     >
-      <div className="border-b border-[#1E2D42] px-6 py-4">
+      <div className="border-b border-[var(--border)] px-6 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <h2 className="text-base font-bold text-white">{SECTION_ASSESSMENT_INTERPRETATION_DRAFT}</h2>
-          <span className="shrink-0 rounded-full border border-amber-300/25 bg-amber-400/10 px-2.5 py-0.5 text-[10px] font-semibold text-amber-200">
+          <h2 className="text-base font-bold text-[var(--foreground)]">{SECTION_ASSESSMENT_INTERPRETATION_DRAFT}</h2>
+          <span className="shrink-0 rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-200">
             {INTERPRETATION_DRAFT_BADGE}
           </span>
         </div>
-        <p className="mt-3 text-xs leading-relaxed text-white/50">{INTERPRETATION_DRAFT_INTRO}</p>
+        <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">{INTERPRETATION_DRAFT_INTRO}</p>
       </div>
 
       <div className="px-6 py-5">
         <DraftBody draft={draft} variant="screen" />
-        <p className="mt-5 text-xs leading-relaxed text-white/40">{draft.confirmationNote}</p>
+        <p className="mt-5 text-xs leading-relaxed text-[var(--muted-soft)]">{draft.confirmationNote}</p>
       </div>
     </section>
   );

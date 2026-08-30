@@ -1,22 +1,42 @@
 "use client";
 
 import Link from "next/link";
+import { useGlobalLanguage } from "@/app/components/GlobalLanguageProvider";
 
-const STAT_CARDS = [
+const STAT_CARDS_EN = [
   { label: "Total Clinicians",  value: "—",   note: "Connect backend" },
   { label: "Active Patients",   value: "—",   note: "Connect backend" },
   { label: "Assessments This Week", value: "—", note: "Connect backend" },
   { label: "Sessions This Week",    value: "—", note: "Connect backend" },
 ];
 
-const NAV_ITEMS = [
+const STAT_CARDS_AR = [
+  { label: "إجمالي الأطباء", value: "—", note: "ربط الواجهة الخلفية" },
+  { label: "المرضى النشطون", value: "—", note: "ربط الواجهة الخلفية" },
+  { label: "التقييمات هذا الأسبوع", value: "—", note: "ربط الواجهة الخلفية" },
+  { label: "الجلسات هذا الأسبوع", value: "—", note: "ربط الواجهة الخلفية" },
+];
+
+const NAV_ITEMS_EN = [
   { label: "Dashboard",  href: "/admin",           active: true  },
   { label: "Clinicians", href: "/admin/clinicians", active: false },
   { label: "Patients",   href: "/admin/patients",   active: false },
   { label: "Settings",   href: "/admin/settings",   active: false },
 ];
 
+const NAV_ITEMS_AR = [
+  { label: "لوحة التحكم", href: "/admin", active: true },
+  { label: "الأطباء", href: "/admin/clinicians", active: false },
+  { label: "المرضى", href: "/admin/patients", active: false },
+  { label: "الإعدادات", href: "/admin/settings", active: false },
+];
+
 export default function AdminDashboard() {
+  const { language } = useGlobalLanguage();
+  const isArabic = language === "ar";
+  const STAT_CARDS = isArabic ? STAT_CARDS_AR : STAT_CARDS_EN;
+  const NAV_ITEMS = isArabic ? NAV_ITEMS_AR : NAV_ITEMS_EN;
+
   return (
     <div className="flex min-h-screen bg-[#0B1220]" style={{ fontFamily: "var(--font-inter, ui-sans-serif, sans-serif)" }}>
 
@@ -51,8 +71,8 @@ export default function AdminDashboard() {
 
         <div className="border-t border-[#1E2D42] p-3">
           <div className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5">
-            <p className="text-xs font-semibold text-white/60">Admin Portal</p>
-            <p className="text-[11px] text-white/30">System management</p>
+            <p className="text-xs font-semibold text-white/60">{isArabic ? "بوابة الإدارة" : "Admin Portal"}</p>
+            <p className="text-[11px] text-white/30">{isArabic ? "إدارة النظام" : "System management"}</p>
           </div>
           <Link
             href="/login"
@@ -61,7 +81,7 @@ export default function AdminDashboard() {
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
             </svg>
-            Sign out
+            {isArabic ? "تسجيل الخروج" : "Sign out"}
           </Link>
         </div>
       </aside>
@@ -72,13 +92,13 @@ export default function AdminDashboard() {
         {/* Top bar */}
         <div className="flex h-14 items-center justify-between border-b border-[#1E2D42] px-6">
           <div className="flex items-center gap-2">
-            <h1 className="text-sm font-bold text-white">Admin Dashboard</h1>
+            <h1 className="text-sm font-bold text-white">{isArabic ? "لوحة تحكم الإدارة" : "Admin Dashboard"}</h1>
             <span className="rounded-[5px] border border-amber-400/20 bg-amber-400/8 px-2 py-0.5 text-[10px] font-bold text-amber-300">
               MVP
             </span>
           </div>
           <Link href="/clinician" className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/50 transition hover:text-white">
-            Clinician Portal →
+            {isArabic ? "بوابة الطبيب →" : "Clinician Portal →"}
           </Link>
         </div>
 
@@ -109,24 +129,24 @@ export default function AdminDashboard() {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
             </div>
-            <p className="text-base font-bold text-white/40">Admin portal in development</p>
+            <p className="text-base font-bold text-white/40">{isArabic ? "بوابة الإدارة قيد التطوير" : "Admin portal in development"}</p>
             <p className="mt-1.5 text-sm text-white/25">
-              Clinician management, patient overview, and system settings will appear here.
+              {isArabic ? "سيظهر هنا إدارة الأطباء ونظرة عامة على المرضى وإعدادات النظام." : "Clinician management, patient overview, and system settings will appear here."}
             </p>
             <Link
               href="/clinician"
               className="mt-6 inline-flex items-center gap-2 rounded-[8px] bg-[#1D9E75] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#179165]"
             >
-              Go to Clinician Portal →
+              {isArabic ? "اذهب إلى بوابة الطبيب →" : "Go to Clinician Portal →"}
             </Link>
           </div>
 
           {/* Quick links */}
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             {[
-              { label: "Manage Clinicians", href: "/admin/clinicians", note: "Coming soon" },
-              { label: "Patient Overview",  href: "/admin/patients",   note: "Coming soon" },
-              { label: "System Settings",   href: "/admin/settings",   note: "Coming soon" },
+              { label: isArabic ? "إدارة الأطباء" : "Manage Clinicians", href: "/admin/clinicians", note: isArabic ? "قريبًا" : "Coming soon" },
+              { label: isArabic ? "نظرة عامة على المرضى" : "Patient Overview", href: "/admin/patients", note: isArabic ? "قريبًا" : "Coming soon" },
+              { label: isArabic ? "إعدادات النظام" : "System Settings", href: "/admin/settings", note: isArabic ? "قريبًا" : "Coming soon" },
             ].map(({ label, href, note }) => (
               <Link
                 key={href}

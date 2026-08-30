@@ -72,7 +72,9 @@ export type SingleLegStancePoseDetectorCallbacks = {
  */
 export class SingleLegStancePoseDetector {
   private readonly callbacks: SingleLegStancePoseDetectorCallbacks;
-  private readonly shellConfig: typeof PATIENT_SLS_POSE_SHELL;
+  private readonly shellConfig: Omit<typeof PATIENT_SLS_POSE_SHELL, "landmarksOverlayOnly"> & {
+    landmarksOverlayOnly: boolean;
+  };
   private readonly holdConfig: SingleLegStanceHoldConfig;
   private readonly holdEngine: SingleLegStanceHoldDetector;
 
@@ -92,7 +94,9 @@ export class SingleLegStancePoseDetector {
     callbacks: SingleLegStancePoseDetectorCallbacks,
     stanceLeg: StanceLeg,
     holdConfig: SingleLegStanceHoldConfig = PATIENT_SLS_HOLD_CONFIG,
-    shellConfig: typeof PATIENT_SLS_POSE_SHELL = PATIENT_SLS_POSE_SHELL,
+    shellConfig: Omit<typeof PATIENT_SLS_POSE_SHELL, "landmarksOverlayOnly"> & {
+      landmarksOverlayOnly: boolean;
+    } = PATIENT_SLS_POSE_SHELL,
   ) {
     this.callbacks = callbacks;
     this.holdConfig = holdConfig;

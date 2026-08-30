@@ -1,8 +1,9 @@
 "use client";
 
+import { useGlobalLanguage } from "@/app/components/GlobalLanguageProvider";
 import { useState } from "react";
 
-const PILOT_STEPS = [
+const PILOT_STEPS_EN = [
   { title: "Add patient", detail: "Create the patient file in the clinician portal." },
   { title: "Send assessment", detail: "Share a remote assessment link or document in clinic." },
   { title: "Review submitted assessment", detail: "Open the assessment report and focus context." },
@@ -14,43 +15,58 @@ const PILOT_STEPS = [
   },
 ] as const;
 
+const PILOT_STEPS_AR = [
+  { title: "إضافة مريض", detail: "أنشئ ملف المريض في بوابة الطبيب." },
+  { title: "إرسال تقييم", detail: "شارك رابط تقييم عن بُعد أو وثّق داخل العيادة." },
+  { title: "مراجعة التقييم المقدم", detail: "افتح تقرير التقييم وسياق التركيز." },
+  { title: "تعيين الخطة", detail: "أنشئ خطة إعادة تأهيل منظمة وخصصها." },
+  { title: "يُكمل المريض الجلسات المنزلية", detail: "يستخدم المريض رابط البوابة للجلسات المنزلية." },
+  {
+    title: "مراجعة التقدم ومقاييس الحركة عند توفرها",
+    detail: "راجع تقدم الجلسة ومقاييس الحركة المشتقة في ملف المريض.",
+  },
+] as const;
+
 export function PilotChecklistCard() {
+  const { language } = useGlobalLanguage();
+  const isArabic = language === "ar";
+  const pilotSteps = isArabic ? PILOT_STEPS_AR : PILOT_STEPS_EN;
   const [open, setOpen] = useState(true);
 
   return (
-    <section className="mb-6 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
+    <section className="mb-6 rounded-[16px] border border-[var(--border)] bg-[var(--surface)] p-5 shadow-[var(--shadow-card)]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-bold text-white">Pilot workflow checklist</h2>
-          <p className="mt-1 text-xs text-white/35">
-            Clinician-facing steps for a supervised clinic pilot. Not a clinical protocol.
+          <h2 className="text-sm font-bold text-[var(--foreground)]">{isArabic ? "قائمة مراجعة سير العمل التجريبي" : "Pilot workflow checklist"}</h2>
+          <p className="mt-1 text-xs text-[var(--muted)]">
+            {isArabic ? "خطوات موجهة للطبيب لخطة عيادية supervised. ليست بروتوكولًا سريريًا." : "Clinician-facing steps for a supervised clinic pilot. Not a clinical protocol."}
           </p>
         </div>
         <button
           type="button"
           onClick={() => setOpen((value) => !value)}
-          className="shrink-0 rounded-[6px] border border-[#1E2D42] bg-[#0B1220] px-3 py-1.5 text-[11px] font-semibold text-white/50 transition hover:text-white"
+          className="shrink-0 rounded-[8px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-1.5 text-[11px] font-semibold text-[var(--foreground)] transition hover:border-[var(--brand)]/40 hover:text-[var(--brand)]"
         >
-          {open ? "Hide" : "Show"}
+          {open ? (isArabic ? "إخفاء" : "Hide") : (isArabic ? "إظهار" : "Show")}
         </button>
       </div>
 
       {open ? (
         <ol className="mt-4 space-y-2.5">
-          {PILOT_STEPS.map((step, index) => (
+          {pilotSteps.map((step, index) => (
             <li
               key={step.title}
-              className="flex gap-3 rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3 py-2.5"
+              className="flex gap-3 rounded-[10px] border border-[var(--border)] bg-[var(--surface-alt)] px-3 py-2.5"
             >
               <span
-                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#1E2D42] text-[11px] font-bold text-[#5DCAA5]"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[var(--brand)]/30 bg-[var(--brand-soft)] text-[11px] font-bold text-[var(--brand)]"
                 aria-hidden
               >
                 {index + 1}
               </span>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-white">{step.title}</p>
-                <p className="mt-0.5 text-xs leading-relaxed text-white/40">{step.detail}</p>
+                <p className="text-sm font-semibold text-[var(--foreground)]">{step.title}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-[var(--muted)]">{step.detail}</p>
               </div>
             </li>
           ))}

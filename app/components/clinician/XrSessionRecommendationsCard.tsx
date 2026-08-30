@@ -22,38 +22,38 @@ export function XrSessionRecommendationsCard({
   );
 
   return (
-    <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
-      <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">
+    <section className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] p-5">
+      <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--muted-soft)]">
         Session recommendations — assistive
       </p>
-      <h2 className="mt-1 text-sm font-bold text-white">XR & camera session ideas</h2>
-      <p className="mt-2 text-xs leading-relaxed text-white/45">{XR_DISCLAIMER}</p>
+      <h2 className="mt-1 text-sm font-bold text-[var(--foreground)]">XR & camera session ideas</h2>
+      <p className="mt-2 text-xs leading-relaxed text-[var(--muted)]">{XR_DISCLAIMER}</p>
 
       <div className="mt-4 space-y-3">
         {recommendations.map((rec) => (
           <div
             key={rec.id}
-            className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3"
+            className="rounded-[7px] border border-[var(--border)] bg-[var(--surface-alt)] px-4 py-3"
           >
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div>
-                <p className="text-sm font-semibold text-white">{rec.title}</p>
-                <p className="mt-1 text-xs text-white/45">{rec.rationale}</p>
+                <p className="text-sm font-semibold text-[var(--foreground)]">{rec.title}</p>
+                <p className="mt-1 text-xs text-[var(--muted)]">{rec.rationale}</p>
               </div>
-              <span className="rounded-[5px] border border-[#1E2D42] px-2 py-0.5 text-[10px] text-white/40">
+              <span className="rounded-[5px] border border-[var(--border)] px-2 py-0.5 text-[10px] text-[var(--muted-soft)]">
                 {rec.modeLabel}
               </span>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <Link
                 href={rec.cameraHref}
-                className="rounded-[6px] border border-[#1D9E75]/25 bg-[#1D9E75]/8 px-3 py-1.5 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
+                className="rounded-[6px] border border-[var(--brand)]/25 bg-[var(--brand)]/8 px-3 py-1.5 text-xs font-semibold text-[var(--brand)] transition hover:bg-[var(--brand)]/15"
               >
                 Open camera session
               </Link>
               <Link
                 href={rec.libraryHref}
-                className="rounded-[6px] border border-[#1E2D42] px-3 py-1.5 text-xs font-semibold text-white/55 transition hover:text-white"
+                className="rounded-[6px] border border-[var(--border)] px-3 py-1.5 text-xs font-semibold text-[var(--muted)] transition hover:text-[var(--foreground)]"
               >
                 View in library
               </Link>
