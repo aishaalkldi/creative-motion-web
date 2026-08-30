@@ -172,7 +172,7 @@ function PreviewStack({
   return (
     <div
       ref={containerRef}
-      className="relative mt-3 w-full overflow-hidden rounded-[12px] border border-[#1E2D42]/50 bg-[#0A0F1A] shadow-[0_8px_28px_rgba(10,15,26,0.18)]"
+      className="relative w-full overflow-hidden rounded-[12px] border border-[#1E2D42]/50 bg-[#0A0F1A] shadow-[0_8px_28px_rgba(10,15,26,0.18)]"
       style={{ aspectRatio: `${canvasWidth} / ${canvasHeight}` }}
       onMouseMove={onDevMouseMove}
       aria-label={previewAriaLabel}
@@ -819,6 +819,10 @@ export function OrchestratorCvSessionCore({
     ? resolveInteractiveShoulderRuntimeFaultMessage(language, runtimeFault)
     : null;
   const controlsLocked = Boolean(runtimeFault);
+  const showLiveStatusRail =
+    !showBlockSummary &&
+    !countdownActive &&
+    (isInstructionalBlock || isMovementPatternBlock || isMovementTargetBlock);
 
   return (
     <div className="px-4 pb-4 pt-3" dir={textDir} lang={language}>
@@ -860,37 +864,119 @@ export function OrchestratorCvSessionCore({
               {ui.devMouseSimulation}
             </p>
           )}
-          <PreviewStack
-            videoRef={videoRef}
-            canvasRef={canvasRef}
-            containerRef={containerRef}
-            canvasWidth={canvasWidth}
-            canvasHeight={canvasHeight}
-            previewAriaLabel={ui.cameraPreviewAriaLabel}
-            onDevMouseMove={handleDevMouseMove}
-            overlay={
-              <>
-                <ReachTheLightEnvironment reducedMotion={prefersReducedMotion} />
-                {countdownActive ? (
-                  <ReadyCountdownOverlay
-                    language={language}
-                    arClass={arClass}
-                    reducedMotion={prefersReducedMotion}
-                    onTick={handleCountdownTick}
-                    onComplete={handleCountdownComplete}
-                  />
-                ) : null}
-                {showBlockSummary ? (
-                  <SessionCompleteOverlay
-                    language={language}
-                    arClass={arClass}
-                    blocksCompleted={hudSnapshot.accumulatedBlockResults.length}
-                    repetitionsCompleted={summaryMetrics.reps}
-                    durationSeconds={summaryMetrics.durationSeconds}
-                    targetsReached={summaryMetrics.targets}
-                    patternsCompleted={summaryMetrics.patterns}
-                  />
-                ) : isInstructionalBlock ? (
+          <div className="mt-3 flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-6">
+            <div className="w-full min-w-0 lg:w-[78%] lg:flex-none">
+              <PreviewStack
+                videoRef={videoRef}
+                canvasRef={canvasRef}
+                containerRef={containerRef}
+                canvasWidth={canvasWidth}
+                canvasHeight={canvasHeight}
+                previewAriaLabel={ui.cameraPreviewAriaLabel}
+                onDevMouseMove={handleDevMouseMove}
+                overlay={
+                  <>
+                    <ReachTheLightEnvironment reducedMotion={prefersReducedMotion} />
+                    {countdownActive ? (
+                      <ReadyCountdownOverlay
+                        language={language}
+                        arClass={arClass}
+                        reducedMotion={prefersReducedMotion}
+                        onTick={handleCountdownTick}
+                        onComplete={handleCountdownComplete}
+                      />
+                    ) : null}
+                    {showBlockSummary ? (
+                      <SessionCompleteOverlay
+                        language={language}
+                        arClass={arClass}
+                        blocksCompleted={hudSnapshot.accumulatedBlockResults.length}
+                        repetitionsCompleted={summaryMetrics.reps}
+                        durationSeconds={summaryMetrics.durationSeconds}
+                        targetsReached={summaryMetrics.targets}
+                        patternsCompleted={summaryMetrics.patterns}
+                      />
+                    ) : isInstructionalBlock ? (
+                      <InstructionalBlockLayer
+                        language={language}
+                        arClass={arClass}
+                        snapshot={hudSnapshot}
+                        presentationProgress={presentationProgress}
+                        onPause={handlePause}
+                        onResume={handleResume}
+                        controlsLocked={controlsLocked}
+                        soundMuted={soundMuted}
+                        onSoundToggle={handleSoundToggle}
+                        placement="strip"
+                      />
+                    ) : (
+                      <>
+                        {isMovementPatternBlock && activeMotionPattern && patternState ? (
+                          <TherapeuticPathLayer
+                            pattern={activeMotionPattern}
+                            lifecycle={patternState}
+                            hitBurstProgress={hitBurstProgress}
+                            reducedMotion={prefersReducedMotion}
+                          />
+                        ) : isMovementTargetBlock ? (
+                          <ShoulderTargetLayer
+                            target={targetState.currentTarget}
+                            exitingTarget={targetState.exitingTarget}
+                            hitBurstTarget={hitBurstTarget}
+                            reducedMotion={prefersReducedMotion}
+                          />
+                        ) : null}
+                        {(isMovementPatternBlock || isMovementTargetBlock) && (
+                          <>
+                            <TrackedHandCursor
+                              wrist={
+                                mirroredCursorWrist ??
+                                (isDevMouseSimulationEnabled() ? devMouseRef.current : null)
+                              }
+                              visible={hudSnapshot.sessionState === "active" || hudSnapshot.sessionState === "safetyHold"}
+                              reducedMotion={prefersReducedMotion}
+                            />
+                            <ShoulderSessionHud
+                              language={language}
+                              arClass={arClass}
+                              snapshot={hudSnapshot}
+                              feedbackMode={resolvedHudFeedbackMode}
+                              targetInteraction={targetState.interaction}
+                              patternInteraction={patternState?.interaction ?? createEmptyPatternInteractionMetrics()}
+                              measuredReps={measuredReps}
+                              onPause={handlePause}
+                              onResume={handleResume}
+                              soundMuted={soundMuted}
+                              onSoundToggle={handleSoundToggle}
+                              targetHitAnnouncement={targetHitAnnouncement}
+                              placement="strip"
+                            />
+                            {targetHitAnnouncement ? (
+                              <TargetSuccessPulse message={targetHitAnnouncement} arClass={arClass} />
+                            ) : null}
+                          </>
+                        )}
+                        {runtimeFaultMessage ? (
+                          <div
+                            className="pointer-events-auto absolute inset-0 z-40 flex items-end justify-center bg-[#0A0F1A]/60 p-4"
+                            role="alert"
+                            aria-live="assertive"
+                          >
+                            <p className={`max-w-md rounded-[10px] border border-rose-300/40 bg-[#0F1825]/95 px-4 py-3 text-center text-[12px] text-rose-100 ${arClass}`}>
+                              <span className="font-semibold">{ui.runtimeFaultTitle}: </span>
+                              {runtimeFaultMessage}
+                            </p>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </>
+                }
+              />
+            </div>
+            {showLiveStatusRail ? (
+              <div className="w-full lg:w-[22%] lg:flex-none">
+                {isInstructionalBlock ? (
                   <InstructionalBlockLayer
                     language={language}
                     arClass={arClass}
@@ -901,75 +987,28 @@ export function OrchestratorCvSessionCore({
                     controlsLocked={controlsLocked}
                     soundMuted={soundMuted}
                     onSoundToggle={handleSoundToggle}
+                    placement="rail"
                   />
                 ) : (
-                  <>
-                    {isMovementPatternBlock && activeMotionPattern && patternState ? (
-                      <TherapeuticPathLayer
-                        pattern={activeMotionPattern}
-                        lifecycle={patternState}
-                        hitBurstProgress={hitBurstProgress}
-                        reducedMotion={prefersReducedMotion}
-                      />
-                    ) : isMovementTargetBlock ? (
-                      <ShoulderTargetLayer
-                        target={targetState.currentTarget}
-                        exitingTarget={targetState.exitingTarget}
-                        hitBurstTarget={hitBurstTarget}
-                        reducedMotion={prefersReducedMotion}
-                      />
-                    ) : null}
-                    {(isMovementPatternBlock || isMovementTargetBlock) && (
-                      <>
-                        <TrackedHandCursor
-                          wrist={
-                            mirroredCursorWrist ??
-                            (isDevMouseSimulationEnabled() ? devMouseRef.current : null)
-                          }
-                          visible={hudSnapshot.sessionState === "active" || hudSnapshot.sessionState === "safetyHold"}
-                          reducedMotion={prefersReducedMotion}
-                        />
-                        <ShoulderSessionHud
-                          language={language}
-                          arClass={arClass}
-                          snapshot={hudSnapshot}
-                          feedbackMode={resolvedHudFeedbackMode}
-                          targetInteraction={targetState.interaction}
-                          patternInteraction={patternState?.interaction ?? createEmptyPatternInteractionMetrics()}
-                          measuredReps={measuredReps}
-                          onPause={handlePause}
-                          onResume={handleResume}
-                          showBlockSummary={false}
-                          blockSummaryTargetsReached={summaryMetrics.targets}
-                          blockSummaryPatternsCompleted={summaryMetrics.patterns}
-                          blockSummaryMeasuredReps={summaryMetrics.reps}
-                          blockSummaryDurationSeconds={summaryMetrics.durationSeconds}
-                          targetHitAnnouncement={targetHitAnnouncement}
-                          soundMuted={soundMuted}
-                          onSoundToggle={handleSoundToggle}
-                        />
-                        {targetHitAnnouncement ? (
-                          <TargetSuccessPulse message={targetHitAnnouncement} arClass={arClass} />
-                        ) : null}
-                      </>
-                    )}
-                    {runtimeFaultMessage ? (
-                      <div
-                        className="pointer-events-auto absolute inset-0 z-40 flex items-end justify-center bg-[#0A0F1A]/60 p-4"
-                        role="alert"
-                        aria-live="assertive"
-                      >
-                        <p className={`max-w-md rounded-[10px] border border-rose-300/40 bg-[#0F1825]/95 px-4 py-3 text-center text-[12px] text-rose-100 ${arClass}`}>
-                          <span className="font-semibold">{ui.runtimeFaultTitle}: </span>
-                          {runtimeFaultMessage}
-                        </p>
-                      </div>
-                    ) : null}
-                  </>
+                  <ShoulderSessionHud
+                    language={language}
+                    arClass={arClass}
+                    snapshot={hudSnapshot}
+                    feedbackMode={resolvedHudFeedbackMode}
+                    targetInteraction={targetState.interaction}
+                    patternInteraction={patternState?.interaction ?? createEmptyPatternInteractionMetrics()}
+                    measuredReps={measuredReps}
+                    onPause={handlePause}
+                    onResume={handleResume}
+                    soundMuted={soundMuted}
+                    onSoundToggle={handleSoundToggle}
+                    targetHitAnnouncement={targetHitAnnouncement}
+                    placement="rail"
+                  />
                 )}
-              </>
-            }
-          />
+              </div>
+            ) : null}
+          </div>
           {runtimeFaultMessage ? (
             <p
               className={`mt-2 rounded-[8px] border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700 ${arClass}`}

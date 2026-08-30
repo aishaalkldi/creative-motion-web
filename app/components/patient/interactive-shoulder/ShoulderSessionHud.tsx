@@ -12,7 +12,8 @@ import {
 } from "@/app/lib/interactive-shoulder/interactive-shoulder-ui";
 import { resolveBlockDisplayCopy } from "@/app/lib/interactive-shoulder/resolve-block-display-copy";
 import type { SessionOrchestratorSnapshot } from "@/app/lib/session-orchestrator/types";
-import { ShoulderLiveMetricRow, ShoulderLiveSessionLayout } from "./ShoulderLiveSessionLayout";
+import { ShoulderLiveInstructionStrip } from "./ShoulderLiveInstructionStrip";
+import { ShoulderLiveStatusRail } from "./ShoulderLiveStatusRail";
 
 type ShoulderSessionHudProps = {
   language: PatientExerciseLanguage;
@@ -24,14 +25,10 @@ type ShoulderSessionHudProps = {
   measuredReps: number;
   onPause: () => void;
   onResume: () => void;
-  showBlockSummary: boolean;
-  blockSummaryTargetsReached: number;
-  blockSummaryPatternsCompleted: number;
-  blockSummaryMeasuredReps: number;
-  blockSummaryDurationSeconds: number;
-  targetHitAnnouncement?: string | null;
   soundMuted: boolean;
   onSoundToggle: () => void;
+  targetHitAnnouncement?: string | null;
+  placement: "rail" | "strip";
 };
 
 function formatRemainingSeconds(snapshot: SessionOrchestratorSnapshot): number | null {
@@ -57,14 +54,10 @@ export function ShoulderSessionHud({
   measuredReps,
   onPause,
   onResume,
-  showBlockSummary,
-  blockSummaryTargetsReached,
-  blockSummaryPatternsCompleted,
-  blockSummaryMeasuredReps,
-  blockSummaryDurationSeconds,
-  targetHitAnnouncement = null,
   soundMuted,
   onSoundToggle,
+  targetHitAnnouncement = null,
+  placement,
 }: ShoulderSessionHudProps) {
   const ui = interactiveShoulderUi(language);
   const isPatternMode = feedbackMode === "motion-pattern";
@@ -79,9 +72,8 @@ export function ShoulderSessionHud({
   const liveMessage = resolveInteractiveShoulderLiveMessage(language, snapshot);
   const encouragement = resolveInteractiveShoulderEncouragement(language, snapshot);
   const primaryLiveAnnouncement = targetHitAnnouncement ?? liveMessage;
-  const guidanceMessage =
-    primaryLiveAnnouncement ??
-    (snapshot.safetyStatus === "normal" ? encouragement ?? blockCopy.instructions : blockCopy.instructions);
+  const stripMessage =
+    primaryLiveAnnouncement ?? (snapshot.safetyStatus === "normal" ? encouragement : null);
   const blockProgressPercent = Math.round(snapshot.blockProgress * 100);
   const sessionProgressPercent = Math.round(snapshot.sessionProgress * 100);
   const prescribedReps = snapshot.currentBlock?.prescribedRepetitions ?? null;
@@ -92,8 +84,9 @@ export function ShoulderSessionHud({
     ? patternInteraction.patternsShown
     : targetInteraction.targetsShown;
 
-  if (showBlockSummary) {
-    return null;
+  if (placement === "strip") {
+    if (!stripMessage) return null;
+    return <ShoulderLiveInstructionStrip message={stripMessage} arClass={arClass} />;
   }
 
   const interactionLabel = isPatternMode
@@ -101,33 +94,28 @@ export function ShoulderSessionHud({
     : ui.interactionTargetsLabel(0, 0).split(":")[0];
 
   return (
-    <ShoulderLiveSessionLayout
+    <ShoulderLiveStatusRail
       language={language}
       arClass={arClass}
       phaseLabel={blockCopy.phaseLabel}
       phaseAccent="exercise"
       title={blockCopy.title}
       timer={remaining !== null ? formatClinicalClock(remaining) : null}
+      metrics={[
+        { label: interactionLabel, value: `${interactionCompleted}/${interactionTotal || "—"}` },
+        {
+          label: ui.measuredRepsLabel(0).replace(/:.*/, ""),
+          value: ui.repProgressLabel(measuredReps, prescribedReps),
+        },
+      ]}
+      showBlockProgress
       blockProgressPercent={blockProgressPercent}
       sessionProgressPercent={sessionProgressPercent}
-      guidanceMessage={guidanceMessage}
       pausedOrHold={pausedOrHold}
       onPause={onPause}
       onResume={onResume}
       soundMuted={soundMuted}
       onSoundToggle={onSoundToggle}
-      metrics={
-        <>
-          <ShoulderLiveMetricRow
-            label={interactionLabel}
-            value={`${interactionCompleted}/${interactionTotal || "—"}`}
-          />
-          <ShoulderLiveMetricRow
-            label={ui.measuredRepsLabel(0).replace(/:.*/, "")}
-            value={ui.repProgressLabel(measuredReps, prescribedReps)}
-          />
-        </>
-      }
     />
   );
 }

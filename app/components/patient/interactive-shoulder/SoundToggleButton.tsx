@@ -8,24 +8,75 @@ type SoundToggleButtonProps = {
   muted: boolean;
   onToggle: () => void;
   className?: string;
+  variant?: "text" | "icon";
 };
+
+function SpeakerIcon({ muted }: { muted: boolean }) {
+  if (muted) {
+    return (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+        <path
+          d="M11 5L6 9H3v6h3l5 4V5z"
+          stroke="currentColor"
+          strokeWidth="1.75"
+          strokeLinejoin="round"
+        />
+        <path d="M16 9l4 4M20 9l-4 4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <path
+        d="M11 5L6 9H3v6h3l5 4V5z"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M15.5 8.5a4.5 4.5 0 010 7"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
 
 export function SoundToggleButton({
   language,
   muted,
   onToggle,
   className = "",
+  variant = "icon",
 }: SoundToggleButtonProps) {
   const ui = interactiveShoulderUi(language);
+  const ariaLabel = muted ? ui.soundUnmuteAria : ui.soundMuteAria;
+
+  if (variant === "text") {
+    return (
+      <button
+        type="button"
+        className={`rounded-[10px] border border-white/20 bg-[#0F1825]/88 px-3 py-2 text-[11px] font-semibold text-white/90 backdrop-blur-sm transition hover:border-[#1D9E75]/40 hover:bg-[#0F1825] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5DCAA5] ${className}`}
+        onClick={onToggle}
+        aria-pressed={muted}
+        aria-label={ariaLabel}
+      >
+        {muted ? ui.soundOffLabel : ui.soundOnLabel}
+      </button>
+    );
+  }
+
   return (
     <button
       type="button"
-      className={`pointer-events-auto rounded-[10px] border border-white/20 bg-[#0F1825]/88 px-3 py-2 text-[11px] font-semibold text-white/90 backdrop-blur-sm transition hover:border-[#1D9E75]/40 hover:bg-[#0F1825] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#5DCAA5] ${className}`}
+      title={ariaLabel}
+      className={`inline-flex h-9 w-9 items-center justify-center rounded-[10px] border border-[#D1D9E0] bg-white text-[#374151] transition hover:border-[#94A3B8] hover:bg-[#F8FAFC] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D9E75] ${className}`}
       onClick={onToggle}
       aria-pressed={muted}
-      aria-label={muted ? ui.soundUnmuteAria : ui.soundMuteAria}
+      aria-label={ariaLabel}
     >
-      {muted ? ui.soundOffLabel : ui.soundOnLabel}
+      <SpeakerIcon muted={muted} />
     </button>
   );
 }

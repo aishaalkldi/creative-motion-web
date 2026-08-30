@@ -8,7 +8,8 @@ import {
   resolveBlockDisplayCopy,
 } from "@/app/lib/interactive-shoulder/resolve-block-display-copy";
 import type { SessionOrchestratorSnapshot } from "@/app/lib/session-orchestrator/types";
-import { ShoulderLiveSessionLayout } from "./ShoulderLiveSessionLayout";
+import { ShoulderLiveInstructionStrip } from "./ShoulderLiveInstructionStrip";
+import { ShoulderLiveStatusRail } from "./ShoulderLiveStatusRail";
 
 type InstructionalBlockLayerProps = {
   language: PatientExerciseLanguage;
@@ -20,6 +21,7 @@ type InstructionalBlockLayerProps = {
   controlsLocked?: boolean;
   soundMuted: boolean;
   onSoundToggle: () => void;
+  placement: "rail" | "strip";
 };
 
 function formatRemainingSeconds(snapshot: SessionOrchestratorSnapshot): number | null {
@@ -45,6 +47,7 @@ export function InstructionalBlockLayer({
   controlsLocked = false,
   soundMuted,
   onSoundToggle,
+  placement,
 }: InstructionalBlockLayerProps) {
   const ui = interactiveShoulderUi(language);
   const block = snapshot.currentBlock;
@@ -65,17 +68,22 @@ export function InstructionalBlockLayer({
   const isCoolDown = isCoolDownBlock(block?.blockId);
   const phaseAccent = isCoolDown ? "cooldown" : isWarmUp ? "warmup" : "exercise";
 
+  if (placement === "strip") {
+    return <ShoulderLiveInstructionStrip message={copy.instructions} arClass={arClass} />;
+  }
+
   return (
-    <ShoulderLiveSessionLayout
+    <ShoulderLiveStatusRail
       language={language}
       arClass={arClass}
       phaseLabel={copy.phaseLabel}
       phaseAccent={phaseAccent}
       title={copy.title}
       timer={remaining !== null ? formatClinicalClock(remaining) : null}
+      metrics={[]}
+      showBlockProgress={!isCoolDown}
       blockProgressPercent={blockProgressPercent}
       sessionProgressPercent={sessionProgressPercent}
-      guidanceMessage={copy.instructions}
       pausedOrHold={pausedOrHold}
       onPause={onPause}
       onResume={onResume}
