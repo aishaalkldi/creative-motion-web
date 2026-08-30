@@ -245,6 +245,9 @@ export function OrchestratorCvSessionCore({
   const activeBlockIdRef = useRef<string | null>(null);
   const rafRef = useRef<number>(0);
   const sessionStartedRef = useRef(false);
+  /** Read at error time so `startSession` stays locale-independent (#286). */
+  const languageRef = useRef(language);
+  languageRef.current = language;
   const sessionCompleteFiredRef = useRef(false);
   const runtimeFaultRef = useRef<OrchestratorCvRuntimeFault | null>(null);
   const faultPauseAppliedRef = useRef(false);
@@ -421,6 +424,7 @@ export function OrchestratorCvSessionCore({
   }, []);
 
   const startSession = useCallback(async () => {
+    if (sessionStartedRef.current) return;
     const detector = detectorRef.current;
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -466,11 +470,11 @@ export function OrchestratorCvSessionCore({
       activeBlockIdRef.current = null;
       setOrchestratorSnapshot(orchestrator.getSnapshot(now));
     } catch (error) {
-      setStartError(resolveInteractiveShoulderStartError(language, error));
+      setStartError(resolveInteractiveShoulderStartError(languageRef.current, error));
     } finally {
       setStarting(false);
     }
-  }, [profile, language, sessionDefinition]);
+  }, [profile, sessionDefinition]);
 
   const therapeuticSideKey = resolvedTherapeuticSide?.side ?? null;
 
@@ -494,6 +498,7 @@ export function OrchestratorCvSessionCore({
     );
     detectorRef.current = detector;
     return () => {
+      sessionStartedRef.current = false;
       disposeOrchestratorCvDetector(detector);
       detectorRef.current = null;
       cancelAnimationFrame(rafRef.current);
