@@ -1,3 +1,5 @@
+import type { PatientPortalLanguage } from "@/app/lib/patient-portal-ui";
+import { formatPortalChartDate } from "@/app/lib/patient-portal-ui";
 import type { InteractiveShoulderOutcomeReportEntry } from "@/app/lib/progress/progress-outcomes-bundle";
 import type { ProgressOutcomesPainPoint } from "@/app/lib/progress/progress-outcomes-bundle";
 import { aggregateInteractiveShoulderSessionMetrics } from "@/app/lib/progress/aggregate-interactive-shoulder-session-metrics";
@@ -211,13 +213,31 @@ export function shouldShowInteractiveShoulderProgressCharts(sessionCount: number
   return sessionCount >= MIN_SESSIONS_FOR_PROGRESS_CHARTS;
 }
 
+const PATIENT_PROGRESS_CHART_LABELS: Record<
+  PatientPortalLanguage,
+  { sessionsCompleted: string; painAfter: string; effort: string }
+> = {
+  en: {
+    sessionsCompleted: "Sessions completed",
+    painAfter: "How you felt after session",
+    effort: "Your effort",
+  },
+  ar: {
+    sessionsCompleted: "الجلسات المكتملة",
+    painAfter: "شعورك بعد الجلسة",
+    effort: "جهدك",
+  },
+};
+
 export function buildPatientProgressChartSeries(
   points: PatientShoulderProgressPoint[],
+  lang: PatientPortalLanguage = "en",
 ): ProgressChartSeries[] {
+  const labels = PATIENT_PROGRESS_CHART_LABELS[lang];
   const series: ProgressChartSeries[] = [
     {
       id: "sessions-completed",
-      label: "Sessions completed",
+      label: labels.sessionsCompleted,
       values: points.map((_point, index) => index + 1),
       valueFormatter: (value) => String(Math.round(value)),
     },
@@ -227,7 +247,7 @@ export function buildPatientProgressChartSeries(
   if (pain.some((value) => value != null)) {
     series.push({
       id: "pain-after",
-      label: "How you felt after session",
+      label: labels.painAfter,
       values: pain,
       valueFormatter: (value) => `${Math.round(value)}/10`,
     });
@@ -237,7 +257,7 @@ export function buildPatientProgressChartSeries(
   if (effort.some((value) => value != null)) {
     series.push({
       id: "effort",
-      label: "Your effort",
+      label: labels.effort,
       values: effort,
       valueFormatter: (value) => `${Math.round(value)}/10`,
     });
@@ -252,5 +272,15 @@ export function toProgressChartPointLabels(
   return points.map((point) => ({
     sessionId: point.sessionId,
     sessionLabel: point.sessionLabel,
+  }));
+}
+
+export function toProgressChartDateLabels(
+  points: readonly Pick<PatientShoulderProgressPoint, "sessionId" | "completedAt">[],
+  lang: PatientPortalLanguage,
+): ProgressChartPointLabel[] {
+  return points.map((point) => ({
+    sessionId: point.sessionId,
+    sessionLabel: formatPortalChartDate(point.completedAt, lang),
   }));
 }
