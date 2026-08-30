@@ -10,6 +10,8 @@ export {
 
 export const PROGRESS_OVER_SESSIONS_TITLE = "Progress over sessions";
 export const PROGRESS_OVER_SESSIONS_REVIEW_NOTE = "For therapist review";
+export const PROGRESS_OVER_SESSIONS_SUMMARY_HELPER =
+  "Trend shown from recorded Interactive Shoulder sessions.";
 export const SINGLE_SESSION_CHART_EMPTY_STATE =
   "Progress charts will appear after more recorded sessions.";
 
@@ -51,6 +53,38 @@ export function sortInteractiveShoulderOutcomesChronologically(
   return [...outcomes].sort(
     (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
   );
+}
+
+export type InteractiveShoulderProgressSessionsSummary = {
+  recordedSessions: number;
+  latestSessionAt: string | null;
+  treatedSideLabel: string | null;
+};
+
+export function resolveProgressSessionsTreatedSideLabel(
+  outcomes: readonly InteractiveShoulderOutcomeReportEntry[],
+): string | null {
+  if (outcomes.length === 0) return null;
+
+  const sides = outcomes.map((outcome) => outcome.prescribedSide);
+  if (sides.every((side) => side === "left")) return "LEFT";
+  if (sides.every((side) => side === "right")) return "RIGHT";
+  if (sides.some((side) => side === "left" || side === "right")) return "—";
+
+  return null;
+}
+
+export function buildInteractiveShoulderProgressSessionsSummary(
+  outcomes: readonly InteractiveShoulderOutcomeReportEntry[],
+): InteractiveShoulderProgressSessionsSummary {
+  const chronological = sortInteractiveShoulderOutcomesChronologically([...outcomes]);
+  const latest = chronological[chronological.length - 1];
+
+  return {
+    recordedSessions: outcomes.length,
+    latestSessionAt: latest?.createdAt ?? null,
+    treatedSideLabel: resolveProgressSessionsTreatedSideLabel(outcomes),
+  };
 }
 
 export function buildPainTrendByPlanSessionId(

@@ -10,9 +10,12 @@ import type { InteractiveShoulderOutcomeBlockReport } from "@/app/lib/interactiv
 import type { InteractiveShoulderOutcomeReportEntry } from "@/app/lib/progress/progress-outcomes-bundle";
 import {
   buildClinicianProgressChartSeries,
+  buildInteractiveShoulderProgressSessionsSummary,
   buildInteractiveShoulderSessionChartPoints,
   buildPatientShoulderProgressPointsFromSessions,
   MIN_SESSIONS_FOR_PROGRESS_CHARTS,
+  PROGRESS_OVER_SESSIONS_SUMMARY_HELPER,
+  resolveProgressSessionsTreatedSideLabel,
   shouldShowInteractiveShoulderProgressCharts,
   SINGLE_SESSION_CHART_EMPTY_STATE,
 } from "./interactive-shoulder-progress-charts";
@@ -23,8 +26,12 @@ const PANEL_SOURCE = readFileSync(
   join(__dirname, "../../components/clinician/progress/InteractiveShoulderOutcomesPanel.tsx"),
   "utf8",
 );
-const PATIENT_SOURCE = readFileSync(
-  join(__dirname, "../../components/patient/progress/PatientProgressPortal.tsx"),
+const CLINICIAN_CHARTS_SOURCE = readFileSync(
+  join(__dirname, "../../components/clinician/progress/InteractiveShoulderClinicianProgressCharts.tsx"),
+  "utf8",
+);
+const SUMMARY_STRIP_SOURCE = readFileSync(
+  join(__dirname, "../../components/clinician/progress/InteractiveShoulderProgressSessionsSummaryStrip.tsx"),
   "utf8",
 );
 
@@ -72,12 +79,13 @@ function sessionEntry(
   blocks: InteractiveShoulderOutcomeBlockReport[] = [block()],
   planSessionId: string | null = null,
   planId = "plan-1",
+  prescribedSide: InteractiveShoulderOutcomeReportEntry["prescribedSide"] = "left",
 ): InteractiveShoulderOutcomeReportEntry {
   return {
     id,
     planSessionId,
     planId,
-    prescribedSide: "LEFT",
+    prescribedSide,
     totalElapsedSeconds: 300,
     blocksCompleted: blocks.length,
     blocksTotal: blocks.length,
@@ -173,6 +181,44 @@ describe("interactive-shoulder-progress-charts", () => {
   });
 });
 
+describe("interactive-shoulder progress sessions summary", () => {
+  it("builds summary from recorded outcomes without interpretation", () => {
+    const summary = buildInteractiveShoulderProgressSessionsSummary([
+      sessionEntry("s1", "2026-08-28T10:00:00.000Z", [block()], "ps-1", "plan-a", "left"),
+      sessionEntry("s2", "2026-08-30T10:00:00.000Z", [block()], "ps-2", "plan-b", "left"),
+    ]);
+
+    assert.equal(summary.recordedSessions, 2);
+    assert.equal(summary.latestSessionAt, "2026-08-30T10:00:00.000Z");
+    assert.equal(summary.treatedSideLabel, "LEFT");
+  });
+
+  it("shows em dash for mixed treated sides and omits when unavailable", () => {
+    assert.equal(
+      resolveProgressSessionsTreatedSideLabel([
+        sessionEntry("s1", "2026-08-28T10:00:00.000Z", [block()], "ps-1", "plan-a", "left"),
+        sessionEntry("s2", "2026-08-30T10:00:00.000Z", [block()], "ps-2", "plan-b", "right"),
+      ]),
+      "—",
+    );
+    assert.equal(
+      resolveProgressSessionsTreatedSideLabel([
+        sessionEntry("s1", "2026-08-28T10:00:00.000Z", [block()], "ps-1", "plan-a", null),
+      ]),
+      null,
+    );
+  });
+
+  it("renders compact summary strip above clinician charts", () => {
+    assert.ok(CLINICIAN_CHARTS_SOURCE.includes("InteractiveShoulderProgressSessionsSummaryStrip"));
+    assert.ok(SUMMARY_STRIP_SOURCE.includes("Recorded sessions:"));
+    assert.ok(SUMMARY_STRIP_SOURCE.includes("Latest session:"));
+    assert.ok(SUMMARY_STRIP_SOURCE.includes("PROGRESS_OVER_SESSIONS_SUMMARY_HELPER"));
+    assert.ok(!SUMMARY_STRIP_SOURCE.includes("improv"));
+    assert.ok(!SUMMARY_STRIP_SOURCE.includes("diagnos"));
+  });
+});
+
 describe("technical observations visibility", () => {
   it("hides technical observations when no persisted cycles exist", () => {
     assert.equal(hasTechnicalObservationsForBlock(block()), false);
@@ -197,10 +243,14 @@ describe("progress chart UI wiring", () => {
   });
 
   it("shows patient charts without technical clinician-only series", () => {
-    assert.ok(PATIENT_SOURCE.includes("InteractiveShoulderPatientProgressCharts"));
-    assert.ok(PATIENT_SOURCE.includes("token={token}"));
-    assert.ok(!PATIENT_SOURCE.includes("Compensation signal"));
-    assert.ok(!PATIENT_SOURCE.includes("2D camera angle"));
-    assert.ok(!PATIENT_SOURCE.includes("Technical observations"));
+    const patientSource = readFileSync(
+      join(__dirname, "../../components/patient/progress/PatientProgressPortal.tsx"),
+      "utf8",
+    );
+    assert.ok(patientSource.includes("InteractiveShoulderPatientProgressCharts"));
+    assert.ok(patientSource.includes("token={token}"));
+    assert.ok(!patientSource.includes("Compensation signal"));
+    assert.ok(!patientSource.includes("2D camera angle"));
+    assert.ok(!patientSource.includes("Technical observations"));
   });
 });
