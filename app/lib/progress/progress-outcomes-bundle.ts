@@ -55,6 +55,7 @@ export type ProgressOutcomesAdherence = {
 export type ProgressOutcomesPainPoint = {
   sessionLogId: string;
   sessionNumber: number | null;
+  planSessionId: string | null;
   completedAt: string;
   painBefore: number | null;
   painAfter: number | null;
@@ -112,6 +113,10 @@ export type ProgressOutcomesBundle = {
   cvEvidence: ProgressOutcomesCvEvidenceEntry[];
   captureQualityHistory: CaptureQualityHistoryEntry[];
   interactiveShoulderOutcomes: InteractiveShoulderOutcomeReportEntry[];
+  /** Cross-plan Interactive Shoulder outcomes for longitudinal charts only. */
+  interactiveShoulderChartOutcomes: InteractiveShoulderOutcomeReportEntry[];
+  /** Patient-reported pain/effort joined across plans for longitudinal charts only. */
+  interactiveShoulderChartPainTrend: ProgressOutcomesPainPoint[];
 };
 
 export type SessionLogInput = {
@@ -152,6 +157,7 @@ export function buildPainTrendFromSessionLogs(
         sessionNumber: log.plan_session_id
           ? sessionNumberById.get(log.plan_session_id) ?? null
           : null,
+        planSessionId: log.plan_session_id,
         completedAt: log.completed_at,
         painBefore: coach.painBefore,
         painAfter: log.pain_score,
@@ -214,6 +220,9 @@ export function buildProgressOutcomesBundle(input: {
   assessmentRows: AssessmentPickInput[];
   cvMetricRows: CvMetricInput[];
   interactiveShoulderOutcomeRows: InteractiveShoulderOutcomeReportRow[];
+  interactiveShoulderChartOutcomeRows: InteractiveShoulderOutcomeReportRow[];
+  interactiveShoulderChartSessionLogs: SessionLogInput[];
+  interactiveShoulderChartSessionNumberById: Map<string, number>;
 }): ProgressOutcomesBundle {
   const adherence =
     input.planId && input.totalSessions > 0
@@ -250,6 +259,13 @@ export function buildProgressOutcomesBundle(input: {
     captureQualityHistory: buildCaptureQualityHistory(input.cvMetricRows),
     interactiveShoulderOutcomes: buildInteractiveShoulderOutcomeReportEntries(
       input.interactiveShoulderOutcomeRows,
+    ),
+    interactiveShoulderChartOutcomes: buildInteractiveShoulderOutcomeReportEntries(
+      input.interactiveShoulderChartOutcomeRows,
+    ),
+    interactiveShoulderChartPainTrend: buildPainTrendFromSessionLogs(
+      input.interactiveShoulderChartSessionLogs,
+      input.interactiveShoulderChartSessionNumberById,
     ),
   };
 }

@@ -98,11 +98,18 @@ import { SessionOrchestrator } from "@/app/lib/session-orchestrator/session-orch
 import type { SessionOrchestratorSnapshot } from "@/app/lib/session-orchestrator/types";
 import { ShoulderSessionHud } from "./ShoulderSessionHud";
 import { InstructionalBlockLayer } from "./InstructionalBlockLayer";
+import { CoolDownMotionGuide } from "./CoolDownMotionGuide";
+import { isCoolDownBlock } from "@/app/lib/interactive-shoulder/resolve-block-display-copy";
+import type { InteractiveShoulderSoundCue } from "@/app/lib/interactive-shoulder/interactive-shoulder-sounds";
 import { ShoulderTargetLayer } from "./ShoulderTargetLayer";
 import { TrackedHandCursor } from "./TrackedHandCursor";
 import { TherapeuticPathLayer } from "./TherapeuticPathLayer";
 import { ReachTheLightEnvironment } from "./ReachTheLightEnvironment";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
+import { ReadyCountdownOverlay } from "./ReadyCountdownOverlay";
+import { SessionCompleteOverlay } from "./SessionCompleteOverlay";
+import { TargetSuccessPulse } from "./TargetSuccessPulse";
+import { createInteractiveShoulderSoundPlayer } from "@/app/lib/interactive-shoulder/interactive-shoulder-sounds";
 
 registerAllBlockRunners();
 
@@ -168,7 +175,7 @@ function PreviewStack({
   return (
     <div
       ref={containerRef}
-      className="relative mt-3 w-full overflow-hidden rounded-[12px] border border-[#1E2D42]/50 bg-[#0A0F1A] shadow-[0_8px_28px_rgba(10,15,26,0.18)]"
+      className="relative w-full overflow-hidden rounded-[12px] border border-[#1E2D42]/50 bg-[#0A0F1A] shadow-[0_8px_28px_rgba(10,15,26,0.18)]"
       style={{ aspectRatio: `${canvasWidth} / ${canvasHeight}` }}
       onMouseMove={onDevMouseMove}
       aria-label={previewAriaLabel}
@@ -238,6 +245,9 @@ export function OrchestratorCvSessionCore({
   const activeBlockIdRef = useRef<string | null>(null);
   const rafRef = useRef<number>(0);
   const sessionStartedRef = useRef(false);
+  /** Read at error time so `startSession` stays locale-independent (#286). */
+  const languageRef = useRef(language);
+  languageRef.current = language;
   const sessionCompleteFiredRef = useRef(false);
   const runtimeFaultRef = useRef<OrchestratorCvRuntimeFault | null>(null);
   const faultPauseAppliedRef = useRef(false);
@@ -288,6 +298,37 @@ export function OrchestratorCvSessionCore({
   const [hitBurstTarget, setHitBurstTarget] = useState<TherapeuticTarget | null>(null);
   const [hitBurstProgress, setHitBurstProgress] = useState<number | null>(null);
   const hitFeedbackTimeoutRef = useRef<number | null>(null);
+  const soundPlayerRef = useRef(createInteractiveShoulderSoundPlayer(prefersReducedMotion));
+  const previousBlockIdForSoundRef = useRef<string | null>(null);
+
+  const [countdownActive, setCountdownActive] = useState(false);
+  const [soundMuted, setSoundMuted] = useState(() => soundPlayerRef.current.isMuted());
+
+  useEffect(() => {
+    soundPlayerRef.current = createInteractiveShoulderSoundPlayer(prefersReducedMotion);
+  }, [prefersReducedMotion]);
+
+  const handleSoundToggle = useCallback(() => {
+    const muted = soundPlayerRef.current.toggleMuted();
+    setSoundMuted(muted);
+  }, []);
+
+  const handlePlaySound = useCallback((cue: InteractiveShoulderSoundCue) => {
+    soundPlayerRef.current.play(cue);
+  }, []);
+
+  const handleCountdownComplete = useCallback(() => {
+    const orchestrator = orchestratorRef.current;
+    if (orchestrator) {
+      orchestrator.resume(performance.now());
+    }
+    soundPlayerRef.current.play("sessionStart");
+    setCountdownActive(false);
+  }, []);
+
+  const handleCountdownTick = useCallback(() => {
+    soundPlayerRef.current.play("countdown");
+  }, []);
 
   const clearHitFeedback = useCallback(() => {
     if (hitFeedbackTimeoutRef.current !== null) {
@@ -383,6 +424,7 @@ export function OrchestratorCvSessionCore({
   }, []);
 
   const startSession = useCallback(async () => {
+    if (sessionStartedRef.current) return;
     const detector = detectorRef.current;
     const video = videoRef.current;
     const canvas = canvasRef.current;
@@ -399,6 +441,9 @@ export function OrchestratorCvSessionCore({
       orchestrator.start(now);
       orchestrator.beginCalibration(now);
       orchestrator.completeCalibration(now);
+      orchestrator.pause(now);
+      setCountdownActive(true);
+      previousBlockIdForSoundRef.current = null;
       sessionStartedRef.current = true;
       sessionCompleteFiredRef.current = false;
       // SESSION BOUNDARY for adaptation. `startSession` is the only place a session
@@ -425,11 +470,11 @@ export function OrchestratorCvSessionCore({
       activeBlockIdRef.current = null;
       setOrchestratorSnapshot(orchestrator.getSnapshot(now));
     } catch (error) {
-      setStartError(resolveInteractiveShoulderStartError(language, error));
+      setStartError(resolveInteractiveShoulderStartError(languageRef.current, error));
     } finally {
       setStarting(false);
     }
-  }, [profile, language, sessionDefinition]);
+  }, [profile, sessionDefinition]);
 
   const therapeuticSideKey = resolvedTherapeuticSide?.side ?? null;
 
@@ -453,6 +498,7 @@ export function OrchestratorCvSessionCore({
     );
     detectorRef.current = detector;
     return () => {
+      sessionStartedRef.current = false;
       disposeOrchestratorCvDetector(detector);
       detectorRef.current = null;
       cancelAnimationFrame(rafRef.current);
@@ -506,6 +552,7 @@ export function OrchestratorCvSessionCore({
           });
           if (shouldFireSessionCompleteCallback(snap.sessionState, sessionCompleteFiredRef.current)) {
             sessionCompleteFiredRef.current = true;
+            soundPlayerRef.current.play("sessionComplete");
             // Forwards the same local `snap` this tick already computed — no
             // new state, no new effect dependency, no change to camera-start
             // or detector mount/dispose lifecycle. See orchestrator-cv-session-types.ts.
@@ -529,6 +576,10 @@ export function OrchestratorCvSessionCore({
           activeBlockIdRef.current !== currentBlockId &&
           currentBlock
         ) {
+          if (activeBlockIdRef.current !== null) {
+            soundPlayerRef.current.play("blockComplete");
+          }
+          previousBlockIdForSoundRef.current = activeBlockIdRef.current;
           activeBlockIdRef.current = currentBlockId;
           clearHitFeedback();
           setPresentationProgress(null);
@@ -647,7 +698,8 @@ export function OrchestratorCvSessionCore({
               if (burstTarget) {
                 setHitBurstTarget(burstTarget);
               }
-              setTargetHitAnnouncement(ui.targetReached);
+              soundPlayerRef.current.play("targetHit");
+              setTargetHitAnnouncement(ui.goodReachFeedback);
               if (hitFeedbackTimeoutRef.current !== null) {
                 window.clearTimeout(hitFeedbackTimeoutRef.current);
               }
@@ -663,6 +715,7 @@ export function OrchestratorCvSessionCore({
                 now,
               );
               setHitBurstProgress(dispatch.states.pattern?.exitingProgress ?? null);
+              soundPlayerRef.current.play("repetition");
               setTargetHitAnnouncement(ui.patternPathComplete);
               if (hitFeedbackTimeoutRef.current !== null) {
                 window.clearTimeout(hitFeedbackTimeoutRef.current);
@@ -757,7 +810,6 @@ export function OrchestratorCvSessionCore({
 
   const canvasWidth = profile.canvasWidth;
   const canvasHeight = profile.canvasHeight;
-  const measuredReps = snapshot?.primaryRepCount ?? 0;
   const hudSnapshot =
     orchestratorSnapshot ??
     ({
@@ -778,6 +830,12 @@ export function OrchestratorCvSessionCore({
     ? resolveInteractiveShoulderRuntimeFaultMessage(language, runtimeFault)
     : null;
   const controlsLocked = Boolean(runtimeFault);
+  const showLiveStatusRail =
+    !showBlockSummary &&
+    !countdownActive &&
+    (isInstructionalBlock || isMovementPatternBlock || isMovementTargetBlock);
+  const isCoolDownInstructional =
+    isInstructionalBlock && isCoolDownBlock(hudSnapshot.currentBlock?.blockId);
 
   return (
     <div className="px-4 pb-4 pt-3" dir={textDir} lang={language}>
@@ -798,7 +856,11 @@ export function OrchestratorCvSessionCore({
             >
               {ui.continueCamera}
             </button>
-            <button type="button" className="rounded-[8px] border border-[#E2E8E5] px-4 py-2 text-sm" onClick={onSkipped}>
+            <button
+              type="button"
+              className="rounded-[8px] border border-[#CBD5E1] bg-white px-4 py-2 text-sm font-medium text-[#374151] shadow-sm transition hover:border-[#94A3B8] hover:bg-[#F8FAFC] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D9E75]"
+              onClick={onSkipped}
+            >
               {ui.skipCamera}
             </button>
           </div>
@@ -815,36 +877,126 @@ export function OrchestratorCvSessionCore({
               {ui.devMouseSimulation}
             </p>
           )}
-          <PreviewStack
-            videoRef={videoRef}
-            canvasRef={canvasRef}
-            containerRef={containerRef}
-            canvasWidth={canvasWidth}
-            canvasHeight={canvasHeight}
-            previewAriaLabel={ui.cameraPreviewAriaLabel}
-            onDevMouseMove={handleDevMouseMove}
-            overlay={
-              <>
-                <ReachTheLightEnvironment reducedMotion={prefersReducedMotion} />
-                {showBlockSummary ? (
-                  <ShoulderSessionHud
-                    language={language}
-                    arClass={arClass}
-                    snapshot={hudSnapshot}
-                    feedbackMode={resolvedHudFeedbackMode}
-                    targetInteraction={targetState.interaction}
-                    patternInteraction={patternState?.interaction ?? createEmptyPatternInteractionMetrics()}
-                    measuredReps={measuredReps}
-                    onPause={handlePause}
-                    onResume={handleResume}
-                    showBlockSummary={showBlockSummary}
-                    blockSummaryTargetsReached={summaryMetrics.targets}
-                    blockSummaryPatternsCompleted={summaryMetrics.patterns}
-                    blockSummaryMeasuredReps={summaryMetrics.reps}
-                    blockSummaryDurationSeconds={summaryMetrics.durationSeconds}
-                    targetHitAnnouncement={targetHitAnnouncement}
-                  />
-                ) : isInstructionalBlock ? (
+          <div className="mt-3 flex flex-col gap-5 lg:flex-row lg:items-start lg:gap-6">
+            <div className="w-full min-w-0 lg:w-[78%] lg:flex-none">
+              <PreviewStack
+                videoRef={videoRef}
+                canvasRef={canvasRef}
+                containerRef={containerRef}
+                canvasWidth={canvasWidth}
+                canvasHeight={canvasHeight}
+                previewAriaLabel={ui.cameraPreviewAriaLabel}
+                onDevMouseMove={handleDevMouseMove}
+                overlay={
+                  <>
+                    <ReachTheLightEnvironment reducedMotion={prefersReducedMotion} />
+                    {countdownActive ? (
+                      <ReadyCountdownOverlay
+                        language={language}
+                        arClass={arClass}
+                        reducedMotion={prefersReducedMotion}
+                        onTick={handleCountdownTick}
+                        onComplete={handleCountdownComplete}
+                      />
+                    ) : null}
+                    {showBlockSummary ? (
+                      <SessionCompleteOverlay
+                        language={language}
+                        arClass={arClass}
+                        blocksCompleted={hudSnapshot.accumulatedBlockResults.length}
+                        durationSeconds={summaryMetrics.durationSeconds}
+                        targetsReached={summaryMetrics.targets}
+                        patternsCompleted={summaryMetrics.patterns}
+                      />
+                    ) : isInstructionalBlock ? (
+                      <>
+                        {isCoolDownInstructional ? (
+                          <CoolDownMotionGuide
+                            reducedMotion={prefersReducedMotion}
+                            elapsedSeconds={hudSnapshot.blockElapsedSeconds}
+                          />
+                        ) : null}
+                        <InstructionalBlockLayer
+                          language={language}
+                          arClass={arClass}
+                          snapshot={hudSnapshot}
+                          presentationProgress={presentationProgress}
+                          onPause={handlePause}
+                          onResume={handleResume}
+                          controlsLocked={controlsLocked}
+                          soundMuted={soundMuted}
+                          onSoundToggle={handleSoundToggle}
+                          onPlaySound={handlePlaySound}
+                          placement="strip"
+                        />
+                      </>
+                    ) : (
+                      <>
+                        {isMovementPatternBlock && activeMotionPattern && patternState ? (
+                          <TherapeuticPathLayer
+                            pattern={activeMotionPattern}
+                            lifecycle={patternState}
+                            hitBurstProgress={hitBurstProgress}
+                            reducedMotion={prefersReducedMotion}
+                          />
+                        ) : isMovementTargetBlock ? (
+                          <ShoulderTargetLayer
+                            target={targetState.currentTarget}
+                            exitingTarget={targetState.exitingTarget}
+                            hitBurstTarget={hitBurstTarget}
+                            reducedMotion={prefersReducedMotion}
+                          />
+                        ) : null}
+                        {(isMovementPatternBlock || isMovementTargetBlock) && (
+                          <>
+                            <TrackedHandCursor
+                              wrist={
+                                mirroredCursorWrist ??
+                                (isDevMouseSimulationEnabled() ? devMouseRef.current : null)
+                              }
+                              visible={hudSnapshot.sessionState === "active" || hudSnapshot.sessionState === "safetyHold"}
+                              reducedMotion={prefersReducedMotion}
+                            />
+                            <ShoulderSessionHud
+                              language={language}
+                              arClass={arClass}
+                              snapshot={hudSnapshot}
+                              feedbackMode={resolvedHudFeedbackMode}
+                              targetInteraction={targetState.interaction}
+                              patternInteraction={patternState?.interaction ?? createEmptyPatternInteractionMetrics()}
+                              onPause={handlePause}
+                              onResume={handleResume}
+                              soundMuted={soundMuted}
+                              onSoundToggle={handleSoundToggle}
+                              targetHitAnnouncement={targetHitAnnouncement}
+                              placement="strip"
+                            />
+                            {targetHitAnnouncement ? (
+                              <TargetSuccessPulse message={targetHitAnnouncement} arClass={arClass} />
+                            ) : null}
+                          </>
+                        )}
+                        {runtimeFaultMessage ? (
+                          <div
+                            className="pointer-events-auto absolute inset-0 z-40 flex items-end justify-center bg-[#0A0F1A]/60 p-4"
+                            role="alert"
+                            aria-live="assertive"
+                          >
+                            <p className={`max-w-md rounded-[10px] border border-rose-300/40 bg-[#0F1825]/95 px-4 py-3 text-center text-[12px] text-rose-100 ${arClass}`}>
+                              <span className="font-semibold">{ui.runtimeFaultTitle}: </span>
+                              {runtimeFaultMessage}
+                            </p>
+                          </div>
+                        ) : null}
+                      </>
+                    )}
+                  </>
+                }
+              />
+            </div>
+            {showLiveStatusRail ? (
+              <div className="w-full lg:w-[22%] lg:flex-none">
+                {isInstructionalBlock ? (
                   <InstructionalBlockLayer
                     language={language}
                     arClass={arClass}
@@ -853,70 +1005,30 @@ export function OrchestratorCvSessionCore({
                     onPause={handlePause}
                     onResume={handleResume}
                     controlsLocked={controlsLocked}
+                    soundMuted={soundMuted}
+                    onSoundToggle={handleSoundToggle}
+                    onPlaySound={handlePlaySound}
+                    placement="rail"
                   />
                 ) : (
-                  <>
-                    {isMovementPatternBlock && activeMotionPattern && patternState ? (
-                      <TherapeuticPathLayer
-                        pattern={activeMotionPattern}
-                        lifecycle={patternState}
-                        hitBurstProgress={hitBurstProgress}
-                        reducedMotion={prefersReducedMotion}
-                      />
-                    ) : isMovementTargetBlock ? (
-                      <ShoulderTargetLayer
-                        target={targetState.currentTarget}
-                        exitingTarget={targetState.exitingTarget}
-                        hitBurstTarget={hitBurstTarget}
-                        reducedMotion={prefersReducedMotion}
-                      />
-                    ) : null}
-                    {(isMovementPatternBlock || isMovementTargetBlock) && (
-                      <>
-                        <TrackedHandCursor
-                          wrist={
-                            mirroredCursorWrist ??
-                            (isDevMouseSimulationEnabled() ? devMouseRef.current : null)
-                          }
-                          visible={hudSnapshot.sessionState === "active" || hudSnapshot.sessionState === "safetyHold"}
-                          reducedMotion={prefersReducedMotion}
-                        />
-                        <ShoulderSessionHud
-                          language={language}
-                          arClass={arClass}
-                          snapshot={hudSnapshot}
-                          feedbackMode={resolvedHudFeedbackMode}
-                          targetInteraction={targetState.interaction}
-                          patternInteraction={patternState?.interaction ?? createEmptyPatternInteractionMetrics()}
-                          measuredReps={measuredReps}
-                          onPause={handlePause}
-                          onResume={handleResume}
-                          showBlockSummary={false}
-                          blockSummaryTargetsReached={summaryMetrics.targets}
-                          blockSummaryPatternsCompleted={summaryMetrics.patterns}
-                          blockSummaryMeasuredReps={summaryMetrics.reps}
-                          blockSummaryDurationSeconds={summaryMetrics.durationSeconds}
-                          targetHitAnnouncement={targetHitAnnouncement}
-                        />
-                      </>
-                    )}
-                    {runtimeFaultMessage ? (
-                      <div
-                        className="pointer-events-auto absolute inset-0 z-40 flex items-end justify-center bg-[#0A0F1A]/60 p-4"
-                        role="alert"
-                        aria-live="assertive"
-                      >
-                        <p className={`max-w-md rounded-[10px] border border-rose-300/40 bg-[#0F1825]/95 px-4 py-3 text-center text-[12px] text-rose-100 ${arClass}`}>
-                          <span className="font-semibold">{ui.runtimeFaultTitle}: </span>
-                          {runtimeFaultMessage}
-                        </p>
-                      </div>
-                    ) : null}
-                  </>
+                  <ShoulderSessionHud
+                    language={language}
+                    arClass={arClass}
+                    snapshot={hudSnapshot}
+                    feedbackMode={resolvedHudFeedbackMode}
+                    targetInteraction={targetState.interaction}
+                    patternInteraction={patternState?.interaction ?? createEmptyPatternInteractionMetrics()}
+                    onPause={handlePause}
+                    onResume={handleResume}
+                    soundMuted={soundMuted}
+                    onSoundToggle={handleSoundToggle}
+                    targetHitAnnouncement={targetHitAnnouncement}
+                    placement="rail"
+                  />
                 )}
-              </>
-            }
-          />
+              </div>
+            ) : null}
+          </div>
           {runtimeFaultMessage ? (
             <p
               className={`mt-2 rounded-[8px] border border-rose-200 bg-rose-50 px-3 py-2 text-[12px] text-rose-700 ${arClass}`}
