@@ -5,13 +5,13 @@ const COOL_DOWN_COACHING: Record<
   { start: string; middle: string; almostDone: string }
 > = {
   en: {
-    start: "Slow down your movement and relax your shoulder.",
-    middle: "Move gently and within a comfortable range.",
+    start: "Slowly lower your arm to a comfortable resting position.",
+    middle: "Relax your shoulder and take a calm breath.",
     almostDone: "Almost done.",
   },
   ar: {
-    start: "خفّف سرعة الحركة وأرخِ كتفك.",
-    middle: "تحرّك بهدوء وضمن مدى مريح.",
+    start: "اخفض ذراعك ببطء إلى وضع مريح.",
+    middle: "أرخِ كتفك وخذ نفسًا هادئًا.",
     almostDone: "أوشكت على الانتهاء.",
   },
 };

@@ -12,11 +12,11 @@ describe("resolveCoolDownCoachingMessage", () => {
   it("rotates Arabic cool-down coaching copy by remaining time", () => {
     assert.equal(
       resolveCoolDownCoachingMessage("ar", 80),
-      "خفّف سرعة الحركة وأرخِ كتفك.",
+      "اخفض ذراعك ببطء إلى وضع مريح.",
     );
     assert.equal(
       resolveCoolDownCoachingMessage("ar", 20),
-      "تحرّك بهدوء وضمن مدى مريح.",
+      "أرخِ كتفك وخذ نفسًا هادئًا.",
     );
     assert.equal(resolveCoolDownCoachingMessage("ar", 4), "أوشكت على الانتهاء.");
   });
@@ -24,11 +24,11 @@ describe("resolveCoolDownCoachingMessage", () => {
   it("rotates English cool-down coaching copy by remaining time", () => {
     assert.equal(
       resolveCoolDownCoachingMessage("en", 60),
-      "Slow down your movement and relax your shoulder.",
+      "Slowly lower your arm to a comfortable resting position.",
     );
     assert.equal(
       resolveCoolDownCoachingMessage("en", 15),
-      "Move gently and within a comfortable range.",
+      "Relax your shoulder and take a calm breath.",
     );
     assert.equal(resolveCoolDownCoachingMessage("en", 3), "Almost done.");
   });
