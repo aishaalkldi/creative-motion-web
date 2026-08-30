@@ -256,3 +256,9 @@ export function buildTechnicalObservationMetrics(
     },
   ];
 }
+
+export function hasTechnicalObservationsForBlock(
+  block: InteractiveShoulderOutcomeBlockReport,
+): boolean {
+  return buildTechnicalObservationMetrics(block).length > 0;
+}

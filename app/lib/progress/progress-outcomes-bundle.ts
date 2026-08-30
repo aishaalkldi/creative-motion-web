@@ -55,6 +55,7 @@ export type ProgressOutcomesAdherence = {
 export type ProgressOutcomesPainPoint = {
   sessionLogId: string;
   sessionNumber: number | null;
+  planSessionId: string | null;
   completedAt: string;
   painBefore: number | null;
   painAfter: number | null;
@@ -152,6 +153,7 @@ export function buildPainTrendFromSessionLogs(
         sessionNumber: log.plan_session_id
           ? sessionNumberById.get(log.plan_session_id) ?? null
           : null,
+        planSessionId: log.plan_session_id,
         completedAt: log.completed_at,
         painBefore: coach.painBefore,
         painAfter: log.pain_score,

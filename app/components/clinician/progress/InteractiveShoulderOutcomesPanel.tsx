@@ -2,6 +2,8 @@
 
 import { formatCvDuration, formatCvRecordedAt } from "@/app/lib/cv/cv-metrics-display";
 import { formatPrescribedSideForReview } from "@/app/lib/clinical/clinical-prescribed-side-plan-draft";
+import { InteractiveShoulderClinicianProgressCharts } from "@/app/components/clinician/progress/InteractiveShoulderClinicianProgressCharts";
+import type { ProgressOutcomesPainPoint } from "@/app/lib/progress/progress-outcomes-bundle";
 import {
   describeRecordedBlockResults,
 } from "@/app/lib/progress/progress-outcomes-bundle";
@@ -14,6 +16,7 @@ import {
   buildBlockDetailsMetrics,
   buildTechnicalObservationMetrics,
   formatRecordedBlockDuration,
+  hasTechnicalObservationsForBlock,
   isInstructionalPhaseBlock,
   RECORDED_BLOCK_DETAILS_COMPENSATION_FOOTNOTE,
   RECORDED_BLOCK_DETAILS_CTA,
@@ -42,6 +45,7 @@ import {
 
 type InteractiveShoulderOutcomesPanelProps = {
   outcomes: InteractiveShoulderOutcomeReportEntry[];
+  painTrend?: ProgressOutcomesPainPoint[];
 };
 
 const CATEGORY_FALLBACK_LABELS: Record<InteractiveShoulderOutcomeBlockDisplayCategory, string> = {
@@ -279,7 +283,9 @@ function RecordedBlockDetailRow({
           <CompactDetailMetric key={`${block.blockId}-${metric.label}`} metric={metric} />
         ))}
       </div>
-      <TechnicalObservationsSubsection block={block} />
+      {hasTechnicalObservationsForBlock(block) ? (
+        <TechnicalObservationsSubsection block={block} />
+      ) : null}
     </div>
   );
 }
@@ -371,9 +377,13 @@ function OutcomeEntryCard({ entry }: { entry: InteractiveShoulderOutcomeReportEn
   );
 }
 
-export function InteractiveShoulderOutcomesPanel({ outcomes }: InteractiveShoulderOutcomesPanelProps) {
+export function InteractiveShoulderOutcomesPanel({
+  outcomes,
+  painTrend = [],
+}: InteractiveShoulderOutcomesPanelProps) {
   return (
     <div className="space-y-4">
+      <InteractiveShoulderClinicianProgressCharts outcomes={outcomes} painTrend={painTrend} />
       {outcomes.map((entry) => (
         <OutcomeEntryCard key={entry.id} entry={entry} />
       ))}

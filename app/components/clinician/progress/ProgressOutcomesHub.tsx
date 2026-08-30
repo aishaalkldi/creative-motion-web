@@ -359,7 +359,10 @@ export function ProgressOutcomesHub({ bundle }: ProgressOutcomesHubProps) {
         {bundle.interactiveShoulderOutcomes.length === 0 ? (
           <EmptyState message="No Interactive Shoulder movement outcomes recorded yet. A record appears here after the patient completes an Interactive Shoulder session." />
         ) : (
-          <InteractiveShoulderOutcomesPanel outcomes={bundle.interactiveShoulderOutcomes} />
+          <InteractiveShoulderOutcomesPanel
+            outcomes={bundle.interactiveShoulderOutcomes}
+            painTrend={bundle.painTrend}
+          />
         )}
       </SectionShell>
 
