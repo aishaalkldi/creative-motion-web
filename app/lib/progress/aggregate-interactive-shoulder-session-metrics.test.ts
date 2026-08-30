@@ -132,20 +132,20 @@ describe("aggregateInteractiveShoulderSessionMetrics", () => {
 
 describe("InteractiveShoulderOutcomesPanel session summary", () => {
   it("does not render movement speed, tracking confidence, or response consistency at session level", () => {
-    const performanceStart = PANEL_SOURCE.indexOf("<SectionHeading>Performance / quality</SectionHeading>");
-    assert.ok(performanceStart >= 0, "expected Performance / quality section");
-    const performanceSection = PANEL_SOURCE.slice(
-      performanceStart,
-      PANEL_SOURCE.indexOf("trackingLimitations.length > 0", performanceStart),
-    );
-    assert.ok(!performanceSection.includes("metrics.movementSpeed"));
-    assert.ok(!performanceSection.includes("metrics.trackingConfidence"));
-    assert.ok(!performanceSection.includes("metrics.responseConsistency"));
-    assert.ok(performanceSection.includes("metrics.averageReactionMs"));
-    assert.ok(performanceSection.includes("metrics.compensationEvents"));
-    assert.ok(performanceSection.includes("COMPENSATION_SIGNAL_LABEL"));
+    const motionStart = PANEL_SOURCE.indexOf("function MotionAnalysisSection");
+    const detailedStart = PANEL_SOURCE.indexOf("<SectionHeading>Detailed block data</SectionHeading>");
+    assert.ok(motionStart >= 0, "expected MotionAnalysisSection");
+    assert.ok(detailedStart > motionStart, "expected Detailed block data section");
+    const motionSection = PANEL_SOURCE.slice(motionStart, detailedStart);
+    assert.ok(!motionSection.includes("metrics.movementSpeed"));
+    assert.ok(!motionSection.includes("metrics.trackingConfidence"));
+    assert.ok(!motionSection.includes("metrics.responseConsistency"));
+    assert.ok(motionSection.includes("buildSessionMotionSnapshot"));
+    assert.ok(motionSection.includes("buildRecordedSessionObservation"));
+    assert.ok(motionSection.includes("COMPENSATION_SIGNAL_LABEL"));
     assert.ok(!PANEL_SOURCE.includes('label="Valid repetitions"') || PANEL_SOURCE.includes("isRepetitionDosedBlock"));
-    assert.ok(!PANEL_SOURCE.slice(0, PANEL_SOURCE.indexOf("<SectionHeading>Movement outcomes</SectionHeading>")).includes("metrics.validRepetitions"));
-    assert.ok(PANEL_SOURCE.includes("aggregateInteractiveShoulderSessionMetrics"));
+    const summaryStart = PANEL_SOURCE.indexOf("<SectionHeading>Session summary</SectionHeading>");
+    assert.ok(!PANEL_SOURCE.slice(summaryStart, detailedStart).includes("metrics.validRepetitions"));
+    assert.ok(PANEL_SOURCE.includes("buildSessionMotionSnapshot"));
   });
 });

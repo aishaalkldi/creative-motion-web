@@ -103,10 +103,10 @@ describe("interactive-shoulder-outcome-clinician-display", () => {
 describe("InteractiveShoulderOutcomesPanel clinician semantics", () => {
   it("does not show a session-wide valid repetition total", () => {
     const summaryStart = PANEL_SOURCE.indexOf("<SectionHeading>Session summary</SectionHeading>");
-    const movementStart = PANEL_SOURCE.indexOf("<SectionHeading>Movement outcomes</SectionHeading>");
+    const detailedStart = PANEL_SOURCE.indexOf("<SectionHeading>Detailed block data</SectionHeading>");
     assert.ok(summaryStart >= 0);
-    assert.ok(movementStart > summaryStart);
-    const sessionSummary = PANEL_SOURCE.slice(summaryStart, movementStart);
+    assert.ok(detailedStart > summaryStart);
+    const sessionSummary = PANEL_SOURCE.slice(summaryStart, detailedStart);
     assert.ok(!sessionSummary.includes(VALID_REPETITIONS_LABEL));
     assert.ok(!sessionSummary.includes("metrics.validRepetitions"));
   });
@@ -133,7 +133,9 @@ describe("InteractiveShoulderOutcomesPanel clinician semantics", () => {
   });
 
   it("hides empty reaction and ROM fields", () => {
-    assert.ok(PANEL_SOURCE.includes("avgReactionMs != null"));
+    assert.ok(PANEL_SOURCE.includes("avgResponseMs != null"));
     assert.ok(PANEL_SOURCE.includes("peakRomDegrees(block)"));
+    assert.ok(PANEL_SOURCE.includes("buildSessionMotionSnapshot"));
+    assert.ok(PANEL_SOURCE.includes("Detailed block data"));
   });
 });

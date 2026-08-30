@@ -13,7 +13,6 @@ import {
   describeRecordedBlockResults,
 } from "@/app/lib/progress/progress-outcomes-bundle";
 import type { MovementBlockCompletionReason } from "@/app/lib/session-orchestrator/types";
-import { aggregateInteractiveShoulderSessionMetrics } from "@/app/lib/progress/aggregate-interactive-shoulder-session-metrics";
 import {
   COMPENSATION_SIGNAL_CAVEAT,
   COMPENSATION_SIGNAL_LABEL,
@@ -26,6 +25,21 @@ import {
   peakRomDegrees,
   shouldShowDetectedReachReturnCycles,
 } from "@/app/lib/progress/interactive-shoulder-outcome-clinician-display";
+import {
+  AVG_TARGET_RESPONSE_TIME_LABEL,
+  MOTION_PROFILE_HEADING,
+  PEAK_MOVEMENT_ANGLE_LABEL,
+  PEAK_MOVEMENT_ANGLE_HELPER,
+  RECORDED_SESSION_OBSERVATION_HEADING,
+  averageTargetResponseTimeMs,
+  buildBlockMotionProfile,
+  buildRecordedSessionObservation,
+  buildSessionMotionSnapshot,
+  formatMovementAngleDegrees,
+  formatTargetResponseTimeSeconds,
+  hasMotionAnalysisContent,
+  isActiveExerciseBlock,
+} from "@/app/lib/progress/interactive-shoulder-motion-analysis";
 
 type InteractiveShoulderOutcomesPanelProps = {
   outcomes: InteractiveShoulderOutcomeReportEntry[];
@@ -66,12 +80,6 @@ function formatSecondsOrDash(value: number | null): string {
   return value != null ? `${value}s` : "—";
 }
 
-function averageTimingSampleMs(samples: number[]): number | null {
-  if (samples.length === 0) return null;
-  const total = samples.reduce((sum, value) => sum + value, 0);
-  return Math.round(total / samples.length);
-}
-
 function SectionHeading({ children }: { children: string }) {
   return (
     <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#5DCAA5]/85">{children}</p>
@@ -108,6 +116,98 @@ function Stat({
   );
 }
 
+function SnapshotMetric({
+  label,
+  value,
+  helper,
+}: {
+  label: string;
+  value: string;
+  helper?: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[9px] uppercase tracking-[0.12em] text-white/35">{label}</p>
+      <p className="mt-1 text-[20px] font-semibold leading-none tracking-tight text-[#F9FAFB]">{value}</p>
+      {helper ? (
+        <p className="mt-2 text-[9px] leading-relaxed text-white/35">{helper}</p>
+      ) : null}
+    </div>
+  );
+}
+
+function MotionAnalysisSection({ entry }: { entry: InteractiveShoulderOutcomeReportEntry }) {
+  if (!hasMotionAnalysisContent(entry)) return null;
+
+  const snapshot = buildSessionMotionSnapshot(entry);
+  const observation = buildRecordedSessionObservation(entry);
+  const profiles = entry.blocks
+    .filter(isActiveExerciseBlock)
+    .map((block) => ({ block, lines: buildBlockMotionProfile(block) }))
+    .filter((profile) => profile.lines.length > 0);
+
+  return (
+    <div className="mb-5 overflow-hidden rounded-[10px] border border-[#1E2D42]/70 bg-[#080E18]">
+      <div className="border-b border-[#1E2D42]/60 px-5 py-4">
+        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#F9FAFB]">Motion analysis</p>
+        <p className="mt-1 text-[10px] text-white/40">For therapist review</p>
+      </div>
+
+      <div className="space-y-5 px-5 py-5">
+        {snapshot.length > 0 ? (
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {snapshot.map((metric) => (
+              <SnapshotMetric
+                key={metric.label}
+                label={metric.label}
+                value={metric.value}
+                helper={metric.helper}
+              />
+            ))}
+          </div>
+        ) : null}
+
+        {observation ? (
+          <div className="space-y-2 border-t border-[#1E2D42]/50 pt-5">
+            <SectionHeading>{RECORDED_SESSION_OBSERVATION_HEADING}</SectionHeading>
+            <p className="max-w-3xl text-[12px] leading-relaxed text-white/70">{observation}</p>
+          </div>
+        ) : null}
+
+        {profiles.length > 0 ? (
+          <div className="space-y-3 border-t border-[#1E2D42]/50 pt-5">
+            <SectionHeading>{MOTION_PROFILE_HEADING}</SectionHeading>
+            <div className="space-y-4">
+              {profiles.map(({ block, lines }) => (
+                <div key={block.blockId} className="min-w-0">
+                  <p className="text-[12px] font-semibold text-[#F9FAFB]">{formatBlockTitle(block)}</p>
+                  <ul className="mt-2 space-y-1">
+                    {lines.map((line) => (
+                      <li
+                        key={`${block.blockId}-${line.label}`}
+                        className={`flex flex-wrap items-baseline gap-x-2 text-[11px] ${
+                          line.secondary ? "text-white/40" : "text-white/65"
+                        }`}
+                      >
+                        <span className={line.secondary ? "text-white/30" : "text-white/45"}>
+                          {line.label}:
+                        </span>
+                        <span className={line.secondary ? "font-normal" : "font-medium text-white/80"}>
+                          {line.value}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function InteractiveBlockCard({
   block,
   index,
@@ -117,8 +217,8 @@ function InteractiveBlockCard({
 }) {
   const repDosed = isRepetitionDosedBlock(block);
   const showDetectedCycles = shouldShowDetectedReachReturnCycles(block);
-  const avgReactionMs = averageTimingSampleMs(block.interaction.timingSamplesMs);
-  const romDegrees = peakRomDegrees(block);
+  const avgResponseMs = averageTargetResponseTimeMs(block.interaction.timingSamplesMs);
+  const peakAngle = peakRomDegrees(block);
 
   return (
     <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220]/50 p-4">
@@ -147,11 +247,18 @@ function InteractiveBlockCard({
           label="Participation time"
           value={formatSecondsOrDash(block.interaction.participationDurationSeconds)}
         />
-        {avgReactionMs != null ? (
-          <Stat label="Avg reaction time" value={`${avgReactionMs}ms`} />
+        {avgResponseMs != null ? (
+          <Stat
+            label={AVG_TARGET_RESPONSE_TIME_LABEL}
+            value={formatTargetResponseTimeSeconds(avgResponseMs)}
+          />
         ) : null}
-        {romDegrees != null ? (
-          <Stat label="Peak ROM (deg)" value={formatNumberOrDash(romDegrees)} />
+        {peakAngle != null ? (
+          <Stat
+            label={PEAK_MOVEMENT_ANGLE_LABEL}
+            value={formatMovementAngleDegrees(peakAngle)}
+            helper={PEAK_MOVEMENT_ANGLE_HELPER}
+          />
         ) : null}
         {repDosed ? (
           <Stat
@@ -159,6 +266,13 @@ function InteractiveBlockCard({
             value={formatNumberOrDash(
               block.measured.validRepetitions > 0 ? block.measured.validRepetitions : null,
             )}
+          />
+        ) : null}
+        {block.interpreted.compensationEvents > 0 ? (
+          <Stat
+            label={COMPENSATION_SIGNAL_LABEL}
+            value={formatNumberOrDash(block.interpreted.compensationEvents)}
+            helper={COMPENSATION_SIGNAL_CAVEAT}
           />
         ) : null}
       </div>
@@ -204,6 +318,8 @@ function UnknownCategoryBlockCard({
 }) {
   const repDosed = isRepetitionDosedBlock(block);
   const showDetectedCycles = shouldShowDetectedReachReturnCycles(block);
+  const avgResponseMs = averageTargetResponseTimeMs(block.interaction.timingSamplesMs);
+  const peakAngle = peakRomDegrees(block);
 
   return (
     <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220]/50 p-4">
@@ -233,12 +349,32 @@ function UnknownCategoryBlockCard({
           label="Participation time"
           value={formatSecondsOrDash(block.interaction.participationDurationSeconds)}
         />
+        {avgResponseMs != null ? (
+          <Stat
+            label={AVG_TARGET_RESPONSE_TIME_LABEL}
+            value={formatTargetResponseTimeSeconds(avgResponseMs)}
+          />
+        ) : null}
+        {peakAngle != null ? (
+          <Stat
+            label={PEAK_MOVEMENT_ANGLE_LABEL}
+            value={formatMovementAngleDegrees(peakAngle)}
+            helper={PEAK_MOVEMENT_ANGLE_HELPER}
+          />
+        ) : null}
         {repDosed ? (
           <Stat
             label={VALID_REPETITIONS_LABEL}
             value={formatNumberOrDash(
               block.measured.validRepetitions > 0 ? block.measured.validRepetitions : null,
             )}
+          />
+        ) : null}
+        {block.interpreted.compensationEvents > 0 ? (
+          <Stat
+            label={COMPENSATION_SIGNAL_LABEL}
+            value={formatNumberOrDash(block.interpreted.compensationEvents)}
+            helper={COMPENSATION_SIGNAL_CAVEAT}
           />
         ) : null}
       </div>
@@ -273,14 +409,6 @@ function BlockReportCard({
 }
 
 function OutcomeEntryCard({ entry }: { entry: InteractiveShoulderOutcomeReportEntry }) {
-  const metrics = aggregateInteractiveShoulderSessionMetrics(entry);
-  const hasPerformanceMetrics =
-    metrics.targetsContacted > 0 ||
-    metrics.patternsCompleted > 0 ||
-    metrics.averageReactionMs != null ||
-    metrics.compensationEvents > 0 ||
-    metrics.trackingLimitations.length > 0;
-
   return (
     <div className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -314,9 +442,11 @@ function OutcomeEntryCard({ entry }: { entry: InteractiveShoulderOutcomeReportEn
         </p>
       ) : null}
 
+      <MotionAnalysisSection entry={entry} />
+
       {entry.blocks.length > 0 ? (
         <div className="space-y-3">
-          <SectionHeading>Movement outcomes</SectionHeading>
+          <SectionHeading>Detailed block data</SectionHeading>
           {entry.blocks.map((block, index) => (
             <BlockReportCard key={`${entry.id}-${block.blockId}-${index}`} block={block} index={index} />
           ))}
@@ -324,39 +454,6 @@ function OutcomeEntryCard({ entry }: { entry: InteractiveShoulderOutcomeReportEn
       ) : (
         <p className="text-[11px] text-white/45">No block-level movement data recorded for this session.</p>
       )}
-
-      {hasPerformanceMetrics ? (
-        <div className="mt-5 space-y-3">
-          <SectionHeading>Performance / quality</SectionHeading>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {metrics.targetsContacted > 0 ? (
-              <Stat
-                label={TARGET_INTERACTIONS_LABEL}
-                value={formatNumberOrDash(metrics.targetsContacted)}
-                helper={TARGET_INTERACTIONS_HELPER}
-              />
-            ) : null}
-            {metrics.patternsCompleted > 0 ? (
-              <Stat label="Patterns completed" value={formatNumberOrDash(metrics.patternsCompleted)} />
-            ) : null}
-            {metrics.averageReactionMs != null ? (
-              <Stat label="Avg reaction time" value={`${metrics.averageReactionMs}ms`} />
-            ) : null}
-            {metrics.compensationEvents > 0 ? (
-              <Stat
-                label={COMPENSATION_SIGNAL_LABEL}
-                value={formatNumberOrDash(metrics.compensationEvents)}
-                helper={COMPENSATION_SIGNAL_CAVEAT}
-              />
-            ) : null}
-          </div>
-          {metrics.trackingLimitations.length > 0 ? (
-            <p className="text-[10px] leading-relaxed text-white/45">
-              Tracking limitations noted: {metrics.trackingLimitations.join(", ")}
-            </p>
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }
