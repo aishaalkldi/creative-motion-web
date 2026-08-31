@@ -7,6 +7,7 @@ import type { PatientPlanData, PatientSession } from "@/app/api/patient/plan/rou
 import { STROKE_UPPER_LIMB_RECOVERY_FOUNDATION_SESSION_1 } from "@/app/lib/rehab-programs/stroke-upper-limb-recovery-foundation";
 import {
   resolvePatientHomeProgramTitle,
+  resolvePatientHomeRehabFocus,
   resolvePatientHomeSessionDisplay,
 } from "./resolve-patient-home-display";
 
@@ -68,6 +69,38 @@ describe("resolvePatientHomeProgramTitle", () => {
     assert.equal(title, "أساسيات تعافي الطرف العلوي");
     assert.ok(!title.includes("Upper Limb"));
   });
+
+  it("localizes generic rehab focus when Arabic UI is active", () => {
+    const title = resolvePatientHomeProgramTitle(
+      basePlan({
+        planTitle: "Rehabilitation Plan",
+        patientRehabFocus:
+          "Follow your plan exercises to safely return to your daily activities.",
+      }),
+      "ar",
+    );
+    assert.equal(
+      title,
+      "اتبع تمارين خطتك للعودة تدريجياً إلى نشاطك اليومي بأمان.",
+    );
+    assert.ok(!title.includes("Follow your plan"));
+  });
+});
+
+describe("resolvePatientHomeRehabFocus", () => {
+  it("returns Arabic generic focus when portal language is Arabic", () => {
+    const focus = resolvePatientHomeRehabFocus(
+      basePlan({
+        patientRehabFocus:
+          "Follow your plan exercises to safely return to your daily activities.",
+      }),
+      "ar",
+    );
+    assert.equal(
+      focus,
+      "اتبع تمارين خطتك للعودة تدريجياً إلى نشاطك اليومي بأمان.",
+    );
+  });
 });
 
 describe("resolvePatientHomeSessionDisplay", () => {
@@ -93,5 +126,24 @@ describe("resolvePatientHomeSessionDisplay", () => {
       "ar",
     );
     assert.match(display.title, /^الجلسة 1 —/);
+  });
+
+  it("uses Arabic rehab focus for session context when UI language is Arabic", () => {
+    const display = resolvePatientHomeSessionDisplay(
+      baseSession({
+        catalogSession: null,
+        title: "Strength and balance",
+      }),
+      basePlan({
+        patientRehabFocus:
+          "Follow your plan exercises to safely return to your daily activities.",
+      }),
+      "ar",
+    );
+    assert.equal(
+      display.context,
+      "اتبع تمارين خطتك للعودة تدريجياً إلى نشاطك اليومي بأمان.",
+    );
+    assert.ok(!display.context?.includes("Follow your plan"));
   });
 });

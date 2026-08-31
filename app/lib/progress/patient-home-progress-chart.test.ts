@@ -88,6 +88,18 @@ describe("patient home progress chart — wiring", () => {
     assert.match(HOME_SOURCE, /PatientHomeProgressChartPreview/);
   });
 
+  it("places the progress chart directly after quick stats", () => {
+    const statsIndex = HOME_SOURCE.indexOf("<QuickStatsGrid");
+    assert.ok(statsIndex >= 0);
+
+    const afterStats = HOME_SOURCE.slice(statsIndex);
+    const chartOffset = afterStats.indexOf("<PatientHomeProgressChartPreview");
+    const lifetimeOffset = afterStats.indexOf("<PatientLifetimeSummaryCard");
+
+    assert.ok(chartOffset >= 0);
+    assert.ok(lifetimeOffset > chartOffset);
+  });
+
   it("reuses the existing interactive shoulder progress hook and chart component", () => {
     assert.match(PREVIEW_SOURCE, /usePatientInteractiveShoulderProgress/);
     assert.match(PREVIEW_SOURCE, /ProgressSessionBarChart/);

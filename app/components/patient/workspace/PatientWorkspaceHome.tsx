@@ -33,6 +33,7 @@ type Props = {
 
 const CARD =
   "rounded-[16px] border border-[#E2E8E5] bg-white shadow-[0_1px_3px_rgba(10,15,26,0.04)]";
+const HOME_WIDTH = "mx-auto w-full max-w-2xl lg:max-w-3xl";
 
 export function PatientWorkspaceHome({
   plan,
@@ -59,7 +60,7 @@ export function PatientWorkspaceHome({
 
   if (preview.totalCount === 0) {
     return (
-      <div className={`mx-auto w-full max-w-2xl space-y-4 ${arClass}`} dir={textDir}>
+      <div className={`${HOME_WIDTH} space-y-4 ${arClass}`} dir={textDir}>
         <HeroEmpty
           homeTitle={homeTitle}
           greeting={`${getPortalGreeting(lang)}, ${firstName}`}
@@ -83,7 +84,7 @@ export function PatientWorkspaceHome({
   }
 
   return (
-    <div className={`mx-auto w-full max-w-2xl space-y-4 ${arClass}`} dir={textDir}>
+    <div className={`${HOME_WIDTH} space-y-4 ${arClass}`} dir={textDir}>
       <HeroSection
         homeTitle={homeTitle}
         greeting={ui.homeGreeting(firstName)}
@@ -150,6 +151,8 @@ export function PatientWorkspaceHome({
         ]}
       />
 
+      <PatientHomeProgressChartPreview token={token} lang={lang} />
+
       <PatientLifetimeSummaryCard
         summary={plan.lifetimeSummary}
         lang={lang}
@@ -162,8 +165,6 @@ export function PatientWorkspaceHome({
         subtitle={ui.weeklyActivitySubtitle}
         days={preview.weeklyActivity}
       />
-
-      <PatientHomeProgressChartPreview token={token} lang={lang} />
 
       <SectionCard
         title={ui.achievementsPreview}

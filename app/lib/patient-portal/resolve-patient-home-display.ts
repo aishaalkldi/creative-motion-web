@@ -1,10 +1,31 @@
 import type { PatientPlanData, PatientSession } from "@/app/api/patient/plan/route";
 import { resolveCatalogSessionDisplay } from "@/app/lib/interactive-shoulder/resolve-catalog-session-display";
+import { resolvePatientRehabFocus } from "@/app/lib/plan-program-metadata";
 import type { ProgramSessionEstimatedDurationMinutes } from "@/app/lib/rehab-programs/rehab-program-types";
 import {
   formatSessionDisplayTitle,
   type PatientPortalLanguage,
 } from "@/app/lib/patient-portal-ui";
+
+function planMetadataForRehabFocus(plan: PatientPlanData) {
+  return {
+    programTemplateId: plan.programTemplateId ?? undefined,
+    patientFriendlyGoal: plan.patientFriendlyGoal ?? undefined,
+    programGoal: plan.phaseGoal?.trim() || undefined,
+  };
+}
+
+/** UI-language rehab focus — avoids English API copy when Arabic portal is active. */
+export function resolvePatientHomeRehabFocus(
+  plan: PatientPlanData,
+  lang: PatientPortalLanguage,
+): string {
+  return resolvePatientRehabFocus(
+    planMetadataForRehabFocus(plan),
+    plan.phaseGoal,
+    lang,
+  );
+}
 
 /** Known catalog / template program titles for Arabic home display (presentation only). */
 const PATIENT_HOME_PROGRAM_TITLE_AR: Record<string, string> = {
@@ -40,8 +61,8 @@ export function resolvePatientHomeProgramTitle(
     return PATIENT_HOME_PROGRAM_TITLE_AR[catalogProgramId]!;
   }
 
-  const rehabFocus = plan.patientRehabFocus?.trim();
-  if (rehabFocus) return rehabFocus;
+  const localizedFocus = resolvePatientHomeRehabFocus(plan, lang).trim();
+  if (localizedFocus) return localizedFocus;
 
   return plan.planTitle?.trim() || plan.programName?.trim() || "";
 }
@@ -64,11 +85,17 @@ export function resolvePatientHomeSessionDisplay(
   lang: PatientPortalLanguage,
 ): PatientHomeSessionDisplay {
   const catalog = session.catalogSession;
+  const localizedRehabFocus = resolvePatientHomeRehabFocus(plan, lang);
+  const fallbackGoal =
+    lang === "ar"
+      ? localizedRehabFocus
+      : plan.patientFriendlyGoal?.trim() ?? plan.patientRehabFocus?.trim() ?? null;
+
   const localized = resolveCatalogSessionDisplay(
     lang,
     catalog?.id,
     session.title,
-    catalog?.goal ?? plan.patientFriendlyGoal ?? plan.patientRehabFocus,
+    catalog?.goal ?? fallbackGoal,
   );
 
   const title =
@@ -76,11 +103,7 @@ export function resolvePatientHomeSessionDisplay(
       ? localized.title
       : formatSessionDisplayTitle(session.sessionNumber, session.title, lang);
 
-  const context =
-    localized.goal ??
-    plan.patientFriendlyGoal?.trim() ??
-    plan.patientRehabFocus?.trim() ??
-    null;
+  const context = localized.goal ?? fallbackGoal;
 
   const durationLabel = catalog
     ? formatPatientSessionDurationLabel(catalog.estimatedDurationMinutes, lang)
