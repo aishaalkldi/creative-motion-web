@@ -311,6 +311,23 @@
   50% { transform: translate3d(-8px, -14px, 0); }
 }
 
+.rasq-ambient-node {
+  opacity: 0;
+  filter: url(#rasq-ambient-node-soft);
+}
+
+.rasq-ambient-node--teal {
+  fill: var(--rasq-teal, #1D9E75);
+}
+
+.rasq-ambient-node--mint {
+  fill: var(--rasq-mint, #5DCAA5);
+}
+
+.rasq-ambient-node--static {
+  opacity: 0.11;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rasq-stagger-item,
   .rasq-reveal,
@@ -358,6 +375,14 @@
 
   .rasq-ambient-zone--medium .rasq-ambient-line--mint {
     opacity: 0.03 !important;
+  }
+
+  .rasq-ambient-node:not(.rasq-ambient-node--static) {
+    display: none;
+  }
+
+  .rasq-ambient-node--static {
+    opacity: 0.09 !important;
   }
 
   .rasq-progress-sweep::after {

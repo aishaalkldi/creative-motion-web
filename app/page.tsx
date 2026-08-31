@@ -171,7 +171,74 @@ function Navbar() {
   );
 }
 
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const update = () => setReduced(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, []);
+  return reduced;
+}
+
+function AmbientTravelNode({
+  pathId,
+  duration,
+  begin = 0,
+  tone = "teal",
+  reducedMotion,
+  staticCx,
+  staticCy,
+}: {
+  pathId: string;
+  duration: number;
+  begin?: number;
+  tone?: "teal" | "mint";
+  reducedMotion: boolean;
+  staticCx: number;
+  staticCy: number;
+}) {
+  if (reducedMotion) {
+    return (
+      <circle
+        cx={staticCx}
+        cy={staticCy}
+        r="1.5"
+        className={`rasq-ambient-node rasq-ambient-node--static rasq-ambient-node--${tone}`}
+      />
+    );
+  }
+
+  return (
+    <circle r="1.5" className={`rasq-ambient-node rasq-ambient-node--${tone}`}>
+      <animateMotion
+        dur={`${duration}s`}
+        repeatCount="indefinite"
+        begin={`${begin}s`}
+        rotate="auto"
+        calcMode="spline"
+        keyTimes="0;0.5;1"
+        keySplines="0.42 0 0.2 1; 0.42 0 0.2 1"
+      >
+        <mpath href={`#${pathId}`} />
+      </animateMotion>
+      <animate
+        attributeName="opacity"
+        values="0;0.34;0.34;0"
+        keyTimes="0;0.1;0.9;1"
+        dur={`${duration}s`}
+        repeatCount="indefinite"
+        begin={`${begin}s`}
+      />
+    </circle>
+  );
+}
+
 function PageAmbientLines() {
+  const reducedMotion = usePrefersReducedMotion();
+
   return (
     <div className="rasq-page-ambient" aria-hidden="true">
       <svg
@@ -180,15 +247,45 @@ function PageAmbientLines() {
         preserveAspectRatio="xMidYMin slice"
         fill="none"
       >
+        <defs>
+          <filter id="rasq-ambient-node-soft" x="-100%" y="-100%" width="300%" height="300%">
+            <feGaussianBlur stdDeviation="0.45" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
+        </defs>
+
         {/* Hero — active linework */}
         <g className="rasq-ambient-flow rasq-ambient-flow--a">
           <path
+            id="rasq-ambient-path-hero-a"
             className="rasq-ambient-line"
             d="M-40 120 C 220 40, 420 260, 680 180 S 1180 60, 1520 220"
           />
           <path
+            id="rasq-ambient-path-hero-b"
             className="rasq-ambient-line rasq-ambient-line--mint"
             d="M120 420 C 360 320, 520 540, 780 460 S 1120 340, 1480 500"
+          />
+          <AmbientTravelNode
+            pathId="rasq-ambient-path-hero-a"
+            duration={14}
+            begin={0}
+            tone="teal"
+            reducedMotion={reducedMotion}
+            staticCx={680}
+            staticCy={180}
+          />
+          <AmbientTravelNode
+            pathId="rasq-ambient-path-hero-b"
+            duration={16}
+            begin={5}
+            tone="mint"
+            reducedMotion={reducedMotion}
+            staticCx={780}
+            staticCy={460}
           />
         </g>
         <g className="rasq-ambient-flow rasq-ambient-flow--b">
@@ -209,12 +306,22 @@ function PageAmbientLines() {
         {/* Guided rehabilitation — medium */}
         <g className="rasq-ambient-flow rasq-ambient-flow--d rasq-ambient-zone--medium">
           <path
+            id="rasq-ambient-path-guided-a"
             className="rasq-ambient-line"
             d="M-60 2100 C 180 1980, 420 2220, 700 2100 S 1140 1940, 1480 2080"
           />
           <path
             className="rasq-ambient-line rasq-ambient-line--mint"
             d="M200 2480 C 440 2360, 620 2580, 900 2460 S 1280 2300, 1520 2440"
+          />
+          <AmbientTravelNode
+            pathId="rasq-ambient-path-guided-a"
+            duration={12}
+            begin={2}
+            tone="teal"
+            reducedMotion={reducedMotion}
+            staticCx={700}
+            staticCy={2100}
           />
         </g>
 
@@ -229,12 +336,22 @@ function PageAmbientLines() {
         {/* Capabilities — lines return */}
         <g className="rasq-ambient-flow rasq-ambient-flow--f">
           <path
+            id="rasq-ambient-path-cap-a"
             className="rasq-ambient-line rasq-ambient-line--mint"
             d="M-40 3680 C 220 3560, 460 3800, 740 3680 S 1120 3520, 1500 3660"
           />
           <path
             className="rasq-ambient-line"
             d="M140 4040 C 380 3920, 560 4140, 820 4020 S 1180 3860, 1460 4000"
+          />
+          <AmbientTravelNode
+            pathId="rasq-ambient-path-cap-a"
+            duration={15}
+            begin={7}
+            tone="mint"
+            reducedMotion={reducedMotion}
+            staticCx={740}
+            staticCy={3680}
           />
         </g>
 
