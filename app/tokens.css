@@ -189,6 +189,94 @@
   to { transform: scale(1.025); }
 }
 
+/* Hero portrait — motion-tracking overlay loop (~4.5s) */
+.rasq-hero-portrait-drift {
+  animation: rasq-hero-portrait-drift 20s ease-in-out infinite alternate;
+  transform-origin: 42% 38%;
+}
+
+@keyframes rasq-hero-portrait-drift {
+  from { transform: scale(1); }
+  to { transform: scale(1.018); }
+}
+
+.rasq-hero-track-overlay {
+  mix-blend-mode: screen;
+}
+
+.rasq-hero-track-path {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  opacity: 0;
+  animation: rasq-hero-track-path 4.5s var(--rasq-ease-out) infinite;
+}
+
+@keyframes rasq-hero-track-path {
+  0% {
+    stroke-dashoffset: 100;
+    opacity: 0.72;
+  }
+  44% {
+    stroke-dashoffset: 0;
+    opacity: 0.78;
+  }
+  67% {
+    stroke-dashoffset: 0;
+    opacity: 0.78;
+  }
+  82% {
+    stroke-dashoffset: 0;
+    opacity: 0.28;
+  }
+  88% {
+    stroke-dashoffset: 100;
+    opacity: 0;
+  }
+  100% {
+    stroke-dashoffset: 100;
+    opacity: 0;
+  }
+}
+
+.rasq-hero-track-node {
+  opacity: 0;
+  transform-origin: center;
+  transform-box: fill-box;
+  animation-duration: 4.5s;
+  animation-timing-function: var(--rasq-ease-out);
+  animation-iteration-count: infinite;
+}
+
+.rasq-hero-track-node--shoulder {
+  animation-name: rasq-hero-track-node-shoulder;
+}
+
+.rasq-hero-track-node--elbow {
+  animation-name: rasq-hero-track-node-elbow;
+}
+
+.rasq-hero-track-node--hand {
+  animation-name: rasq-hero-track-node-hand;
+}
+
+@keyframes rasq-hero-track-node-shoulder {
+  0%, 4% { opacity: 0; transform: scale(0.85); }
+  7%, 13% { opacity: 0.88; transform: scale(1.08); }
+  18%, 100% { opacity: 0.58; transform: scale(1); }
+}
+
+@keyframes rasq-hero-track-node-elbow {
+  0%, 14% { opacity: 0; transform: scale(0.85); }
+  17%, 24% { opacity: 0.86; transform: scale(1.07); }
+  30%, 100% { opacity: 0.56; transform: scale(1); }
+}
+
+@keyframes rasq-hero-track-node-hand {
+  0%, 28% { opacity: 0; transform: scale(0.85); }
+  32%, 42% { opacity: 1; transform: scale(1.14); }
+  48%, 100% { opacity: 0.62; transform: scale(1); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rasq-stagger-item,
   .rasq-reveal,
@@ -199,11 +287,29 @@
   .rasq-connector,
   .rasq-preview-stack,
   .rasq-progress-sweep::after,
-  .rasq-photo-drift {
+  .rasq-photo-drift,
+  .rasq-hero-portrait-drift,
+  .rasq-hero-track-path,
+  .rasq-hero-track-node,
+  .rasq-hero-track-node--shoulder,
+  .rasq-hero-track-node--elbow,
+  .rasq-hero-track-node--hand {
     animation: none !important;
     transition: none !important;
     opacity: 1 !important;
     transform: none !important;
+  }
+
+  .rasq-hero-track-path {
+    stroke-dashoffset: 0 !important;
+    opacity: 0.52 !important;
+  }
+
+  .rasq-hero-track-node,
+  .rasq-hero-track-node--shoulder,
+  .rasq-hero-track-node--elbow,
+  .rasq-hero-track-node--hand {
+    opacity: 0.62 !important;
   }
 
   .rasq-progress-sweep::after {

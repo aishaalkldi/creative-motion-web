@@ -171,6 +171,60 @@ function Navbar() {
   );
 }
 
+function HeroTrackingOverlay() {
+  return (
+    <svg
+      className="rasq-hero-track-overlay pointer-events-none absolute inset-0 h-full w-full"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="xMidYMid slice"
+      aria-hidden="true"
+    >
+      <defs>
+        <filter id="rasq-hero-track-glow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="0.35" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+
+      <path
+        className="rasq-hero-track-path"
+        d="M 31 58 C 36 50, 39 44, 43 41 S 50 34, 56 30 S 64 24, 70 19"
+        pathLength={100}
+        fill="none"
+        stroke="var(--rasq-mint, #5DCAA5)"
+        strokeWidth="0.42"
+        strokeLinecap="round"
+        filter="url(#rasq-hero-track-glow)"
+      />
+
+      <circle
+        className="rasq-hero-track-node rasq-hero-track-node--shoulder"
+        cx="31"
+        cy="58"
+        r="1.15"
+        fill="var(--rasq-teal, #1D9E75)"
+      />
+      <circle
+        className="rasq-hero-track-node rasq-hero-track-node--elbow"
+        cx="43"
+        cy="41"
+        r="1.05"
+        fill="var(--rasq-mint, #5DCAA5)"
+      />
+      <circle
+        className="rasq-hero-track-node rasq-hero-track-node--hand"
+        cx="70"
+        cy="19"
+        r="1.25"
+        fill="var(--rasq-mint, #5DCAA5)"
+      />
+    </svg>
+  );
+}
+
 function HeroPreview() {
   return (
     <div className="relative mx-auto w-full max-w-[420px] lg:max-w-none">
@@ -185,14 +239,17 @@ function HeroPreview() {
           aria-hidden="true"
         >
           <div className="relative aspect-[4/5] w-full min-h-[320px] sm:min-h-[380px] lg:min-h-[440px]">
-            <Image
-              src="/images/futuristic_motion_tracking_portrait.png"
-              alt=""
-              fill
-              priority
-              sizes="(max-width: 1024px) 420px, 520px"
-              className="object-cover object-[42%_38%]"
-            />
+            <div className="rasq-hero-portrait-drift absolute inset-0">
+              <Image
+                src="/images/futuristic_motion_tracking_portrait.png"
+                alt=""
+                fill
+                priority
+                sizes="(max-width: 1024px) 420px, 520px"
+                className="object-cover object-[42%_38%]"
+              />
+            </div>
+            <HeroTrackingOverlay />
             <div
               className="pointer-events-none absolute inset-0 rounded-[var(--rasq-r-lg)]"
               style={{
