@@ -7,6 +7,7 @@ import { PatientSafetyNotice } from "@/app/components/patient/PatientSafetyNotic
 import { TrustFooter } from "@/app/components/trust/TrustFooter";
 import { PatientWorkspaceNav } from "@/app/components/patient/workspace/PatientWorkspaceNav";
 import { tokenLayoutUi, trustFooterUi } from "@/app/lib/patient-portal-ui";
+import { patientPortalArabicClass } from "@/app/lib/rasq-typography";
 
 export default function PatientTokenLayout({ children }: { children: React.ReactNode }) {
   const params = useParams();
@@ -20,27 +21,18 @@ export default function PatientTokenLayout({ children }: { children: React.React
 }
 
 function PatientTokenLayoutShell({ children }: { children: React.ReactNode }) {
-  const { language, assignedBy, textDir, arClass, isArabic } = usePatientLanguage();
+  const { language, assignedBy, textDir, isArabic } = usePatientLanguage();
   const layoutUi = tokenLayoutUi(language);
-  const readableArabicClass = isArabic ? "patient-arabic-readable" : "";
+  const portalFontClass = patientPortalArabicClass(isArabic);
 
   return (
     <div
-      className={`min-h-screen bg-[#EEF2F0] ${arClass} ${readableArabicClass}`}
+      className={`min-h-screen bg-[#EEF2F0] ${portalFontClass}`}
       dir={textDir}
       lang={language}
-      style={{ fontFamily: "var(--font-inter, ui-sans-serif, sans-serif)" }}
     >
       <nav className="sticky top-0 z-10 flex h-[52px] items-center justify-between border-b border-[#E2E8E5] bg-white px-5">
-        <span
-          className="text-[14px] font-bold text-[#0A0F1A]"
-          style={{
-            fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)",
-            letterSpacing: "2px",
-          }}
-        >
-          RASQ
-        </span>
+        <span className="rasq-wordmark text-[14px] text-[#0A0F1A]">RASQ</span>
         <div className="flex items-center gap-3">
           <PatientLanguageToggle />
           {assignedBy && (

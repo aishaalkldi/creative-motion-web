@@ -34,7 +34,8 @@ describe("patient UI professional polish — Arabic readability", () => {
     const layout = read("app/patient/[token]/layout.tsx");
     const globals = read("app/globals.css");
 
-    assert.match(layout, /patient-arabic-readable/);
+    assert.match(layout, /patientPortalArabicClass/);
+    assert.match(globals, /\.patient-arabic-readable\s*\{[^}]*font-family:\s*var\(--font-ui-ar\)/);
     assert.match(globals, /\.patient-arabic-readable\s*\{[^}]*line-height:\s*1\.78/);
     assert.match(globals, /letter-spacing:\s*0/);
     assert.doesNotMatch(globals, /Arslan Wessam/);

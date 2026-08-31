@@ -74,8 +74,7 @@ function DoseTile({
         {label}
       </p>
       <p
-        className="mt-0.5 text-[15px] font-bold text-[#0A0F1A]"
-        style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+        className="font-data mt-0.5 text-[15px] font-bold text-[#0A0F1A]"
       >
         {value}
       </p>
@@ -232,12 +231,7 @@ export function PatientExerciseSessionCard({
 
         <div className="space-y-4 p-5">
           <div>
-            <h2
-              className={`text-[18px] font-bold text-[#0A0F1A] ${arClass}`}
-              style={{
-                fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)",
-              }}
-            >
+            <h2 className={`rasq-card-title text-[#0A0F1A] ${arClass}`}>
               {view.name}
             </h2>
             {bodyRegion && (
@@ -321,8 +315,7 @@ export function PatientExerciseSessionCard({
 
           {view.doseLabel && (
             <p
-              className={`text-[12px] font-semibold text-[#1D9E75] ${arClass}`}
-              style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+              className={`font-data text-[12px] font-semibold text-[#1D9E75] ${arClass}`}
             >
               {view.doseLabel}
             </p>

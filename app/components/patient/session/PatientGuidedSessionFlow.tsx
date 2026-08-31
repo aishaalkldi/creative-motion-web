@@ -60,7 +60,6 @@ export function GuidedSessionShell({
       <div>
         <h1
           className="text-[20px] font-bold leading-snug text-[#0A0F1A]"
-          style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
         >
           {sessionTitle}
         </h1>
@@ -114,7 +113,6 @@ export function GuidedSessionStartScreen({
         </p>
         <h2
           className="mt-3 text-[26px] font-bold leading-tight"
-          style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
         >
           {ui.startTitle(sessionTitle)}
         </h2>
@@ -189,7 +187,6 @@ export function GuidedSessionExerciseHero({
       <div>
         <h2
           className="text-[22px] font-bold leading-snug text-[#0A0F1A]"
-          style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
         >
           {view.name}
         </h2>
@@ -293,7 +290,6 @@ export function GuidedSessionRestScreen({
         </div>
         <h2
           className="mt-4 text-[24px] font-bold text-[#0A0F1A]"
-          style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
         >
           {ui.restTitle}
         </h2>
@@ -304,7 +300,6 @@ export function GuidedSessionRestScreen({
             {secondsLeft > 0 ? (
               <p
                 className="text-[40px] font-bold leading-tight text-[#1D9E75]"
-                style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
               >
                 {ui.restCountdownSeconds(secondsLeft)}
               </p>
@@ -384,7 +379,6 @@ export function GuidedSessionCompleteScreen({
       <div className="max-w-sm">
         <h2
           className="text-[28px] font-bold text-[#0A0F1A]"
-          style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
         >
           {ui.sessionCompleteTitle}
         </h2>

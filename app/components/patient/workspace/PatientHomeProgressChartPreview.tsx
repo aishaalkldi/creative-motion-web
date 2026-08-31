@@ -18,7 +18,7 @@ type PatientHomeProgressChartPreviewProps = {
 };
 
 const CARD =
-  "rounded-[16px] border border-[#E2E8E5] bg-white shadow-[0_1px_3px_rgba(10,15,26,0.04)]";
+  "rounded-[16px] border border-[#E2E8E5] bg-white p-5 shadow-[0_1px_3px_rgba(10,15,26,0.04)]";
 
 export function PatientHomeProgressChartPreview({
   token,
@@ -32,13 +32,11 @@ export function PatientHomeProgressChartPreview({
 
   if (!shouldShowInteractiveShoulderProgressCharts(points.length)) {
     return (
-      <section className={`${CARD} p-4 sm:p-5`}>
+      <section className={CARD}>
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="text-[17px] font-bold text-[#0A0F1A]">{ui.homeProgressTitle}</h2>
-            <p className="mt-1 text-[13px] leading-relaxed text-[#6B7280]">
-              {ui.homeProgressSubtitle}
-            </p>
+            <h2 className="rasq-card-title text-[#0A0F1A]">{ui.homeProgressTitle}</h2>
+            <p className="rasq-meta mt-1">{ui.homeProgressSubtitle}</p>
           </div>
           <Link
             href={`/patient/${token}/progress`}
@@ -56,13 +54,11 @@ export function PatientHomeProgressChartPreview({
   const series = buildPatientProgressChartSeries(points, lang);
 
   return (
-    <section className={`${CARD} p-4 sm:p-5`}>
+    <section className={CARD}>
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-[17px] font-bold text-[#0A0F1A]">{ui.homeProgressTitle}</h2>
-          <p className="mt-1 text-[13px] leading-relaxed text-[#6B7280]">
-            {ui.homeProgressSubtitle}
-          </p>
+          <h2 className="rasq-card-title text-[#0A0F1A]">{ui.homeProgressTitle}</h2>
+          <p className="rasq-meta mt-1">{ui.homeProgressSubtitle}</p>
         </div>
         <Link
           href={`/patient/${token}/progress`}

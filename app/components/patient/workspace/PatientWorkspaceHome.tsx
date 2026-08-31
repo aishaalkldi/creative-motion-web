@@ -31,9 +31,14 @@ type Props = {
   movementCheck: PatientMovementCheckView | null;
 };
 
-const CARD =
+const CARD_SHELL =
   "rounded-[16px] border border-[#E2E8E5] bg-white shadow-[0_1px_3px_rgba(10,15,26,0.04)]";
+const CARD = `${CARD_SHELL} p-5`;
+const CARD_ACCENT =
+  "rounded-[16px] border-2 border-[#1D9E75]/25 bg-white p-5 shadow-[0_4px_20px_rgba(29,158,117,0.08)]";
 const HOME_WIDTH = "mx-auto w-full max-w-2xl lg:max-w-3xl";
+const EYEBROW_ACCENT = "rasq-eyebrow text-[#1D9E75]";
+const EYEBROW_META = "rasq-eyebrow text-[#9CA3AF]";
 
 export function PatientWorkspaceHome({
   plan,
@@ -60,15 +65,15 @@ export function PatientWorkspaceHome({
 
   if (preview.totalCount === 0) {
     return (
-      <div className={`${HOME_WIDTH} space-y-4 ${arClass}`} dir={textDir}>
+      <div className={`${HOME_WIDTH} space-y-5 ${arClass}`} dir={textDir}>
         <HeroEmpty
           homeTitle={homeTitle}
           greeting={`${getPortalGreeting(lang)}, ${firstName}`}
           tagline={heroTagline}
         />
-        <section className={`${CARD} p-8 text-center`}>
-          <p className="text-[17px] font-bold text-[#0A0F1A]">{ui.preparingSchedule}</p>
-          <p className="mt-2 text-[14px] leading-relaxed text-[#6B7280]">{ui.noSessionsYet}</p>
+        <section className={`${CARD} text-center`}>
+          <p className="rasq-card-title text-[#0A0F1A]">{ui.preparingSchedule}</p>
+          <p className="rasq-body mt-2 text-[#6B7280]">{ui.noSessionsYet}</p>
         </section>
         <PatientLifetimeSummaryCard
           summary={plan.lifetimeSummary}
@@ -84,7 +89,7 @@ export function PatientWorkspaceHome({
   }
 
   return (
-    <div className={`${HOME_WIDTH} space-y-4 ${arClass}`} dir={textDir}>
+    <div className={`${HOME_WIDTH} space-y-5 ${arClass}`} dir={textDir}>
       <HeroSection
         homeTitle={homeTitle}
         greeting={ui.homeGreeting(firstName)}
@@ -233,17 +238,12 @@ export function PatientWorkspaceHome({
 
       <Link
         href={`/patient/${token}/progress`}
-        className={`block ${CARD} p-4 transition hover:border-[#CFE8DD]`}
+        className={`block ${CARD} transition hover:border-[#CFE8DD]`}
       >
         <div className="flex items-center justify-between gap-3">
           <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF]">
-              {ui.progressSummary}
-            </p>
-            <p
-              className="mt-1 text-[20px] font-bold text-[#0A0F1A]"
-              style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
-            >
+            <p className={EYEBROW_META}>{ui.progressSummary}</p>
+            <p className="font-data mt-1 text-[20px] font-bold text-[#0A0F1A]">
               {preview.progressPercent}%
             </p>
           </div>
@@ -304,35 +304,24 @@ function HeroSection({
   sessionsLeftLabel: string;
 }) {
   return (
-    <section className={`${CARD} overflow-hidden`}>
+    <section className={`${CARD_SHELL} overflow-hidden`}>
       <div className="border-b border-[#EEF2F0] bg-[#FAFCFB] px-5 py-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#1D9E75]">
-          {homeTitle}
-        </p>
-        <h1 className="mt-2 text-[26px] font-bold leading-[1.2] tracking-tight text-[#0A0F1A] sm:text-[28px]">
-          {greeting}
-        </h1>
-        <p className="mt-2 max-w-prose text-[14px] leading-relaxed text-[#6B7280]">
-          {tagline}
-        </p>
+        <p className={EYEBROW_ACCENT}>{homeTitle}</p>
+        <h1 className="rasq-page-title mt-2 text-[#0A0F1A]">{greeting}</h1>
+        <p className="rasq-body mt-2 max-w-prose text-[#6B7280]">{tagline}</p>
       </div>
 
       <div className="px-5 py-4">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0 flex-1">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF]">
-              {progressLabel}
-            </p>
-            <p className="mt-1 text-[16px] font-bold leading-snug text-[#0A0F1A]">
-              {programName}
-            </p>
-            <p className="mt-2 text-[13px] text-[#6B7280]">
+            <p className={EYEBROW_META}>{progressLabel}</p>
+            <p className="rasq-card-title mt-1 text-[#0A0F1A]">{programName}</p>
+            <p className="rasq-meta mt-2">
               {completedCount}/{totalCount} · {sessionsLeftLabel}
             </p>
           </div>
           <p
-            className="shrink-0 text-[28px] font-bold leading-none text-[#1D9E75] sm:text-[32px]"
-            style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
+            className="font-data shrink-0 text-[28px] font-bold leading-none text-[#1D9E75] sm:text-[30px]"
             aria-label={`${progressPercent}%`}
           >
             {progressPercent}%
@@ -360,12 +349,10 @@ function HeroEmpty({
   tagline: string;
 }) {
   return (
-    <section className={`${CARD} px-5 py-6`}>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#1D9E75]">
-        {homeTitle}
-      </p>
-      <h1 className="mt-2 text-[26px] font-bold leading-tight text-[#0A0F1A]">{greeting}</h1>
-      <p className="mt-2 text-[14px] leading-relaxed text-[#6B7280]">{tagline}</p>
+    <section className={`${CARD_SHELL} px-5 py-6`}>
+      <p className={EYEBROW_ACCENT}>{homeTitle}</p>
+      <h1 className="rasq-page-title mt-2 text-[#0A0F1A]">{greeting}</h1>
+      <p className="rasq-body mt-2 text-[#6B7280]">{tagline}</p>
     </section>
   );
 }
@@ -396,25 +383,21 @@ function NextSessionCard({
   startLabel: string;
 }) {
   return (
-    <section className="rounded-[16px] border-2 border-[#1D9E75]/25 bg-white p-5 shadow-[0_4px_20px_rgba(29,158,117,0.08)]">
+    <section className={CARD_ACCENT}>
       <div className="flex flex-wrap items-center gap-2">
-        <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]">
-          {sessionLabel}
-        </p>
-        <span className="rounded-full bg-[#EEF7F3] px-2.5 py-0.5 text-[11px] font-semibold text-[#085041]">
+        <p className={EYEBROW_ACCENT}>{sessionLabel}</p>
+        <span className="rounded-full bg-[#EEF7F3] px-2.5 py-0.5 text-[12px] font-semibold text-[#085041]">
           {statusLabel}
         </span>
       </div>
 
-      <h2 className="mt-3 text-[22px] font-bold leading-snug text-[#0A0F1A] sm:text-[24px]">
-        {title}
-      </h2>
+      <h2 className="rasq-section-title mt-3 text-[#0A0F1A]">{title}</h2>
 
       {context ? (
-        <p className="mt-2 text-[14px] leading-relaxed text-[#4B5563]">{context}</p>
+        <p className="rasq-body mt-2 text-[#4B5563]">{context}</p>
       ) : null}
 
-      <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-[#6B7280]">
+      <div className="rasq-meta mt-4 flex flex-wrap gap-x-4 gap-y-1">
         <span>{exerciseCountLabel}</span>
         {durationLabel ? <span>{durationLabel}</span> : null}
         <span>{therapistContextLabel}</span>
@@ -444,11 +427,9 @@ function WeeklyActivityStrip({
   days: ReturnType<typeof buildWorkspaceHomePreview>["weeklyActivity"];
 }) {
   return (
-    <section className={`${CARD} p-4 sm:p-5`}>
-      <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF]">
-        {title}
-      </p>
-      <p className="mt-0.5 text-[15px] font-bold text-[#0A0F1A]">{subtitle}</p>
+    <section className={CARD}>
+      <p className={EYEBROW_META}>{title}</p>
+      <p className="rasq-card-title mt-1 text-[#0A0F1A]">{subtitle}</p>
       <div className="mt-3 flex items-end justify-between gap-1.5 sm:gap-2">
         {days.map((day, index) => (
           <div key={`${day.label}-${index}`} className="flex flex-1 flex-col items-center gap-1.5">
@@ -482,25 +463,20 @@ function QuickStatsGrid({
   }[];
 }) {
   return (
-    <section className={`${CARD} p-4 sm:p-5`}>
+    <section className={CARD}>
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-[12px] bg-[#EEF2F0] sm:grid-cols-4">
         {stats.map((stat) => (
           <div key={stat.label} className="bg-white px-3 py-3.5 sm:px-4">
             <p
               className={`font-bold text-[#0A0F1A] ${
-                stat.compact ? "text-[14px] leading-snug" : "text-[20px] leading-none sm:text-[22px]"
-              }`}
-              style={
                 stat.compact
-                  ? undefined
-                  : { fontFamily: "var(--font-ibm-plex-mono, monospace)" }
-              }
+                  ? "text-[14px] leading-snug"
+                  : "font-data text-[20px] leading-none sm:text-[22px]"
+              }`}
             >
               {stat.value}
             </p>
-            <p className="mt-1.5 text-[11px] font-medium leading-snug text-[#6B7280]">
-              {stat.label}
-            </p>
+            <p className="rasq-meta mt-1.5 font-medium">{stat.label}</p>
           </div>
         ))}
       </div>
@@ -520,11 +496,9 @@ function SectionCard({
   children: ReactNode;
 }) {
   return (
-    <section className={`${CARD} p-4 sm:p-5`}>
+    <section className={CARD}>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF]">
-          {title}
-        </p>
+        <p className={EYEBROW_META}>{title}</p>
         <Link href={actionHref} className="text-[12px] font-semibold text-[#1D9E75]">
           {actionLabel}
         </Link>
@@ -544,7 +518,7 @@ function ProviderCard({
   ui: ReturnType<typeof workspaceUi>;
 }) {
   return (
-    <section className={`${CARD} p-4 sm:p-5`}>
+    <section className={CARD}>
       <div className="flex items-start gap-3">
         <span
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#EEF7F3] text-[16px]"
@@ -553,13 +527,11 @@ function ProviderCard({
           🏥
         </span>
         <div className="min-w-0">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-[#9CA3AF]">
-            {ui.providerClinic}
-          </p>
-          <p className="mt-1 text-[15px] font-bold text-[#0A0F1A]" dir="ltr">
+          <p className={EYEBROW_META}>{ui.providerClinic}</p>
+          <p className="rasq-card-title mt-1 text-[#0A0F1A]" dir="ltr">
             {assignedBy}
           </p>
-          <p className="mt-0.5 text-[13px] text-[#6B7280]">{ui.providerCardSubtitle}</p>
+          <p className="rasq-meta mt-0.5">{ui.providerCardSubtitle}</p>
           <p className="mt-1 truncate text-[12px] font-medium text-[#1D9E75]">{program}</p>
         </div>
       </div>
