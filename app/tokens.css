@@ -122,3 +122,68 @@
 .rasq-connector.is-revealed {
   transform: scaleX(1);
 }
+
+/* Homepage — restrained ambient depth */
+.rasq-hero-ambient {
+  pointer-events: none;
+  background: radial-gradient(
+    ellipse at 35% 45%,
+    color-mix(in srgb, var(--rasq-teal) 8%, transparent) 0%,
+    transparent 68%
+  );
+}
+
+.rasq-preview-stack {
+  transform: perspective(1200px) rotateY(-4deg) rotateX(2deg);
+  transition: transform 0.8s var(--rasq-ease);
+}
+
+@media (min-width: 1024px) {
+  .rasq-preview-stack:hover {
+    transform: perspective(1200px) rotateY(-2deg) rotateX(1deg);
+  }
+}
+
+.rasq-progress-sweep {
+  position: relative;
+  overflow: hidden;
+}
+
+.rasq-progress-sweep::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--rasq-mint) 35%, transparent) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: rasq-bar-sweep 4.5s var(--rasq-ease) 1.2s 1 forwards;
+}
+
+@keyframes rasq-bar-sweep {
+  to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rasq-stagger-item,
+  .rasq-reveal,
+  .rasq-reveal-children > *,
+  .rasq-arc-outer,
+  .rasq-arc-inner,
+  .rasq-arc-dot,
+  .rasq-connector,
+  .rasq-preview-stack,
+  .rasq-progress-sweep::after {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .rasq-progress-sweep::after {
+    display: none;
+  }
+}
