@@ -87,7 +87,6 @@ export function GuidedSessionStartScreen({
   lang,
   arClass,
   textDir,
-  sessionTitle,
   totalExercises,
   firstExerciseName,
   onBegin,
@@ -95,7 +94,6 @@ export function GuidedSessionStartScreen({
   lang: PatientExerciseLanguage;
   arClass: string;
   textDir: "ltr" | "rtl";
-  sessionTitle: string;
   totalExercises: number;
   firstExerciseName: string;
   onBegin: () => void;
@@ -111,12 +109,7 @@ export function GuidedSessionStartScreen({
         <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/70">
           {ui.startEyebrow}
         </p>
-        <h2
-          className="mt-3 text-[26px] font-bold leading-tight"
-        >
-          {ui.startTitle(sessionTitle)}
-        </h2>
-        <p className="mt-3 text-[14px] leading-relaxed text-white/85">{ui.startSubtitle}</p>
+        <p className="mt-3 text-[15px] leading-relaxed text-white/90">{ui.startSubtitle}</p>
         <p className="mt-4 text-[13px] font-semibold text-[#B8F5DF]">
           {ui.exercisesReady(totalExercises)}
         </p>

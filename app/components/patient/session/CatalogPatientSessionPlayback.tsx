@@ -275,11 +275,10 @@ export function CatalogPatientSessionPlayback({
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]">
               {guidedUi.startEyebrow}
             </p>
-            <p className="mt-2 text-[18px] font-bold text-[#0A0F1A]">{sessionDisplay.title}</p>
             {sessionDisplay.goal ? (
-              <p className="mt-3 text-[13px] leading-relaxed text-[#6B7280]">{sessionDisplay.goal}</p>
+              <p className="mt-3 text-[14px] leading-relaxed text-[#6B7280]">{sessionDisplay.goal}</p>
             ) : (
-              <p className="mt-3 text-[13px] leading-relaxed text-[#6B7280]">
+              <p className="mt-3 text-[14px] leading-relaxed text-[#6B7280]">
                 {flowUi.sessionOverviewBody}
               </p>
             )}
