@@ -9,6 +9,8 @@ import { PatientWorkspaceNav } from "@/app/components/patient/workspace/PatientW
 import { tokenLayoutUi, trustFooterUi } from "@/app/lib/patient-portal-ui";
 import { patientPortalArabicClass } from "@/app/lib/rasq-typography";
 
+const PATIENT_TOKEN_SHELL_WIDTH = "mx-auto w-full max-w-[680px] lg:max-w-[880px]";
+
 export default function PatientTokenLayout({ children }: { children: React.ReactNode }) {
   const params = useParams();
   const token = String(params.token ?? "");
@@ -36,14 +38,14 @@ function PatientTokenLayoutShell({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-3">
           <PatientLanguageToggle />
           {assignedBy && (
-            <span className="text-[11px] text-[#9CA3AF]" dir="ltr">
+            <span className="text-[12px] text-[#6B7280]" dir="ltr">
               {layoutUi.assignedBy(assignedBy)}
             </span>
           )}
         </div>
       </nav>
 
-      <main className="mx-auto max-w-[680px] px-6 py-8 pb-28 md:px-8">
+      <main className={`${PATIENT_TOKEN_SHELL_WIDTH} px-6 py-8 pb-28 md:px-8`}>
         {children}
         <PatientSafetyNotice />
       </main>
@@ -53,7 +55,7 @@ function PatientTokenLayoutShell({ children }: { children: React.ReactNode }) {
       <TrustFooter
         variant="light"
         labels={trustFooterUi(language)}
-        className="mx-auto max-w-[680px] px-6 pb-28 md:px-8"
+        className={`${PATIENT_TOKEN_SHELL_WIDTH} px-6 pb-28 md:px-8`}
       />
     </div>
   );

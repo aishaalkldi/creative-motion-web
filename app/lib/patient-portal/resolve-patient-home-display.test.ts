@@ -9,6 +9,7 @@ import {
   resolvePatientHomeProgramTitle,
   resolvePatientHomeRehabFocus,
   resolvePatientHomeSessionDisplay,
+  shouldShowPatientHomeExerciseCount,
 } from "./resolve-patient-home-display";
 
 function basePlan(overrides: Partial<PatientPlanData> = {}): PatientPlanData {
@@ -145,5 +146,38 @@ describe("resolvePatientHomeSessionDisplay", () => {
       "اتبع تمارين خطتك للعودة تدريجياً إلى نشاطك اليومي بأمان.",
     );
     assert.ok(!display.context?.includes("Follow your plan"));
+  });
+});
+
+describe("shouldShowPatientHomeExerciseCount", () => {
+  it("hides exercise count for catalog-provenance sessions", () => {
+    assert.equal(shouldShowPatientHomeExerciseCount(baseSession()), false);
+  });
+
+  it("shows exercise count for legacy sessions", () => {
+    assert.equal(
+      shouldShowPatientHomeExerciseCount(baseSession({ catalogSession: null })),
+      true,
+    );
+  });
+});
+
+describe("patient home title duplication check (report-only)", () => {
+  it("catalog recovery uses distinct program and session titles in EN and AR", () => {
+    const plan = basePlan({ sessions: [baseSession()] });
+    const session = baseSession();
+
+    const programEn = resolvePatientHomeProgramTitle(plan, "en");
+    const sessionEn = resolvePatientHomeSessionDisplay(session, plan, "en").title;
+    const programAr = resolvePatientHomeProgramTitle(plan, "ar");
+    const sessionAr = resolvePatientHomeSessionDisplay(session, plan, "ar").title;
+
+    assert.equal(programEn, "Upper Limb Recovery Foundation");
+    assert.equal(sessionEn, "Session 1 — Activation and Functional Reaching");
+    assert.equal(programAr, "أساسيات تعافي الطرف العلوي");
+    assert.equal(sessionAr, "الجلسة 1 — التنشيط والوصول الوظيفي");
+
+    assert.notEqual(programEn.toLowerCase(), sessionEn.toLowerCase());
+    assert.notEqual(programAr, sessionAr);
   });
 });

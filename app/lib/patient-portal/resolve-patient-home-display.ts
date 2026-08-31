@@ -42,6 +42,11 @@ export type PatientHomeSessionDisplay = {
   durationLabel: string | null;
 };
 
+/** Catalog sessions store content under catalogSession.blocks — do not show exercise counts. */
+export function shouldShowPatientHomeExerciseCount(session: PatientSession): boolean {
+  return session.catalogSession == null;
+}
+
 export function resolvePatientHomeProgramTitle(
   plan: PatientPlanData,
   lang: PatientPortalLanguage,

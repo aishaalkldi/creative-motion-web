@@ -7,7 +7,9 @@ import type { SessionLogEntry } from "@/app/api/patient/logs/route";
 import { friendlyEffortLabel } from "@/app/lib/patient-progress-portal";
 import {
   resolvePatientHomeProgramTitle,
+  resolvePatientHomeRehabFocus,
   resolvePatientHomeSessionDisplay,
+  shouldShowPatientHomeExerciseCount,
 } from "@/app/lib/patient-portal/resolve-patient-home-display";
 import { buildWorkspaceHomePreview } from "@/app/lib/patient-workspace";
 import {
@@ -38,7 +40,7 @@ const CARD_ACCENT =
   "rounded-[16px] border-2 border-[#1D9E75]/25 bg-white p-5 shadow-[0_4px_20px_rgba(29,158,117,0.08)]";
 const HOME_WIDTH = "mx-auto w-full max-w-2xl lg:max-w-3xl";
 const EYEBROW_ACCENT = "rasq-eyebrow text-[#1D9E75]";
-const EYEBROW_META = "rasq-eyebrow text-[#9CA3AF]";
+const EYEBROW_META = "rasq-eyebrow text-[#6B7280]";
 
 export function PatientWorkspaceHome({
   plan,
@@ -112,7 +114,11 @@ export function PatientWorkspaceHome({
           title={nextSessionDisplay.title}
           context={nextSessionDisplay.context}
           durationLabel={nextSessionDisplay.durationLabel}
-          exerciseCountLabel={ui.exerciseCountLabel(preview.nextSession.exercises.length)}
+          exerciseCountLabel={
+            shouldShowPatientHomeExerciseCount(preview.nextSession)
+              ? ui.exerciseCountLabel(preview.nextSession.exercises.length)
+              : null
+          }
           statusLabel={
             canStart ? ui.nextSessionStatusReady : ui.nextSessionStatusDoneToday
           }
@@ -224,7 +230,7 @@ export function PatientWorkspaceHome({
                       {title}
                     </p>
                     {row.completedAt ? (
-                      <p className="text-[12px] text-[#9CA3AF]">
+                      <p className="rasq-meta text-[#6B7280]">
                         {formatPortalDate(row.completedAt, lang)}
                       </p>
                     ) : null}
@@ -374,7 +380,7 @@ function NextSessionCard({
   title: string;
   context: string | null;
   durationLabel: string | null;
-  exerciseCountLabel: string;
+  exerciseCountLabel: string | null;
   statusLabel: string;
   therapistContextLabel: string;
   completedLabel: string;
@@ -398,12 +404,12 @@ function NextSessionCard({
       ) : null}
 
       <div className="rasq-meta mt-4 flex flex-wrap gap-x-4 gap-y-1">
-        <span>{exerciseCountLabel}</span>
+        {exerciseCountLabel ? <span>{exerciseCountLabel}</span> : null}
         {durationLabel ? <span>{durationLabel}</span> : null}
         <span>{therapistContextLabel}</span>
       </div>
 
-      <p className="mt-3 text-[12px] text-[#9CA3AF]">{completedLabel}</p>
+      <p className="rasq-meta mt-3 text-[#6B7280]">{completedLabel}</p>
 
       {canStart && startHref ? (
         <Link
@@ -440,8 +446,8 @@ function WeeklyActivityStrip({
               aria-label={day.active ? "Active day" : "Inactive day"}
             />
             <span
-              className={`text-[10px] font-bold sm:text-[11px] ${
-                day.isToday ? "text-[#1D9E75]" : "text-[#9CA3AF]"
+              className={`text-[12px] font-semibold ${
+                day.isToday ? "text-[#1D9E75]" : "text-[#6B7280]"
               }`}
             >
               {day.label}
@@ -499,7 +505,7 @@ function SectionCard({
     <section className={CARD}>
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className={EYEBROW_META}>{title}</p>
-        <Link href={actionHref} className="text-[12px] font-semibold text-[#1D9E75]">
+        <Link href={actionHref} className="text-[13px] font-semibold text-[#1D9E75]">
           {actionLabel}
         </Link>
       </div>
@@ -532,7 +538,7 @@ function ProviderCard({
             {assignedBy}
           </p>
           <p className="rasq-meta mt-0.5">{ui.providerCardSubtitle}</p>
-          <p className="mt-1 truncate text-[12px] font-medium text-[#1D9E75]">{program}</p>
+          <p className="mt-1 truncate text-[13px] font-medium text-[#1D9E75]">{program}</p>
         </div>
       </div>
     </section>
