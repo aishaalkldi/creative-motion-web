@@ -171,57 +171,82 @@ function Navbar() {
   );
 }
 
-function HeroTrackingOverlay() {
+function PageAmbientLines() {
   return (
-    <svg
-      className="rasq-hero-track-overlay pointer-events-none absolute inset-0 h-full w-full"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="xMidYMid slice"
-      aria-hidden="true"
-    >
-      <defs>
-        <filter id="rasq-hero-track-glow" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="0.35" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-      </defs>
-
-      <path
-        className="rasq-hero-track-path"
-        d="M 31 58 C 36 50, 39 44, 43 41 S 50 34, 56 30 S 64 24, 70 19"
-        pathLength={100}
+    <div className="rasq-page-ambient" aria-hidden="true">
+      <svg
+        className="rasq-page-ambient__svg"
+        viewBox="0 0 1440 5200"
+        preserveAspectRatio="xMidYMin slice"
         fill="none"
-        stroke="var(--rasq-mint, #5DCAA5)"
-        strokeWidth="0.42"
-        strokeLinecap="round"
-        filter="url(#rasq-hero-track-glow)"
-      />
+      >
+        {/* Hero — active linework */}
+        <g className="rasq-ambient-flow rasq-ambient-flow--a">
+          <path
+            className="rasq-ambient-line"
+            d="M-40 120 C 220 40, 420 260, 680 180 S 1180 60, 1520 220"
+          />
+          <path
+            className="rasq-ambient-line rasq-ambient-line--mint"
+            d="M120 420 C 360 320, 520 540, 780 460 S 1120 340, 1480 500"
+          />
+        </g>
+        <g className="rasq-ambient-flow rasq-ambient-flow--b">
+          <path
+            className="rasq-ambient-line"
+            d="M80 760 C 300 660, 480 880, 740 780 S 1080 640, 1420 820"
+          />
+        </g>
 
-      <circle
-        className="rasq-hero-track-node rasq-hero-track-node--shoulder"
-        cx="31"
-        cy="58"
-        r="1.15"
-        fill="var(--rasq-teal, #1D9E75)"
-      />
-      <circle
-        className="rasq-hero-track-node rasq-hero-track-node--elbow"
-        cx="43"
-        cy="41"
-        r="1.05"
-        fill="var(--rasq-mint, #5DCAA5)"
-      />
-      <circle
-        className="rasq-hero-track-node rasq-hero-track-node--hand"
-        cx="70"
-        cy="19"
-        r="1.25"
-        fill="var(--rasq-mint, #5DCAA5)"
-      />
-    </svg>
+        {/* Trust / workflow — sparse */}
+        <g className="rasq-ambient-flow rasq-ambient-flow--c rasq-ambient-zone--quiet">
+          <path
+            className="rasq-ambient-line rasq-ambient-line--mint"
+            d="M960 1180 C 760 1080, 540 1280, 320 1180 S -40 1020, -120 1120"
+          />
+        </g>
+
+        {/* Guided rehabilitation — medium */}
+        <g className="rasq-ambient-flow rasq-ambient-flow--d rasq-ambient-zone--medium">
+          <path
+            className="rasq-ambient-line"
+            d="M-60 2100 C 180 1980, 420 2220, 700 2100 S 1140 1940, 1480 2080"
+          />
+          <path
+            className="rasq-ambient-line rasq-ambient-line--mint"
+            d="M200 2480 C 440 2360, 620 2580, 900 2460 S 1280 2300, 1520 2440"
+          />
+        </g>
+
+        {/* Progress / access — quiet again */}
+        <g className="rasq-ambient-flow rasq-ambient-flow--e rasq-ambient-zone--quiet">
+          <path
+            className="rasq-ambient-line"
+            d="M1180 3020 C 980 2920, 720 3140, 480 3040 S 120 2880, -80 2980"
+          />
+        </g>
+
+        {/* Capabilities — lines return */}
+        <g className="rasq-ambient-flow rasq-ambient-flow--f">
+          <path
+            className="rasq-ambient-line rasq-ambient-line--mint"
+            d="M-40 3680 C 220 3560, 460 3800, 740 3680 S 1120 3520, 1500 3660"
+          />
+          <path
+            className="rasq-ambient-line"
+            d="M140 4040 C 380 3920, 560 4140, 820 4020 S 1180 3860, 1460 4000"
+          />
+        </g>
+
+        {/* Footer approach — fading */}
+        <g className="rasq-ambient-flow rasq-ambient-flow--g rasq-ambient-zone--quiet">
+          <path
+            className="rasq-ambient-line rasq-ambient-line--mint"
+            d="M900 4620 C 700 4520, 460 4740, 220 4640 S -120 4480, -200 4580"
+          />
+        </g>
+      </svg>
+    </div>
   );
 }
 
@@ -239,7 +264,7 @@ function HeroPreview() {
           aria-hidden="true"
         >
           <div className="relative aspect-[4/5] w-full min-h-[320px] sm:min-h-[380px] lg:min-h-[440px]">
-            <div className="rasq-hero-portrait-drift absolute inset-0">
+            <div className="absolute inset-0">
               <Image
                 src="/images/futuristic_motion_tracking_portrait.png"
                 alt=""
@@ -249,7 +274,6 @@ function HeroPreview() {
                 className="object-cover object-[42%_38%]"
               />
             </div>
-            <HeroTrackingOverlay />
             <div
               className="pointer-events-none absolute inset-0 rounded-[var(--rasq-r-lg)]"
               style={{
@@ -285,7 +309,7 @@ const HERO_VALUES = [
 
 function HeroSection() {
   return (
-    <section className="relative overflow-hidden bg-[var(--rasq-void)]" id="hero">
+    <section className="relative overflow-hidden bg-transparent" id="hero">
       <div className="mx-auto max-w-6xl px-6 py-16 lg:py-24">
         <div className="grid items-start gap-14 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
           <div>
@@ -378,7 +402,7 @@ function TrustBar() {
   return (
     <section
       ref={ref as React.RefObject<HTMLElement>}
-      className={`border-y border-[var(--rasq-border)] bg-[var(--rasq-card)] rasq-reveal ${revealed ? "is-revealed" : ""}`}
+      className={`border-y border-[var(--rasq-border)] bg-[var(--rasq-card)]/82 rasq-reveal ${revealed ? "is-revealed" : ""}`}
     >
       <div className="mx-auto grid max-w-6xl grid-cols-1 divide-y divide-[var(--rasq-border)] px-6 py-0 md:grid-cols-3 md:divide-x md:divide-y-0">
         {items.map((text) => (
@@ -405,7 +429,7 @@ function WorkflowSection() {
     <section
       id="platform"
       ref={ref as React.RefObject<HTMLElement>}
-      className="bg-[var(--rasq-void)] py-16 lg:py-24"
+      className="bg-transparent py-16 lg:py-24"
     >
       <div className="mx-auto max-w-6xl px-6">
         <div className={`rasq-reveal ${revealed ? "is-revealed" : ""}`}>
@@ -462,7 +486,7 @@ function GuidedRehabilitationSection() {
   return (
     <section
       ref={ref as React.RefObject<HTMLElement>}
-      className="bg-[var(--rasq-void)] py-16 lg:py-24"
+      className="bg-transparent py-16 lg:py-24"
     >
       <div className="mx-auto max-w-6xl px-6">
         <div className={`grid items-start gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16`}>
@@ -548,7 +572,7 @@ function ProgressJourneySection() {
   return (
     <section
       ref={ref as React.RefObject<HTMLElement>}
-      className="bg-[var(--rasq-card)] py-16 lg:py-24"
+      className="bg-[var(--rasq-card)]/78 py-16 lg:py-24"
     >
       <div className="mx-auto max-w-6xl px-6">
         <div className={`rasq-reveal ${revealed ? "is-revealed" : ""}`}>
@@ -651,7 +675,7 @@ function AccessSection() {
     <section
       id="providers"
       ref={ref as React.RefObject<HTMLElement>}
-      className="bg-[var(--rasq-base)] py-16 lg:py-24"
+      className="bg-[var(--rasq-base)]/82 py-16 lg:py-24"
     >
       <div className="mx-auto max-w-6xl px-6">
         <div className={`rasq-reveal ${revealed ? "is-revealed" : ""}`}>
@@ -826,7 +850,7 @@ function CapabilitiesSection() {
   return (
     <section
       ref={ref as React.RefObject<HTMLElement>}
-      className="bg-[var(--rasq-void)] py-16 lg:py-24"
+      className="bg-transparent py-16 lg:py-24"
     >
       <div className="mx-auto max-w-6xl px-6">
         <div className={`rasq-reveal ${revealed ? "is-revealed" : ""}`}>
@@ -896,7 +920,7 @@ function CapabilitiesSection() {
 
 function Footer() {
   return (
-    <footer className="border-t border-[var(--rasq-border)] bg-[var(--rasq-void)]">
+    <footer className="relative z-10 border-t border-[var(--rasq-border)] bg-transparent">
       <div className="mx-auto max-w-6xl px-6 py-12">
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-[1.2fr_auto_auto]">
           <div>
@@ -969,11 +993,12 @@ function Footer() {
 export default function HomePage() {
   return (
     <div
-      className="min-h-screen bg-[var(--rasq-void)] text-white"
+      className="relative min-h-screen bg-[var(--rasq-void)] text-white"
       style={{ fontFamily: "var(--rasq-font-body)" }}
     >
+      <PageAmbientLines />
       <Navbar />
-      <main>
+      <main className="relative z-10">
         <HeroSection />
         <TrustBar />
         <WorkflowSection />

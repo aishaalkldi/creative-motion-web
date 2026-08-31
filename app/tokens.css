@@ -189,92 +189,126 @@
   to { transform: scale(1.025); }
 }
 
-/* Hero portrait — motion-tracking overlay loop (~4.5s) */
-.rasq-hero-portrait-drift {
-  animation: rasq-hero-portrait-drift 20s ease-in-out infinite alternate;
-  transform-origin: 42% 38%;
+/* Page ambient — thin flowing lines across the full homepage */
+.rasq-page-ambient {
+  pointer-events: none;
+  position: absolute;
+  top: 52px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 0;
+  overflow: hidden;
+  mask-image: linear-gradient(
+    to bottom,
+    black 0%,
+    black 88%,
+    transparent 100%
+  );
 }
 
-@keyframes rasq-hero-portrait-drift {
-  from { transform: scale(1); }
-  to { transform: scale(1.018); }
+.rasq-page-ambient__svg {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
 }
 
-.rasq-hero-track-overlay {
-  mix-blend-mode: screen;
+.rasq-ambient-line {
+  fill: none;
+  stroke: var(--rasq-teal, #1D9E75);
+  stroke-width: 1;
+  stroke-linecap: round;
+  opacity: 0.055;
+  vector-effect: non-scaling-stroke;
 }
 
-.rasq-hero-track-path {
-  stroke-dasharray: 100;
-  stroke-dashoffset: 100;
-  opacity: 0;
-  animation: rasq-hero-track-path 4.5s var(--rasq-ease-out) infinite;
+.rasq-ambient-line--mint {
+  stroke: var(--rasq-mint, #5DCAA5);
+  opacity: 0.045;
 }
 
-@keyframes rasq-hero-track-path {
-  0% {
-    stroke-dashoffset: 100;
-    opacity: 0.72;
-  }
-  44% {
-    stroke-dashoffset: 0;
-    opacity: 0.78;
-  }
-  67% {
-    stroke-dashoffset: 0;
-    opacity: 0.78;
-  }
-  82% {
-    stroke-dashoffset: 0;
-    opacity: 0.28;
-  }
-  88% {
-    stroke-dashoffset: 100;
-    opacity: 0;
-  }
-  100% {
-    stroke-dashoffset: 100;
-    opacity: 0;
-  }
+.rasq-ambient-zone--quiet .rasq-ambient-line {
+  opacity: 0.028;
 }
 
-.rasq-hero-track-node {
-  opacity: 0;
-  transform-origin: center;
+.rasq-ambient-zone--quiet .rasq-ambient-line--mint {
+  opacity: 0.022;
+}
+
+.rasq-ambient-zone--medium .rasq-ambient-line {
+  opacity: 0.042;
+}
+
+.rasq-ambient-zone--medium .rasq-ambient-line--mint {
+  opacity: 0.035;
+}
+
+.rasq-ambient-flow {
   transform-box: fill-box;
-  animation-duration: 4.5s;
-  animation-timing-function: var(--rasq-ease-out);
-  animation-iteration-count: infinite;
+  transform-origin: center;
 }
 
-.rasq-hero-track-node--shoulder {
-  animation-name: rasq-hero-track-node-shoulder;
+.rasq-ambient-flow--a {
+  animation: rasq-ambient-drift-a 42s ease-in-out infinite;
 }
 
-.rasq-hero-track-node--elbow {
-  animation-name: rasq-hero-track-node-elbow;
+.rasq-ambient-flow--b {
+  animation: rasq-ambient-drift-b 52s ease-in-out infinite;
 }
 
-.rasq-hero-track-node--hand {
-  animation-name: rasq-hero-track-node-hand;
+.rasq-ambient-flow--c {
+  animation: rasq-ambient-drift-c 48s ease-in-out infinite;
 }
 
-@keyframes rasq-hero-track-node-shoulder {
-  0%, 4% { opacity: 0; transform: scale(0.85); }
-  7%, 13% { opacity: 0.88; transform: scale(1.08); }
-  18%, 100% { opacity: 0.58; transform: scale(1); }
+.rasq-ambient-flow--d {
+  animation: rasq-ambient-drift-d 56s ease-in-out infinite;
 }
 
-@keyframes rasq-hero-track-node-elbow {
-  0%, 14% { opacity: 0; transform: scale(0.85); }
-  17%, 24% { opacity: 0.86; transform: scale(1.07); }
-  30%, 100% { opacity: 0.56; transform: scale(1); }
+.rasq-ambient-flow--e {
+  animation: rasq-ambient-drift-e 44s ease-in-out infinite;
 }
 
-@keyframes rasq-hero-track-node-hand {
-  0%, 28% { opacity: 0; transform: scale(0.85); }
-  32%, 42% { opacity: 1; transform: scale(1.14); }
-  48%, 100% { opacity: 0.62; transform: scale(1); }
+.rasq-ambient-flow--f {
+  animation: rasq-ambient-drift-f 50s ease-in-out infinite;
+}
+
+.rasq-ambient-flow--g {
+  animation: rasq-ambient-drift-g 58s ease-in-out infinite;
+}
+
+@keyframes rasq-ambient-drift-a {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(-18px, 28px, 0); }
+}
+
+@keyframes rasq-ambient-drift-b {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(22px, -24px, 0); }
+}
+
+@keyframes rasq-ambient-drift-c {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(-10px, 16px, 0); }
+}
+
+@keyframes rasq-ambient-drift-d {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(16px, -20px, 0); }
+}
+
+@keyframes rasq-ambient-drift-e {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(-14px, 12px, 0); }
+}
+
+@keyframes rasq-ambient-drift-f {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(20px, 18px, 0); }
+}
+
+@keyframes rasq-ambient-drift-g {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(-8px, -14px, 0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -288,28 +322,42 @@
   .rasq-preview-stack,
   .rasq-progress-sweep::after,
   .rasq-photo-drift,
-  .rasq-hero-portrait-drift,
-  .rasq-hero-track-path,
-  .rasq-hero-track-node,
-  .rasq-hero-track-node--shoulder,
-  .rasq-hero-track-node--elbow,
-  .rasq-hero-track-node--hand {
+  .rasq-ambient-flow,
+  .rasq-ambient-flow--a,
+  .rasq-ambient-flow--b,
+  .rasq-ambient-flow--c,
+  .rasq-ambient-flow--d,
+  .rasq-ambient-flow--e,
+  .rasq-ambient-flow--f,
+  .rasq-ambient-flow--g {
     animation: none !important;
     transition: none !important;
     opacity: 1 !important;
     transform: none !important;
   }
 
-  .rasq-hero-track-path {
-    stroke-dashoffset: 0 !important;
-    opacity: 0.52 !important;
+  .rasq-ambient-line {
+    opacity: 0.05 !important;
   }
 
-  .rasq-hero-track-node,
-  .rasq-hero-track-node--shoulder,
-  .rasq-hero-track-node--elbow,
-  .rasq-hero-track-node--hand {
-    opacity: 0.62 !important;
+  .rasq-ambient-line--mint {
+    opacity: 0.04 !important;
+  }
+
+  .rasq-ambient-zone--quiet .rasq-ambient-line {
+    opacity: 0.022 !important;
+  }
+
+  .rasq-ambient-zone--quiet .rasq-ambient-line--mint {
+    opacity: 0.018 !important;
+  }
+
+  .rasq-ambient-zone--medium .rasq-ambient-line {
+    opacity: 0.035 !important;
+  }
+
+  .rasq-ambient-zone--medium .rasq-ambient-line--mint {
+    opacity: 0.03 !important;
   }
 
   .rasq-progress-sweep::after {
