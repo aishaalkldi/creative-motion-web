@@ -57,10 +57,7 @@ export function PatientProgressPortal({
         <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]">
           {ui.pageTitle}
         </p>
-        <h1
-          className="mt-2 text-[22px] font-bold text-[#0A0F1A]"
-          style={{ fontFamily: "var(--font-geist-sans, ui-sans-serif, sans-serif)" }}
-        >
+        <h1 className="rasq-page-title mt-2 text-[#0A0F1A]">
           {ui.progressHeroGreeting(firstName)}
         </h1>
         <p className="mt-1 text-[14px] font-semibold text-[#374151]">
@@ -71,10 +68,7 @@ export function PatientProgressPortal({
         <div className="mt-4">
           <div className="mb-1.5 flex items-center justify-between gap-2">
             <span className="text-[12px] font-semibold text-[#374151]">{programLabel}</span>
-            <span
-              className="text-[12px] font-bold text-[#1D9E75]"
-              style={{ fontFamily: "var(--font-ibm-plex-mono, monospace)" }}
-            >
+            <span className="font-data text-[12px] font-bold text-[#1D9E75]">
               {view.progressPercent}%
             </span>
           </div>
@@ -135,12 +129,9 @@ export function PatientProgressPortal({
               className="rounded-[8px] border border-[#E2E8E5] bg-[#F9FAFB] px-3 py-2.5"
             >
               <p
-                className={`font-bold text-[#1D9E75] ${stat.small ? "text-[13px]" : "text-[18px]"}`}
-                style={
-                  stat.small
-                    ? undefined
-                    : { fontFamily: "var(--font-ibm-plex-mono, monospace)" }
-                }
+                className={`font-bold text-[#1D9E75] ${
+                  stat.small ? "text-[13px]" : "font-data text-[18px]"
+                }`}
               >
                 {stat.value}
               </p>

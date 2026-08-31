@@ -430,7 +430,6 @@ export default function SessionPlayerPage() {
           lang={patientLanguage}
           arClass={arClass}
           textDir={textDir}
-          sessionTitle={session.title}
           totalExercises={total}
           firstExerciseName={firstExerciseView.name}
           onBegin={handleBeginSession}

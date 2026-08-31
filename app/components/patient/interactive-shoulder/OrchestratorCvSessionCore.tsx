@@ -106,10 +106,12 @@ import { TrackedHandCursor } from "./TrackedHandCursor";
 import { TherapeuticPathLayer } from "./TherapeuticPathLayer";
 import { ReachTheLightEnvironment } from "./ReachTheLightEnvironment";
 import { usePrefersReducedMotion } from "./usePrefersReducedMotion";
+import { PatientCameraTrackingIndicator } from "./PatientCameraTrackingIndicator";
 import { ReadyCountdownOverlay } from "./ReadyCountdownOverlay";
 import { SessionCompleteOverlay } from "./SessionCompleteOverlay";
 import { TargetSuccessPulse } from "./TargetSuccessPulse";
 import { createInteractiveShoulderSoundPlayer } from "@/app/lib/interactive-shoulder/interactive-shoulder-sounds";
+import { PATIENT_PRIMARY_TOUCH_MIN_CLASS } from "@/app/lib/patient-portal-touch-targets";
 
 registerAllBlockRunners();
 
@@ -843,14 +845,14 @@ export function OrchestratorCvSessionCore({
         <div className={`rounded-[10px] border border-[#E2E8E5] bg-white p-4 ${arClass}`}>
           <p className="text-sm font-semibold text-[#0A0F1A]">{ui.consentTitle}</p>
           <p className="mt-2 text-[12px] leading-relaxed text-[#6B7280]">{ui.consentDescription}</p>
-          <label className="mt-3 flex items-start gap-2 text-[12px] text-[#374151]">
-            <input type="checkbox" checked={consentChecked} onChange={(e) => setConsentChecked(e.target.checked)} />
+          <label className={`mt-3 flex min-h-[48px] items-start gap-2 text-[12px] text-[#374151]`}>
+            <input type="checkbox" checked={consentChecked} onChange={(e) => setConsentChecked(e.target.checked)} className="mt-1" />
             <span>{ui.consentCheckbox}</span>
           </label>
-          <div className="mt-3 flex gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             <button
               type="button"
-              className="rounded-[8px] bg-[#1D9E75] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className={`rounded-[8px] bg-[#1D9E75] px-4 text-sm font-semibold text-white disabled:opacity-50 ${PATIENT_PRIMARY_TOUCH_MIN_CLASS}`}
               disabled={!consentChecked}
               onClick={acceptConsent}
             >
@@ -858,7 +860,7 @@ export function OrchestratorCvSessionCore({
             </button>
             <button
               type="button"
-              className="rounded-[8px] border border-[#CBD5E1] bg-white px-4 py-2 text-sm font-medium text-[#374151] shadow-sm transition hover:border-[#94A3B8] hover:bg-[#F8FAFC] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D9E75]"
+              className={`rounded-[8px] border border-[#CBD5E1] bg-white px-4 text-sm font-medium text-[#374151] shadow-sm transition hover:border-[#94A3B8] hover:bg-[#F8FAFC] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D9E75] ${PATIENT_PRIMARY_TOUCH_MIN_CLASS}`}
               onClick={onSkipped}
             >
               {ui.skipCamera}
@@ -890,6 +892,13 @@ export function OrchestratorCvSessionCore({
                 overlay={
                   <>
                     <ReachTheLightEnvironment reducedMotion={prefersReducedMotion} />
+                    {!countdownActive && !showBlockSummary ? (
+                      <PatientCameraTrackingIndicator
+                        language={language}
+                        arClass={arClass}
+                        trackingStatus={snapshot?.trackingStatus}
+                      />
+                    ) : null}
                     {countdownActive ? (
                       <ReadyCountdownOverlay
                         language={language}

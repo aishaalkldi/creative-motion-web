@@ -49,7 +49,7 @@ function PainScale({
             key={n}
             type="button"
             onClick={() => onChange(n)}
-            className={`flex h-[44px] min-w-[40px] flex-1 items-center justify-center rounded-[10px] border text-[13px] font-semibold transition ${
+            className={`flex h-[48px] min-w-[44px] flex-1 items-center justify-center rounded-[10px] border text-[13px] font-semibold transition ${
               value === n
                 ? "border-[#1D9E75] bg-[#1D9E75] text-white"
                 : "border-[#E2E8E5] bg-[#F4F6F5] text-[#374151] hover:border-[#1D9E75]/40"
@@ -275,11 +275,10 @@ export function CatalogPatientSessionPlayback({
             <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#1D9E75]">
               {guidedUi.startEyebrow}
             </p>
-            <p className="mt-2 text-[18px] font-bold text-[#0A0F1A]">{sessionDisplay.title}</p>
             {sessionDisplay.goal ? (
-              <p className="mt-3 text-[13px] leading-relaxed text-[#6B7280]">{sessionDisplay.goal}</p>
+              <p className="mt-3 text-[14px] leading-relaxed text-[#6B7280]">{sessionDisplay.goal}</p>
             ) : (
-              <p className="mt-3 text-[13px] leading-relaxed text-[#6B7280]">
+              <p className="mt-3 text-[14px] leading-relaxed text-[#6B7280]">
                 {flowUi.sessionOverviewBody}
               </p>
             )}

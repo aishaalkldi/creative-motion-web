@@ -2,6 +2,7 @@
 
 import type { PatientExerciseLanguage } from "@/app/lib/exercise-resolve";
 import { interactiveShoulderUi } from "@/app/lib/interactive-shoulder/interactive-shoulder-ui";
+import { PATIENT_PRIMARY_TOUCH_MIN_CLASS } from "@/app/lib/patient-portal-touch-targets";
 import { SoundToggleButton } from "./SoundToggleButton";
 
 export type ShoulderLivePhaseAccent = "warmup" | "cooldown" | "exercise";
@@ -142,7 +143,7 @@ export function ShoulderLiveStatusRail({
         ) : (
           <button
             type="button"
-            className="rounded-[10px] border border-[#CBD5E1] bg-white px-4 py-2 text-[13px] font-semibold text-[#374151] transition hover:border-[#94A3B8] hover:bg-[#F8FAFC] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D9E75]"
+            className={`rounded-[10px] border border-[#CBD5E1] bg-white px-5 text-[13px] font-semibold text-[#374151] transition hover:border-[#94A3B8] hover:bg-[#F8FAFC] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1D9E75] ${PATIENT_PRIMARY_TOUCH_MIN_CLASS}`}
             onClick={pausedOrHold ? onResume : onPause}
             aria-label={pausedOrHold ? ui.resumeAriaLabel : ui.pauseAriaLabel}
           >

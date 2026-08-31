@@ -35,10 +35,10 @@
   --rasq-ease:     cubic-bezier(0.16, 1, 0.3, 1);
   --rasq-ease-out: cubic-bezier(0.0, 0.0, 0.2, 1);
 
-  /* ── Typography pointers (actual vars loaded by layout.tsx) ── */
-  --rasq-font-display: var(--font-geist, var(--font-inter), ui-sans-serif, sans-serif);
-  --rasq-font-body:    var(--font-inter), ui-sans-serif, sans-serif;
-  --rasq-font-mono:    var(--font-ibm-plex-mono), ui-monospace, monospace;
+  /* ── Typography pointers (loaded by app/fonts.ts + layout.tsx) ── */
+  --rasq-font-display: var(--font-ui-en);
+  --rasq-font-body:    var(--font-ui-en);
+  --rasq-font-mono:    var(--font-data);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
