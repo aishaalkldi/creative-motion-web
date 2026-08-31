@@ -2,6 +2,8 @@
  * Run: npx tsx --test app/lib/patient-portal/resolve-patient-home-display.test.ts
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import type { PatientPlanData, PatientSession } from "@/app/api/patient/plan/route";
 import { STROKE_UPPER_LIMB_RECOVERY_FOUNDATION_SESSION_1 } from "@/app/lib/rehab-programs/stroke-upper-limb-recovery-foundation";
@@ -158,6 +160,33 @@ describe("shouldShowPatientHomeExerciseCount", () => {
     assert.equal(
       shouldShowPatientHomeExerciseCount(baseSession({ catalogSession: null })),
       true,
+    );
+  });
+});
+
+describe("patient home next session card — metadata wiring", () => {
+  const homeSource = readFileSync(
+    join(process.cwd(), "app/components/patient/workspace/PatientWorkspaceHome.tsx"),
+    "utf8",
+  );
+  const nextSessionBlock = homeSource.slice(
+    homeSource.indexOf("function NextSessionCard"),
+    homeSource.indexOf("function WeeklyActivityStrip"),
+  );
+
+  it("does not render a decorative session icon placeholder in NextSessionCard", () => {
+    assert.doesNotMatch(
+      nextSessionBlock,
+      /flex h-\d+ w-\d+ shrink-0 items-center justify-center rounded-full/,
+    );
+    assert.doesNotMatch(nextSessionBlock, /<circle[\s/>]/);
+  });
+
+  it("omits catalog exercise-count metadata from the home card", () => {
+    assert.match(homeSource, /shouldShowPatientHomeExerciseCount\(preview\.nextSession\)/);
+    assert.match(
+      nextSessionBlock,
+      /\{exerciseCountLabel \? <span>\{exerciseCountLabel\}<\/span> : null\}/,
     );
   });
 });
