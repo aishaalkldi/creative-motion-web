@@ -28,6 +28,7 @@ const PUBLIC_PREFIXES = [
   "/_next",
   "/favicon.ico",
   "/fonts",
+  "/images",
 ];
 
 const PUBLIC_PATHS = new Set([
