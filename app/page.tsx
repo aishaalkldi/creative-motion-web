@@ -74,6 +74,59 @@ function ChevronIcon({ muted = false }: { muted?: boolean }) {
   );
 }
 
+/**
+ * Abstract movement arc — a single geometric curve suggesting a guided
+ * shoulder-reach path. Deliberately NOT anatomical: no joints, no skeleton,
+ * no pose-estimation-style points. Brand teal only.
+ */
+function MovementArc({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      className={`pointer-events-none absolute inset-0 h-full w-full ${className}`}
+      viewBox="0 0 400 300"
+      fill="none"
+      aria-hidden="true"
+    >
+      <path
+        d="M120 230C120 230 150 120 240 90C300 70 340 100 350 130"
+        stroke="var(--rasq-mint, #5DCAA5)"
+        strokeWidth="2"
+        strokeLinecap="round"
+        opacity="0.55"
+      />
+      <circle cx="120" cy="230" r="4" fill="var(--rasq-teal, #1D9E75)" opacity="0.7" />
+      <circle cx="350" cy="130" r="4" fill="var(--rasq-mint, #5DCAA5)" opacity="0.85" />
+    </svg>
+  );
+}
+
+/**
+ * Graded placeholder for real RASQ rehabilitation photography.
+ *
+ * No stock or decorative photo is embedded here — sourcing/licensing a real
+ * photograph of a person for a healthcare brand's public site is a decision
+ * outside what can be made unilaterally in this pass. This component is the
+ * exact crop, grade, and motion treatment the real asset drops into
+ * unchanged: replace the empty frame's background with the licensed image
+ * and everything layered on top of it (UI card, arc, copy) stays correct.
+ */
+function PhotoFrame({
+  children,
+  className = "",
+  drift = false,
+}: {
+  children?: React.ReactNode;
+  className?: string;
+  drift?: boolean;
+}) {
+  return (
+    <div className={`rasq-photo-frame relative rounded-[var(--rasq-r-lg)] border border-[var(--rasq-border)] ${className}`}>
+      <div className={`absolute inset-0 ${drift ? "rasq-photo-drift" : ""}`} aria-hidden="true" />
+      {children}
+    </div>
+  );
+}
+
 function Navbar() {
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--rasq-border)] bg-[var(--rasq-void)]/95">
@@ -126,40 +179,12 @@ function HeroPreview() {
       />
 
       <div className="rasq-preview-stack relative">
-        <div
-          className="absolute right-0 top-6 z-0 w-[78%] rounded-[var(--rasq-r-card)] border border-[var(--rasq-border)] bg-[var(--rasq-base)] p-4 shadow-[0_24px_48px_-32px_rgba(0,0,0,0.75)] lg:right-2 lg:top-8"
-          aria-hidden="true"
-        >
-          <p
-            className="text-[10px] font-medium uppercase tracking-[0.1em] text-white/30"
-            style={{ fontFamily: "var(--rasq-font-mono)" }}
-          >
-            Session progress
-          </p>
-          <div className="mt-3 space-y-2.5">
-            {[
-              { label: "Guided session 8", state: "Completed" },
-              { label: "Guided session 9", state: "Scheduled" },
-            ].map(({ label, state }) => (
-              <div
-                key={label}
-                className="flex items-center justify-between rounded-[6px] border border-[var(--rasq-border)] bg-[var(--rasq-card)] px-3 py-2"
-              >
-                <span className="text-xs text-white/55">{label}</span>
-                <span
-                  className={`text-[10px] font-medium ${
-                    state === "Completed" ? "text-[var(--rasq-mint)]" : "text-white/30"
-                  }`}
-                >
-                  {state}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
+        <PhotoFrame drift className="aspect-[4/5] w-full lg:aspect-[5/6]">
+          <MovementArc className="opacity-90" />
+        </PhotoFrame>
 
         <div
-          className="relative z-10 rounded-[var(--rasq-r-lg)] border border-[var(--rasq-border)] bg-[var(--rasq-base)] p-5 shadow-[0_32px_64px_-40px_rgba(0,0,0,0.85)] lg:p-6"
+          className="relative z-10 -mt-16 ml-auto w-[85%] rounded-[var(--rasq-r-lg)] border border-[var(--rasq-border)] bg-[var(--rasq-base)] p-5 shadow-[0_32px_64px_-40px_rgba(0,0,0,0.85)] lg:-mt-20 lg:w-[80%] lg:p-6"
           aria-hidden="true"
         >
           <div className="rounded-[var(--rasq-r-card)] border border-[var(--rasq-border)] bg-[var(--rasq-card)] p-5">
@@ -216,46 +241,10 @@ function HeroPreview() {
             </div>
           </div>
         </div>
-
-        <div
-          className="relative z-10 mt-3 rounded-[var(--rasq-r-card)] border border-[var(--rasq-border)] bg-[var(--rasq-card)] p-5"
-          aria-hidden="true"
-        >
-          <div className="flex items-center justify-between">
-            <span
-              className="text-[10px] font-medium uppercase tracking-[0.1em] text-white/30"
-              style={{ fontFamily: "var(--rasq-font-mono)" }}
-            >
-              Clinical review
-            </span>
-            <span className="rounded-[5px] border border-[var(--rasq-teal)]/20 bg-[var(--rasq-teal)]/8 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[var(--rasq-mint)]/70">
-              AI · Draft
-            </span>
-          </div>
-
-          <ul className="mt-4 space-y-2.5">
-            {[
-              "Session 8 notes ready for clinician review.",
-              "Adherence pattern flagged for follow-up at next visit.",
-            ].map((item) => (
-              <li key={item} className="flex gap-2.5">
-                <span
-                  className="mt-[5px] h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--rasq-teal)]"
-                  aria-hidden="true"
-                />
-                <span className="text-xs leading-5 text-white/55">{item}</span>
-              </li>
-            ))}
-          </ul>
-
-          <p className="mt-4 border-t border-[var(--rasq-border)] pt-3 text-[10px] text-white/25">
-            Clinical decision support · Therapist review required before implementing
-          </p>
-        </div>
       </div>
 
       <p className="relative z-10 mt-5 text-[11px] leading-5 text-white/30">
-        Illustrative demo UI — example workspace views only, not live patient data.
+        Illustrative session — example workspace view only, not a real patient record.
       </p>
     </div>
   );
@@ -280,7 +269,7 @@ function HeroSection() {
   return (
     <section className="relative overflow-hidden bg-[var(--rasq-void)]" id="hero">
       <div className="mx-auto max-w-6xl px-6 py-16 lg:py-24">
-        <div className="grid items-center gap-14 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
+        <div className="grid items-start gap-14 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16">
           <div>
             <div
               className="rasq-stagger-item inline-flex items-center rounded-[6px] border border-[var(--rasq-border)] bg-[var(--rasq-base)] px-3 py-1.5"
@@ -449,12 +438,84 @@ function WorkflowSection() {
   );
 }
 
+function GuidedRehabilitationSection() {
+  const [ref, revealed] = useReveal(0.15);
+
+  return (
+    <section
+      ref={ref as React.RefObject<HTMLElement>}
+      className="bg-[var(--rasq-void)] py-16 lg:py-24"
+    >
+      <div className="mx-auto max-w-6xl px-6">
+        <div className={`grid items-start gap-12 lg:grid-cols-[0.9fr_1.1fr] lg:gap-16`}>
+          <div className={`rasq-reveal ${revealed ? "is-revealed" : ""}`}>
+            <p
+              className="text-xs font-medium uppercase tracking-[0.12em] text-[var(--rasq-mint)]/75"
+              style={{ fontFamily: "var(--rasq-font-mono)" }}
+            >
+              Guided rehabilitation
+            </p>
+            <h2
+              className="mt-3 text-2xl font-semibold tracking-tight text-white lg:text-[1.75rem]"
+              style={{ fontFamily: "var(--rasq-font-display)" }}
+            >
+              Guided movement. Clinician-reviewed progress.
+            </h2>
+            <p className="mt-4 max-w-md text-sm leading-6 text-white/45">
+              Patients follow clinician-prescribed guided sessions while RASQ structures
+              session information for therapist review and follow-up.
+            </p>
+          </div>
+
+          <div
+            className={`rasq-reveal relative ${revealed ? "is-revealed" : ""}`}
+            style={{ transitionDelay: "100ms" }}
+          >
+            <PhotoFrame drift className="aspect-[16/10] w-full">
+              <MovementArc className="opacity-80" />
+            </PhotoFrame>
+
+            <div
+              className="absolute bottom-4 right-4 z-10 w-[62%] max-w-[240px] rounded-[var(--rasq-r-card)] border border-[var(--rasq-border)] bg-[var(--rasq-base)]/95 p-4 shadow-[0_20px_40px_-24px_rgba(0,0,0,0.8)] backdrop-blur-sm sm:bottom-6 sm:right-6"
+              aria-hidden="true"
+            >
+              <div className="flex items-center justify-between">
+                <span
+                  className="text-[9px] font-medium uppercase tracking-[0.1em] text-white/30"
+                  style={{ fontFamily: "var(--rasq-font-mono)" }}
+                >
+                  Clinical review
+                </span>
+                <span className="rounded-[5px] border border-[var(--rasq-teal)]/20 bg-[var(--rasq-teal)]/8 px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.06em] text-[var(--rasq-mint)]/70">
+                  Draft
+                </span>
+              </div>
+              <ul className="mt-2.5 space-y-1.5">
+                {["Session notes ready for review", "Adherence reviewed by clinician"].map((item) => (
+                  <li key={item} className="flex gap-1.5">
+                    <span className="mt-[5px] h-1 w-1 shrink-0 rounded-full bg-[var(--rasq-teal)]" aria-hidden="true" />
+                    <span className="text-[10px] leading-4 text-white/55">{item}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <p className="relative z-10 mt-4 text-[11px] leading-5 text-white/30">
+              Illustrative session — example UI overlay only, not a real patient record.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 const PROGRESS_TIMELINE = [
-  { step: "Assessment", detail: "Initial functional assessment completed." },
+  { step: "Initial assessment", detail: "Structured functional assessment completed." },
   { step: "Plan assigned", detail: "Rehabilitation plan reviewed and assigned by clinician." },
-  { step: "Progress check", detail: "Adherence and session completion reviewed." },
-  { step: "Plan reviewed", detail: "Plan adjusted following clinician review." },
-  { step: "Next review", detail: "Follow-up assessment scheduled.", pending: true },
+  { step: "Guided sessions", detail: "Patient completes clinician-prescribed guided sessions." },
+  { step: "Progress review", detail: "Adherence and session completion reviewed by therapist." },
+  { step: "Follow-up assessment", detail: "Next structured assessment scheduled.", pending: true },
 ];
 
 const REVIEW_ITEMS = [
@@ -483,7 +544,7 @@ function ProgressJourneySection() {
             className="mt-3 max-w-2xl text-2xl font-semibold tracking-tight text-white lg:text-[1.75rem]"
             style={{ fontFamily: "var(--rasq-font-display)" }}
           >
-            From first session to full recovery.
+            From assessment to ongoing progress.
           </h2>
           <p className="mt-3 max-w-lg text-sm leading-6 text-white/40">
             RASQ supports the clinician workflow from assessment through plan assignment
@@ -494,7 +555,7 @@ function ProgressJourneySection() {
         <div className="mt-12 grid items-start gap-10 lg:grid-cols-2">
           <div className={`rasq-reveal ${revealed ? "is-revealed" : ""}`} style={{ transitionDelay: "80ms" }}>
             <p className="mb-5 text-xs font-medium uppercase tracking-[0.1em] text-white/30">
-              Patient journey — illustrative example
+              Illustrative session journey
             </p>
             <div className="relative space-y-0">
               <div className="absolute left-[11px] top-3 bottom-3 w-px bg-[var(--rasq-border)]" />
@@ -595,10 +656,26 @@ function AccessSection() {
           style={{ transitionDelay: "80ms" }}
         >
           <div className="flex flex-col p-8 lg:p-10" style={{ background: "var(--rasq-void)" }}>
-            <div className="flex h-10 w-10 items-center justify-center rounded-[8px] border border-[var(--rasq-border)] bg-[var(--rasq-card)] text-[var(--rasq-mint)]">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3.75h.008v.008h-.008v-.008z" />
-              </svg>
+            <div
+              className="rounded-[var(--rasq-r-card)] border border-[var(--rasq-border)] bg-[var(--rasq-card)] p-3.5"
+              aria-hidden="true"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-medium uppercase tracking-[0.1em] text-white/30" style={{ fontFamily: "var(--rasq-font-mono)" }}>
+                  Patients
+                </span>
+                <span className="rounded-[4px] border border-[var(--rasq-teal)]/25 bg-[var(--rasq-teal)]/10 px-1.5 py-0.5 text-[8px] font-medium text-[var(--rasq-mint)]">
+                  3 active plans
+                </span>
+              </div>
+              <div className="mt-2.5 space-y-1.5">
+                {["Lower limb rehabilitation", "Upper limb recovery"].map((row) => (
+                  <div key={row} className="flex items-center justify-between rounded-[5px] border border-[var(--rasq-border)] bg-[var(--rasq-void)] px-2.5 py-1.5">
+                    <span className="text-[10px] text-white/50">{row}</span>
+                    <span className="h-1.5 w-1.5 rounded-full bg-[var(--rasq-teal)]" />
+                  </div>
+                ))}
+              </div>
             </div>
             <p className="mt-5 text-xs font-medium uppercase tracking-[0.1em] text-white/35">
               For providers
@@ -642,10 +719,22 @@ function AccessSection() {
             className="flex flex-col border-t border-[var(--rasq-border)] p-8 lg:border-l lg:border-t-0 lg:p-10"
             style={{ background: "var(--rasq-warm)" }}
           >
-            <div className="flex h-10 w-10 items-center justify-center rounded-[8px] border border-[var(--rasq-warm-bd)] bg-white text-[var(--rasq-teal)]">
-              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-              </svg>
+            <div
+              className="rounded-[var(--rasq-r-card)] border border-[var(--rasq-warm-bd)] bg-white p-3.5"
+              aria-hidden="true"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[9px] font-medium uppercase tracking-[0.1em] text-[var(--rasq-warm-tx2)]" style={{ fontFamily: "var(--rasq-font-mono)" }}>
+                  Today
+                </span>
+                <span className="rounded-[4px] border border-[var(--rasq-teal)]/25 bg-[var(--rasq-teal)]/10 px-1.5 py-0.5 text-[8px] font-medium text-[var(--rasq-teal)]">
+                  1 session
+                </span>
+              </div>
+              <div className="mt-2.5 rounded-[5px] border border-[var(--rasq-warm-bd)] bg-[var(--rasq-warm)] px-2.5 py-2">
+                <p className="text-[10px] font-medium text-[var(--rasq-warm-tx)]">Guided session 9</p>
+                <p className="mt-0.5 text-[9px] text-[var(--rasq-warm-tx2)]">10–15 min · Assigned by your therapist</p>
+              </div>
             </div>
             <p className="mt-5 text-xs font-medium uppercase tracking-[0.1em] text-[var(--rasq-warm-tx2)]">
               For patients
@@ -870,6 +959,7 @@ export default function HomePage() {
         <HeroSection />
         <TrustBar />
         <WorkflowSection />
+        <GuidedRehabilitationSection />
         <ProgressJourneySection />
         <AccessSection />
         <CapabilitiesSection />

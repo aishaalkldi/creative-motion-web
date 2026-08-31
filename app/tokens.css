@@ -167,6 +167,28 @@
   to { transform: translateX(100%); }
 }
 
+/* Photo frame — graded placeholder for real RASQ rehabilitation photography.
+   No stock/decorative photo is embedded; this is the crop/grade/motion
+   treatment the real asset will drop into unchanged. */
+.rasq-photo-frame {
+  position: relative;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse at 32% 22%, color-mix(in srgb, var(--rasq-teal) 16%, transparent) 0%, transparent 56%),
+    linear-gradient(160deg, #0d1b17 0%, #0a1512 45%, #060b09 100%);
+}
+
+/* Maximum ~2.5% scale over a long, slow duration — must never read as a
+   deliberate "moving photo" design effect. */
+.rasq-photo-drift {
+  animation: rasq-photo-drift 24s var(--rasq-ease) infinite alternate;
+}
+
+@keyframes rasq-photo-drift {
+  from { transform: scale(1); }
+  to { transform: scale(1.025); }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .rasq-stagger-item,
   .rasq-reveal,
@@ -176,7 +198,8 @@
   .rasq-arc-dot,
   .rasq-connector,
   .rasq-preview-stack,
-  .rasq-progress-sweep::after {
+  .rasq-progress-sweep::after,
+  .rasq-photo-drift {
     animation: none !important;
     transition: none !important;
     opacity: 1 !important;
