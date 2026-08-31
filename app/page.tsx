@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 
 function useReveal(threshold = 0.15) {
@@ -179,73 +180,33 @@ function HeroPreview() {
       />
 
       <div className="rasq-preview-stack relative">
-        <PhotoFrame drift className="aspect-[4/5] w-full lg:aspect-[5/6]">
-          <MovementArc className="opacity-90" />
-        </PhotoFrame>
-
         <div
-          className="relative z-10 -mt-16 ml-auto w-[85%] rounded-[var(--rasq-r-lg)] border border-[var(--rasq-border)] bg-[var(--rasq-base)] p-5 shadow-[0_32px_64px_-40px_rgba(0,0,0,0.85)] lg:-mt-20 lg:w-[80%] lg:p-6"
+          className="relative overflow-hidden rounded-[var(--rasq-r-lg)] border border-[var(--rasq-border)] bg-[var(--rasq-base)] shadow-[0_32px_64px_-40px_rgba(0,0,0,0.85)]"
           aria-hidden="true"
         >
-          <div className="rounded-[var(--rasq-r-card)] border border-[var(--rasq-border)] bg-[var(--rasq-card)] p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p
-                  className="text-[10px] font-medium uppercase tracking-[0.1em] text-white/30"
-                  style={{ fontFamily: "var(--rasq-font-mono)" }}
-                >
-                  Clinician workspace
-                </p>
-                <p className="mt-2 text-sm font-medium text-white">Recovery plan</p>
-                <p className="mt-0.5 text-xs text-white/40">Lower limb rehabilitation</p>
-              </div>
-              <span className="rounded-[5px] border border-[var(--rasq-teal)]/25 bg-[var(--rasq-teal)]/10 px-2 py-0.5 text-[10px] font-medium text-[var(--rasq-mint)]">
-                Active
-              </span>
-            </div>
-
-            <div className="mt-5">
-              <div className="mb-2 flex items-center justify-between text-xs text-white/40">
-                <span>Plan status</span>
-                <span style={{ fontFamily: "var(--rasq-font-mono)" }}>In progress</span>
-              </div>
-              <div className="rasq-progress-sweep h-1.5 w-full rounded-full bg-[var(--rasq-border)]">
-                <div
-                  className="h-full rounded-full bg-[var(--rasq-teal)]"
-                  style={{ width: "62%" }}
-                />
-              </div>
-            </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-3 border-t border-[var(--rasq-border)] pt-5">
-              {[
-                { label: "Sessions completed", value: "8 of 12" },
-                { label: "Next review", value: "Week 5" },
-              ].map(({ label, value }) => (
-                <div key={label}>
-                  <p className="text-[11px] text-white/35">{label}</p>
-                  <p
-                    className="mt-1 text-sm font-medium text-white"
-                    style={{ fontFamily: "var(--rasq-font-mono)" }}
-                  >
-                    {value}
-                  </p>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-4 rounded-[6px] border border-[var(--rasq-border)] bg-[var(--rasq-void)] px-3 py-2.5">
-              <p className="text-[11px] text-white/45">
-                Therapist review · Draft notes ready for clinician review
-              </p>
-            </div>
+          <div className="relative aspect-[4/5] w-full min-h-[320px] sm:min-h-[380px] lg:min-h-[440px]">
+            <Image
+              src="/images/futuristic_motion_tracking_portrait.png"
+              alt=""
+              fill
+              priority
+              sizes="(max-width: 1024px) 420px, 520px"
+              className="object-cover object-[42%_38%]"
+            />
+            <div
+              className="pointer-events-none absolute inset-0 rounded-[var(--rasq-r-lg)]"
+              style={{
+                background:
+                  "linear-gradient(180deg, color-mix(in srgb, var(--rasq-void) 18%, transparent) 0%, transparent 28%, transparent 72%, color-mix(in srgb, var(--rasq-void) 24%, transparent) 100%), linear-gradient(90deg, color-mix(in srgb, var(--rasq-void) 12%, transparent) 0%, transparent 18%, transparent 82%, color-mix(in srgb, var(--rasq-void) 16%, transparent) 100%)",
+              }}
+            />
+            <div
+              className="pointer-events-none absolute inset-0 rounded-[var(--rasq-r-lg)] ring-1 ring-inset ring-[var(--rasq-teal)]/10"
+              aria-hidden="true"
+            />
           </div>
         </div>
       </div>
-
-      <p className="relative z-10 mt-5 text-[11px] leading-5 text-white/30">
-        Illustrative session — example workspace view only, not a real patient record.
-      </p>
     </div>
   );
 }
