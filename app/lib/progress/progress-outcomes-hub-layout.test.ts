@@ -9,9 +9,12 @@ import { describe, it } from "node:test";
 import {
   ADDITIONAL_CAMERA_OBSERVATIONS_TITLE,
   filterOutcomesHubSectionNav,
+  formatInteractiveShoulderOutcomeSummary,
   INTERACTIVE_SHOULDER_SECTION_DESCRIPTION,
+  shouldMountInteractiveShoulderOutcomesPanel,
   shouldShowCameraObservationsSection,
   shouldShowCaptureReliabilitySection,
+  shouldShowInteractiveShoulderEmptyState,
   TRACKING_CAPTURE_NOTES_TITLE,
 } from "./progress-outcomes-hub-layout";
 
@@ -61,6 +64,45 @@ describe("progress-outcomes-hub-layout", () => {
 });
 
 describe("ProgressOutcomesHub interactive shoulder polish", () => {
+  it("shows Interactive Shoulder empty state only when current and chart outcomes are both empty", () => {
+    assert.equal(shouldShowInteractiveShoulderEmptyState(0, 0), true);
+    assert.equal(shouldShowInteractiveShoulderEmptyState(0, 2), false);
+    assert.equal(shouldShowInteractiveShoulderEmptyState(1, 2), false);
+    assert.equal(shouldShowInteractiveShoulderEmptyState(1, 1), false);
+    assert.ok(HUB_SOURCE.includes("shouldShowInteractiveShoulderEmptyState("));
+    assert.ok(!HUB_SOURCE.includes("bundle.interactiveShoulderOutcomes.length === 0 ? ("));
+  });
+
+  it("mounts InteractiveShoulderOutcomesPanel when longitudinal chart outcomes exist without current-plan cards", () => {
+    assert.equal(shouldMountInteractiveShoulderOutcomesPanel(0, 2), true);
+    assert.equal(shouldMountInteractiveShoulderOutcomesPanel(0, 0), false);
+    assert.equal(shouldMountInteractiveShoulderOutcomesPanel(1, 2), true);
+    assert.ok(HUB_SOURCE.includes("InteractiveShoulderOutcomesPanel"));
+    assert.ok(HUB_SOURCE.includes("chartOutcomes={bundle.interactiveShoulderChartOutcomes}"));
+    assert.ok(HUB_SOURCE.includes("outcomes={bundle.interactiveShoulderOutcomes}"));
+  });
+
+  it("keeps historical outcomes on chartOutcomes only — session cards map current-plan outcomes", () => {
+    assert.ok(PANEL_SOURCE.includes("outcomes.map((entry) => ("));
+    assert.ok(PANEL_SOURCE.includes("chartOutcomes ?? outcomes"));
+    assert.ok(PANEL_SOURCE.includes("longitudinalOutcomes = chartOutcomes ?? outcomes"));
+  });
+
+  it("formats summary line with recorded longitudinal count when chart outcomes exist", () => {
+    assert.equal(
+      formatInteractiveShoulderOutcomeSummary(0, 7),
+      "7 recorded Interactive Shoulder outcomes",
+    );
+    assert.equal(
+      formatInteractiveShoulderOutcomeSummary(1, 7),
+      "7 recorded Interactive Shoulder outcomes (1 on current plan)",
+    );
+    assert.equal(
+      formatInteractiveShoulderOutcomeSummary(0, 0),
+      "0 Interactive Shoulder outcomes (current plan)",
+    );
+  });
+
   it("hides empty camera observation and capture sections", () => {
     assert.ok(HUB_SOURCE.includes("showCameraObservations"));
     assert.ok(HUB_SOURCE.includes("showCaptureReliability"));
