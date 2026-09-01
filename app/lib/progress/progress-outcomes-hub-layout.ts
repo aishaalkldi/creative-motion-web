@@ -33,3 +33,34 @@ export function filterOutcomesHubSectionNav<
     return true;
   });
 }
+
+/** Empty only when there are no current-plan cards and no longitudinal chart rows. */
+export function shouldShowInteractiveShoulderEmptyState(
+  currentPlanOutcomeCount: number,
+  chartOutcomeCount: number,
+): boolean {
+  return currentPlanOutcomeCount === 0 && chartOutcomeCount === 0;
+}
+
+export function shouldMountInteractiveShoulderOutcomesPanel(
+  currentPlanOutcomeCount: number,
+  chartOutcomeCount: number,
+): boolean {
+  return !shouldShowInteractiveShoulderEmptyState(currentPlanOutcomeCount, chartOutcomeCount);
+}
+
+/** Summary line: longitudinal recorded count when chart rows exist; current-plan label otherwise. */
+export function formatInteractiveShoulderOutcomeSummary(
+  currentPlanOutcomeCount: number,
+  chartOutcomeCount: number,
+): string {
+  if (chartOutcomeCount > 0) {
+    const recorded = `${chartOutcomeCount} recorded Interactive Shoulder outcome${chartOutcomeCount === 1 ? "" : "s"}`;
+    if (currentPlanOutcomeCount > 0 && currentPlanOutcomeCount !== chartOutcomeCount) {
+      return `${recorded} (${currentPlanOutcomeCount} on current plan)`;
+    }
+    return recorded;
+  }
+
+  return `${currentPlanOutcomeCount} Interactive Shoulder outcome${currentPlanOutcomeCount === 1 ? "" : "s"} (current plan)`;
+}

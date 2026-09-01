@@ -29,6 +29,7 @@ import {
   INTERACTIVE_SHOULDER_SECTION_DESCRIPTION,
   shouldShowCameraObservationsSection,
   shouldShowCaptureReliabilitySection,
+  shouldShowInteractiveShoulderEmptyState,
   TRACKING_CAPTURE_NOTES_DESCRIPTION,
   TRACKING_CAPTURE_NOTES_TITLE,
 } from "@/app/lib/progress/progress-outcomes-hub-layout";
@@ -141,7 +142,10 @@ function hubIsFullyEmpty(bundle: ProgressOutcomesBundle): boolean {
     bundle.assessments.length === 0 &&
     bundle.cvEvidence.length === 0 &&
     bundle.captureQualityHistory.length === 0 &&
-    bundle.interactiveShoulderOutcomes.length === 0
+    shouldShowInteractiveShoulderEmptyState(
+      bundle.interactiveShoulderOutcomes.length,
+      bundle.interactiveShoulderChartOutcomes.length,
+    )
   );
 }
 
@@ -356,7 +360,10 @@ export function ProgressOutcomesHub({ bundle }: ProgressOutcomesHubProps) {
         typeBadge={PROGRESS_OUTCOMES_SECTION_BADGES.interactiveShoulderOutcomes}
         description={INTERACTIVE_SHOULDER_SECTION_DESCRIPTION}
       >
-        {bundle.interactiveShoulderOutcomes.length === 0 ? (
+        {shouldShowInteractiveShoulderEmptyState(
+          bundle.interactiveShoulderOutcomes.length,
+          bundle.interactiveShoulderChartOutcomes.length,
+        ) ? (
           <EmptyState message="No Interactive Shoulder movement outcomes recorded yet. A record appears here after the patient completes an Interactive Shoulder session." />
         ) : (
           <InteractiveShoulderOutcomesPanel
