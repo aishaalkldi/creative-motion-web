@@ -2,7 +2,6 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { IBM_Plex_Sans_Arabic } from "next/font/google";
 import {
   getRemoteAssessment,
   updateRemoteAssessmentDraft,
@@ -27,12 +26,7 @@ import {
 } from "@/app/lib/patient-assessment-questions";
 import { TrustFooter } from "@/app/components/trust/TrustFooter";
 import { trustFooterUi } from "@/app/lib/patient-portal-ui";
-
-const arabicFont = IBM_Plex_Sans_Arabic({
-  subsets: ["arabic"],
-  weight: ["400", "600"],
-  display: "swap",
-});
+import { patientPortalArabicClass } from "@/app/lib/rasq-typography";
 
 type Stage = "section" | "review" | "submitting";
 
@@ -677,7 +671,7 @@ export function PatientAssessmentClient() {
   const progress = totalSections > 0 ? (sectionIdx / totalSections) * 100 : 0;
   const formDir = lang === "ar" ? "rtl" : "ltr";
   const formLang = lang === "ar" ? "ar" : "en";
-  const fontClass = lang === "ar" ? arabicFont.className : "";
+  const fontClass = patientPortalArabicClass(lang === "ar");
 
   if (tokenState === "invalid") {
     return (
