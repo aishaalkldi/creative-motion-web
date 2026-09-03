@@ -350,6 +350,10 @@ export class SessionOrchestrator {
    * the pre-configuration default behavior.
    */
   private evaluateTrackerLossHold(block: MovementBlock, nowMs: number): boolean {
+    // Instructional blocks (warm-up / cool-down) advance by duration only.
+    // Brief tracking loss must not enter safetyHold and block completion.
+    if (block.blockType === "instructional") return false;
+
     if (this.trackerLostAtMs === null) return false;
     if (this.state === "safetyHold" && this.safetyHoldReason === "trackerLost") return true;
     if (this.state !== "active") return false;
