@@ -16,8 +16,16 @@ import {
   extractMotionInputSourceFromStructuredData,
   type MotionInputAdapterId,
 } from "@/app/lib/assessment-delivery/motion-input-registry";
+import {
+  isStrokeQuestionnaireData,
+  type StrokeQuestionnaireSubmission,
+} from "@/app/lib/stroke-questionnaire/stroke-questionnaire-schema";
 
-export type AssessmentReportKind = "general_msk" | "remote_questionnaire" | "structured";
+export type AssessmentReportKind =
+  | "general_msk"
+  | "remote_questionnaire"
+  | "stroke_questionnaire"
+  | "structured";
 
 export type ResolvedAssessmentReport = {
   kind: AssessmentReportKind | null;
@@ -25,6 +33,7 @@ export type ResolvedAssessmentReport = {
   remoteQuestionnaireDraft: PatientAssessmentDraft | null;
   remoteSubmissionMeta: Record<string, unknown> | null;
   remoteIncludedSections: PatientSectionId[];
+  strokeSubmission: StrokeQuestionnaireSubmission | null;
   structuredData: AssessmentData | null;
   patient: BackendPatient | null;
   resolvedPatientId: string;
@@ -45,6 +54,7 @@ export function resolveAssessmentReportFromDetail(
     remoteQuestionnaireDraft: null,
     remoteSubmissionMeta: null,
     remoteIncludedSections: [],
+    strokeSubmission: null,
     structuredData: null,
     patient: {
       full_name: detail.patient.full_name,
@@ -62,6 +72,17 @@ export function resolveAssessmentReportFromDetail(
   const general = extractGeneralDraft(detail.structured_data, detail.type);
   if (general) {
     return { ...base, kind: "general_msk", draft: general };
+  }
+
+  if (
+    detail.type === "remote_questionnaire" &&
+    isStrokeQuestionnaireData(detail.structured_data)
+  ) {
+    return {
+      ...base,
+      kind: "stroke_questionnaire",
+      strokeSubmission: detail.structured_data,
+    };
   }
 
   const remoteDraft = extractRemoteQuestionnaireDraft(detail.structured_data, detail.type);

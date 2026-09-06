@@ -44,6 +44,13 @@ import { RemoteQuestionnairePrintReport } from "@/app/components/reports/RemoteQ
 import { PtClinicalReportSection } from "@/app/components/reports/PtClinicalReportSection";
 import { CvCapturesClinicalSection } from "@/app/components/reports/CvCapturesClinicalSection";
 import { AssessmentInterpretationDraftSection } from "@/app/components/reports/AssessmentInterpretationDraftSection";
+import {
+  StrokeQuestionnaireClinicianPanel,
+  StrokeReportDisplay,
+  isStrokeClinicianData,
+} from "@/app/components/clinician/StrokeQuestionnaireClinicianPanel";
+import type { StrokeQuestionnaireSubmission } from "@/app/lib/stroke-questionnaire/stroke-questionnaire-schema";
+import type { StrokePtClinicalReport } from "@/app/lib/stroke-questionnaire/stroke-pt-clinical-report";
 import { PdfTranslationWarningModal } from "@/app/components/clinician/PdfTranslationWarningModal";
 import { useCvSessionMetrics } from "@/app/hooks/useCvSessionMetrics";
 import { getCvReadyExercises } from "@/app/lib/cv/cv-ready-exercises";
@@ -1029,7 +1036,8 @@ export function AssessmentReportClient() {
   const [remoteQuestionnaireDraft, setRemoteQuestionnaireDraft] = useState<PatientAssessmentDraft | null>(null);
   const [remoteSubmissionMeta, setRemoteSubmissionMeta] = useState<Record<string, unknown> | null>(null);
   const [remoteIncludedSections, setRemoteIncludedSections] = useState<PatientSectionId[]>([]);
-  const [reportKind, setReportKind] = useState<"general_msk" | "structured" | "remote_questionnaire" | null>(null);
+  const [strokeSubmission, setStrokeSubmission] = useState<StrokeQuestionnaireSubmission | null>(null);
+  const [reportKind, setReportKind] = useState<"general_msk" | "structured" | "remote_questionnaire" | "stroke_questionnaire" | null>(null);
   const [serverBacked, setServerBacked] = useState(false);
   const [resolvedPatientId, setResolvedPatientId] = useState(patientIdParam);
   const [serverNotes, setServerNotes] = useState<string | null>(null);
@@ -1143,6 +1151,7 @@ export function AssessmentReportClient() {
       setRemoteQuestionnaireDraft(null);
       setRemoteSubmissionMeta(null);
       setRemoteIncludedSections([]);
+      setStrokeSubmission(null);
       setReportKind(null);
       setServerBacked(false);
       setPatientAnsweredInArabic(false);
@@ -1168,6 +1177,7 @@ export function AssessmentReportClient() {
           setRemoteQuestionnaireDraft(resolved.remoteQuestionnaireDraft);
           setRemoteSubmissionMeta(resolved.remoteSubmissionMeta);
           setRemoteIncludedSections(resolved.remoteIncludedSections);
+          setStrokeSubmission(resolved.strokeSubmission);
           setStructuredData(resolved.structuredData);
           setReportKind(resolved.kind);
           if (resolved.loadError) {
@@ -1321,6 +1331,128 @@ export function AssessmentReportClient() {
               ← Patient profile
             </Link>
           )}
+        </div>
+      </main>
+    );
+  }
+
+  if (reportKind === "stroke_questionnaire" && strokeSubmission) {
+    const strokeReport =
+      ((strokeSubmission as unknown as Record<string, unknown>)
+        .strokePtClinicalReportFinal ??
+        (strokeSubmission as unknown as Record<string, unknown>)
+          .strokePtClinicalReportDraft) as StrokePtClinicalReport | undefined;
+    const backHref = patientId
+      ? `/clinician/patients/${patientId}`
+      : "/clinician/patients";
+
+    return (
+      <main className="assessment-report-root print-report min-h-screen bg-[#0B1220] text-white">
+        <ReportExportToolbar backHref={backHref} onExportClick={() => window.print()} />
+        <ReportScreenHeader
+          patientName={patient?.full_name ?? "Patient"}
+          displayDate={reportDate}
+          assessmentTypeLabel="Remote Neurorehabilitation Intake"
+          sourceLabel="Patient- and/or caregiver-reported"
+          languageLabel={strokeSubmission.assessmentLanguage === "ar" ? "Arabic" : "English"}
+          hasRiskFlags={strokeSubmission.safetyState !== "PASS"}
+        />
+        <div className="print-report-body mx-auto max-w-4xl space-y-6 px-6 py-8">
+          <div className="print:hidden">
+            <StrokeQuestionnaireClinicianPanel
+              assessmentId={assessmentId}
+              structuredData={strokeSubmission}
+              patientId={patientId}
+              onStructuredDataUpdated={(next) => {
+                if (isStrokeClinicianData(next)) setStrokeSubmission(next);
+              }}
+            />
+          </div>
+          <header className="hidden border-b border-gray-300 pb-5 print:block">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+              RASQ Clinical Assessment Report
+            </p>
+            <h1 className="mt-2 text-2xl font-bold text-gray-950">
+              {patient?.full_name ?? "Patient"}
+            </h1>
+            <p className="mt-1 text-sm text-gray-600">
+              Remote Neurorehabilitation Intake · {reportDate.slice(0, 10)}
+            </p>
+            <p className="mt-3 text-xs text-gray-600">
+              Patient- and/or caregiver-reported clinical decision-support information
+              for physiotherapist review.
+            </p>
+          </header>
+          <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 print:border-gray-200 print:bg-white print:text-gray-900">
+            <h2 className="text-base font-bold">Encounter &amp; Safety</h2>
+            <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+              <InfoTile label="Questionnaire" value="Stroke v1" />
+              <InfoTile label="Pathway" value="Remote Neurorehabilitation Intake" />
+              <InfoTile label="Safety gate" value={strokeSubmission.safetyState} />
+              <InfoTile
+                label="Information source"
+                value={
+                  String(
+                    strokeSubmission.responses.sc_information_source?.rawValue ??
+                      "Not specified",
+                  )
+                }
+              />
+            </dl>
+            <p className="mt-4 text-xs text-white/50 print:text-gray-600">
+              PASS reflects completion of the intake safety gate only. It does not indicate
+              medical clearance for exercise or performance assessment.
+            </p>
+          </section>
+          {strokeReport ? (
+            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 print:border-0 print:bg-white print:text-gray-900">
+              <StrokeReportDisplay report={strokeReport} />
+            </section>
+          ) : (
+            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+              <p className="text-sm text-white/70">
+                The Stroke PT Clinical Report has not been generated and finalized yet.
+              </p>
+            </section>
+          )}
+          <section className="hidden break-before-page print:block">
+            <h2 className="text-lg font-bold text-gray-950">
+              Appendix: Source Response Traceability
+            </h2>
+            <p className="mt-1 text-xs text-gray-600">
+              Original responses and approved Clinical English. This appendix preserves
+              reporter provenance and is not an objective examination.
+            </p>
+            <div className="mt-5 space-y-4">
+              {Object.entries(strokeSubmission.responses)
+                .filter(([, response]) =>
+                  Array.isArray(response.rawValue)
+                    ? response.rawValue.length > 0
+                    : response.rawValue.trim().length > 0,
+                )
+                .map(([id, response]) => (
+                  <div key={id} className="break-inside-avoid border-b border-gray-200 pb-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
+                      {id.replaceAll("_", " ")} · {response.provenance}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">Original</p>
+                    <p className="text-sm text-gray-900">
+                      {Array.isArray(response.rawValue)
+                        ? response.rawValue.join(", ")
+                        : response.rawValue}
+                    </p>
+                    {response.clinicalEnglish ? (
+                      <>
+                        <p className="mt-2 text-xs text-gray-500">Clinical English</p>
+                        <p className="text-sm text-gray-900">
+                          {response.clinicalEnglish}
+                        </p>
+                      </>
+                    ) : null}
+                  </div>
+                ))}
+            </div>
+          </section>
         </div>
       </main>
     );

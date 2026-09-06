@@ -91,6 +91,10 @@ import {
   RemoteQuestionnaireClinicianPanel,
   isRemoteQuestionnaireStructuredData,
 } from "@/app/components/clinician/RemoteQuestionnaireClinicianPanel";
+import {
+  StrokeQuestionnaireClinicianPanel,
+  isStrokeClinicianData,
+} from "@/app/components/clinician/StrokeQuestionnaireClinicianPanel";
 import { displayPatientFileHeader } from "../../../lib/patient-file-number";
 import { resolveCurrentAndPreviousPlans } from "../../../lib/clinician/resolve-current-plan";
 import { PreviousPlansSummary } from "../../../components/clinician/PreviousPlansSummary";
@@ -470,6 +474,33 @@ export default function PatientProfilePage() {
   const clinicalSummary = useMemo(() => {
     if (!clinicalSummaryRow) return null;
     if (clinicalSummaryRow.type === "remote_questionnaire") {
+      if (isStrokeClinicianData(clinicalSummaryRow.structured_data)) {
+        const source = clinicalSummaryRow.structured_data.responses.sc_information_source;
+        return {
+          title: "Remote Neurorehabilitation Intake",
+          submittedAt: clinicalSummaryRow.created_at,
+          metrics: [
+            { label: "Safety gate", value: clinicalSummaryRow.structured_data.safetyState },
+            {
+              label: "Clinical English",
+              value: clinicalSummaryRow.structured_data.strokeWorkflow.translation.status,
+            },
+          ],
+          rows: [
+            ...(source
+              ? [
+                  {
+                    label: "Information source",
+                    value: Array.isArray(source.rawValue)
+                      ? source.rawValue.join(", ")
+                      : source.rawValue,
+                  },
+                ]
+              : []),
+          ],
+          hasRedFlag: clinicalSummaryRow.structured_data.safetyState !== "PASS",
+        };
+      }
       return buildRemoteQuestionnaireSummary(
         clinicalSummaryRow.structured_data,
         clinicalSummaryRow.created_at,
@@ -527,7 +558,9 @@ export default function PatientProfilePage() {
   }, [clinicalSummaryRow]);
 
   const remoteQuestionnaireSummary: RemoteQuestionnaireSummary | null =
-    clinicalSummaryRow?.type === "remote_questionnaire" && clinicalSummary
+    clinicalSummaryRow?.type === "remote_questionnaire" &&
+    !isStrokeClinicianData(clinicalSummaryRow.structured_data) &&
+    clinicalSummary
       ? (clinicalSummary as RemoteQuestionnaireSummary)
       : null;
 
@@ -1228,6 +1261,24 @@ export default function PatientProfilePage() {
 
                     {clinicalSummaryDetail?.type === "remote_questionnaire" &&
                     clinicalSummaryAssessmentId &&
+                    isStrokeClinicianData(clinicalSummaryDetail.structured_data) ? (
+                      <StrokeQuestionnaireClinicianPanel
+                        assessmentId={clinicalSummaryAssessmentId}
+                        structuredData={clinicalSummaryDetail.structured_data}
+                        patientId={patient.id}
+                        onStructuredDataUpdated={(next) =>
+                          setClinicalSummaryDetail((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  structured_data: next as StoredAssessmentPayload,
+                                }
+                              : current,
+                          )
+                        }
+                      />
+                    ) : clinicalSummaryDetail?.type === "remote_questionnaire" &&
+                    clinicalSummaryAssessmentId &&
                     isRemoteQuestionnaireStructuredData(clinicalSummaryDetail.structured_data) ? (
                       <RemoteQuestionnaireClinicianPanel
                         assessmentId={clinicalSummaryAssessmentId}
@@ -1710,6 +1761,14 @@ export default function PatientProfilePage() {
                               Copy Link
                             </button>
                           )}
+                          {isSubmitted && ra.assessmentId ? (
+                            <Link
+                              href={`/clinician/assessment/report?patientId=${encodeURIComponent(patient.id)}&assessmentId=${encodeURIComponent(ra.assessmentId)}`}
+                              className="flex-1 px-3 py-2.5 text-center text-[11px] font-semibold text-[#5DCAA5] transition hover:bg-[#0B1220]"
+                            >
+                              Review submission
+                            </Link>
+                          ) : null}
                         </div>
                       </div>
                     );

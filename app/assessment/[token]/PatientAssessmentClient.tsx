@@ -27,6 +27,7 @@ import {
 import { TrustFooter } from "@/app/components/trust/TrustFooter";
 import { trustFooterUi } from "@/app/lib/patient-portal-ui";
 import { patientPortalArabicClass } from "@/app/lib/rasq-typography";
+import { StrokeQuestionnaireClient } from "@/app/components/stroke/StrokeQuestionnaireClient";
 
 type Stage = "section" | "review" | "submitting";
 
@@ -694,6 +695,10 @@ export function PatientAssessmentClient() {
         <p className="text-sm text-white/40">{patientText(PATIENT_UI.verifying, lang)}</p>
       </div>
     );
+  }
+
+  if (req.assessmentType === "stroke_neuro_v1") {
+    return <StrokeQuestionnaireClient token={token} request={req} />;
   }
 
   if (!consentGiven) {
