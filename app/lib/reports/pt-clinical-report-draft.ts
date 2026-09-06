@@ -4,24 +4,20 @@
 import type { PatientAssessmentDraft, PatientSectionId } from "@/app/lib/api/remote-assessments";
 import { getAssessmentLanguage } from "@/app/lib/assessment-payload";
 import { synthesizePtClinicalReport } from "@/app/lib/ai/synthesize-pt-clinical-report";
-import { PATIENT_SECTION_QUESTIONS, PATIENT_SECTION_TITLES, clinicianText } from "@/app/lib/patient-assessment-questions";
-import { detectRedFlag, inferIncludedSections } from "@/app/lib/remote-questionnaire-summary";
-import {
-  buildAssessmentInterpretationDraft,
-  FORBIDDEN_INTERPRETATION_TERMS,
-} from "@/app/lib/reports/assessment-interpretation-draft";
-import { readClinicalFieldForReport } from "@/app/lib/reports/remote-questionnaire-workflow";
+import { inferIncludedSections } from "@/app/lib/remote-questionnaire-summary";
+import { polishPtClinicalReportDraft } from "@/app/lib/reports/polish-pt-clinical-report";
 import {
   buildPtClinicalReportDraftFromSections,
-  type ApprovedClinicalEnglishField,
-  type ApprovedClinicalEnglishPayload,
   type PtClinicalReportDraft,
   type PtClinicalReportSection,
-  PT_CLINICAL_REPORT_DISCLAIMER,
-  PT_CLINICAL_REPORT_THERAPIST_NOTE,
-  PT_CLINICAL_REPORT_TITLE,
   PT_REPORT_SECTION_SPECS,
 } from "@/app/lib/reports/pt-clinical-report-schema";
+import { suggestRasqModulesFromCorpus } from "@/app/lib/reports/rasq-assessment-modules";
+import {
+  buildStructuredClinicalSourceBundle,
+  type StructuredClinicalSourceBundle,
+  type StructuredClinicalSourceField,
+} from "@/app/lib/reports/structured-clinical-source-bundle";
 
 export {
   PT_CLINICAL_REPORT_DISCLAIMER,
@@ -30,226 +26,128 @@ export {
   PT_REPORT_SECTION_SPECS,
 } from "@/app/lib/reports/pt-clinical-report-schema";
 export type {
+  ApprovedClinicalEnglishField,
   ApprovedClinicalEnglishPayload,
   PtClinicalReportDraft,
   PtClinicalReportSection,
 } from "@/app/lib/reports/pt-clinical-report-schema";
+export { buildStructuredClinicalSourceBundle } from "@/app/lib/reports/structured-clinical-source-bundle";
 
-function asText(value: string | undefined): string {
-  return value?.trim() ?? "";
+function joinFieldText(fields: StructuredClinicalSourceField[]): string {
+  return fields.map((field) => field.clinicalEnglish).join(" ");
 }
 
-function readField(
-  structuredData: Record<string, unknown>,
-  fieldKey: string,
-  original: string | undefined,
-): string {
-  return readClinicalFieldForReport(structuredData, fieldKey, original);
-}
-
-export function buildApprovedClinicalEnglishPayload(input: {
-  structuredData: Record<string, unknown>;
-  draft: PatientAssessmentDraft;
-  includedSections?: PatientSectionId[];
-}): ApprovedClinicalEnglishPayload {
-  const includedSections = input.includedSections ?? inferIncludedSections(input.draft);
-  const language = getAssessmentLanguage(input.structuredData);
-  const fields: ApprovedClinicalEnglishField[] = [];
-
-  for (const sectionId of includedSections) {
-    const block = input.draft[sectionId];
-    if (!block || typeof block !== "object") continue;
-    const questions = PATIENT_SECTION_QUESTIONS[sectionId];
-    for (const question of questions) {
-      const raw = (block as Record<string, string>)[question.key];
-      if (typeof raw !== "string") continue;
-      const trimmed = raw.trim();
-      if (!trimmed || /^\d+$/.test(trimmed)) continue;
-      const clinicalEnglish = readField(input.structuredData, question.key, trimmed);
-      if (!clinicalEnglish) continue;
-      fields.push({
-        fieldKey: question.key,
-        label: clinicianText(question.text),
-        section: clinicianText(PATIENT_SECTION_TITLES[sectionId]),
-        clinicalEnglish,
-      });
-    }
-  }
-
-  const painScore = asText(input.draft.pain?.painScore) || null;
-
-  return {
-    sourceLanguage: language === "ar" ? "ar" : "en",
-    painScore,
-    hasRedFlag: detectRedFlag(input.structuredData),
-    fields,
-  };
-}
-
-function containsForbiddenTerm(text: string): boolean {
-  const normalized = text.trim().toLowerCase();
-  return FORBIDDEN_INTERPRETATION_TERMS.some((term) => normalized.includes(term.trim()));
-}
-
-function filterSafeLines(lines: string[]): string[] {
-  return lines.filter((line) => line.trim() && !containsForbiddenTerm(line));
-}
-
-function buildRuleFallbackSections(
-  structuredData: Record<string, unknown>,
-  draft: PatientAssessmentDraft,
-  includedSections: PatientSectionId[],
-): PtClinicalReportSection[] {
-  const pain = draft.pain;
-  const interpretation = buildAssessmentInterpretationDraft({
-    draft,
-    includedSections,
-    submissionMeta: structuredData,
-  });
-
-  const mainComplaint = readField(structuredData, "chiefComplaint", pain?.chiefComplaint);
-  const bodyRegion = readField(structuredData, "painLocation", pain?.painLocation);
-  const aggravating = readField(structuredData, "aggravating", pain?.aggravating);
-  const easing = readField(structuredData, "easing", pain?.easing);
-  const dailyImpact = readField(structuredData, "dailyImpact", pain?.dailyImpact);
-  const goals = readField(structuredData, "goals", pain?.goals);
-  const painScore = asText(pain?.painScore);
-
-  const presentationBullets = filterSafeLines([
-    mainComplaint ? `Primary concern: ${mainComplaint}` : "",
-    bodyRegion ? `Affected area (patient-reported): ${bodyRegion}` : "",
-    painScore ? `Patient-reported pain score: ${painScore}/10` : "",
-  ]);
-
-  const painBullets = filterSafeLines([
-    aggravating ? `Aggravating factors (patient-reported): ${aggravating}` : "",
-    easing ? `Easing factors (patient-reported): ${easing}` : "",
-    readField(structuredData, "worseWith", draft.rom?.worseWith)
-      ? `Movement-related symptom behavior (patient-reported): ${readField(structuredData, "worseWith", draft.rom?.worseWith)}`
-      : "",
-  ]);
-
-  const functionalBullets = filterSafeLines([
-    dailyImpact ? `Daily impact (patient-reported): ${dailyImpact}` : "",
-    readField(structuredData, "limitations", draft.rom?.limitations)
-      ? `Movement limitations (patient-reported): ${readField(structuredData, "limitations", draft.rom?.limitations)}`
-      : "",
-    readField(structuredData, "activitiesAffected", draft.strength?.activitiesAffected)
-      ? `Strength-related activity impact (patient-reported): ${readField(structuredData, "activitiesAffected", draft.strength?.activitiesAffected)}`
-      : "",
-  ]);
-
-  const activityBullets = filterSafeLines([
-    readField(structuredData, "difficultyDescription", draft.balance?.difficultyDescription)
-      ? `Balance-related difficulty (patient-reported): ${readField(structuredData, "difficultyDescription", draft.balance?.difficultyDescription)}`
-      : "",
-    readField(structuredData, "walkingDescription", draft.gait?.walkingDescription)
-      ? `Gait-related difficulty (patient-reported): ${readField(structuredData, "walkingDescription", draft.gait?.walkingDescription)}`
-      : "",
-    readField(structuredData, "standingDuration", draft.functional?.standingDuration)
-      ? `Standing tolerance (patient-reported): ${readField(structuredData, "standingDuration", draft.functional?.standingDuration)}`
-      : "",
-    readField(structuredData, "walkingDistance", draft.functional?.walkingDistance)
-      ? `Walking distance (patient-reported): ${readField(structuredData, "walkingDistance", draft.functional?.walkingDistance)}`
-      : "",
-    readField(structuredData, "stairsAbility", draft.functional?.stairsAbility)
-      ? `Stair ability (patient-reported): ${readField(structuredData, "stairsAbility", draft.functional?.stairsAbility)}`
-      : "",
-    readField(structuredData, "otherNotes", draft.functional?.otherNotes)
-      ? `Additional functional notes (patient-reported): ${readField(structuredData, "otherNotes", draft.functional?.otherNotes)}`
-      : "",
-  ]);
-
-  const interpretationParagraphs = filterSafeLines([
-    mainComplaint || aggravating || dailyImpact
-      ? `Based on the submitted questionnaire, the patient reports ${[mainComplaint, aggravating, dailyImpact].filter(Boolean).join("; ")}.`
-      : "",
-    bodyRegion && (aggravating || dailyImpact)
-      ? `The reported symptom behavior in the ${bodyRegion} region may indicate a mechanically influenced presentation requiring further physical examination for therapist review.`
-      : interpretation.functionalLimitations.length > 0
-        ? "Patient-reported functional limitations may indicate activity-related symptom behavior requiring further physical examination for therapist review."
-        : "",
-  ]);
-
-  const objectiveBullets = filterSafeLines([
-    ...interpretation.suggestedObjectiveAssessments.map(
-      (item) => `Consider assessing: ${item.replace(/^Suggested objective PT assessment item:\s*/i, "")}`,
-    ),
-    ...interpretation.movementComponents.slice(0, 4).map(
-      (item) => `Consider assessing: ${item.replace(/^Movement component for review:\s*/i, "")}`,
-    ),
-  ]);
-
-  const rasqBullets = filterSafeLines(
-    interpretation.bodyRegionBuckets.map((bucket) => {
-      if (bucket === "Shoulder" || bucket === "Upper limb") {
-        return "Consider for therapist review: upper-limb movement observation or remote upper-limb battery modules if clinically appropriate.";
-      }
-      if (bucket === "Balance and gait" || bucket === "Ankle / foot") {
-        return "Consider for therapist review: gait observation, balance, or mobility-related RASQ assessment modules if clinically appropriate.";
-      }
-      if (bucket === "Knee" || bucket === "Hip") {
-        return "Consider for therapist review: lower-limb functional movement and strength-related assessment modules if clinically appropriate.";
-      }
-      if (bucket === "Low back" || bucket === "Neck") {
-        return "Consider for therapist review: spinal movement and functional tolerance assessment modules if clinically appropriate.";
-      }
-      return "";
-    }),
+function synthesizeParagraphFromFields(fields: StructuredClinicalSourceField[]): string[] {
+  if (fields.length === 0) return [];
+  if (fields.length === 1) return [fields[0].clinicalEnglish];
+  const concepts = fields.map((field) =>
+    field.clinicalEnglish
+      .replace(/^(The patient reports|Patient-reported)\s*/i, "")
+      .trim()
+      .replace(/\.+$/, ""),
   );
+  return [`The patient reports ${concepts.join("; ")}.`];
+}
 
-  if (rasqBullets.length === 0) {
-    rasqBullets.push(
-      "Consider for therapist review: objective movement and functional assessment modules aligned with the patient-reported region and goals.",
-    );
+function buildInterpretationParagraph(bundle: StructuredClinicalSourceBundle): string[] {
+  const domains: string[] = [];
+  if (bundle.functionalLimitations.some((field) => /weakness|weak/i.test(field.clinicalEnglish))) {
+    domains.push("upper-limb or general functional limitation");
+  }
+  if (bundle.symptomBehavior.length > 0) domains.push("symptom behavior with movement");
+  if (bundle.activityParticipation.some((field) => /balance|unsteady|fall/i.test(field.clinicalEnglish))) {
+    domains.push("balance");
+  }
+  if (bundle.activityParticipation.some((field) => /walk|gait/i.test(field.clinicalEnglish))) {
+    domains.push("gait and mobility");
+  }
+  if (domains.length === 0) {
+    return [
+      "Based on the submitted questionnaire, further objective assessment is required to characterize movement quality, symptom behavior, and functional tolerance for therapist review.",
+    ];
+  }
+  return [
+    `The patient-reported presentation is consistent with significant ${domains.join(", ")}. Objective assessment is required to characterize movement quality, ROM, strength, motor control, hand function, balance, and mobility for therapist review.`,
+  ];
+}
+
+function buildObjectiveBullets(bundle: StructuredClinicalSourceBundle): string[] {
+  const bullets: string[] = [];
+  const corpus = joinFieldText(bundle.allFields).toLowerCase();
+  if (/shoulder|arm|hand|upper limb|overhead|reach/i.test(corpus)) {
+    bullets.push("Consider assessing shoulder movement and movement quality.");
+    bullets.push("Consider assessing upper-limb motor control and functional hand use.");
+  }
+  if (/weakness|grip|hold|cup|eat|groom/i.test(corpus)) {
+    bullets.push("Consider assessing functional hand use and grip-related tasks.");
+  }
+  if (/balance|unsteady|fall/i.test(corpus)) {
+    bullets.push("Consider assessing balance and postural control.");
+  }
+  if (/walk|gait|stairs|distance|stand/i.test(corpus)) {
+    bullets.push("Consider assessing gait and mobility tolerance.");
+  }
+  if (bullets.length === 0) {
+    bullets.push("Consider assessing pain behavior, active movement, and functional tasks relevant to the patient-reported region.");
+  }
+  return bullets;
+}
+
+function buildRuleFallbackSections(bundle: StructuredClinicalSourceBundle): PtClinicalReportSection[] {
+  const primary = bundle.presentation.filter((field) => field.clinicalConcept === "primary_complaint");
+  const anatomical = bundle.presentation.filter((field) => field.clinicalConcept === "anatomical_region");
+  const presentationParagraphs = [
+    anatomical.length > 0
+      ? anatomical[0].clinicalEnglish
+      : primary.length > 0
+        ? primary[0].clinicalEnglish
+        : "Summary of patient-reported presentation from the approved Clinical English translation.",
+  ];
+  if (bundle.painScore) {
+    presentationParagraphs.push(`Patient-reported pain score: ${bundle.painScore}/10.`);
   }
 
-  const hasRedFlag = detectRedFlag(structuredData);
+  const rasqModules = suggestRasqModulesFromCorpus(joinFieldText(bundle.allFields));
 
   const sectionContent: Record<string, { paragraphs: string[]; bullets: string[] }> = {
     presentation: {
-      paragraphs: presentationBullets.length
-        ? ["Summary of patient-reported presentation from the approved Clinical English translation."]
-        : ["No detailed presentation fields were documented in the submitted questionnaire."],
-      bullets: presentationBullets,
+      paragraphs: presentationParagraphs,
+      bullets: [],
     },
     primary_complaint: {
-      paragraphs: mainComplaint ? [] : ["No primary complaint was documented."],
-      bullets: mainComplaint ? [mainComplaint] : [],
+      paragraphs: primary.length ? synthesizeParagraphFromFields(primary) : ["Not reported."],
+      bullets: [],
     },
     pain_symptom_behavior: {
-      paragraphs: painBullets.length
-        ? ["Patient-reported pain and symptom behavior:"]
+      paragraphs: bundle.symptomBehavior.length
+        ? synthesizeParagraphFromFields(bundle.symptomBehavior)
         : ["No pain or symptom behavior details were documented."],
-      bullets: painBullets,
+      bullets: [],
     },
     functional_limitations: {
-      paragraphs: functionalBullets.length
-        ? ["Patient-reported functional limitations:"]
+      paragraphs: bundle.functionalLimitations.length
+        ? synthesizeParagraphFromFields(bundle.functionalLimitations)
         : ["No functional limitations were documented."],
-      bullets: functionalBullets,
+      bullets: [],
     },
     activity_participation: {
-      paragraphs: activityBullets.length
-        ? ["Patient-reported activity and participation restrictions:"]
+      paragraphs: bundle.activityParticipation.length
+        ? synthesizeParagraphFromFields(bundle.activityParticipation)
         : ["No activity or participation restrictions were documented."],
-      bullets: activityBullets,
+      bullets: [],
     },
     patient_goals: {
-      paragraphs: goals ? [] : ["No patient goals were documented."],
-      bullets: goals ? [goals] : [],
+      paragraphs: bundle.patientGoals.length
+        ? synthesizeParagraphFromFields(bundle.patientGoals)
+        : ["No patient goals were documented."],
+      bullets: [],
     },
     pt_interpretation: {
-      paragraphs:
-        interpretationParagraphs.length > 0
-          ? interpretationParagraphs
-          : [
-              "Insufficient patient-reported detail to synthesize a structured physiotherapy interpretation draft. Therapist review of the original responses is required.",
-            ],
+      paragraphs: buildInterpretationParagraph(bundle),
       bullets: [],
     },
     safety: {
-      paragraphs: hasRedFlag
+      paragraphs: bundle.hasRedFlag
         ? [
             "The patient reported information that may warrant red-flag screening during therapist review. Confirm details directly with the patient and apply appropriate clinical safety protocols.",
           ]
@@ -262,18 +160,15 @@ function buildRuleFallbackSections(
       paragraphs: [
         "Suggested objective assessment areas based on patient-reported information only. Therapist confirmation is required.",
       ],
-      bullets:
-        objectiveBullets.length > 0
-          ? objectiveBullets
-          : [
-              "Consider for therapist review: pain characteristics, active movement, functional movement, and relevant special tests based on the patient-reported region.",
-            ],
+      bullets: buildObjectiveBullets(bundle),
     },
     suggested_rasq_modules: {
       paragraphs: [
         "Recommended RASQ assessment modules based on patient-reported information only. Therapist confirmation is required before assignment.",
       ],
-      bullets: rasqBullets,
+      bullets: rasqModules.map(
+        (module) => `Consider for therapist review: ${module.label} if clinically appropriate.`,
+      ),
     },
   };
 
@@ -291,19 +186,21 @@ export function buildPtClinicalReportDraftFallback(input: {
   includedSections?: PatientSectionId[];
   generatedAt?: string;
 }): PtClinicalReportDraft {
-  const includedSections = input.includedSections ?? inferIncludedSections(input.draft);
-  const language = getAssessmentLanguage(input.structuredData);
-  const sections = buildRuleFallbackSections(input.structuredData, input.draft, includedSections);
-
-  return buildPtClinicalReportDraftFromSections(sections, {
-    sourceLanguage: language === "ar" ? "ar" : "en",
-    source: language === "ar" ? "clinical_english" : "patient_english",
+  const bundle = buildStructuredClinicalSourceBundle({
+    structuredData: input.structuredData,
+    draft: input.draft,
+    includedSections: input.includedSections,
+  });
+  const sections = buildRuleFallbackSections(bundle);
+  const draft = buildPtClinicalReportDraftFromSections(sections, {
+    sourceLanguage: bundle.sourceLanguage,
+    source: bundle.sourceLanguage === "ar" ? "clinical_english" : "patient_english",
     generatedAt: input.generatedAt,
     generationMethod: "rule_fallback",
   });
+  return polishPtClinicalReportDraft(draft, bundle);
 }
 
-/** Synchronous builder — rule-based fallback (tests and AI failure path). */
 export function buildPtClinicalReportDraft(input: {
   structuredData: Record<string, unknown>;
   draft: PatientAssessmentDraft;
@@ -324,15 +221,14 @@ export async function generatePtClinicalReport(input: {
   includedSections?: PatientSectionId[];
   apiKey: string | null;
 }): Promise<GeneratePtClinicalReportResult> {
-  const includedSections = input.includedSections ?? inferIncludedSections(input.draft);
-  const payload = buildApprovedClinicalEnglishPayload({
+  const bundle = buildStructuredClinicalSourceBundle({
     structuredData: input.structuredData,
     draft: input.draft,
-    includedSections,
+    includedSections: input.includedSections ?? inferIncludedSections(input.draft),
   });
 
   if (input.apiKey) {
-    const aiResult = await synthesizePtClinicalReport(input.apiKey, payload);
+    const aiResult = await synthesizePtClinicalReport(input.apiKey, bundle);
     if (aiResult.ok) {
       return { report: aiResult.report, usedFallback: false };
     }
@@ -342,7 +238,7 @@ export async function generatePtClinicalReport(input: {
     report: buildPtClinicalReportDraftFallback({
       structuredData: input.structuredData,
       draft: input.draft,
-      includedSections,
+      includedSections: input.includedSections,
     }),
     usedFallback: true,
   };
@@ -369,4 +265,24 @@ export function ptReportSectionsMatchSchema(report: PtClinicalReportDraft): bool
   return PT_REPORT_SECTION_SPECS.every(
     (spec, index) => report.sections[index]?.id === spec.id && report.sections[index]?.title === spec.title,
   );
+}
+
+// Backward-compatible export used by older imports.
+export function buildApprovedClinicalEnglishPayload(input: {
+  structuredData: Record<string, unknown>;
+  draft: PatientAssessmentDraft;
+  includedSections?: PatientSectionId[];
+}) {
+  const bundle = buildStructuredClinicalSourceBundle(input);
+  return {
+    sourceLanguage: bundle.sourceLanguage,
+    painScore: bundle.painScore,
+    hasRedFlag: bundle.hasRedFlag,
+    fields: bundle.allFields.map((field) => ({
+      fieldKey: field.fieldKey,
+      label: field.label,
+      section: field.sectionTitle,
+      clinicalEnglish: field.clinicalEnglish,
+    })),
+  };
 }

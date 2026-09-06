@@ -10,6 +10,7 @@ type Props = {
   variant?: "screen" | "print";
   isVoiceAnswer?: boolean;
   isLoading?: boolean;
+  showDisclaimer?: boolean;
 };
 
 export function PatientClinicalTranslationDisplay({
@@ -18,6 +19,7 @@ export function PatientClinicalTranslationDisplay({
   variant = "screen",
   isVoiceAnswer = false,
   isLoading = false,
+  showDisclaimer = true,
 }: Props) {
   const showTranslation = clinicalEnglish.trim().length > 0;
   const originalLabelClass =
@@ -84,7 +86,9 @@ export function PatientClinicalTranslationDisplay({
         <div className={translationBoxClass}>
           <p className={clinicalLabelClass}>{PATIENT_ANSWER_CLINICAL_ENGLISH_LABEL}</p>
           <p className={clinicalTextClass}>{clinicalEnglish}</p>
-          <p className={disclaimerClass}>{PATIENT_ANSWER_TRANSLATION_DISCLAIMER}</p>
+          {showDisclaimer ? (
+            <p className={disclaimerClass}>{PATIENT_ANSWER_TRANSLATION_DISCLAIMER}</p>
+          ) : null}
         </div>
       ) : null}
     </div>

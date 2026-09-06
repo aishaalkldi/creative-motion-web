@@ -1,18 +1,21 @@
 "use client";
 
 import type { PtClinicalReportDraft } from "@/app/lib/reports/pt-clinical-report-draft";
+import { filterDisplaySections } from "@/app/lib/reports/polish-pt-clinical-report";
 import { PT_REPORT_SECTION_SPECS } from "@/app/lib/reports/pt-clinical-report-schema";
 
 type Props = {
   report: PtClinicalReportDraft;
   variant?: "screen" | "print";
   showSectionLetters?: boolean;
+  condensed?: boolean;
 };
 
 export function PtClinicalReportSection({
   report,
   variant = "screen",
   showSectionLetters = false,
+  condensed = false,
 }: Props) {
   const titleClass =
     variant === "print"
@@ -35,32 +38,37 @@ export function PtClinicalReportSection({
       ? "mt-2 list-inside list-disc space-y-1.5 text-sm leading-relaxed text-gray-900"
       : "mt-2 list-inside list-disc space-y-1.5 text-sm leading-relaxed text-white/80";
 
+  const sections = condensed ? filterDisplaySections(report) : report.sections;
+
   return (
     <div>
       <p className={titleClass}>{report.title}</p>
       <p className={disclaimerClass}>{report.disclaimer}</p>
-      <p className={disclaimerClass}>{report.therapistReviewNote}</p>
+      {variant !== "print" ? <p className={disclaimerClass}>{report.therapistReviewNote}</p> : null}
 
       <div className={variant === "print" ? "mt-5 space-y-5" : "mt-5 space-y-5"}>
-        {report.sections.map((section) => {
+        {sections.map((section) => {
           const letter = PT_REPORT_SECTION_SPECS.find((spec) => spec.id === section.id)?.letter;
           const heading = showSectionLetters && letter ? `${letter}. ${section.title}` : section.title;
           return (
-          <div key={section.id}>
-            <h3 className={sectionTitleClass}>{heading}</h3>
-            {section.paragraphs.map((paragraph) => (
-              <p key={paragraph} className={`${bodyClass} mt-2`}>
-                {paragraph}
-              </p>
-            ))}
-            {section.bullets.length > 0 ? (
-              <ul className={bulletClass}>
-                {section.bullets.map((bullet) => (
-                  <li key={bullet}>{bullet}</li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
+            <div
+              key={section.id}
+              className={variant === "print" ? "print-document-section break-inside-avoid" : undefined}
+            >
+              <h3 className={sectionTitleClass}>{heading}</h3>
+              {section.paragraphs.map((paragraph) => (
+                <p key={paragraph} className={`${bodyClass} mt-2`}>
+                  {paragraph}
+                </p>
+              ))}
+              {section.bullets.length > 0 ? (
+                <ul className={bulletClass}>
+                  {section.bullets.map((bullet) => (
+                    <li key={bullet}>{bullet}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
           );
         })}
       </div>

@@ -8,26 +8,46 @@ import {
   validateAndNormalizePtReportSections,
 } from "./synthesize-pt-clinical-report";
 import { PT_REPORT_SECTION_SPECS } from "@/app/lib/reports/pt-clinical-report-schema";
+import { buildStructuredClinicalSourceBundle } from "@/app/lib/reports/structured-clinical-source-bundle";
 
-const APPROVED_PAYLOAD = {
-  sourceLanguage: "ar" as const,
-  painScore: "6",
-  hasRedFlag: false,
-  fields: [
-    {
-      fieldKey: "chiefComplaint",
-      label: "Main complaint",
-      section: "Pain & Symptoms",
-      clinicalEnglish: "The patient reports shoulder pain when reaching overhead",
+const BUNDLE = buildStructuredClinicalSourceBundle({
+  structuredData: {
+    assessmentLanguage: "ar",
+    clinical_translation_status: "approved",
+    chiefComplaint_en: "The patient reports shoulder pain when reaching overhead",
+    painLocation_en: "The patient reports right shoulder pain",
+    aggravating_en: "The patient reports overhead reaching aggravates symptoms",
+    easing_en: "The patient reports rest eases symptoms",
+    dailyImpact_en: "The patient reports difficulty combing hair",
+    goals_en: "The patient reports a goal to return to work without shoulder pain",
+    pain: {
+      chiefComplaint: "ألم",
+      painLocation: "الكتف",
+      painScore: "5",
+      aggravating: "رفع",
+      easing: "راحة",
+      dailyImpact: "تأثير",
+      goals: "هدف",
     },
-  ],
-};
+  },
+  draft: {
+    pain: {
+      chiefComplaint: "ألم",
+      painLocation: "الكتف",
+      painScore: "5",
+      aggravating: "رفع",
+      easing: "راحة",
+      dailyImpact: "تأثير",
+      goals: "هدف",
+    },
+  },
+});
 
 function mockSections() {
   return PT_REPORT_SECTION_SPECS.map((spec) => ({
     id: spec.id,
     paragraphs: [`Patient-reported content for ${spec.id}`],
-    bullets: spec.id === "suggested_objective" ? ["Consider assessing active shoulder movement"] : [],
+    bullets: spec.id === "suggested_objective" ? ["Consider assessing shoulder movement and movement quality"] : [],
   }));
 }
 
@@ -35,7 +55,7 @@ describe("synthesizePtClinicalReport", () => {
   it("parses valid AI JSON into A–J sections", async () => {
     const result = await synthesizePtClinicalReport(
       "sk-test",
-      APPROVED_PAYLOAD,
+      BUNDLE,
       async () => ({
         choices: [
           {
@@ -64,7 +84,7 @@ describe("synthesizePtClinicalReport", () => {
 
     const result = await synthesizePtClinicalReport(
       "sk-test",
-      APPROVED_PAYLOAD,
+      BUNDLE,
       async () => ({
         choices: [{ message: { content: JSON.stringify({ sections }) } }],
       }),

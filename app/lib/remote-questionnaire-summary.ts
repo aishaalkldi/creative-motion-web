@@ -159,8 +159,7 @@ export function buildRemoteQuestionnaireSummary(
     readField(root, "painAtRest") ??
     (pain?.painScore ? `${pain.painScore}/10` : null);
   const painOnMovement = readField(root, "painOnMovement");
-  const bodyRegionOriginal =
-    readField(root, "bodyRegion") ?? asTrimmedString(pain?.painLocation);
+  const bodyRegionOriginal = asTrimmedString(pain?.painLocation);
 
   if (painAtRest) metrics.push({ label: "Pain at rest", value: painAtRest });
   if (painOnMovement) metrics.push({ label: "Pain on movement", value: painOnMovement });

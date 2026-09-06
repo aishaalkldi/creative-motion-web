@@ -1,6 +1,5 @@
 /**
  * AI-assisted PT clinical report synthesis from approved Clinical English.
- * Uses the project's existing OpenAI chat completion pattern (injectable for tests).
  */
 import OpenAI from "openai";
 import {
@@ -8,14 +7,19 @@ import {
   type TranslationErrorCode,
 } from "@/app/lib/openai/classify-openai-error";
 import { FORBIDDEN_INTERPRETATION_TERMS } from "@/app/lib/reports/assessment-interpretation-draft";
+import { polishPtClinicalReportDraft } from "@/app/lib/reports/polish-pt-clinical-report";
 import {
   buildPtClinicalReportDraftFromSections,
-  type ApprovedClinicalEnglishPayload,
   type PtClinicalReportDraft,
   type PtClinicalReportSection,
   type PtReportSectionId,
   PT_REPORT_SECTION_SPECS,
 } from "@/app/lib/reports/pt-clinical-report-schema";
+import { listRasqModuleLabels } from "@/app/lib/reports/rasq-assessment-modules";
+import {
+  bundleToPromptText,
+  type StructuredClinicalSourceBundle,
+} from "@/app/lib/reports/structured-clinical-source-bundle";
 
 export type ChatCompletionCreator = (
   params: OpenAI.Chat.Completions.ChatCompletionCreateParamsNonStreaming,
@@ -26,65 +30,41 @@ export type PtReportSynthesisResult =
   | { ok: false; code: TranslationErrorCode | "no_content" | "invalid_output" | "forbidden_terms" };
 
 const SECTION_IDS = PT_REPORT_SECTION_SPECS.map((spec) => spec.id);
+const ALLOWED_RASQ = listRasqModuleLabels().join(", ");
 
 const SYNTHESIS_SYSTEM_PROMPT = `You are a physiotherapy clinical documentation assistant for RASQ.
 
-Your task: synthesize APPROVED patient-reported Clinical English into a structured PT Clinical Report draft for physiotherapist review.
+Synthesize APPROVED patient-reported Clinical English into a concise PT Clinical Report draft for physiotherapist review.
 
-You may:
-- Summarize and organize related patient-reported information across sections
-- Convert patient language into concise PT clinical documentation
-- Identify functional themes for therapist review
-- Suggest appropriate objective assessment areas/modules for therapist consideration
-- Use cautious clinical reasoning language such as "may indicate", "for therapist review", "consider assessing"
+You must SYNTHESIZE, not concatenate or repeat source fields.
 
-You must NOT:
-- Diagnose or name pathology as fact
-- Invent objective findings (ROM, strength, neurological, functional test results, examination findings)
-- Infer pathology, severity, or laterality not supported by the approved source data
-- Prescribe treatment automatically
-- Add information unsupported by the approved source data
-- Present patient statements as confirmed objective findings
-
-Required phrasing patterns:
-- Use "The patient reports...", "Patient-reported...", or "Based on the submitted questionnaire..." for patient-reported content
-- Use "Consider assessing..." or "May warrant examination..." for suggested assessment areas
-- Never use "the patient has [condition]" as a confirmed finding
-
-Return a single JSON object with EXACTLY this shape:
-{
-  "sections": [
-    {
-      "id": "<one of: ${SECTION_IDS.join(", ")}>",
-      "paragraphs": ["string"],
-      "bullets": ["string"]
-    }
-  ]
-}
+Section purposes:
+- presentation: brief overview of patient-reported presentation only
+- primary_complaint: main concern in 1-2 concise statements
+- pain_symptom_behavior: aggravating, relieving, and movement-related symptom behavior
+- functional_limitations: activity/task limitations and weakness-related functional impact
+- activity_participation: balance, gait, standing tolerance, walking tolerance, stairs, aids
+- patient_goals: goals only
+- pt_interpretation: cautious physiotherapy reasoning about domains needing objective examination — NOT a diagnosis and NOT a restatement of every bullet
+- safety: red-flag review language only
+- suggested_objective: clinically meaningful assessment domains (movement quality, ROM, strength, balance, gait, hand function) — use "Consider assessing..."
+- suggested_rasq_modules: only modules from this allowlist: ${ALLOWED_RASQ}
 
 Rules:
-- Include ALL ${SECTION_IDS.length} sections in order, each id exactly once
-- paragraphs and bullets are string arrays (may be empty)
-- Do not include section titles — only id, paragraphs, bullets
-- Do not include any keys other than "sections"
-- Respond with valid JSON only — no markdown, no explanation`;
-
-function buildUserPrompt(payload: ApprovedClinicalEnglishPayload): string {
-  const fieldLines = payload.fields
-    .map((field) => `- [${field.section} / ${field.label}] (${field.fieldKey}): ${field.clinicalEnglish}`)
-    .join("\n");
-
-  return `Approved Clinical English source data (patient-reported only):
-
-Source language: ${payload.sourceLanguage}
-Patient-reported pain score (numeric): ${payload.painScore ?? "not documented"}
-Red-flag indicator from questionnaire: ${payload.hasRedFlag ? "yes — flag for therapist review" : "no specific red flag documented"}
-
-Approved fields:
-${fieldLines || "(no free-text fields)"}
-
-Synthesize the PT Clinical Report draft JSON now.`;
+- Each clinical fact should appear once in the most appropriate section.
+- Do not copy every source field as its own bullet.
+- Use patient-reported phrasing: "The patient reports...", "Patient-reported...", "Based on the submitted questionnaire..."
+- Never claim objective examination findings, measured ROM, strength grades, or pathology as fact.
+- Never diagnose.
+- Preserve durations as durations and anatomical regions as anatomical regions.
+- If weakness and pain with movement are both reported, keep them as separate concepts.
+- Respond with valid JSON only:
+{
+  "sections": [
+    { "id": "<section id>", "paragraphs": ["string"], "bullets": ["string"] }
+  ]
 }
+Include all ${SECTION_IDS.length} section ids exactly once.`;
 
 function safeJsonObjectParse(raw: string): Record<string, unknown> | null {
   try {
@@ -150,7 +130,7 @@ export function validateAndNormalizePtReportSections(
 
 export async function synthesizePtClinicalReport(
   apiKey: string,
-  payload: ApprovedClinicalEnglishPayload,
+  bundle: StructuredClinicalSourceBundle,
   createChatCompletion: ChatCompletionCreator = (params) =>
     new OpenAI({ apiKey }).chat.completions.create(params),
 ): Promise<PtReportSynthesisResult> {
@@ -162,7 +142,10 @@ export async function synthesizePtClinicalReport(
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYNTHESIS_SYSTEM_PROMPT },
-        { role: "user", content: buildUserPrompt(payload) },
+        {
+          role: "user",
+          content: `Approved structured Clinical English source bundle:\n\n${bundleToPromptText(bundle)}\n\nSynthesize the concise PT Clinical Report JSON now.`,
+        },
       ],
     });
     raw = response.choices[0]?.message?.content?.trim() ?? "";
@@ -182,13 +165,15 @@ export async function synthesizePtClinicalReport(
     return { ok: false, code: "forbidden_terms" };
   }
 
-  const source = payload.sourceLanguage === "ar" ? "clinical_english" : "patient_english";
+  const source = bundle.sourceLanguage === "ar" ? "clinical_english" : "patient_english";
+  const draft = buildPtClinicalReportDraftFromSections(sections, {
+    sourceLanguage: bundle.sourceLanguage,
+    source,
+    generationMethod: "ai",
+  });
+
   return {
     ok: true,
-    report: buildPtClinicalReportDraftFromSections(sections, {
-      sourceLanguage: payload.sourceLanguage,
-      source,
-      generationMethod: "ai",
-    }),
+    report: polishPtClinicalReportDraft(draft, bundle),
   };
 }
