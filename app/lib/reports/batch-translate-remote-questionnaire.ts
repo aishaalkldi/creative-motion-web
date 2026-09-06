@@ -50,10 +50,16 @@ export type BatchTranslateRemoteQuestionnaireResult = {
 
 export type ClinicalTextTranslator = (text: string) => Promise<ClinicalTranslationResult>;
 
+export type BatchTranslateOptions = {
+  /** When true, overwrite existing {fieldKey}_en values. */
+  regenerate?: boolean;
+};
+
 export async function batchTranslateRemoteQuestionnaire(
   structuredData: Record<string, unknown>,
   apiKey: string | null,
   translateFn?: ClinicalTextTranslator,
+  options: BatchTranslateOptions = {},
 ): Promise<BatchTranslateRemoteQuestionnaireResult> {
   const translate =
     translateFn ??
@@ -86,13 +92,15 @@ export async function batchTranslateRemoteQuestionnaire(
   for (const { fieldKey, text } of fields) {
     const existingKey = `${fieldKey}_en`;
     const existing = updated[existingKey];
-    if (typeof existing === "string" && existing.trim()) continue;
+    if (!options.regenerate && typeof existing === "string" && existing.trim()) continue;
 
     const result = await translate(text);
     if (result.ok) {
       updated[existingKey] = result.translation;
+      updated[`${fieldKey}_en_ai`] = result.translation;
       updated[`${fieldKey}_en_generated_at`] = generatedAt;
       updated[`${fieldKey}_en_reviewed`] = false;
+      delete updated[`${fieldKey}_en_edited_at`];
     } else {
       failedFieldKeys.push(fieldKey);
     }
@@ -103,7 +111,7 @@ export async function batchTranslateRemoteQuestionnaire(
       failedFieldKeys.length === fields.length ? "failed" : "partial";
     updated.clinical_translation_warning = CLINICAL_TRANSLATION_REVIEW_WARNING;
   } else {
-    updated.clinical_translation_status = "complete";
+    updated.clinical_translation_status = "review_required";
   }
 
   return { structuredData: updated, failedFieldKeys, translationAttempted: true };

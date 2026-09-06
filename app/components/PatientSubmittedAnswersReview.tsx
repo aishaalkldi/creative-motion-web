@@ -100,7 +100,6 @@ export function PatientSubmittedAnswersReview({
     arabicFields,
     existingTranslations,
     existingGeneratedAt,
-    { autoTranslate: aiTranslationEnabled && assessmentLanguage === "ar" && !!assessmentId },
   );
 
   const {
@@ -150,12 +149,7 @@ export function PatientSubmittedAnswersReview({
   const showArabicNotice =
     aiTranslationEnabled && isArabicAssessmentContent(assessmentLanguage, allValues);
   const showSetupNotice = !aiTranslationEnabled && assessmentLanguage === "ar" && !compact;
-  const showTranslateHeader =
-    aiTranslationEnabled &&
-    !compact &&
-    assessmentLanguage === "ar" &&
-    !!assessmentId &&
-    totalCount > 0;
+  const showTranslateHeader = false;
 
   return (
     <div className={compact ? "space-y-3" : "space-y-4"}>

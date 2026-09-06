@@ -10,6 +10,7 @@ import {
 } from "../../../lib/api";
 import type { SavedAssessment } from "../../../lib/mock-clinical-data";
 import type { AssessmentListRow, AssessmentRow } from "../../../api/assessments/route";
+import type { StoredAssessmentPayload } from "../../../lib/assessment-payload";
 import { pickPreferredAssessment } from "../../../lib/assessment-snapshot";
 import {
   FOCUS_AREA_LABEL,
@@ -86,6 +87,10 @@ import {
   type RemoteQuestionnaireSummary,
 } from "../../../lib/remote-questionnaire-summary";
 import { PatientClinicalTranslationDisplay } from "@/app/components/reports/PatientClinicalTranslationDisplay";
+import {
+  RemoteQuestionnaireClinicianPanel,
+  isRemoteQuestionnaireStructuredData,
+} from "@/app/components/clinician/RemoteQuestionnaireClinicianPanel";
 import { displayPatientFileHeader } from "../../../lib/patient-file-number";
 import { resolveCurrentAndPreviousPlans } from "../../../lib/clinician/resolve-current-plan";
 import { PreviousPlansSummary } from "../../../components/clinician/PreviousPlansSummary";
@@ -1219,6 +1224,27 @@ export default function PatientProfilePage() {
                           {remoteQuestionnaireSummary.clinicalTranslationWarning}
                         </p>
                       </div>
+                    ) : null}
+
+                    {clinicalSummaryDetail?.type === "remote_questionnaire" &&
+                    clinicalSummaryAssessmentId &&
+                    isRemoteQuestionnaireStructuredData(clinicalSummaryDetail.structured_data) ? (
+                      <RemoteQuestionnaireClinicianPanel
+                        assessmentId={clinicalSummaryAssessmentId}
+                        structuredData={clinicalSummaryDetail.structured_data}
+                        patientDraft={remoteQuestionnaireSummary!.patientDraft}
+                        patientId={patient.id}
+                        onStructuredDataUpdated={(next) =>
+                          setClinicalSummaryDetail((current) =>
+                            current
+                              ? {
+                                  ...current,
+                                  structured_data: next as StoredAssessmentPayload,
+                                }
+                              : current,
+                          )
+                        }
+                      />
                     ) : null}
 
                     {clinicalSummary.metrics.length > 0 && (
