@@ -7,7 +7,10 @@ export const PT_CLINICAL_REPORT_DISCLAIMER =
   "AI-generated draft for physiotherapist review. Not a diagnosis.";
 
 export const PT_CLINICAL_REPORT_THERAPIST_NOTE =
-  "Draft only — therapist confirmation required before clinical use.";
+  "AI-generated draft for physiotherapist review. Therapist confirmation required before clinical use.";
+
+export const PT_CLINICAL_REPORT_FINALIZED_NOTE =
+  "Clinician-reviewed/finalized report.";
 
 export const PT_REPORT_SECTION_SPECS = [
   { id: "presentation", letter: "A", title: "Patient-Reported Presentation" },

@@ -8,7 +8,7 @@ import {
   clinicalEnglishLabel,
   ptClinicalReportLabel,
   readClinicalTranslationStatus,
-  readPtClinicalReportForDisplay,
+  readEnrichedPtClinicalReportForDisplay,
   readPtClinicalReportStatus,
 } from "@/app/lib/reports/remote-questionnaire-workflow";
 import { PatientClinicalTranslationDisplay } from "@/app/components/reports/PatientClinicalTranslationDisplay";
@@ -136,7 +136,11 @@ export function RemoteQuestionnairePrintReport({
   assessmentLanguage = null,
 }: Props) {
   const notes = clinicianNotes?.trim() ?? "";
-  const ptReport = readPtClinicalReportForDisplay(submissionMeta);
+  const ptReport = readEnrichedPtClinicalReportForDisplay(
+    submissionMeta,
+    summary.patientDraft,
+    summary.includedSections,
+  );
   const reportStatus = readPtClinicalReportStatus(submissionMeta);
   const translationStatus = readClinicalTranslationStatus(submissionMeta);
   const hasAnswers = summary.includedSections.length > 0;
@@ -200,7 +204,13 @@ export function RemoteQuestionnairePrintReport({
 
       {usePolishedLayout && ptReport ? (
         <ReportPrintSection title="PT Clinical Report">
-          <PtClinicalReportSection report={ptReport} variant="print" showSectionLetters condensed />
+          <PtClinicalReportSection
+            report={ptReport}
+            variant="print"
+            showSectionLetters
+            condensed
+            finalized={reportStatus === "finalized"}
+          />
         </ReportPrintSection>
       ) : (
         <>

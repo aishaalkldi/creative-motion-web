@@ -14,13 +14,15 @@ import {
   type PatientReviewEntry,
 } from "@/app/lib/patient-assessment-questions";
 import { TranslatableField } from "@/app/components/clinician/TranslatableField";
+import { PatientClinicalTranslationDisplay } from "@/app/components/reports/PatientClinicalTranslationDisplay";
 import {
   AI_TRANSLATION_SETUP_NOTICE,
   isAiTranslationEnabled,
 } from "@/app/lib/ai/ai-features";
-import { patientReportedLabel } from "@/app/lib/reports/clinical-report-copy";
+import { patientReportedLabel, PATIENT_ANSWER_TRANSLATION_DISCLAIMER } from "@/app/lib/reports/clinical-report-copy";
 import {
   extractTranslationMeta,
+  hasPersistedClinicalEnglish,
   isTranslatablePatientFieldKey,
 } from "@/app/lib/reports/patient-clinical-translation";
 import {
@@ -146,9 +148,13 @@ export function PatientSubmittedAnswersReview({
   }
 
   const allValues = blocks.flatMap((block) => block.entries.map((entry) => entry.value));
+  const hasPersistedTranslations = hasPersistedClinicalEnglish(submissionMeta);
   const showArabicNotice =
     aiTranslationEnabled && isArabicAssessmentContent(assessmentLanguage, allValues);
-  const showSetupNotice = !aiTranslationEnabled && assessmentLanguage === "ar" && !compact;
+  const showSetupNotice =
+    !aiTranslationEnabled && !hasPersistedTranslations && assessmentLanguage === "ar" && !compact;
+  const showTranslationDisclaimer =
+    hasPersistedTranslations && assessmentLanguage === "ar";
   const showTranslateHeader = false;
 
   return (
@@ -188,6 +194,12 @@ export function PatientSubmittedAnswersReview({
         </div>
       )}
 
+      {showTranslationDisclaimer ? (
+        <p className="text-[10px] italic leading-relaxed text-white/35">
+          {PATIENT_ANSWER_TRANSLATION_DISCLAIMER}
+        </p>
+      ) : null}
+
       {showArabicNotice && (
         <div className="rounded-[7px] border border-amber-300/25 bg-amber-400/10 px-3 py-2.5">
           <p className="text-xs leading-relaxed text-amber-100/90">{ARABIC_READABILITY_NOTICE}</p>
@@ -208,6 +220,15 @@ export function PatientSubmittedAnswersReview({
             {block.entries.map((entry) => {
               const voiceAnswered = isVoiceAnswered(submissionMeta, entry.fieldKey);
               const fieldKey = entry.fieldKey;
+              const persistedEnglish =
+                fieldKey && isTranslatablePatientFieldKey(fieldKey)
+                  ? (existingTranslations[`${fieldKey}_en`] ?? "").trim()
+                  : "";
+              const showPersistedTranslation =
+                assessmentLanguage === "ar" &&
+                !!fieldKey &&
+                isTranslatablePatientFieldKey(fieldKey) &&
+                persistedEnglish.length > 0;
               const useTranslation =
                 aiTranslationEnabled &&
                 assessmentLanguage === "ar" &&
@@ -221,7 +242,15 @@ export function PatientSubmittedAnswersReview({
                     {patientReportedLabel(entry.label)}
                   </dt>
                   <dd className="mt-0.5">
-                    {useTranslation && fieldKey ? (
+                    {showPersistedTranslation && !useTranslation ? (
+                      <PatientClinicalTranslationDisplay
+                        originalText={entry.value}
+                        clinicalEnglish={persistedEnglish}
+                        isVoiceAnswer={voiceAnswered}
+                        variant="screen"
+                        showDisclaimer={false}
+                      />
+                    ) : useTranslation && fieldKey ? (
                       <TranslatableField
                         assessmentId={assessmentId}
                         fieldKey={fieldKey}

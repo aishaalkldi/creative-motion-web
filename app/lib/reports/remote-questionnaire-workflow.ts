@@ -6,7 +6,7 @@
 
  */
 
-import type { PatientAssessmentDraft } from "@/app/lib/api/remote-assessments";
+import type { PatientAssessmentDraft, PatientSectionId } from "@/app/lib/api/remote-assessments";
 
 import { getAssessmentLanguage } from "@/app/lib/assessment-payload";
 
@@ -25,6 +25,8 @@ import {
 import { isPatientAssessmentDraft } from "@/app/lib/remote-questionnaire-summary";
 
 import type { PtClinicalReportDraft } from "./pt-clinical-report-draft";
+import { enrichPtClinicalReportForDisplay } from "./polish-pt-clinical-report";
+import { buildStructuredClinicalSourceBundle } from "./structured-clinical-source-bundle";
 
 
 
@@ -200,6 +202,21 @@ export function readPtClinicalReportForDisplay(
 
   return readPtClinicalReportFinal(structuredData) ?? readPtClinicalReportDraft(structuredData);
 
+}
+
+export function readEnrichedPtClinicalReportForDisplay(
+  structuredData: Record<string, unknown> | null | undefined,
+  draft: PatientAssessmentDraft,
+  includedSections?: PatientSectionId[],
+): PtClinicalReportDraft | null {
+  const report = readPtClinicalReportForDisplay(structuredData);
+  if (!report) return null;
+  const bundle = buildStructuredClinicalSourceBundle({
+    structuredData: structuredData ?? {},
+    draft,
+    includedSections,
+  });
+  return enrichPtClinicalReportForDisplay(report, bundle);
 }
 
 

@@ -23,6 +23,7 @@ const OBJECTIVE_FINDING_PATTERN =
 const BOILERPLATE_ONLY = new Set([
   "no detailed presentation fields were documented in the submitted questionnaire.",
   "no primary complaint was documented.",
+  "not reported.",
   "no pain or symptom behavior details were documented.",
   "no functional limitations were documented.",
   "no activity or participation restrictions were documented.",
@@ -127,6 +128,27 @@ function polishRasqBullets(bullets: string[]): string[] {
   return polished;
 }
 
+function ensurePrimaryComplaintSection(
+  sections: PtClinicalReportSection[],
+  bundle: StructuredClinicalSourceBundle,
+): PtClinicalReportSection[] {
+  return sections.map((section) => {
+    if (section.id !== "primary_complaint" || sectionHasSubstantiveContent(section)) {
+      return section;
+    }
+
+    const primaryFields = bundle.presentation.filter(
+      (field) => field.clinicalConcept === "primary_complaint",
+    );
+    if (primaryFields.length === 0) {
+      return { ...section, paragraphs: [], bullets: [] };
+    }
+
+    const paragraphs = primaryFields.map((field) => field.clinicalEnglish);
+    return { ...section, paragraphs, bullets: [] };
+  });
+}
+
 export function polishPtClinicalReportDraft(
   report: PtClinicalReportDraft,
   bundle: StructuredClinicalSourceBundle,
@@ -149,7 +171,20 @@ export function polishPtClinicalReportDraft(
     });
   }
 
-  return { ...report, sections: polishedSections };
+  return {
+    ...report,
+    sections: ensurePrimaryComplaintSection(polishedSections, bundle),
+  };
+}
+
+export function enrichPtClinicalReportForDisplay(
+  report: PtClinicalReportDraft,
+  bundle: StructuredClinicalSourceBundle,
+): PtClinicalReportDraft {
+  return {
+    ...report,
+    sections: ensurePrimaryComplaintSection(report.sections, bundle),
+  };
 }
 
 export function countSubstantiveReportLines(report: PtClinicalReportDraft): number {

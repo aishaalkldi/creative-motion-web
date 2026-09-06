@@ -12,7 +12,7 @@ import {
   isClinicalTranslationApproved,
   ptClinicalReportLabel,
   readClinicalTranslationStatus,
-  readPtClinicalReportForDisplay,
+  readEnrichedPtClinicalReportForDisplay,
   readPtClinicalReportStatus,
   resolveRemoteQuestionnaireWorkflowStep,
   type RemoteQuestionnaireWorkflowStep,
@@ -62,10 +62,14 @@ export function RemoteQuestionnaireClinicianPanel({
 
   const translationStatus = readClinicalTranslationStatus(structuredData);
   const reportStatus = readPtClinicalReportStatus(structuredData);
-  const reportForDisplay = readPtClinicalReportForDisplay(structuredData);
   const translationApproved = isClinicalTranslationApproved(structuredData);
   const language = getAssessmentLanguage(structuredData);
   const includedSections = useMemo(() => inferIncludedSections(patientDraft), [patientDraft]);
+  const reportForDisplay = readEnrichedPtClinicalReportForDisplay(
+    structuredData,
+    patientDraft,
+    includedSections,
+  );
   const workflowStep = resolveRemoteQuestionnaireWorkflowStep(structuredData, patientDraft);
   const showTranslateActions = language === "ar";
 

@@ -2,20 +2,25 @@
 
 import type { PtClinicalReportDraft } from "@/app/lib/reports/pt-clinical-report-draft";
 import { filterDisplaySections } from "@/app/lib/reports/polish-pt-clinical-report";
-import { PT_REPORT_SECTION_SPECS } from "@/app/lib/reports/pt-clinical-report-schema";
+import {
+  PT_CLINICAL_REPORT_FINALIZED_NOTE,
+  PT_REPORT_SECTION_SPECS,
+} from "@/app/lib/reports/pt-clinical-report-schema";
 
 type Props = {
   report: PtClinicalReportDraft;
   variant?: "screen" | "print";
   showSectionLetters?: boolean;
   condensed?: boolean;
+  finalized?: boolean;
 };
 
 export function PtClinicalReportSection({
   report,
   variant = "screen",
   showSectionLetters = false,
-  condensed = false,
+  condensed = true,
+  finalized = false,
 }: Props) {
   const titleClass =
     variant === "print"
@@ -38,13 +43,14 @@ export function PtClinicalReportSection({
       ? "mt-2 list-inside list-disc space-y-1.5 text-sm leading-relaxed text-gray-900"
       : "mt-2 list-inside list-disc space-y-1.5 text-sm leading-relaxed text-white/80";
 
-  const sections = condensed ? filterDisplaySections(report) : report.sections;
+  const sections = filterDisplaySections(report);
+  const lifecycleNote = finalized ? PT_CLINICAL_REPORT_FINALIZED_NOTE : report.therapistReviewNote;
 
   return (
     <div>
       <p className={titleClass}>{report.title}</p>
       <p className={disclaimerClass}>{report.disclaimer}</p>
-      {variant !== "print" ? <p className={disclaimerClass}>{report.therapistReviewNote}</p> : null}
+      {variant !== "print" ? <p className={disclaimerClass}>{lifecycleNote}</p> : null}
 
       <div className={variant === "print" ? "mt-5 space-y-5" : "mt-5 space-y-5"}>
         {sections.map((section) => {

@@ -41,6 +41,7 @@ import {
 } from "@/app/lib/remote-questionnaire-summary";
 import { ReportExportToolbar } from "@/app/components/reports/ReportExportToolbar";
 import { RemoteQuestionnairePrintReport } from "@/app/components/reports/RemoteQuestionnairePrintReport";
+import { PtClinicalReportSection } from "@/app/components/reports/PtClinicalReportSection";
 import { CvCapturesClinicalSection } from "@/app/components/reports/CvCapturesClinicalSection";
 import { AssessmentInterpretationDraftSection } from "@/app/components/reports/AssessmentInterpretationDraftSection";
 import { PdfTranslationWarningModal } from "@/app/components/clinician/PdfTranslationWarningModal";
@@ -99,6 +100,10 @@ import {
 } from "@/app/lib/program-direction-copy";
 import { resolveProgramOptionsForFocus } from "@/app/lib/program-direction-options";
 import { buildAssessmentInterpretationDraft } from "@/app/lib/reports/assessment-interpretation-draft";
+import {
+  readEnrichedPtClinicalReportForDisplay,
+  readPtClinicalReportStatus,
+} from "@/app/lib/reports/remote-questionnaire-workflow";
 import { resolveAssessmentReportFromDetail } from "@/app/lib/reports/assessment-report-resolver";
 
 // ── Constants & labels ─────────────────────────────────────────────────────────
@@ -1332,6 +1337,12 @@ export function AssessmentReportClient() {
       includedSections: remoteIncludedSections,
       submissionMeta: remoteSubmissionMeta,
     });
+    const ptReportForScreen = readEnrichedPtClinicalReportForDisplay(
+      remoteSubmissionMeta,
+      remoteQuestionnaireDraft,
+      remoteIncludedSections,
+    );
+    const ptReportFinalized = readPtClinicalReportStatus(remoteSubmissionMeta) === "finalized";
     const backHref = patientId ? `/clinician/patients/${patientId}` : "/clinician/patients";
 
     return (
@@ -1415,7 +1426,18 @@ export function AssessmentReportClient() {
               />
             </div>
           </section>
-          <AssessmentInterpretationDraftSection draft={interpretationDraft} />
+          {ptReportForScreen ? (
+            <section className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+              <PtClinicalReportSection
+                report={ptReportForScreen}
+                variant="screen"
+                showSectionLetters
+                finalized={ptReportFinalized}
+              />
+            </section>
+          ) : (
+            <AssessmentInterpretationDraftSection draft={interpretationDraft} />
+          )}
           {serverNotes?.trim() ? (
             <section className="overflow-hidden rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
               <h2 className="text-base font-bold text-white">Therapist-entered clinical note</h2>

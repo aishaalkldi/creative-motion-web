@@ -81,7 +81,7 @@ export function PtClinicalReportEditor({
 
   return (
     <div className="space-y-4">
-      <PtClinicalReportDisplay report={displayReport} variant="screen" />
+      <PtClinicalReportDisplay report={displayReport} variant="screen" finalized={finalized} />
 
       {!finalized ? (
         <div className="space-y-3 border-t border-[#1E2D42] pt-4">
