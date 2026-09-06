@@ -12,11 +12,17 @@ import {
 } from "./stroke-pt-clinical-report";
 import {
   STROKE_PATHWAY,
+  STROKE_QUESTIONS,
   STROKE_QUESTIONNAIRE_KIND,
   STROKE_QUESTIONNAIRE_VERSION,
+  compactStrokeResponsesForSubmission,
   type StrokeQuestionnaireSubmission,
   type StrokeResponse,
 } from "./stroke-questionnaire-schema";
+import {
+  REMOTE_ASSESSMENT_MAX_STRING_LENGTH,
+  validateRemoteAssessmentStructuredData,
+} from "@/app/lib/remote-assessment-validation";
 
 function response(
   rawValue: string | string[],
@@ -215,5 +221,94 @@ describe("Stroke report provenance and diagnostic safety", () => {
     );
     assert.doesNotMatch(JSON.stringify(report), /\bneglect\b/i);
     assert.deepEqual(strokeReportContainsForbiddenDiagnosticUpgrade(report), []);
+  });
+});
+
+function realisticFullSubmission(
+  rawLanguage: "en" | "ar",
+  provenance: StrokeResponse["provenance"] = "PATIENT_REPORTED",
+) {
+  const reporterRole =
+    provenance === "CAREGIVER_REPORTED" ? "caregiver" : "patient";
+  const fullResponses = Object.fromEntries(
+    STROKE_QUESTIONS.map((question) => [
+      question.id,
+      {
+        rawValue:
+          question.kind === "multi_select"
+            ? [question.options?.[0]?.value ?? "none"]
+            : question.options?.[0]?.value ??
+              (rawLanguage === "ar"
+                ? "وصف عربي واقعي للصعوبة الوظيفية الحالية"
+                : "A realistic description of the current functional difficulty"),
+        rawLanguage,
+        responseMethod: question.options ? "selection" : "text",
+        provenance,
+        reporterRole,
+        translation: { status: "not_generated" as const },
+      },
+    ]),
+  ) as Record<string, StrokeResponse>;
+
+  fullResponses.sg_sudden_new_neurological_change.rawValue = "no";
+  fullResponses.sg_chest_pain_or_severe_breathlessness.rawValue = "no";
+  fullResponses.sg_recent_fall_with_injury.rawValue = "no";
+  fullResponses.sg_gradual_functional_worsening.rawValue = "no";
+  fullResponses.sc_upper_limb_involvement.rawValue = "yes";
+  fullResponses.mb_current_walking_status.rawValue = "indoor";
+  fullResponses.mb_fall_reported.rawValue = "yes";
+  fullResponses.sfp_pain_present.rawValue = "yes";
+
+  return {
+    questionnaireKind: STROKE_QUESTIONNAIRE_KIND,
+    questionnaireVersion: STROKE_QUESTIONNAIRE_VERSION,
+    pathway: STROKE_PATHWAY,
+    assessmentLanguage: rawLanguage,
+    safetyState: resolveStrokeSafetyState(fullResponses),
+    responses: compactStrokeResponsesForSubmission(fullResponses),
+    branchTrace: buildStrokeBranchTrace(fullResponses),
+  };
+}
+
+describe("Stroke submission payload boundary", () => {
+  it("accepts a realistic complete seven-section submission", () => {
+    const payload = realisticFullSubmission("en");
+    assert.equal(Object.keys(payload.responses).length, STROKE_QUESTIONS.length);
+    assert.deepEqual(validateRemoteAssessmentStructuredData(payload), {
+      ok: true,
+      data: payload,
+    });
+  });
+
+  it("accepts an Arabic upper-limb-heavy submission", () => {
+    const payload = realisticFullSubmission("ar");
+    assert.equal(payload.responses.ul_grasp.rawLanguage, "ar");
+    assert.equal(payload.responses.ul_grasp.responseMethod, undefined);
+    assert.equal(payload.responses.ul_grasp.translation, undefined);
+    assert.equal(validateRemoteAssessmentStructuredData(payload).ok, true);
+  });
+
+  it("accepts caregiver provenance without weakening reporter identity", () => {
+    const payload = realisticFullSubmission("ar", "CAREGIVER_REPORTED");
+    assert.ok(
+      Object.values(payload.responses).every(
+        (item) =>
+          item.provenance === "CAREGIVER_REPORTED" &&
+          item.reporterRole === "caregiver",
+      ),
+    );
+    assert.equal(validateRemoteAssessmentStructuredData(payload).ok, true);
+  });
+
+  it("still rejects an unreasonable oversized response", () => {
+    const payload = realisticFullSubmission("en");
+    payload.responses.goal_primary = {
+      ...payload.responses.goal_primary,
+      rawValue: "x".repeat(REMOTE_ASSESSMENT_MAX_STRING_LENGTH + 1),
+    };
+    assert.deepEqual(validateRemoteAssessmentStructuredData(payload), {
+      ok: false,
+      error: "Assessment data exceeds allowed size.",
+    });
   });
 });

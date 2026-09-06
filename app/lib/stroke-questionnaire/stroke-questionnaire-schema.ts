@@ -20,7 +20,7 @@ export type StrokeTranslationStatus = "not_generated" | "review_required" | "app
 export type StrokeResponse = {
   rawValue: string | string[];
   rawLanguage: "en" | "ar";
-  responseMethod: StrokeResponseMethod;
+  responseMethod?: StrokeResponseMethod;
   provenance: Extract<ClinicalProvenance, "PATIENT_REPORTED" | "CAREGIVER_REPORTED">;
   reporterRole: StrokeReporterRole;
   clinicalEnglish?: string;
@@ -301,4 +301,33 @@ export function validateStrokeIntakeProvenance(
 
 export function strokeQuestionById(id: string): StrokeQuestionDefinition | undefined {
   return STROKE_QUESTIONS.find((question) => question.id === id);
+}
+
+/**
+ * Patient submission transport deliberately excludes translation state and
+ * generated Clinical English. A selection response's method is implied by the
+ * server-owned question registry; typed/voice methods remain explicit.
+ */
+export function compactStrokeResponsesForSubmission(
+  responses: Record<string, StrokeResponse>,
+): Record<string, StrokeResponse> {
+  return Object.fromEntries(
+    Object.entries(responses).map(([questionId, response]) => {
+      const question = strokeQuestionById(questionId);
+      const responseMethod =
+        response.responseMethod === "selection" && question?.options
+          ? undefined
+          : response.responseMethod;
+      return [
+        questionId,
+        {
+          rawValue: response.rawValue,
+          rawLanguage: response.rawLanguage,
+          ...(responseMethod ? { responseMethod } : {}),
+          provenance: response.provenance,
+          reporterRole: response.reporterRole,
+        },
+      ];
+    }),
+  );
 }

@@ -80,7 +80,11 @@ function responseText(id: string, response: StrokeResponse): string {
   const question = strokeQuestionById(id);
   const raw = rawText(response).trim();
   if (!raw) return "";
-  if (response.responseMethod === "selection" && question?.options) {
+  if (
+    question?.options &&
+    (response.responseMethod === "selection" ||
+      response.responseMethod === undefined)
+  ) {
     const values = Array.isArray(response.rawValue) ? response.rawValue : [response.rawValue];
     const labels = values
       .map((item) => question.options?.find((option) => option.value === item)?.en ?? item)

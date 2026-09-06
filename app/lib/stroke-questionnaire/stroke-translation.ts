@@ -27,6 +27,14 @@ function reporterPrefix(response: StrokeResponse): string {
     : "The patient reports";
 }
 
+function isSelectionResponse(id: string, response: StrokeResponse): boolean {
+  return (
+    response.responseMethod === "selection" ||
+    (response.responseMethod === undefined &&
+      Boolean(strokeQuestionById(id)?.options))
+  );
+}
+
 function selectionTranslation(id: string, response: StrokeResponse): string {
   const question = strokeQuestionById(id);
   const values = Array.isArray(response.rawValue) ? response.rawValue : [response.rawValue];
@@ -62,7 +70,7 @@ export async function translateStrokeSubmission(
       responses[id] = {
         ...response,
         clinicalEnglish:
-          response.responseMethod === "selection"
+          isSelectionResponse(id, response)
             ? selectionTranslation(id, response)
             : `${reporterPrefix(response)} ${rawText(response).trim()}`,
         translation: { status: "review_required", generatedAt },
@@ -70,7 +78,7 @@ export async function translateStrokeSubmission(
       continue;
     }
 
-    if (response.responseMethod === "selection") {
+    if (isSelectionResponse(id, response)) {
       responses[id] = {
         ...response,
         clinicalEnglish: selectionTranslation(id, response),
