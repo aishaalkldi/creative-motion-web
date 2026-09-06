@@ -181,6 +181,15 @@ const POSE_CONNECTIONS: [number, number][] = [
 // Body landmark indices to draw (shoulders, elbows, wrists only)
 const BODY_LANDMARKS_TO_DRAW = [11, 12, 13, 14, 15, 16];
 
+export type LateralReachCameraOverlayDisplayMode = "clinical" | "patient";
+
+export type LateralReachCameraAcquisitionOptions = {
+  /** Tested side for acquisition-only pose overlay (before engine config exists). */
+  overlayTestedSide?: UpperLimbSide;
+  /** Patient mode draws skeleton only; clinical mode includes debug labels and zones. */
+  overlayDisplayMode?: LateralReachCameraOverlayDisplayMode;
+};
+
 export type LateralReachCameraDetectorCallbacks = {
   onSnapshot: (snapshot: LateralReachCameraSnapshot) => void;
   /** Optional — acquisition observation only; invoked after engine frame handling. */
@@ -266,6 +275,9 @@ export class LateralReachCameraDetector {
   // Engine state
   private engineConfig: LateralReachConfig | null = null;
   private engineState: LateralReachAttemptState | null = null;
+  /** Acquisition-only overlay context — cleared on stop. */
+  private acquisitionOverlayTestedSide: UpperLimbSide | null = null;
+  private overlayDisplayMode: LateralReachCameraOverlayDisplayMode = "clinical";
 
   // Laterality diagnostics
   private lastRightWristVisibility: number | null = null;
@@ -577,6 +589,7 @@ export class LateralReachCameraDetector {
   async startAcquisition(
     video: HTMLVideoElement,
     canvas: HTMLCanvasElement,
+    options?: LateralReachCameraAcquisitionOptions,
   ): Promise<void> {
     // Synchronous fail-closed guard before any await / session mutation.
     if (this.status !== "idle") {
@@ -584,6 +597,9 @@ export class LateralReachCameraDetector {
         'startAcquisition requires status "idle"',
       );
     }
+
+    this.acquisitionOverlayTestedSide = options?.overlayTestedSide ?? null;
+    this.overlayDisplayMode = options?.overlayDisplayMode ?? "clinical";
 
     const epoch = this.beginSession(video, canvas);
     const isCurrent = () => this.sessionEpoch === epoch;
@@ -664,12 +680,12 @@ export class LateralReachCameraDetector {
     height: number,
     landmarks: PoseLandmark[] | undefined,
   ): void {
-    if (!this.engineConfig) return;
-
-    const testedSide = this.engineConfig.testedSide;
+    const testedSide =
+      this.engineConfig?.testedSide ?? this.acquisitionOverlayTestedSide ?? "right";
     const testedWristIndex = testedSide === "right" ? 16 : 15;
+    const minVisibility = this.engineConfig?.tracking.minWristVisibility ?? 0.3;
 
-    // Draw skeleton connections
+    // Draw skeleton connections whenever landmarks are available.
     if (landmarks && landmarks.length > 0) {
       for (const [a, b] of POSE_CONNECTIONS) {
         if (!landmarks[a] || !landmarks[b]) continue;
@@ -720,6 +736,41 @@ export class LateralReachCameraDetector {
         ctx.fillStyle = "rgba(34,211,238,0.2)";
         ctx.fill();
       }
+    }
+
+    if (!this.engineConfig) {
+      if (this.overlayDisplayMode === "patient") {
+        return;
+      }
+
+      const testedWrist = landmarks?.[testedWristIndex];
+      const visibility = testedWrist?.visibility ?? 0;
+      const wristTracked = Boolean(testedWrist) && visibility >= minVisibility;
+      const trackedStatus = wristTracked ? "TRACKED" : "NOT TRACKED";
+      const trackedColor = wristTracked ? "#22d3ee" : "#ef4444";
+      ctx.fillStyle = trackedColor;
+      ctx.font = "bold 14px monospace";
+      this.drawUnmirroredText(
+        ctx,
+        `Tested wrist (${testedSide.toUpperCase()}): ${trackedStatus}`,
+        10,
+        25,
+        width,
+      );
+      ctx.fillStyle = "rgba(255,255,255,0.7)";
+      ctx.font = "11px monospace";
+      this.drawUnmirroredText(
+        ctx,
+        "Pose overlay — for movement observation review",
+        10,
+        height - 10,
+        width,
+      );
+      return;
+    }
+
+    if (this.overlayDisplayMode === "patient") {
+      return;
     }
 
     // Draw starting zone
@@ -775,14 +826,14 @@ export class LateralReachCameraDetector {
     this.drawUnmirroredText(ctx, "Target", targetCenterX + targetRadiusPixels + 5, targetCenterY, width);
 
     // Readiness status text
-    const minVisibility = this.engineConfig.tracking.minWristVisibility;
+    const minVisibilityForStatus = this.engineConfig.tracking.minWristVisibility;
     let wristTracked = false;
     let wristInZone = false;
 
     if (landmarks && landmarks.length > 0) {
       const testedWrist = landmarks[testedWristIndex];
       const visibility = testedWrist?.visibility ?? 0;
-      wristTracked = visibility >= minVisibility;
+      wristTracked = visibility >= minVisibilityForStatus;
 
       if (wristTracked && testedWrist) {
         const wx = testedWrist.x;
@@ -1095,6 +1146,9 @@ export class LateralReachCameraDetector {
     this.lastCommandNowMs = null;
     this.lastFrameNowMs = null;
     this.engineState = null;
+    this.engineConfig = null;
+    this.acquisitionOverlayTestedSide = null;
+    this.overlayDisplayMode = "clinical";
     this.status = "idle";
     this.initPhase = null;
 

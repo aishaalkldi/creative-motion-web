@@ -12,6 +12,8 @@ import {
 } from "@/app/lib/remote-assessment-validation";
 import { serviceUnavailableResponse } from "@/app/lib/api/safe-errors";
 import { backfillTranscriptionSessionAssessmentId } from "@/app/lib/speech-ai/transcription-session-persistence";
+import { batchTranslateRemoteQuestionnaire } from "@/app/lib/reports/batch-translate-remote-questionnaire";
+import { getOpenAiKeyConfig } from "@/app/lib/openai/server-env";
 
 let serviceRoleClientOverride: SupabaseClient | null = null;
 
@@ -107,13 +109,20 @@ export async function POST(
     return NextResponse.json({ error: "Invalid or expired link" }, { status: 404 });
   }
 
+  const keyConfig = getOpenAiKeyConfig();
+  const translation = await batchTranslateRemoteQuestionnaire(
+    validated.data as Record<string, unknown>,
+    keyConfig.ok ? keyConfig.apiKey : null,
+  );
+  const structuredDataForSave = translation.structuredData;
+
   const { data: assessment, error: insertError } = await admin
     .from("assessments")
     .insert({
       patient_id: requestRow.patient_id,
       provider_id: requestRow.provider_id,
       type: "remote_questionnaire",
-      structured_data: validated.data,
+      structured_data: structuredDataForSave,
       status: "completed",
       mode: "remote",
       selected_tests: [],
@@ -124,6 +133,13 @@ export async function POST(
   if (insertError) {
     console.error("[POST /api/remote-assessments/[token]/submit] assessment insert failed");
     return NextResponse.json({ error: "Failed to save assessment." }, { status: 500 });
+  }
+
+  if (translation.translationAttempted && translation.failedFieldKeys.length > 0) {
+    console.warn(
+      "[POST /api/remote-assessments/[token]/submit] clinical translation incomplete",
+      { assessmentId: assessment.id, failedFields: translation.failedFieldKeys.length },
+    );
   }
 
   const submittedAt = new Date().toISOString();

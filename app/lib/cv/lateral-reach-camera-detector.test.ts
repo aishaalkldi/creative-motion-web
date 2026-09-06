@@ -34,6 +34,7 @@ import {
   type LateralReachAttemptState,
   type LateralReachConfig,
 } from "@/app/lib/upper-limb-motor-screen/lateral-reach-engine";
+import type { UpperLimbSide } from "@/app/lib/upper-limb-motor-screen/types";
 
 const DETECTOR_SOURCE_PATH = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -449,6 +450,7 @@ type DetectorInternals = {
   ) => Promise<void>;
   startFrameLoop: (video: HTMLVideoElement) => void;
   emit: () => void;
+  acquisitionOverlayTestedSide: UpperLimbSide | null;
 };
 
 function asInternals(detector: LateralReachCameraDetector): DetectorInternals {
@@ -917,6 +919,70 @@ describe("Terminal outcome bridge", () => {
 
       assert.ok(snapshot.finalResult);
       assert.equal(snapshot.finalResult.completionState, "not_started");
+    } finally {
+      detector.stop();
+      raf.restore();
+    }
+  });
+
+  it("stores acquisition overlay tested side from startAcquisition options", async () => {
+    const detector = new LateralReachCameraDetector({ onSnapshot: () => {} });
+    stubAcquireWithPhaseEmits(detector, () => ({
+      detectForVideo: () => ({ landmarks: [validWristLandmarks()] }),
+    }));
+    const raf = installRafCapture();
+    try {
+      await detector.startAcquisition(fakeVideo(), fakeCanvas(), {
+        overlayTestedSide: "left",
+      });
+      assert.equal(asInternals(detector).acquisitionOverlayTestedSide, "left");
+      assert.equal(asInternals(detector).engineConfig, null);
+    } finally {
+      detector.stop();
+      raf.restore();
+    }
+  });
+
+  it("draws acquisition pose overlay without engine config", async () => {
+    let strokeCount = 0;
+    const canvas = {
+      width: 640,
+      height: 480,
+      getContext: () =>
+        ({
+          clearRect: () => undefined,
+          drawImage: () => undefined,
+          beginPath: () => undefined,
+          moveTo: () => undefined,
+          lineTo: () => undefined,
+          arc: () => undefined,
+          stroke: () => {
+            strokeCount += 1;
+          },
+          fill: () => undefined,
+          save: () => undefined,
+          restore: () => undefined,
+          scale: () => undefined,
+          fillText: () => undefined,
+          setLineDash: () => undefined,
+          strokeStyle: "",
+          lineWidth: 1,
+          fillStyle: "",
+          font: "",
+        }) as CanvasRenderingContext2D,
+    } as unknown as HTMLCanvasElement;
+
+    const detector = new LateralReachCameraDetector({ onSnapshot: () => {} });
+    stubAcquireWithPhaseEmits(detector, () => ({
+      detectForVideo: () => ({ landmarks: [validWristLandmarks()] }),
+    }));
+    const raf = installRafCapture();
+    try {
+      await detector.startAcquisition(fakeVideo(), canvas, { overlayTestedSide: "right" });
+      assert.equal(raf.callbacks.length, 1);
+      raf.callbacks[0]!(0);
+      assert.ok(strokeCount > 0, "expected skeleton strokes during acquisition overlay");
+      assert.equal(asInternals(detector).engineConfig, null);
     } finally {
       detector.stop();
       raf.restore();
