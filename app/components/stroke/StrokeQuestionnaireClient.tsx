@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { RemoteAssessmentRequest } from "@/app/lib/api/remote-assessments";
 import { submitRemoteAssessment } from "@/app/lib/api/remote-assessments";
 import {
+  buildStrokeActiveScreenQueue,
   buildStrokeBranchTrace,
   resolveStrokeSafetyState,
   visibleStrokeQuestions,
@@ -16,9 +17,9 @@ import {
   STROKE_QUESTIONNAIRE_VERSION,
   STROKE_SECTION_TITLES,
   compactStrokeResponsesForSubmission,
+  strokeQuestionById,
   type StrokeQuestionDefinition,
   type StrokeResponse,
-  type StrokeSectionId,
 } from "@/app/lib/stroke-questionnaire/stroke-questionnaire-schema";
 import { LanguageToggle, type PatientLang } from "@/app/components/patient/LanguageToggle";
 
@@ -41,16 +42,31 @@ export function StrokeQuestionnaireClient({ token }: Props) {
   const router = useRouter();
   const [lang, setLang] = useState<PatientLang>("en");
   const [responses, setResponses] = useState<Record<string, StrokeResponse>>({});
-  const [sectionIndex, setSectionIndex] = useState(0);
+  const [screenIndex, setScreenIndex] = useState(0);
+  const [displayProgress, setDisplayProgress] = useState(0);
+  const [showSecondGoal, setShowSecondGoal] = useState(false);
   const [reviewing, setReviewing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  const screens = useMemo(
+    () => buildStrokeActiveScreenQueue(responses),
+    [responses],
+  );
   const sections = useMemo(() => visibleStrokeSections(responses), [responses]);
-  const currentSection = sections[sectionIndex] ?? sections[0];
+  const safeScreenIndex = Math.min(screenIndex, Math.max(0, screens.length - 1));
+  const currentScreen = screens[safeScreenIndex] ?? screens[0];
   const questions = useMemo(
-    () => visibleStrokeQuestions(currentSection, responses),
-    [currentSection, responses],
+    () => {
+      const questionIds =
+        currentScreen.id === "goals" && showSecondGoal
+          ? Array.from(new Set([...currentScreen.questionIds, "goal_second"]))
+          : currentScreen.questionIds;
+      return questionIds
+        .map(strokeQuestionById)
+        .filter((question): question is StrokeQuestionDefinition => Boolean(question));
+    },
+    [currentScreen, showSecondGoal],
   );
   const safetyState = resolveStrokeSafetyState(responses);
   const informationSource = Array.isArray(responses.sc_information_source?.rawValue)
@@ -110,18 +126,25 @@ export function StrokeQuestionnaireClient({ token }: Props) {
     }
   }
 
-  if (safetyState === "URGENT_ESCALATION" && currentSection === "safety_gate") {
+  if (safetyState === "URGENT_ESCALATION" && currentScreen.id === "safety") {
     return (
-      <main className="min-h-screen bg-[#071a2f] px-5 py-12 text-white">
+      <main
+        className="min-h-screen bg-[#071a2f] px-5 py-12 text-white"
+        dir={lang === "ar" ? "rtl" : "ltr"}
+      >
         <div className="mx-auto max-w-xl rounded-2xl border border-rose-300/30 bg-rose-400/10 p-6">
-          <h1 className="text-xl font-bold">Urgent safety escalation</h1>
+          <h1 className="text-xl font-bold">
+            {lang === "ar" ? "تصعيد عاجل للسلامة" : "Urgent safety escalation"}
+          </h1>
           <p className="mt-3 text-sm leading-6 text-rose-50">
-            These answers may indicate a need for urgent medical review. Do not perform
-            rehabilitation movement tests. Contact local emergency services or the
-            treating medical team now.
+            {lang === "ar"
+              ? "قد تشير هذه الإجابات إلى الحاجة لمراجعة طبية عاجلة. لا تنفذ اختبارات حركة تأهيلية. تواصل الآن مع خدمات الطوارئ المحلية أو الفريق الطبي المعالج."
+              : "These answers may indicate a need for urgent medical review. Do not perform rehabilitation movement tests. Contact local emergency services or the treating medical team now."}
           </p>
           <p className="mt-3 text-xs text-rose-100/75">
-            This intake result does not diagnose a new stroke or any other condition.
+            {lang === "ar"
+              ? "نتيجة هذا الاستبيان لا تشخّص سكتة جديدة أو أي حالة أخرى."
+              : "This intake result does not diagnose a new stroke or any other condition."}
           </p>
           <button
             type="button"
@@ -129,7 +152,13 @@ export function StrokeQuestionnaireClient({ token }: Props) {
             onClick={() => void submit()}
             className="mt-5 rounded-lg bg-rose-200 px-4 py-2 text-sm font-bold text-rose-950 disabled:opacity-50"
           >
-            {submitting ? "Sending…" : "Send safety responses to clinic"}
+            {submitting
+              ? lang === "ar"
+                ? "جارٍ الإرسال…"
+                : "Sending…"
+              : lang === "ar"
+                ? "إرسال إجابات السلامة للعيادة"
+                : "Send safety responses to clinic"}
           </button>
         </div>
       </main>
@@ -156,10 +185,34 @@ export function StrokeQuestionnaireClient({ token }: Props) {
           <LanguageToggle current={lang} onChange={setLang} />
         </header>
 
+        {!reviewing ? (
+          <div className="mb-6">
+            <div className="flex items-center justify-between text-[11px] font-semibold text-white/45">
+              <span>
+                {currentScreen.phase === "core"
+                  ? lang === "ar"
+                    ? "الملف الوظيفي الأساسي"
+                    : "Core functional profile"
+                  : lang === "ar"
+                    ? "أسئلة مختارة لك"
+                    : "Questions selected for you"}
+              </span>
+              <span>{displayProgress}%</span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-cyan-300 transition-[width] duration-300"
+                style={{ width: `${displayProgress}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
+
         {safetyState === "REQUIRES_CLINICIAN_REVIEW" ? (
           <div className="mb-5 rounded-xl border border-amber-300/25 bg-amber-400/10 px-4 py-3 text-sm text-amber-50">
-            A clinician should review the reported safety concern. This does not mean
-            the patient is cleared for exercise.
+            {lang === "ar"
+              ? "يجب أن يراجع الطبيب أو المعالج مخاوف السلامة المذكورة. هذا لا يعني أن المريض مصرح له بالتمرين."
+              : "A clinician should review the reported safety concern. This does not mean the patient is cleared for exercise."}
           </div>
         ) : null}
 
@@ -167,15 +220,16 @@ export function StrokeQuestionnaireClient({ token }: Props) {
           <>
             <div className="mb-5">
               <p className="text-xs text-white/45">
-                Section {sectionIndex + 1} of {sections.length}
+                {lang === "ar" ? "الخطوة" : "Step"} {safeScreenIndex + 1} / {screens.length}
               </p>
               <h2 className="mt-1 text-2xl font-bold">
-                {STROKE_SECTION_TITLES[currentSection][lang]}
+                {currentScreen.title[lang]}
               </h2>
-              {currentSection === "safety_gate" ? (
+              {currentScreen.id === "safety" ? (
                 <p className="mt-2 text-sm text-white/55">
-                  PASS means only that no escalation trigger was selected in this
-                  intake. It is not medical clearance for exercise.
+                  {lang === "ar"
+                    ? "تعني PASS فقط أنه لم يتم اختيار سبب للتصعيد في هذا الاستبيان. وهي لا تعني تصريحاً طبياً لممارسة التمارين."
+                    : "PASS means only that no escalation trigger was selected in this intake. It is not medical clearance for exercise."}
                 </p>
               ) : null}
             </div>
@@ -190,38 +244,70 @@ export function StrokeQuestionnaireClient({ token }: Props) {
                   onChange={(value) => updateResponse(question, value)}
                 />
               ))}
+              {currentScreen.id === "goals" &&
+              !showSecondGoal &&
+              !responses.goal_second ? (
+                <button
+                  type="button"
+                  onClick={() => setShowSecondGoal(true)}
+                  className="min-h-11 w-full rounded-xl border border-dashed border-cyan-300/30 px-4 py-2.5 text-sm font-semibold text-cyan-100"
+                >
+                  {lang === "ar" ? "إضافة هدف ثانٍ (اختياري)" : "Add a second goal (optional)"}
+                </button>
+              ) : null}
             </div>
 
             <div className="mt-6 flex gap-3">
-              {sectionIndex > 0 ? (
+              {safeScreenIndex > 0 ? (
                 <button
                   type="button"
-                  onClick={() => setSectionIndex((index) => index - 1)}
-                  className="flex-1 rounded-xl border border-white/15 py-3 text-sm font-semibold"
+                  onClick={() => setScreenIndex(safeScreenIndex - 1)}
+                  className="min-h-12 flex-1 rounded-xl border border-white/15 py-3 text-sm font-semibold"
                 >
-                  Previous
+                  {lang === "ar" ? "السابق" : "Previous"}
                 </button>
               ) : null}
               <button
                 type="button"
                 onClick={() => {
-                  if (sectionIndex < sections.length - 1) {
-                    setSectionIndex((index) => index + 1);
+                  if (safeScreenIndex < screens.length - 1) {
+                    const nextIndex = safeScreenIndex + 1;
+                    setDisplayProgress((current) =>
+                      Math.max(
+                        current,
+                        Math.min(
+                          96,
+                          Math.round(((nextIndex + 1) / screens.length) * 100),
+                        ),
+                      ),
+                    );
+                    setScreenIndex(nextIndex);
                   } else {
+                    setDisplayProgress(100);
                     setReviewing(true);
                   }
                 }}
-                className="flex-1 rounded-xl bg-cyan-300 py-3 text-sm font-bold text-slate-950"
+                className="min-h-12 flex-1 rounded-xl bg-cyan-300 py-3 text-sm font-bold text-slate-950"
               >
-                {sectionIndex < sections.length - 1 ? "Next" : "Review answers"}
+                {safeScreenIndex < screens.length - 1
+                  ? lang === "ar"
+                    ? "التالي"
+                    : "Next"
+                  : lang === "ar"
+                    ? "مراجعة الإجابات"
+                    : "Review answers"}
               </button>
             </div>
           </>
         ) : (
           <div className="space-y-5">
-            <h2 className="text-2xl font-bold">Review responses</h2>
+            <h2 className="text-2xl font-bold">
+              {lang === "ar" ? "مراجعة الإجابات" : "Review responses"}
+            </h2>
             <p className="text-sm text-white/60">
-              Information remains tagged as patient- or caregiver-reported.
+              {lang === "ar"
+                ? "تبقى المعلومات موسومة بأنها من إفادة المريض أو مقدم الرعاية."
+                : "Information remains tagged as patient- or caregiver-reported."}
             </p>
             {sections.map((sectionId) => (
               <section
@@ -231,6 +317,7 @@ export function StrokeQuestionnaireClient({ token }: Props) {
                 <h3 className="font-bold">{STROKE_SECTION_TITLES[sectionId][lang]}</h3>
                 <dl className="mt-3 space-y-3">
                   {visibleStrokeQuestions(sectionId, responses)
+                    .filter((question) => !question.navigationOnly)
                     .filter((question) => responses[question.id])
                     .map((question) => (
                       <div key={question.id}>
@@ -253,7 +340,7 @@ export function StrokeQuestionnaireClient({ token }: Props) {
                 onClick={() => setReviewing(false)}
                 className="flex-1 rounded-xl border border-white/15 py-3 text-sm font-semibold"
               >
-                Edit
+                {lang === "ar" ? "تعديل" : "Edit"}
               </button>
               <button
                 type="button"
@@ -261,7 +348,13 @@ export function StrokeQuestionnaireClient({ token }: Props) {
                 onClick={() => void submit()}
                 className="flex-1 rounded-xl bg-cyan-300 py-3 text-sm font-bold text-slate-950 disabled:opacity-50"
               >
-                {submitting ? "Submitting…" : "Submit intake"}
+                {submitting
+                  ? lang === "ar"
+                    ? "جارٍ الإرسال…"
+                    : "Submitting…"
+                  : lang === "ar"
+                    ? "إرسال الاستبيان"
+                    : "Submit intake"}
               </button>
             </div>
           </div>
@@ -314,25 +407,56 @@ function StrokeQuestion({
     return (
       <fieldset>
         <legend className="text-sm font-semibold">{label(question, lang)}</legend>
-        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <div className="mt-3 flex flex-wrap gap-2">
           {question.options?.map((option) => (
-            <label key={option.value} className="flex gap-2 text-sm text-white/80">
-              <input
-                type="checkbox"
-                checked={selected.includes(option.value)}
-                onChange={(event) =>
-                  onChange(
-                    event.target.checked
-                      ? [...selected, option.value]
-                      : selected.filter((value) => value !== option.value),
-                  )
+            <button
+              key={option.value}
+              type="button"
+              aria-pressed={selected.includes(option.value)}
+              onClick={() => {
+                if (selected.includes(option.value)) {
+                  onChange(selected.filter((value) => value !== option.value));
+                  return;
                 }
-              />
+                if (option.value === "none") {
+                  onChange(["none"]);
+                  return;
+                }
+                onChange([
+                  ...selected.filter((value) => value !== "none"),
+                  option.value,
+                ]);
+              }}
+              className={`min-h-11 rounded-xl border px-4 py-2.5 text-sm transition ${
+                selected.includes(option.value)
+                  ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100"
+                  : "border-white/10 bg-white/[0.04] text-white/75"
+              }`}
+            >
               {lang === "ar" ? option.ar : option.en}
-            </label>
+            </button>
           ))}
         </div>
       </fieldset>
+    );
+  }
+  if ((question.options?.length ?? 0) > 4) {
+    return (
+      <label className="block">
+        <span className="text-sm font-semibold">{label(question, lang)}</span>
+        <select
+          value={typeof current === "string" ? current : ""}
+          onChange={(event) => onChange(event.target.value)}
+          className="mt-3 min-h-12 w-full rounded-xl border border-white/12 bg-[#10253f] px-3 py-2 text-sm text-white outline-none focus:border-cyan-300/50"
+        >
+          <option value="">{lang === "ar" ? "اختر إجابة" : "Choose an answer"}</option>
+          {question.options?.map((option) => (
+            <option key={option.value} value={option.value}>
+              {lang === "ar" ? option.ar : option.en}
+            </option>
+          ))}
+        </select>
+      </label>
     );
   }
   return (
@@ -340,16 +464,19 @@ function StrokeQuestion({
       <legend className="text-sm font-semibold">{label(question, lang)}</legend>
       <div className="mt-2 grid gap-2 sm:grid-cols-2">
         {question.options?.map((option) => (
-          <label key={option.value} className="flex gap-2 text-sm text-white/80">
-            <input
-              type="radio"
-              name={question.id}
-              value={option.value}
-              checked={current === option.value}
-              onChange={() => onChange(option.value)}
-            />
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={current === option.value}
+            onClick={() => onChange(option.value)}
+            className={`min-h-11 rounded-xl border px-4 py-2.5 text-start text-sm transition ${
+              current === option.value
+                ? "border-cyan-300/50 bg-cyan-300/15 text-cyan-100"
+                : "border-white/10 bg-white/[0.04] text-white/75"
+            }`}
+          >
             {lang === "ar" ? option.ar : option.en}
-          </label>
+          </button>
         ))}
       </div>
     </fieldset>

@@ -61,6 +61,8 @@ export type StrokeQuestionDefinition = {
   en: string;
   ar: string;
   options?: StrokeQuestionOption[];
+  /** Controls adaptive navigation only and is not persisted or reported. */
+  navigationOnly?: boolean;
 };
 
 const yesNoUnsure: StrokeQuestionOption[] = [
@@ -85,8 +87,9 @@ function q(
   en: string,
   ar: string,
   options?: StrokeQuestionOption[],
+  navigationOnly = false,
 ): StrokeQuestionDefinition {
-  return { id, sectionId, kind, en, ar, options };
+  return { id, sectionId, kind, en, ar, options, navigationOnly };
 }
 
 export const STROKE_QUESTIONS: StrokeQuestionDefinition[] = [
@@ -151,6 +154,17 @@ export const STROKE_QUESTIONS: StrokeQuestionDefinition[] = [
   q("sc_upper_limb_involvement", "stroke_context", "single_select", "Is an arm or hand currently affected?", "هل الذراع أو اليد متأثرة حالياً؟", yesNoUnsure),
   q("sc_communication_support_needed", "stroke_context", "single_select", "Does the patient need help understanding or communicating answers?", "هل يحتاج المريض إلى مساعدة لفهم الإجابات أو التعبير عنها؟", yesNoUnsure),
 
+  q("ul_priority_tasks", "upper_limb_hand", "multi_select", "Which arm or hand activities should we ask about?", "ما أنشطة الذراع أو اليد التي تريد أن نسأل عنها؟", [
+    { value: "reach", en: "Reaching", ar: "الوصول" },
+    { value: "hand_open_close", en: "Opening or closing the hand", ar: "فتح أو إغلاق اليد" },
+    { value: "grasp_release", en: "Grasping or releasing objects", ar: "الإمساك بالأشياء أو تركها" },
+    { value: "cup_eating", en: "Cup use or eating", ar: "استخدام الكوب أو الأكل" },
+    { value: "dressing_grooming", en: "Dressing or grooming", ar: "ارتداء الملابس أو العناية الشخصية" },
+    { value: "writing_phone", en: "Writing or phone use", ar: "الكتابة أو استخدام الهاتف" },
+    { value: "daily_use", en: "Daily use of the affected arm", ar: "الاستخدام اليومي للذراع المتأثرة" },
+    { value: "symptoms", en: "Stiffness, control, pain, or swelling", ar: "التيبس أو التحكم أو الألم أو التورم" },
+  ], true),
+
   ...[
     ["ul_reaching_forward", "Reaching forward", "الوصول إلى الأمام"],
     ["ul_overhead_reach", "Reaching overhead", "الوصول إلى أعلى"],
@@ -177,6 +191,14 @@ export const STROKE_QUESTIONS: StrokeQuestionDefinition[] = [
     { value: "never", en: "Not used", ar: "لا تُستخدم" },
     { value: "not_applicable", en: "Not applicable", ar: "لا ينطبق" },
   ]),
+  q("ul_symptom_screen", "upper_limb_hand", "multi_select", "Which arm or hand symptoms are currently relevant?", "ما أعراض الذراع أو اليد المهمة حالياً؟", [
+    { value: "stiffness", en: "Stiffness or tightness", ar: "تيبس أو شد" },
+    { value: "control_accuracy", en: "Movement control or accuracy", ar: "التحكم بالحركة أو دقتها" },
+    { value: "unintended_movement", en: "Unintended movement", ar: "حركة غير مقصودة" },
+    { value: "pain", en: "Pain", ar: "ألم" },
+    { value: "swelling_sensitivity", en: "Swelling or sensitivity", ar: "تورم أو حساسية" },
+    { value: "none", en: "None of these", ar: "لا شيء مما سبق" },
+  ]),
   ...[
     ["ul_stiffness_tightness", "stiffness or tightness", "تيبس أو شد"],
     ["ul_movement_control", "difficulty controlling movement", "صعوبة في التحكم بالحركة"],
@@ -191,6 +213,27 @@ export const STROKE_QUESTIONS: StrokeQuestionDefinition[] = [
 
   q("mb_transfer_chair_rise", "mobility_balance_falls", "single_select", "How difficult is standing up from a chair?", "ما مدى صعوبة النهوض من الكرسي؟", difficulty),
   q("mb_transfer_bed_chair", "mobility_balance_falls", "single_select", "How difficult is moving between a bed and chair?", "ما مدى صعوبة الانتقال بين السرير والكرسي؟", difficulty),
+  q("mb_bed_mobility", "mobility_balance_falls", "single_select", "How difficult is moving or changing position in bed?", "ما مدى صعوبة الحركة أو تغيير الوضعية في السرير؟", difficulty),
+  q("mb_transfer_assistance", "mobility_balance_falls", "single_select", "How much help is currently needed for transfers?", "ما مقدار المساعدة المطلوبة حالياً للانتقال؟", [
+    { value: "none", en: "No help", ar: "لا أحتاج مساعدة" },
+    { value: "supervision", en: "Supervision or someone nearby", ar: "إشراف أو وجود شخص قريب" },
+    { value: "some", en: "Some physical help", ar: "بعض المساعدة الجسدية" },
+    { value: "much", en: "A lot of physical help", ar: "مساعدة جسدية كبيرة" },
+    { value: "unable", en: "Unable without full assistance", ar: "غير قادر دون مساعدة كاملة" },
+  ]),
+  q("mb_sitting_support", "mobility_balance_falls", "single_select", "What support is needed to sit safely?", "ما الدعم المطلوب للجلوس بأمان؟", [
+    { value: "independent", en: "Sits independently", ar: "يجلس بشكل مستقل" },
+    { value: "supervision", en: "Needs supervision", ar: "يحتاج إلى إشراف" },
+    { value: "physical_support", en: "Needs physical support", ar: "يحتاج إلى دعم جسدي" },
+    { value: "unable", en: "Unable to sit without full support", ar: "غير قادر على الجلوس دون دعم كامل" },
+  ]),
+  q("mb_standing_support", "mobility_balance_falls", "single_select", "What support is needed to stand?", "ما الدعم المطلوب للوقوف؟", [
+    { value: "independent", en: "Stands independently", ar: "يقف بشكل مستقل" },
+    { value: "aid_or_supervision", en: "Needs an aid or supervision", ar: "يحتاج وسيلة مساعدة أو إشرافاً" },
+    { value: "physical_support", en: "Needs physical support", ar: "يحتاج إلى دعم جسدي" },
+    { value: "unable", en: "Not currently standing", ar: "لا يقف حالياً" },
+  ]),
+  q("mb_wheelchair_support_needs", "mobility_balance_falls", "long_text", "Describe any wheelchair, positioning, or mobility support needs.", "صف أي احتياجات للكرسي المتحرك أو الوضعية أو دعم الحركة."),
   q("mb_current_walking_status", "mobility_balance_falls", "single_select", "What is the patient's current walking status?", "ما هي حالة المشي الحالية للمريض؟", [
     { value: "nonambulatory", en: "Not currently walking", ar: "لا يمشي حالياً" },
     { value: "few_steps_assisted", en: "A few steps with assistance", ar: "بضع خطوات مع المساعدة" },
@@ -199,7 +242,7 @@ export const STROKE_QUESTIONS: StrokeQuestionDefinition[] = [
     { value: "unsure", en: "Not sure", ar: "غير متأكد" },
   ]),
   q("mb_walking_turning_difficulty", "mobility_balance_falls", "single_select", "Is walking or turning difficult?", "هل المشي أو الدوران صعب؟", yesNoUnsure),
-  q("mb_foot_catching_dragging", "mobility_balance_falls", "single_select", "Does the patient report the foot catching or the leg dragging while walking?", "هل يذكر المريض تعثر القدم أو جر الساق أثناء المشي؟", yesNoUnsure),
+  q("mb_foot_catching_dragging", "mobility_balance_falls", "single_select", "Does the patient report the foot catching, the leg dragging, or the leg giving way while walking?", "هل يذكر المريض تعثر القدم أو جر الساق أو ضعف ثبات الساق أثناء المشي؟", yesNoUnsure),
   q("mb_walking_aid_use", "mobility_balance_falls", "multi_select", "Which mobility aids are currently used?", "ما وسائل المساعدة على الحركة المستخدمة حالياً؟", [
     { value: "none", en: "None", ar: "لا شيء" },
     { value: "cane", en: "Cane", ar: "عصا" },
@@ -208,25 +251,48 @@ export const STROKE_QUESTIONS: StrokeQuestionDefinition[] = [
     { value: "person_assistance", en: "Another person's assistance", ar: "مساعدة شخص آخر" },
   ]),
   q("mb_integrated_rise_walk_turn_sit", "mobility_balance_falls", "single_select", "Does the patient report difficulty rising, walking a short distance, turning, and sitting down?", "هل يذكر المريض صعوبة في النهوض والمشي لمسافة قصيرة والدوران والجلوس؟", yesNoUnsure),
+  q("mb_outdoor_walking", "mobility_balance_falls", "single_select", "How difficult is walking outdoors?", "ما مدى صعوبة المشي خارج المنزل؟", difficulty),
+  q("mb_stairs", "mobility_balance_falls", "single_select", "How difficult is using stairs, when relevant?", "ما مدى صعوبة استخدام الدرج، إذا كان ذلك مناسباً؟", difficulty),
   q("mb_standing_reach_balance_concern", "mobility_balance_falls", "single_select", "Is there a concern about balance while standing or reaching?", "هل توجد مخاوف بشأن التوازن أثناء الوقوف أو الوصول؟", yesNoUnsure),
   q("mb_independent_standing", "mobility_balance_falls", "single_select", "Can the patient stand independently according to the information provided?", "هل يستطيع المريض الوقوف بشكل مستقل وفقاً للمعلومات المقدمة؟", yesNoUnsure),
   q("mb_fall_reported", "mobility_balance_falls", "single_select", "Has the patient fallen in the last 3 months?", "هل سقط المريض خلال الأشهر الثلاثة الماضية؟", yesNoUnsure),
+  q("mb_near_fall_reported", "mobility_balance_falls", "single_select", "Has the patient nearly fallen or needed sudden support in the last 3 months?", "هل كاد المريض أن يسقط أو احتاج دعماً مفاجئاً خلال الأشهر الثلاثة الماضية؟", yesNoUnsure),
+  q("mb_falls_screen", "mobility_balance_falls", "multi_select", "In the last 3 months, has the patient had any of these?", "خلال الأشهر الثلاثة الماضية، هل حدث أي مما يلي؟", [
+    { value: "fall", en: "A fall", ar: "سقوط" },
+    { value: "near_fall", en: "A near-fall or sudden need for support", ar: "شبه سقوط أو حاجة مفاجئة للدعم" },
+    { value: "none", en: "Neither", ar: "لا شيء منهما" },
+  ]),
   q("mb_fall_details", "mobility_balance_falls", "long_text", "Please describe the fall or falls.", "يرجى وصف السقوط."),
 
   q("sfp_sensation_change", "sensation_fatigue_pain", "single_select", "Does the patient report numbness, tingling, altered sensation, or reduced awareness of touch?", "هل يذكر المريض خدراً أو وخزاً أو تغيراً في الإحساس أو انخفاضاً في إدراك اللمس؟", yesNoUnsure),
+  q("sfp_functional_symptoms", "sensation_fatigue_pain", "multi_select", "Which symptoms currently affect important activities?", "ما الأعراض التي تؤثر حالياً على الأنشطة المهمة؟", [
+    { value: "sensation", en: "Numbness, tingling, or altered sensation", ar: "خدر أو وخز أو تغير في الإحساس" },
+    { value: "fatigue", en: "Fatigue or low endurance", ar: "تعب أو انخفاض التحمل" },
+    { value: "pain", en: "Pain", ar: "ألم" },
+    { value: "none", en: "None of these", ar: "لا شيء مما سبق" },
+  ]),
   q("sfp_left_side_inattention_reported", "sensation_fatigue_pain", "single_select", "Does the patient or caregiver report sometimes missing things on the left side?", "هل يذكر المريض أو مقدم الرعاية أحياناً عدم ملاحظة أشياء على الجانب الأيسر؟", yesNoUnsure),
   q("sfp_fatigue_impact", "sensation_fatigue_pain", "single_select", "How much does fatigue affect daily activity?", "إلى أي مدى يؤثر التعب على النشاط اليومي؟", difficulty),
+  q("sfp_fatigue_details", "sensation_fatigue_pain", "long_text", "How does fatigue limit the activities that matter most?", "كيف يحد التعب من الأنشطة الأكثر أهمية؟"),
   q("sfp_pain_present", "sensation_fatigue_pain", "single_select", "Is pain currently affecting rehabilitation or daily activity?", "هل يؤثر الألم حالياً على التأهيل أو النشاط اليومي؟", yesNoUnsure),
   q("sfp_pain_location_description", "sensation_fatigue_pain", "long_text", "Where is the pain and how does it affect activity?", "أين يوجد الألم وكيف يؤثر على النشاط؟"),
   q("sfp_other_symptoms", "sensation_fatigue_pain", "long_text", "Describe any other sensory, fatigue, stiffness, or coordination symptoms.", "صف أي أعراض أخرى متعلقة بالإحساس أو التعب أو التيبس أو التناسق."),
 
-  q("adl_self_care_group", "adl_participation_support", "multi_select", "Which self-care activities are difficult or need help?", "ما أنشطة العناية الذاتية الصعبة أو التي تحتاج إلى مساعدة؟", [
+  q("adl_self_care_group", "adl_participation_support", "multi_select", "Which activities currently require help?", "ما الأنشطة التي تحتاج إلى مساعدة حالياً؟", [
     { value: "none", en: "None reported", ar: "لا توجد صعوبات مذكورة" },
+    { value: "transfers", en: "Transfers", ar: "الانتقال" },
+    { value: "walking", en: "Walking", ar: "المشي" },
+    { value: "stairs", en: "Stairs", ar: "الدرج" },
     { value: "dressing", en: "Dressing", ar: "ارتداء الملابس" },
     { value: "bathing", en: "Bathing", ar: "الاستحمام" },
     { value: "toileting", en: "Toileting", ar: "استخدام الحمام" },
     { value: "eating", en: "Eating", ar: "الأكل" },
     { value: "grooming", en: "Grooming", ar: "العناية الشخصية" },
+    { value: "meal_prep", en: "Meal preparation", ar: "إعداد الطعام" },
+    { value: "household", en: "Household activities", ar: "الأنشطة المنزلية" },
+    { value: "community", en: "Community or social activities", ar: "الأنشطة المجتمعية أو الاجتماعية" },
+    { value: "work_education", en: "Work or education", ar: "العمل أو التعليم" },
+    { value: "other", en: "Another important activity", ar: "نشاط مهم آخر" },
   ]),
   q("adl_home_community_group", "adl_participation_support", "multi_select", "Which home or community activities are restricted?", "ما الأنشطة المنزلية أو المجتمعية المقيدة؟", [
     { value: "none", en: "None reported", ar: "لا توجد قيود مذكورة" },
@@ -312,7 +378,9 @@ export function compactStrokeResponsesForSubmission(
   responses: Record<string, StrokeResponse>,
 ): Record<string, StrokeResponse> {
   return Object.fromEntries(
-    Object.entries(responses).map(([questionId, response]) => {
+    Object.entries(responses)
+      .filter(([questionId]) => !strokeQuestionById(questionId)?.navigationOnly)
+      .map(([questionId, response]) => {
       const question = strokeQuestionById(questionId);
       const responseMethod =
         response.responseMethod === "selection" && question?.options
@@ -328,6 +396,6 @@ export function compactStrokeResponsesForSubmission(
           reporterRole: response.reporterRole,
         },
       ];
-    }),
+      }),
   );
 }

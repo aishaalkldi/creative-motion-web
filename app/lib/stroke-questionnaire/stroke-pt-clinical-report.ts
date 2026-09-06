@@ -1,5 +1,4 @@
 import {
-  STROKE_SECTION_TITLES,
   strokeQuestionById,
   type ClinicalProvenance,
   type StrokeQuestionnaireSubmission,
@@ -105,7 +104,12 @@ function linesFor(
   predicate: (id: string) => boolean,
 ): string[] {
   return Object.entries(submission.responses)
-    .filter(([id, response]) => predicate(id) && rawText(response).trim())
+    .filter(
+      ([id, response]) =>
+        !strokeQuestionById(id)?.navigationOnly &&
+        predicate(id) &&
+        rawText(response).trim(),
+    )
     .map(([id, response]) => responseText(id, response))
     .filter(Boolean);
 }
@@ -141,11 +145,26 @@ export function buildStrokePtClinicalReport(
   const upperLimb = linesFor(submission, (id) => id.startsWith("ul_"));
   const transfers = linesFor(
     submission,
-    (id) => id === "mb_transfer_chair_rise" || id === "mb_transfer_bed_chair",
+    (id) =>
+      id.startsWith("mb_transfer_") ||
+      [
+        "mb_bed_mobility",
+        "mb_sitting_support",
+        "mb_standing_support",
+        "mb_wheelchair_support_needs",
+      ].includes(id),
   );
   const gait = linesFor(
     submission,
-    (id) => id.startsWith("mb_") && !id.startsWith("mb_transfer_"),
+    (id) =>
+      id.startsWith("mb_") &&
+      !id.startsWith("mb_transfer_") &&
+      ![
+        "mb_bed_mobility",
+        "mb_sitting_support",
+        "mb_standing_support",
+        "mb_wheelchair_support_needs",
+      ].includes(id),
   );
   const sensation = linesFor(
     submission,
@@ -162,6 +181,7 @@ export function buildStrokePtClinicalReport(
     submission,
     (id) =>
       id === "sfp_fatigue_impact" ||
+      id === "sfp_fatigue_details" ||
       id === "sfp_pain_present" ||
       id === "sfp_pain_location_description" ||
       id === "ul_pain" ||
