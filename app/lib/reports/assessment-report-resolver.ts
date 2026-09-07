@@ -20,12 +20,15 @@ import {
   isStrokeQuestionnaireData,
   type StrokeQuestionnaireSubmission,
 } from "@/app/lib/stroke-questionnaire/stroke-questionnaire-schema";
+import { extractRemoteUpperLimbBatteryFromStructuredData } from "@/app/lib/remote-upper-limb-battery/extract-battery-payload";
+import type { RemoteUpperLimbBatteryPayload } from "@/app/lib/remote-upper-limb-battery/types";
 
 export type AssessmentReportKind =
   | "general_msk"
   | "remote_questionnaire"
   | "stroke_questionnaire"
-  | "structured";
+  | "structured"
+  | "upper_limb_motor_screen";
 
 export type ResolvedAssessmentReport = {
   kind: AssessmentReportKind | null;
@@ -35,6 +38,7 @@ export type ResolvedAssessmentReport = {
   remoteIncludedSections: PatientSectionId[];
   strokeSubmission: StrokeQuestionnaireSubmission | null;
   structuredData: AssessmentData | null;
+  battery: RemoteUpperLimbBatteryPayload | null;
   patient: BackendPatient | null;
   resolvedPatientId: string;
   serverNotes: string | null;
@@ -56,6 +60,7 @@ export function resolveAssessmentReportFromDetail(
     remoteIncludedSections: [],
     strokeSubmission: null,
     structuredData: null,
+    battery: null,
     patient: {
       full_name: detail.patient.full_name,
       diagnosis: detail.patient.diagnosis,
@@ -102,6 +107,13 @@ export function resolveAssessmentReportFromDetail(
   const structured = extractStructuredData(detail.structured_data);
   if (structured) {
     return { ...base, kind: "structured", structuredData: structured };
+  }
+
+  if (detail.type === "upper_limb_motor_screen") {
+    const battery = extractRemoteUpperLimbBatteryFromStructuredData(detail.structured_data);
+    if (battery) {
+      return { ...base, kind: "upper_limb_motor_screen", battery };
+    }
   }
 
   return {

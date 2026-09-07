@@ -98,6 +98,7 @@ import {
 import { displayPatientFileHeader } from "../../../lib/patient-file-number";
 import { resolveCurrentAndPreviousPlans } from "../../../lib/clinician/resolve-current-plan";
 import { PreviousPlansSummary } from "../../../components/clinician/PreviousPlansSummary";
+import { PatientObjectiveResultsSection } from "@/app/components/clinician/progress/PatientObjectiveResultsSection";
 import { DemoOfflineBanner } from "@/app/components/clinician/DemoOfflineBanner";
 import { extractDemoMeta } from "@/app/lib/api/demo-fallback-client";
 import {
@@ -858,6 +859,9 @@ export default function PatientProfilePage() {
               <a href="#rehabilitation-plan" className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
                 Treatment plan
               </a>
+              <a href="#progress-objective-results" className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
+                Objective results
+              </a>
               <a href="#progress-snapshot" className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
                 Progress
               </a>
@@ -1030,6 +1034,8 @@ export default function PatientProfilePage() {
                 </div>
               )}
             </section>
+
+            <PatientObjectiveResultsSection patientId={patient.id} />
 
             {/* Quick actions */}
             <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">

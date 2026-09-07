@@ -120,6 +120,8 @@ import {
   readPtClinicalReportStatus,
 } from "@/app/lib/reports/remote-questionnaire-workflow";
 import { resolveAssessmentReportFromDetail } from "@/app/lib/reports/assessment-report-resolver";
+import { RemoteUpperLimbBatteryResultsBlock } from "@/app/components/clinician/upper-limb-motor-screen/RemoteUpperLimbBatteryResultsBlock";
+import type { RemoteUpperLimbBatteryPayload } from "@/app/lib/remote-upper-limb-battery/types";
 
 // ── Constants & labels ─────────────────────────────────────────────────────────
 
@@ -1045,7 +1047,15 @@ export function AssessmentReportClient() {
   const [remoteSubmissionMeta, setRemoteSubmissionMeta] = useState<Record<string, unknown> | null>(null);
   const [remoteIncludedSections, setRemoteIncludedSections] = useState<PatientSectionId[]>([]);
   const [strokeSubmission, setStrokeSubmission] = useState<StrokeQuestionnaireSubmission | null>(null);
-  const [reportKind, setReportKind] = useState<"general_msk" | "structured" | "remote_questionnaire" | "stroke_questionnaire" | null>(null);
+  const [batteryPayload, setBatteryPayload] = useState<RemoteUpperLimbBatteryPayload | null>(null);
+  const [reportKind, setReportKind] = useState<
+    | "general_msk"
+    | "structured"
+    | "remote_questionnaire"
+    | "stroke_questionnaire"
+    | "upper_limb_motor_screen"
+    | null
+  >(null);
   const [serverBacked, setServerBacked] = useState(false);
   const [resolvedPatientId, setResolvedPatientId] = useState(patientIdParam);
   const [serverNotes, setServerNotes] = useState<string | null>(null);
@@ -1156,6 +1166,7 @@ export function AssessmentReportClient() {
       setLoading(true);
       setLoadError("");
       setStructuredData(null);
+      setBatteryPayload(null);
       setRemoteQuestionnaireDraft(null);
       setRemoteSubmissionMeta(null);
       setRemoteIncludedSections([]);
@@ -1187,6 +1198,7 @@ export function AssessmentReportClient() {
           setRemoteIncludedSections(resolved.remoteIncludedSections);
           setStrokeSubmission(resolved.strokeSubmission);
           setStructuredData(resolved.structuredData);
+          setBatteryPayload(resolved.battery);
           setReportKind(resolved.kind);
           if (resolved.loadError) {
             setLoadError(resolved.loadError);
@@ -1619,6 +1631,34 @@ export function AssessmentReportClient() {
             />
           ) : null}
           <ReportNextStepsFooter patientId={patientId} existingPlan={existingPlan} />
+          <ClinicalDisclaimerBlock />
+        </div>
+      </main>
+    );
+  }
+
+  if (reportKind === "upper_limb_motor_screen" && batteryPayload) {
+    const backHref = patientId ? `/clinician/patients/${patientId}` : "/clinician/patients";
+    return (
+      <main className="assessment-report-root print-report min-h-screen bg-[#0B1220] text-white">
+        <header className="screen-only sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220]">
+          <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
+            <Link
+              href={backHref}
+              className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white"
+            >
+              ← Patient
+            </Link>
+          </div>
+        </header>
+        <ReportScreenHeader
+          patientName={patient?.full_name ?? "Patient"}
+          displayDate={reportDate}
+          assessmentTypeLabel="Upper-Limb Motor Screen"
+          sourceLabel="Camera-assisted observation"
+        />
+        <div className="print-report-body mx-auto max-w-4xl px-6 py-8 space-y-6">
+          <RemoteUpperLimbBatteryResultsBlock battery={batteryPayload} />
           <ClinicalDisclaimerBlock />
         </div>
       </main>

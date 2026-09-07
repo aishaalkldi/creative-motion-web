@@ -11,6 +11,7 @@ import {
   type AssessmentReportKind,
   resolveAssessmentReportFromDetail,
 } from "@/app/lib/reports/assessment-report-resolver";
+import type { RemoteUpperLimbBatteryPayload } from "@/app/lib/remote-upper-limb-battery/types";
 
 export type UseAssessmentReportLoadArgs = {
   assessmentId: string | null;
@@ -27,6 +28,7 @@ export type UseAssessmentReportLoadResult = {
   remoteSubmissionMeta: Record<string, unknown> | null;
   remoteIncludedSections: PatientSectionId[];
   structuredData: AssessmentData | null;
+  battery: RemoteUpperLimbBatteryPayload | null;
   patient: BackendPatient | null;
   resolvedPatientId: string;
   serverNotes: string | null;
@@ -45,6 +47,7 @@ const EMPTY: UseAssessmentReportLoadResult = {
   remoteSubmissionMeta: null,
   remoteIncludedSections: [],
   structuredData: null,
+  battery: null,
   patient: null,
   resolvedPatientId: "",
   serverNotes: null,
@@ -80,6 +83,7 @@ export function useAssessmentReportLoad({
         remoteSubmissionMeta: null,
         remoteIncludedSections: [],
         structuredData: null,
+        battery: null,
         serverBacked: false,
         patientAnsweredInArabic: false,
         reload,
@@ -105,6 +109,7 @@ export function useAssessmentReportLoad({
             remoteSubmissionMeta: resolved.remoteSubmissionMeta,
             remoteIncludedSections: resolved.remoteIncludedSections,
             structuredData: resolved.structuredData,
+            battery: resolved.battery,
             patient: resolved.patient,
             resolvedPatientId: resolved.resolvedPatientId,
             serverNotes: resolved.serverNotes,
