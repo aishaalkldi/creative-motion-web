@@ -1,4 +1,6 @@
 import {
+  formatStrokeResponseValue,
+  isStrokeResponseUnresolved,
   strokeQuestionById,
   type ClinicalProvenance,
   type StrokeQuestionnaireSubmission,
@@ -79,20 +81,17 @@ function responseText(id: string, response: StrokeResponse): string {
   const question = strokeQuestionById(id);
   const raw = rawText(response).trim();
   if (!raw) return "";
+  if (isStrokeResponseUnresolved(id, response)) return "";
   if (
     question?.options &&
     (response.responseMethod === "selection" ||
       response.responseMethod === undefined)
   ) {
-    const values = Array.isArray(response.rawValue) ? response.rawValue : [response.rawValue];
-    const labels = values
-      .map((item) => question.options?.find((option) => option.value === item)?.en ?? item)
-      .join(", ");
     const provenanceLabel =
       response.provenance === "CAREGIVER_REPORTED"
         ? "Caregiver-reported response"
         : "Patient-reported response";
-    return `${provenanceLabel} — ${question.en}: ${labels}.`;
+    return `${provenanceLabel} — ${question.en}: ${formatStrokeResponseValue(id, response)}.`;
   }
   if (response.clinicalEnglish?.trim()) return response.clinicalEnglish.trim();
   if (response.rawLanguage === "en") return `${sourcePrefix(response)} ${raw}`;
@@ -136,6 +135,32 @@ export function strokeReportContainsForbiddenDiagnosticUpgrade(
     .join(" ")
     .toLowerCase();
   return FORBIDDEN_UPGRADES.filter((term) => corpus.includes(term));
+}
+
+export function sanitizeStrokeReportForSourceSafety(
+  report: StrokePtClinicalReport,
+  submission: StrokeQuestionnaireSubmission,
+): StrokePtClinicalReport {
+  const unsupportedStatements = new Set(
+    Object.entries(submission.responses)
+      .filter(([id, response]) => isStrokeResponseUnresolved(id, response))
+      .map(([, response]) => response.clinicalEnglish?.trim())
+      .filter((value): value is string => Boolean(value)),
+  );
+  if (unsupportedStatements.size === 0) return report;
+
+  return {
+    ...report,
+    sections: report.sections.map((reportSection) => ({
+      ...reportSection,
+      paragraphs: reportSection.paragraphs.filter(
+        (paragraph) => !unsupportedStatements.has(paragraph.trim()),
+      ),
+      bullets: reportSection.bullets.filter(
+        (bullet) => !unsupportedStatements.has(bullet.trim()),
+      ),
+    })),
+  };
 }
 
 export function buildStrokePtClinicalReport(
@@ -190,9 +215,18 @@ export function buildStrokePtClinicalReport(
   const adl = linesFor(submission, (id) => id.startsWith("adl_"));
   const support = linesFor(submission, (id) => id.startsWith("support_"));
   const goals = linesFor(submission, (id) => id.startsWith("goal_"));
-  const safety = [
-    `Safety gate state: ${submission.safetyState}. PASS indicates completion of the intake gate only and does not indicate medical clearance for exercise.`,
-  ];
+  const safety =
+    submission.safetyState === "PASS"
+      ? [
+          "Safety gate state: PASS. PASS indicates completion of the intake gate only and does not indicate medical clearance for exercise.",
+        ]
+      : submission.safetyState === "REQUIRES_CLINICIAN_REVIEW"
+        ? [
+            "Safety gate state: REQUIRES CLINICIAN REVIEW. Clinician safety review is required before considering performance assessment. This status does not indicate medical clearance for exercise.",
+          ]
+        : [
+            "Safety gate state: URGENT ESCALATION. An urgent escalation response was recorded; do not authorize performance assessment from this intake.",
+          ];
   const objectivePrompts = [
     upperLimb.length
       ? "Consider therapist-authorized objective assessment of upper-limb movement and task performance."
@@ -209,11 +243,10 @@ export function buildStrokePtClinicalReport(
   );
   const informationSourceResponse = submission.responses.sc_information_source;
   const informationSource = informationSourceResponse
-    ? `Information source: ${
-        strokeQuestionById("sc_information_source")?.options?.find(
-          (option) => option.value === rawText(informationSourceResponse),
-        )?.en ?? rawText(informationSourceResponse)
-      }.`
+    ? `Information source: ${formatStrokeResponseValue(
+        "sc_information_source",
+        informationSourceResponse,
+      )}.`
     : "Information source not specified.";
 
   const report: StrokePtClinicalReport = {

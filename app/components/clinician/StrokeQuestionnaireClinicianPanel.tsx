@@ -2,12 +2,16 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
+  clinicalEnglishForStrokeDisplay,
   STROKE_SECTION_TITLES,
   strokeQuestionById,
   isStrokeQuestionnaireData,
   type StrokeQuestionnaireSubmission,
 } from "@/app/lib/stroke-questionnaire/stroke-questionnaire-schema";
-import type { StrokePtClinicalReport } from "@/app/lib/stroke-questionnaire/stroke-pt-clinical-report";
+import {
+  sanitizeStrokeReportForSourceSafety,
+  type StrokePtClinicalReport,
+} from "@/app/lib/stroke-questionnaire/stroke-pt-clinical-report";
 
 type Props = {
   assessmentId: string;
@@ -27,10 +31,17 @@ export function StrokeQuestionnaireClinicianPanel({
   const [clinicalEnglishEdits, setClinicalEnglishEdits] = useState<Record<string, string>>({});
   const translationStatus = structuredData.strokeWorkflow.translation.status;
   const reportStatus = structuredData.strokeWorkflow.report.status;
-  const report = ((structuredData as unknown as Record<string, unknown>)
+  const storedReport = ((structuredData as unknown as Record<string, unknown>)
     .strokePtClinicalReportFinal ??
     (structuredData as unknown as Record<string, unknown>)
       .strokePtClinicalReportDraft) as StrokePtClinicalReport | undefined;
+  const report = useMemo(
+    () =>
+      storedReport
+        ? sanitizeStrokeReportForSourceSafety(storedReport, structuredData)
+        : undefined,
+    [storedReport, structuredData],
+  );
   const [reportEdit, setReportEdit] = useState<StrokePtClinicalReport | null>(report ?? null);
   const responseRows = useMemo(
     () =>
@@ -46,8 +57,13 @@ export function StrokeQuestionnaireClinicianPanel({
     setClinicalEnglishEdits(
       Object.fromEntries(
         Object.entries(structuredData.responses)
-          .filter(([, response]) => Boolean(response.clinicalEnglish))
-          .map(([id, response]) => [id, response.clinicalEnglish ?? ""]),
+          .filter(([id, response]) =>
+            Boolean(clinicalEnglishForStrokeDisplay(id, response)),
+          )
+          .map(([id, response]) => [
+            id,
+            clinicalEnglishForStrokeDisplay(id, response) ?? "",
+          ]),
       ),
     );
   }, [structuredData.responses]);
@@ -138,10 +154,13 @@ export function StrokeQuestionnaireClinicianPanel({
                     ? response.rawValue.join(", ")
                     : response.rawValue}
                 </p>
-                {response.clinicalEnglish ? (
+                {clinicalEnglishForStrokeDisplay(id, response) ? (
                   <textarea
                     aria-label={`Clinical English for ${question?.en ?? id}`}
-                    value={clinicalEnglishEdits[id] ?? response.clinicalEnglish}
+                    value={
+                      clinicalEnglishEdits[id] ??
+                      clinicalEnglishForStrokeDisplay(id, response)
+                    }
                     disabled={translationStatus === "approved"}
                     onChange={(event) =>
                       setClinicalEnglishEdits((current) => ({

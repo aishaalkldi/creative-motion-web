@@ -1,6 +1,9 @@
 import { translateClinicalText } from "@/app/lib/ai/translate-clinical-text";
 import {
+  formatStrokeResponseValue,
+  isStrokeSourceResponseUnclear,
   STROKE_SECTION_TITLES,
+  STROKE_UNCLEAR_CLINICAL_ENGLISH,
   strokeQuestionById,
   type StrokeQuestionnaireSubmission,
   type StrokeResponse,
@@ -37,20 +40,30 @@ function isSelectionResponse(id: string, response: StrokeResponse): boolean {
 
 function selectionTranslation(id: string, response: StrokeResponse): string {
   const question = strokeQuestionById(id);
-  const values = Array.isArray(response.rawValue) ? response.rawValue : [response.rawValue];
-  const labels = values.map(
-    (value) => question?.options?.find((option) => option.value === value)?.en ?? value,
-  );
   const provenanceLabel =
     response.provenance === "CAREGIVER_REPORTED"
       ? "Caregiver-reported response"
       : "Patient-reported response";
-  return `${provenanceLabel} — ${question?.en ?? id}: ${labels.join(", ")}.`;
+  return `${provenanceLabel} — ${question?.en ?? id}: ${formatStrokeResponseValue(id, response)}.`;
 }
 
 function hasForbiddenUpgrade(text: string): boolean {
   const normalized = text.toLowerCase();
   return FORBIDDEN_TRANSLATION_UPGRADES.some((term) => normalized.includes(term));
+}
+
+function translationAddsUnsupportedNegative(
+  source: string,
+  translated: string,
+): boolean {
+  const sourceHasNegation =
+    /\b(?:no|not|none|without|deny|denies|denied)\b/i.test(source) ||
+    /(?:^|[\s،])(?:لا|ليس|ليست|لم|لن|بدون|ما ?في|لا يوجد)(?=$|[\s،.])/u.test(
+      source,
+    );
+  const translationHasNegative =
+    /\b(?:no|not|none|without|deny|denies|denied)\b/i.test(translated);
+  return translationHasNegative && !sourceHasNegation;
 }
 
 export async function translateStrokeSubmission(
@@ -65,14 +78,33 @@ export async function translateStrokeSubmission(
   const generatedAt = new Date().toISOString();
 
   for (const [id, response] of Object.entries(responses)) {
-    if (!rawText(response).trim()) continue;
+    const sourceText = rawText(response).trim();
+    if (!sourceText) {
+      responses[id] = {
+        ...response,
+        clinicalEnglish: undefined,
+        translation: undefined,
+      };
+      continue;
+    }
+    if (
+      !isSelectionResponse(id, response) &&
+      isStrokeSourceResponseUnclear(id, response)
+    ) {
+      responses[id] = {
+        ...response,
+        clinicalEnglish: STROKE_UNCLEAR_CLINICAL_ENGLISH,
+        translation: { status: "review_required", generatedAt },
+      };
+      continue;
+    }
     if (response.rawLanguage === "en") {
       responses[id] = {
         ...response,
         clinicalEnglish:
           isSelectionResponse(id, response)
             ? selectionTranslation(id, response)
-            : `${reporterPrefix(response)} ${rawText(response).trim()}`,
+            : `${reporterPrefix(response)} ${sourceText}`,
         translation: { status: "review_required", generatedAt },
       };
       continue;
@@ -88,7 +120,7 @@ export async function translateStrokeSubmission(
     }
 
     const question = strokeQuestionById(id);
-    const result = await translateClinicalText(apiKey, rawText(response), undefined, {
+    const result = await translateClinicalText(apiKey, sourceText, undefined, {
       fieldKey: id,
       questionLabel: question?.en ?? id,
       sectionTitle: question
@@ -98,8 +130,19 @@ export async function translateStrokeSubmission(
       valueType: "subjective_report",
       isVoiceTranscription: response.responseMethod === "voice",
     });
-    if (!result.ok || hasForbiddenUpgrade(result.translation)) {
+    if (!result.ok) {
       failedFieldIds.push(id);
+      continue;
+    }
+    if (
+      hasForbiddenUpgrade(result.translation) ||
+      translationAddsUnsupportedNegative(sourceText, result.translation)
+    ) {
+      responses[id] = {
+        ...response,
+        clinicalEnglish: STROKE_UNCLEAR_CLINICAL_ENGLISH,
+        translation: { status: "review_required", generatedAt },
+      };
       continue;
     }
     const translated = result.translation

@@ -10,13 +10,17 @@ import {
 import { routeStrokeRasqModules } from "./stroke-module-routing";
 import {
   buildStrokePtClinicalReport,
+  sanitizeStrokeReportForSourceSafety,
   strokeReportContainsForbiddenDiagnosticUpgrade,
 } from "./stroke-pt-clinical-report";
 import {
+  clinicalEnglishForStrokeDisplay,
+  formatStrokeResponseValue,
   STROKE_PATHWAY,
   STROKE_QUESTIONS,
   STROKE_QUESTIONNAIRE_KIND,
   STROKE_QUESTIONNAIRE_VERSION,
+  STROKE_UNCLEAR_CLINICAL_ENGLISH,
   compactStrokeResponsesForSubmission,
   type StrokeQuestionnaireSubmission,
   type StrokeResponse,
@@ -25,6 +29,7 @@ import {
   REMOTE_ASSESSMENT_MAX_STRING_LENGTH,
   validateRemoteAssessmentStructuredData,
 } from "@/app/lib/remote-assessment-validation";
+import { translateStrokeSubmission } from "./stroke-translation";
 
 function response(
   rawValue: string | string[],
@@ -238,6 +243,123 @@ describe("Stroke RASQ module routing safety", () => {
 });
 
 describe("Stroke report provenance and diagnostic safety", () => {
+  it("clears stale substantive Clinical English for a blank source response", async () => {
+    const blank = response("");
+    blank.rawLanguage = "ar";
+    blank.clinicalEnglish = "The patient reports no fatigue concerns.";
+    const source = submission({ sfp_fatigue_details: blank });
+    source.assessmentLanguage = "ar";
+    source.strokeWorkflow.translation.status = "not_generated";
+
+    const translated = await translateStrokeSubmission(source, "unused");
+    assert.equal(
+      translated.submission.responses.sfp_fatigue_details.clinicalEnglish,
+      undefined,
+    );
+  });
+
+  it("does not synthesize placeholder fatigue details", async () => {
+    const source = submission({
+      sfp_fatigue_details: {
+        rawValue: "-",
+        rawLanguage: "ar",
+        responseMethod: "text",
+        provenance: "PATIENT_REPORTED",
+        reporterRole: "patient",
+      },
+    });
+    source.assessmentLanguage = "ar";
+    source.strokeWorkflow.translation.status = "not_generated";
+
+    const translated = await translateStrokeSubmission(source, "unused");
+    assert.equal(
+      translated.submission.responses.sfp_fatigue_details.clinicalEnglish,
+      STROKE_UNCLEAR_CLINICAL_ENGLISH,
+    );
+    const report = buildStrokePtClinicalReport(translated.submission);
+    const fatigue = report.sections.find(
+      (section) => section.id === "fatigue_endurance_pain",
+    );
+    assert.deepEqual(fatigue?.paragraphs, []);
+  });
+
+  it("omits previously generated substantive text when its source is unresolved", () => {
+    const unsafe = response("-");
+    unsafe.clinicalEnglish =
+      "The patient reports fatigue that substantially limits concentration.";
+    const source = submission({ sfp_fatigue_details: unsafe });
+    const persistedReport = buildStrokePtClinicalReport(submission({}));
+    const persistedFatigue = persistedReport.sections.find(
+      (section) => section.id === "fatigue_endurance_pain",
+    );
+    persistedFatigue?.paragraphs.push(unsafe.clinicalEnglish);
+
+    const report = sanitizeStrokeReportForSourceSafety(persistedReport, source);
+    const safeFatigue = report.sections.find(
+      (section) => section.id === "fatigue_endurance_pain",
+    );
+    assert.deepEqual(safeFatigue?.paragraphs, []);
+    assert.equal(
+      clinicalEnglishForStrokeDisplay("sfp_fatigue_details", unsafe),
+      STROKE_UNCLEAR_CLINICAL_ENGLISH,
+    );
+  });
+
+  it("does not convert an incomplete Arabic safety response into no concern", async () => {
+    const source = submission(
+      {
+        sg_other_safety_concern: {
+          rawValue: "ال",
+          rawLanguage: "ar",
+          responseMethod: "text",
+          provenance: "PATIENT_REPORTED",
+          reporterRole: "patient",
+        },
+      },
+      "REQUIRES_CLINICIAN_REVIEW",
+    );
+    source.assessmentLanguage = "ar";
+    source.strokeWorkflow.translation.status = "not_generated";
+
+    const translated = await translateStrokeSubmission(source, "unused");
+    const clinicalEnglish =
+      translated.submission.responses.sg_other_safety_concern.clinicalEnglish;
+    assert.equal(clinicalEnglish, STROKE_UNCLEAR_CLINICAL_ENGLISH);
+    assert.doesNotMatch(clinicalEnglish ?? "", /no (?:additional )?(?:current )?safety concern/i);
+  });
+
+  it("shows the clinician-review safety state explicitly", () => {
+    const report = buildStrokePtClinicalReport(
+      submission({}, "REQUIRES_CLINICIAN_REVIEW"),
+    );
+    const safety = report.sections.find(
+      (section) => section.id === "safety_considerations",
+    );
+    assert.match(
+      safety?.paragraphs.join(" ") ?? "",
+      /REQUIRES CLINICIAN REVIEW/,
+    );
+    assert.doesNotMatch(
+      safety?.paragraphs.join(" ") ?? "",
+      /Safety gate state: PASS/,
+    );
+  });
+
+  it("humanizes Stroke response enums for clinician-facing reports", () => {
+    assert.equal(
+      formatStrokeResponseValue("adl_self_care_group", response("much_difficulty")),
+      "A lot of difficulty",
+    );
+    assert.equal(
+      formatStrokeResponseValue("sc_pre_stroke_walking_status", response("walking_aid")),
+      "Uses walking aid",
+    );
+    assert.equal(
+      formatStrokeResponseValue("mb_falls_screen", response("near_fall")),
+      "Near fall reported",
+    );
+  });
+
   it("preserves caregiver-reported provenance", () => {
     const report = buildStrokePtClinicalReport(
       submission({

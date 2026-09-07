@@ -49,8 +49,16 @@ import {
   StrokeReportDisplay,
   isStrokeClinicianData,
 } from "@/app/components/clinician/StrokeQuestionnaireClinicianPanel";
-import type { StrokeQuestionnaireSubmission } from "@/app/lib/stroke-questionnaire/stroke-questionnaire-schema";
-import type { StrokePtClinicalReport } from "@/app/lib/stroke-questionnaire/stroke-pt-clinical-report";
+import {
+  clinicalEnglishForStrokeDisplay,
+  formatStrokeResponseValue,
+  strokeQuestionById,
+  type StrokeQuestionnaireSubmission,
+} from "@/app/lib/stroke-questionnaire/stroke-questionnaire-schema";
+import {
+  sanitizeStrokeReportForSourceSafety,
+  type StrokePtClinicalReport,
+} from "@/app/lib/stroke-questionnaire/stroke-pt-clinical-report";
 import { PdfTranslationWarningModal } from "@/app/components/clinician/PdfTranslationWarningModal";
 import { useCvSessionMetrics } from "@/app/hooks/useCvSessionMetrics";
 import { getCvReadyExercises } from "@/app/lib/cv/cv-ready-exercises";
@@ -1337,11 +1345,15 @@ export function AssessmentReportClient() {
   }
 
   if (reportKind === "stroke_questionnaire" && strokeSubmission) {
-    const strokeReport =
+    const isFinalized = strokeSubmission.strokeWorkflow.report.status === "finalized";
+    const storedStrokeReport =
       ((strokeSubmission as unknown as Record<string, unknown>)
         .strokePtClinicalReportFinal ??
         (strokeSubmission as unknown as Record<string, unknown>)
           .strokePtClinicalReportDraft) as StrokePtClinicalReport | undefined;
+    const strokeReport = storedStrokeReport
+      ? sanitizeStrokeReportForSourceSafety(storedStrokeReport, strokeSubmission)
+      : undefined;
     const backHref = patientId
       ? `/clinician/patients/${patientId}`
       : "/clinician/patients";
@@ -1383,27 +1395,6 @@ export function AssessmentReportClient() {
               for physiotherapist review.
             </p>
           </header>
-          <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 print:border-gray-200 print:bg-white print:text-gray-900">
-            <h2 className="text-base font-bold">Encounter &amp; Safety</h2>
-            <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-              <InfoTile label="Questionnaire" value="Stroke v1" />
-              <InfoTile label="Pathway" value="Remote Neurorehabilitation Intake" />
-              <InfoTile label="Safety gate" value={strokeSubmission.safetyState} />
-              <InfoTile
-                label="Information source"
-                value={
-                  String(
-                    strokeSubmission.responses.sc_information_source?.rawValue ??
-                      "Not specified",
-                  )
-                }
-              />
-            </dl>
-            <p className="mt-4 text-xs text-white/50 print:text-gray-600">
-              PASS reflects completion of the intake safety gate only. It does not indicate
-              medical clearance for exercise or performance assessment.
-            </p>
-          </section>
           {strokeReport ? (
             <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 print:border-0 print:bg-white print:text-gray-900">
               <StrokeReportDisplay report={strokeReport} />
@@ -1415,6 +1406,39 @@ export function AssessmentReportClient() {
               </p>
             </section>
           )}
+          <section
+            className={`rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 print:border-gray-200 print:bg-white print:text-gray-900 ${
+              isFinalized ? "print:hidden" : ""
+            }`}
+          >
+            <h2 className="text-base font-bold">Encounter &amp; Safety</h2>
+            <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+              <InfoTile label="Questionnaire" value="Stroke v1" />
+              <InfoTile label="Pathway" value="Remote Neurorehabilitation Intake" />
+              <InfoTile
+                label="Safety gate"
+                value={strokeSubmission.safetyState.replaceAll("_", " ")}
+              />
+              <InfoTile
+                label="Information source"
+                value={
+                  strokeSubmission.responses.sc_information_source
+                    ? formatStrokeResponseValue(
+                        "sc_information_source",
+                        strokeSubmission.responses.sc_information_source,
+                      )
+                    : "Not specified"
+                }
+              />
+            </dl>
+            <p className="mt-4 text-xs text-white/50 print:text-gray-600">
+              {strokeSubmission.safetyState === "PASS"
+                ? "PASS reflects completion of the intake safety gate only. It does not indicate medical clearance for exercise or performance assessment."
+                : strokeSubmission.safetyState === "REQUIRES_CLINICIAN_REVIEW"
+                  ? "Clinician safety review is required before considering performance assessment. This status does not indicate medical clearance."
+                  : "An urgent escalation response was recorded. Do not authorize performance assessment from this intake."}
+            </p>
+          </section>
           <section className="hidden break-before-page print:block">
             <h2 className="text-lg font-bold text-gray-950">
               Appendix: Source Response Traceability
@@ -1433,19 +1457,20 @@ export function AssessmentReportClient() {
                 .map(([id, response]) => (
                   <div key={id} className="break-inside-avoid border-b border-gray-200 pb-3">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
-                      {id.replaceAll("_", " ")} · {response.provenance}
+                      {id.replaceAll("_", " ")} · {response.provenance} ·{" "}
+                      {response.reporterRole} · {response.rawLanguage} ·{" "}
+                      {response.responseMethod ??
+                        (strokeQuestionById(id)?.options ? "selection" : "text")}
                     </p>
                     <p className="mt-1 text-xs text-gray-500">Original</p>
                     <p className="text-sm text-gray-900">
-                      {Array.isArray(response.rawValue)
-                        ? response.rawValue.join(", ")
-                        : response.rawValue}
+                      {formatStrokeResponseValue(id, response)}
                     </p>
-                    {response.clinicalEnglish ? (
+                    {clinicalEnglishForStrokeDisplay(id, response) ? (
                       <>
                         <p className="mt-2 text-xs text-gray-500">Clinical English</p>
                         <p className="text-sm text-gray-900">
-                          {response.clinicalEnglish}
+                          {clinicalEnglishForStrokeDisplay(id, response)}
                         </p>
                       </>
                     ) : null}

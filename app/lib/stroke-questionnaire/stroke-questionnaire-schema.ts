@@ -369,6 +369,95 @@ export function strokeQuestionById(id: string): StrokeQuestionDefinition | undef
   return STROKE_QUESTIONS.find((question) => question.id === id);
 }
 
+export const STROKE_UNCLEAR_CLINICAL_ENGLISH =
+  "Response unclear / requires clinician review.";
+
+const AMBIGUOUS_TEXT_RESPONSES = new Set([
+  "a",
+  "an",
+  "the",
+  "al",
+  "n/a",
+  "na",
+  "unknown",
+  "unclear",
+  "not sure",
+  "ال",
+  "غير واضح",
+  "غير معروف",
+  "لا أعرف",
+]);
+
+export function isStrokeSourceResponseUnclear(
+  id: string,
+  response: StrokeResponse,
+): boolean {
+  if (strokeQuestionById(id)?.options) return false;
+  const raw = Array.isArray(response.rawValue)
+    ? response.rawValue.join(" ")
+    : response.rawValue;
+  const normalized = raw.normalize("NFKC").trim().toLowerCase();
+  if (!normalized) return false;
+  if (AMBIGUOUS_TEXT_RESPONSES.has(normalized)) return true;
+  if (/^[-–—_.,،…/\\\s]+$/u.test(normalized)) return true;
+  const meaningfulCharacters = normalized.match(/[\p{L}\p{N}]/gu) ?? [];
+  return meaningfulCharacters.length < 3;
+}
+
+export function isStrokeResponseUnresolved(
+  id: string,
+  response: StrokeResponse,
+): boolean {
+  return isStrokeSourceResponseUnclear(id, response);
+}
+
+export function clinicalEnglishForStrokeDisplay(
+  id: string,
+  response: StrokeResponse,
+): string | undefined {
+  const raw = Array.isArray(response.rawValue)
+    ? response.rawValue.join(" ").trim()
+    : response.rawValue.trim();
+  if (!raw) return undefined;
+  if (isStrokeResponseUnresolved(id, response)) {
+    return STROKE_UNCLEAR_CLINICAL_ENGLISH;
+  }
+  return response.clinicalEnglish?.trim() || undefined;
+}
+
+const STROKE_DISPLAY_VALUE_OVERRIDES: Record<string, string> = {
+  much_difficulty: "A lot of difficulty",
+  some_difficulty: "Some difficulty",
+  walking_aid: "Uses walking aid",
+  near_fall: "Near fall reported",
+};
+
+export function formatStrokeResponseValue(
+  id: string,
+  response: Pick<StrokeResponse, "rawValue">,
+): string {
+  const question = strokeQuestionById(id);
+  const values = Array.isArray(response.rawValue)
+    ? response.rawValue
+    : [response.rawValue];
+  return values
+    .map((value) => {
+      if (STROKE_DISPLAY_VALUE_OVERRIDES[value]) {
+        return STROKE_DISPLAY_VALUE_OVERRIDES[value];
+      }
+      const optionLabel = question?.options?.find(
+        (option) => option.value === value,
+      )?.en;
+      if (optionLabel) return optionLabel;
+      if (/^[a-z0-9_]+$/i.test(value) && value.includes("_")) {
+        const humanized = value.replaceAll("_", " ");
+        return humanized.charAt(0).toUpperCase() + humanized.slice(1);
+      }
+      return value;
+    })
+    .join(", ");
+}
+
 /**
  * Patient submission transport deliberately excludes translation state and
  * generated Clinical English. A selection response's method is implied by the
