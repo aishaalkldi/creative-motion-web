@@ -49,6 +49,7 @@ import {
   StrokeReportDisplay,
   isStrokeClinicianData,
 } from "@/app/components/clinician/StrokeQuestionnaireClinicianPanel";
+import { StrokeSuggestedAssessments } from "@/app/components/clinician/StrokeSuggestedAssessments";
 import {
   clinicalEnglishForStrokeDisplay,
   formatStrokeResponseValue,
@@ -1382,7 +1383,24 @@ export function AssessmentReportClient() {
           hasRiskFlags={strokeSubmission.safetyState !== "PASS"}
         />
         <div className="print-report-body mx-auto w-full max-w-[1400px] space-y-6 px-6 py-8">
-          <div className="print:hidden">
+          <nav className="print:hidden flex flex-wrap gap-2">
+            {[
+              { href: "#stroke-overview", label: "Overview" },
+              { href: "#stroke-responses", label: "Responses" },
+              { href: "#stroke-clinical-english", label: "Clinical English" },
+              { href: "#stroke-pt-report", label: "PT Report" },
+              { href: "#stroke-suggested", label: "Suggested Assessments" },
+            ].map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-1.5 text-[11px] font-semibold text-white/55 hover:text-white"
+              >
+                {item.label}
+              </a>
+            ))}
+          </nav>
+          <div id="stroke-overview" className="scroll-mt-24 print:hidden">
             <StrokeQuestionnaireClinicianPanel
               assessmentId={assessmentId}
               structuredData={strokeSubmission}
@@ -1409,11 +1427,17 @@ export function AssessmentReportClient() {
             </p>
           </header>
           {strokeReport ? (
-            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 print:border-0 print:bg-white print:text-gray-900">
+            <section
+              id="stroke-pt-report-copy"
+              className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 print:border-0 print:bg-white print:text-gray-900"
+            >
               <StrokeReportDisplay report={strokeReport} />
             </section>
           ) : (
-            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+            <section
+              id="stroke-pt-report"
+              className="scroll-mt-24 rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6"
+            >
               <p className="text-sm text-white/70">
                 The Stroke PT Clinical Report has not been generated and finalized yet.
               </p>
@@ -1452,6 +1476,10 @@ export function AssessmentReportClient() {
                   : "An urgent escalation response was recorded. Do not authorize performance assessment from this intake."}
             </p>
           </section>
+          <StrokeSuggestedAssessments
+            submission={strokeSubmission}
+            patientId={patientId}
+          />
           <section className="hidden break-before-page print:block">
             <h2 className="text-lg font-bold text-gray-950">
               Appendix: Source Response Traceability

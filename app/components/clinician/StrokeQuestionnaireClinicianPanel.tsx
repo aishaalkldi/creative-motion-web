@@ -126,7 +126,8 @@ export function StrokeQuestionnaireClinicianPanel({
 
   const workflowSidebar = (
     <aside
-      className={`min-w-0 space-y-4 ${
+      id="stroke-clinical-english"
+      className={`scroll-mt-24 min-w-0 space-y-4 ${
         wideLayout ? "xl:col-start-2 xl:row-start-1 xl:sticky xl:top-20" : ""
       }`}
     >
@@ -263,7 +264,7 @@ export function StrokeQuestionnaireClinicianPanel({
         {workflowSidebar}
 
         <div className={`min-w-0 space-y-4 ${wideLayout ? "xl:col-start-1 xl:row-start-1" : ""}`}>
-        <details open className="border-t border-[#1E2D42] pt-3">
+        <details id="stroke-responses" open className="scroll-mt-24 border-t border-[#1E2D42] pt-3">
           <summary className="cursor-pointer text-sm font-bold text-white">
             Original responses and Clinical English
           </summary>
@@ -320,11 +321,13 @@ export function StrokeQuestionnaireClinicianPanel({
         </details>
 
         {reportEdit ? (
-          <StrokeReportDisplay
-            report={reportEdit}
-            editable={reportStatus === "draft_ready"}
-            onReportChange={setReportEdit}
-          />
+          <div id="stroke-pt-report" className="scroll-mt-24">
+            <StrokeReportDisplay
+              report={reportEdit}
+              editable={reportStatus === "draft_ready"}
+              onReportChange={setReportEdit}
+            />
+          </div>
         ) : null}
         </div>
       </div>

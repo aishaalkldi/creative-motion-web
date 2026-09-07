@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import type { TimelineEvent, TimelineEventSeverity, TimelineEventType } from "@/app/lib/clinician/patient-timeline";
 import {
   formatRelativeTimelineTime,
@@ -10,6 +11,7 @@ import {
 type PatientJourneyTimelineProps = {
   events: TimelineEvent[];
   patientName: string;
+  initialVisible?: number;
 };
 
 const DOT_STYLES: Record<TimelineEventSeverity, { border: string; bg: string }> = {
@@ -41,8 +43,18 @@ function summarizeEvents(events: TimelineEvent[]) {
   return { actionCount, warningCount, latest };
 }
 
-export function PatientJourneyTimeline({ events, patientName }: PatientJourneyTimelineProps) {
+export function PatientJourneyTimeline({
+  events,
+  patientName,
+  initialVisible,
+}: PatientJourneyTimelineProps) {
+  const [expanded, setExpanded] = useState(false);
   const { actionCount, warningCount, latest } = summarizeEvents(events);
+  const visibleEvents =
+    initialVisible && !expanded && events.length > initialVisible
+      ? events.slice(-initialVisible)
+      : events;
+  const hiddenCount = events.length - visibleEvents.length;
 
   return (
     <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 scroll-mt-6">
@@ -51,7 +63,7 @@ export function PatientJourneyTimeline({ events, patientName }: PatientJourneyTi
           <h2
             className="text-[12px] font-medium text-[#F9FAFB]"
           >
-            Rehabilitation Journey
+            {initialVisible && !expanded ? "Recent Rehabilitation Journey" : "Rehabilitation Journey"}
           </h2>
           <p className="mt-1 text-[11px] text-white/35">
             Chronological record for {patientName}. Events are factual; clinical interpretation is yours.
@@ -94,10 +106,10 @@ export function PatientJourneyTimeline({ events, patientName }: PatientJourneyTi
             aria-hidden
           />
           <ul className="space-y-0">
-            {events.map((event, index) => {
+            {visibleEvents.map((event, index) => {
               const severity: TimelineEventSeverity = event.severity ?? "info";
               const dot = DOT_STYLES[severity];
-              const isLast = index === events.length - 1;
+              const isLast = index === visibleEvents.length - 1;
               const content = (
                 <>
                   <div className="flex flex-wrap items-center gap-2">
@@ -151,6 +163,15 @@ export function PatientJourneyTimeline({ events, patientName }: PatientJourneyTi
           </ul>
         </div>
       )}
+      {events.length > 0 && (hiddenCount > 0 || expanded) ? (
+        <button
+          type="button"
+          onClick={() => setExpanded((value) => !value)}
+          className="mt-4 text-xs font-semibold text-[#5DCAA5] hover:text-white"
+        >
+          {expanded ? "Show recent journey" : `View full journey (${events.length} events)`}
+        </button>
+      ) : null}
     </section>
   );
 }

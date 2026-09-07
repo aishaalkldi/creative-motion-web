@@ -1,55 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams, notFound } from "next/navigation";
 import type { AssessmentRecord } from "../../../lib/domain-types";
-import {
-  getPatientAssessments,
-  type AssessmentOut,
-} from "../../../lib/api";
-import type { SavedAssessment } from "../../../lib/mock-clinical-data";
 import type { AssessmentListRow, AssessmentRow } from "../../../api/assessments/route";
-import type { StoredAssessmentPayload } from "../../../lib/assessment-payload";
 import { pickPreferredAssessment } from "../../../lib/assessment-snapshot";
-import {
-  FOCUS_AREA_LABEL,
-  FOCUS_CATEGORY_LABEL,
-  FOCUS_DIRECTION_LABEL,
-  FOCUS_DIRECTION_VALUE,
-  FOCUS_PROFILE_DISCLAIMER,
-  FOCUS_SECTION_TITLE,
-} from "../../../lib/clinical-focus-copy";
-import { deriveClinicalFocusLabels } from "../../../lib/clinical-focus-labels";
-import {
-  PROGRAM_DIRECTION_CTA,
-  PROGRAM_DIRECTION_FOOTER,
-  PROGRAM_DIRECTION_PROFILE_INTRO,
-  PROGRAM_DIRECTION_PROFILE_TITLE,
-  PROGRAM_DIRECTION_NO_OPTIONS,
-  PROGRAM_DIRECTION_RED_FLAG,
-} from "../../../lib/program-direction-copy";
-import { resolveProgramOptionsForFocus } from "../../../lib/program-direction-options";
 import {
   extractGeneralDraft,
   extractStructuredData,
-  getAssessmentLanguage,
 } from "../../../lib/assessment-payload";
-import {
-  ARABIC_READABILITY_NOTICE,
-  isArabicAssessmentContent,
-  valueTextDirection,
-} from "../../../lib/arabic-readability";
 import type { PatientRow } from "../../../lib/validate-patient-ownership";
 import { assessmentsRepository } from "../../../lib/repositories";
 import ConfirmModal from "../../../components/ConfirmModal";
-import {
-  DEFAULT_THERAPY_PHASE,
-  DEFAULT_THERAPY_PROGRAM_ID,
-  DEFAULT_THERAPY_SESSION_TYPE,
-  type TherapySessionLog,
-} from "../../../lib/therapy-sessions-store";
-import { loadTherapySessionsForDisplay } from "../../../lib/therapy-session-persistence";
 import {
   type TreatmentPlan,
   type Adherence,
@@ -59,7 +22,6 @@ import type { PlanRow } from "../../../api/plans/route";
 import {
   listPatientAssessments,
   ASSESSMENT_TYPE_LABELS,
-  PATIENT_SECTION_LABELS,
   daysUntilExpiry,
   type RemoteAssessmentRequest,
 } from "../../../lib/api/remote-assessments";
@@ -67,14 +29,11 @@ import { SendAssessmentModal } from "./SendAssessmentModal";
 import { SessionScheduleView } from "../../../components/SessionScheduleView";
 import { ClinicalActionCard } from "../../../components/clinician/ClinicalActionCard";
 import { PatientJourneyTimeline } from "../../../components/clinician/PatientJourneyTimeline";
-import { CvPatientCvMetricsSection } from "../../../components/clinician/cv/CvPatientCvMetricsSection";
-import { AiClinicianSummaryCard } from "../../../components/clinician/AiClinicianSummaryCard";
-import { XrSessionRecommendationsCard } from "@/app/components/clinician/XrSessionRecommendationsCard";
 import { getCvReadyExercises } from "@/app/lib/cv/cv-ready-exercises";
 import { GAIT_ASSESSMENT_EXERCISE_DISPLAY_NAMES } from "@/app/lib/cv/gait-assessment-exercise-ids";
 import { indexCvMetricsByPlanSessionId } from "@/app/lib/cv/clinician-session-camera-status";
 import { useCvSessionMetrics } from "@/app/hooks/useCvSessionMetrics";
-import { PatientAdherenceSummary } from "../../../components/clinician/PatientAdherenceSummary";
+import { PatientAssessmentsSummary } from "../../../components/clinician/PatientAssessmentsSummary";
 import {
   formatLastSessionCompletedLine,
   formatSessionsCompletedLine,
@@ -82,29 +41,16 @@ import {
 } from "@/app/lib/clinician/adherence-display";
 import type { PatientProgressSummary, PatientTimelineBundle } from "../../../api/clinician/patient-progress/route";
 import { buildPatientTimeline } from "../../../lib/clinician/patient-timeline";
-import {
-  buildRemoteQuestionnaireSummary,
-  type RemoteQuestionnaireSummary,
-} from "../../../lib/remote-questionnaire-summary";
-import { PatientClinicalTranslationDisplay } from "@/app/components/reports/PatientClinicalTranslationDisplay";
-import {
-  RemoteQuestionnaireClinicianPanel,
-  isRemoteQuestionnaireStructuredData,
-} from "@/app/components/clinician/RemoteQuestionnaireClinicianPanel";
-import {
-  StrokeQuestionnaireClinicianPanel,
-  isStrokeClinicianData,
-} from "@/app/components/clinician/StrokeQuestionnaireClinicianPanel";
+import { buildRemoteQuestionnaireSummary } from "../../../lib/remote-questionnaire-summary";
+import { isStrokeClinicianData } from "@/app/components/clinician/StrokeQuestionnaireClinicianPanel";
+import { OBJECTIVE_CV_EXERCISE_IDS } from "@/app/lib/progress/objective-assessment-series";
 import { displayPatientFileHeader } from "../../../lib/patient-file-number";
 import { resolveCurrentAndPreviousPlans } from "../../../lib/clinician/resolve-current-plan";
 import { PreviousPlansSummary } from "../../../components/clinician/PreviousPlansSummary";
 import { PatientObjectiveResultsSection } from "@/app/components/clinician/progress/PatientObjectiveResultsSection";
 import { DemoOfflineBanner } from "@/app/components/clinician/DemoOfflineBanner";
 import { extractDemoMeta } from "@/app/lib/api/demo-fallback-client";
-import {
-  isUuidPatientId,
-  parseNumericDemoPatientId,
-} from "@/app/lib/api/patient-id-utils";
+import { isUuidPatientId } from "@/app/lib/api/patient-id-utils";
 import { forwardReachAssignmentPatientRoute } from "@/app/lib/upper-limb-motor-screen/forward-reach-assignment-client";
 
 export default function PatientProfilePage() {
@@ -112,12 +58,9 @@ export default function PatientProfilePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = String(params.id || "");
-  // Pure numeric route ids only — UUID Supabase patients skip legacy FastAPI assessment fetch.
-  const legacyNumericPatientId = parseNumericDemoPatientId(id);
 
   const [patient, setPatient] = useState<PatientRow | null>(null);
   const [assessments, setAssessments] = useState<AssessmentRecord[]>([]);
-  const [backendAssessmentHistory, setBackendAssessmentHistory] = useState<AssessmentOut[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [copyFeedback, setCopyFeedback] = useState<"idle" | "success" | "error">("idle");
 
@@ -130,8 +73,6 @@ export default function PatientProfilePage() {
   // Delete state
   const [deleting, setDeleting] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [therapySessions, setTherapySessions] = useState<TherapySessionLog[]>([]);
-  const [therapyLoading, setTherapyLoading] = useState(false);
 
   // Treatment plan state
   const [treatmentPlan, setTreatmentPlan] = useState<TreatmentPlan | null>(null);
@@ -152,7 +93,6 @@ export default function PatientProfilePage() {
   const [remoteAssessments, setRemoteAssessments] = useState<RemoteAssessmentRequest[]>([]);
 
   // RASQ new-style assessments (from rasq_assessments localStorage)
-  const [rasqAssessments, setRasqAssessments] = useState<SavedAssessment[]>([]);
   const [supabaseAssessmentRows, setSupabaseAssessmentRows] = useState<AssessmentListRow[]>([]);
   const [clinicalSummaryDetail, setClinicalSummaryDetail] = useState<AssessmentRow | null>(null);
 
@@ -200,37 +140,11 @@ export default function PatientProfilePage() {
       const localAssessments = assessmentsRepository.listByPatientId(id);
       if (isMounted) setAssessments(localAssessments);
 
-      // Backend assessment history (FastAPI — numeric legacy ids only; Supabase uses /api/assessments)
-      if (legacyNumericPatientId != null) {
-        try {
-          const history = await getPatientAssessments(legacyNumericPatientId);
-          if (isMounted) setBackendAssessmentHistory(history);
-        } catch { /* ignore — FastAPI may be offline */ }
-      }
-
       if (isMounted) setIsLoading(false);
     }
     load();
     return () => { isMounted = false; };
-  }, [id, legacyNumericPatientId]);
-
-  useEffect(() => {
-    if (!patient) return;
-    const pid = String(patient.id);
-    const refresh = () => {
-      setTherapyLoading(true);
-      void loadTherapySessionsForDisplay(pid)
-        .then(setTherapySessions)
-        .finally(() => setTherapyLoading(false));
-    };
-    refresh();
-    window.addEventListener("focus", refresh);
-    window.addEventListener("cm-therapy-saved", refresh);
-    return () => {
-      window.removeEventListener("focus", refresh);
-      window.removeEventListener("cm-therapy-saved", refresh);
-    };
-  }, [patient]);
+  }, [id]);
 
   useEffect(() => {
     if (!patient) return;
@@ -374,29 +288,6 @@ export default function PatientProfilePage() {
       const rows = (await res.json()) as AssessmentListRow[];
       setSupabaseAssessmentRows(rows);
 
-      const mapped: SavedAssessment[] = rows.map((r) => ({
-        id: r.id,
-        patientId: 0,
-        patientName: "",
-        type: r.type,
-        typeLabel:
-          r.type === "remote_questionnaire"
-            ? "Remote Questionnaire Assessment"
-            : r.type === "general_msk"
-              ? "General MSK Assessment"
-              : r.type,
-        date: r.created_at.split("T")[0] ?? "",
-        pain: 0,
-        rom: 0,
-        strength: "See report",
-        mobilityNotes: r.notes ?? "",
-        savedAt: r.created_at,
-        bodyRegion: undefined,
-        rehabilitationPhase: undefined,
-        assessmentData: undefined,
-      }));
-      setRasqAssessments(mapped);
-
       const preferred = pickPreferredAssessment(rows);
       if (!preferred) {
         setClinicalSummaryDetail(null);
@@ -426,49 +317,10 @@ export default function PatientProfilePage() {
     };
   }, [patient, refreshClinicalAssessments]);
 
-  const latestAssessment = useMemo(() => assessments[0] ?? null, [assessments]);
-  const recentAssessments = useMemo(() => assessments.slice(0, 3), [assessments]);
   const latestRemoteAssessment = useMemo(
     () => assessments.find((a) => a.mode === "remote") ?? null,
     [assessments]
   );
-
-  const therapyTrends = useMemo(() => {
-    if (therapySessions.length === 0) {
-      return {
-        latestSteps: null as number | null,
-        latestSymmetry: null as number | null,
-        latestMovementQuality: null as number | null,
-        bestSession: null as TherapySessionLog | null,
-        count: 0,
-      };
-    }
-    const latest = therapySessions[0];
-    const latestSymmetry =
-      latest.symmetryPct ?? latest.symmetry ?? null;
-    const latestMq = latest.movementQuality ?? null;
-    let best = therapySessions[0];
-    for (const s of therapySessions) {
-      if ((s.totalSteps ?? 0) > (best.totalSteps ?? 0)) best = s;
-    }
-    return {
-      latestSteps: latest.totalSteps ?? null,
-      latestSymmetry:
-        typeof latestSymmetry === "number" && Number.isFinite(latestSymmetry)
-          ? latestSymmetry
-          : null,
-      latestMovementQuality:
-        typeof latestMq === "number" && Number.isFinite(latestMq) ? latestMq : null,
-      bestSession: best,
-      count: therapySessions.length,
-    };
-  }, [therapySessions]);
-
-  const flowNextAction = useMemo(() => {
-    const next = therapySessions[0]?.therapyRecommendation?.nextAction?.trim();
-    if (next) return next;
-    return "Not recorded";
-  }, [therapySessions]);
 
   const clinicalSummaryRow = clinicalSummaryDetail;
 
@@ -476,62 +328,25 @@ export default function PatientProfilePage() {
     if (!clinicalSummaryRow) return null;
     if (clinicalSummaryRow.type === "remote_questionnaire") {
       if (isStrokeClinicianData(clinicalSummaryRow.structured_data)) {
-        const source = clinicalSummaryRow.structured_data.responses.sc_information_source;
         return {
           title: "Remote Neurorehabilitation Intake",
           submittedAt: clinicalSummaryRow.created_at,
-          metrics: [
-            { label: "Safety gate", value: clinicalSummaryRow.structured_data.safetyState },
-            {
-              label: "Clinical English",
-              value: clinicalSummaryRow.structured_data.strokeWorkflow.translation.status,
-            },
-          ],
-          rows: [
-            ...(source
-              ? [
-                  {
-                    label: "Information source",
-                    value: Array.isArray(source.rawValue)
-                      ? source.rawValue.join(", ")
-                      : source.rawValue,
-                  },
-                ]
-              : []),
-          ],
-          hasRedFlag: clinicalSummaryRow.structured_data.safetyState !== "PASS",
         };
       }
-      return buildRemoteQuestionnaireSummary(
-        clinicalSummaryRow.structured_data,
-        clinicalSummaryRow.created_at,
-      );
+      return {
+        title:
+          buildRemoteQuestionnaireSummary(
+            clinicalSummaryRow.structured_data,
+            clinicalSummaryRow.created_at,
+          )?.title ?? "Remote Questionnaire",
+        submittedAt: clinicalSummaryRow.created_at,
+      };
     }
     const general = extractGeneralDraft(clinicalSummaryRow.structured_data, clinicalSummaryRow.type);
     if (general) {
       return {
         title: "General MSK Assessment",
         submittedAt: clinicalSummaryRow.created_at,
-        metrics: [
-          ...(general.subjective.nprs.trim()
-            ? [{ label: "Pain score", value: `${general.subjective.nprs}/10` }]
-            : []),
-          ...(general.subjective.painLocation.trim()
-            ? [{ label: "Body region", value: general.subjective.painLocation }]
-            : []),
-        ],
-        rows: [
-          ...(general.subjective.chiefComplaint.trim()
-            ? [{ label: "Main complaint", value: general.subjective.chiefComplaint }]
-            : []),
-          ...(general.subjective.aggravating.trim()
-            ? [{ label: "Aggravating factors", value: general.subjective.aggravating }]
-            : []),
-          ...(general.subjective.goals.trim()
-            ? [{ label: "Functional goal", value: general.subjective.goals }]
-            : []),
-        ],
-        hasRedFlag: Boolean(general.subjective.redFlags.trim()),
       };
     }
     const structured = extractStructuredData(clinicalSummaryRow.structured_data);
@@ -539,46 +354,13 @@ export default function PatientProfilePage() {
       return {
         title: structured.bodyRegion || "Structured Assessment",
         submittedAt: clinicalSummaryRow.created_at,
-        metrics: [
-          { label: "Pain at rest", value: `${structured.painAtRest}/10` },
-          { label: "Pain on movement", value: `${structured.painOnMovement}/10` },
-          { label: "Body region", value: structured.bodyRegion },
-        ],
-        rows: [
-          ...(structured.clinicalNotes.trim()
-            ? [{ label: "Clinical notes", value: structured.clinicalNotes }]
-            : []),
-          ...(structured.rehabilitationPhase
-            ? [{ label: "Rehab phase", value: structured.rehabilitationPhase }]
-            : []),
-        ],
-        hasRedFlag: false,
       };
     }
-    return null;
+    return {
+      title: clinicalSummaryRow.type.replaceAll("_", " "),
+      submittedAt: clinicalSummaryRow.created_at,
+    };
   }, [clinicalSummaryRow]);
-
-  const remoteQuestionnaireSummary: RemoteQuestionnaireSummary | null =
-    clinicalSummaryRow?.type === "remote_questionnaire" &&
-    !isStrokeClinicianData(clinicalSummaryRow.structured_data) &&
-    clinicalSummary
-      ? (clinicalSummary as RemoteQuestionnaireSummary)
-      : null;
-
-  const clinicalFocusLabels = useMemo(() => {
-    if (!clinicalSummaryRow) return null;
-    return deriveClinicalFocusLabels(
-      clinicalSummaryRow.type,
-      clinicalSummaryRow.structured_data,
-    );
-  }, [clinicalSummaryRow]);
-
-  const programDirectionOptions = useMemo(() => {
-    if (!clinicalFocusLabels) return [];
-    return resolveProgramOptionsForFocus(clinicalFocusLabels, {
-      hasRedFlag: clinicalSummary?.hasRedFlag ?? false,
-    });
-  }, [clinicalFocusLabels, clinicalSummary?.hasRedFlag]);
 
   const cvExerciseNameById = useMemo<Record<string, string>>(
     () => ({
@@ -639,34 +421,36 @@ export default function PatientProfilePage() {
     });
   }, [supabaseAssessmentRows, patientPlanRows, timelineBundle, remoteAssessments, patientCvMetrics, cvExerciseNameById]);
 
-  const clinicalSummaryArabicNotice = useMemo(() => {
-    if (!clinicalSummary || !clinicalSummaryRow) return false;
-    const values = [
-      ...clinicalSummary.metrics.map((metric) => metric.value),
-      ...clinicalSummary.rows.map((row) => row.value),
+  const objectiveWorkspaces = useMemo(() => {
+    const hasResult = (exerciseId: string) =>
+      patientCvMetrics.some(
+        (row) =>
+          row.exerciseId === exerciseId &&
+          (row.source === "assessment_movement" || row.source === "patient_session"),
+      );
+    const scoped = (path: string) =>
+      `${path}?patientId=${encodeURIComponent(patient?.id ?? id)}`;
+    return [
+      {
+        id: "tug" as const,
+        title: "Timed Up and Go",
+        hasResult: hasResult(OBJECTIVE_CV_EXERCISE_IDS.tug),
+        href: scoped("/clinician/assessments/timed-up-and-go"),
+      },
+      {
+        id: "sls" as const,
+        title: "Single-Leg Stance",
+        hasResult: hasResult(OBJECTIVE_CV_EXERCISE_IDS.sls),
+        href: scoped("/clinician/assessments/single-leg-stance"),
+      },
+      {
+        id: "sts" as const,
+        title: "Sit-to-Stand",
+        hasResult: hasResult(OBJECTIVE_CV_EXERCISE_IDS.sts),
+        href: scoped("/clinician/assessments/sit-to-stand"),
+      },
     ];
-    return isArabicAssessmentContent(
-      getAssessmentLanguage(clinicalSummaryRow.structured_data),
-      values,
-    );
-  }, [clinicalSummary, clinicalSummaryRow]);
-
-  function handleCreateRemoteRequest() {
-    if (!patient) return;
-    const assessmentId = assessmentsRepository.newAssessmentId();
-    assessmentsRepository.create({
-      id: assessmentId,
-      patientId: String(patient.id),
-      mode: "remote",
-      selectedTests: [],
-      bodyRegion: "Full Body",
-      side: "Not Applicable",
-      visitType: "Follow-Up",
-      sessionLabel: "Remote Assessment Request",
-      createdAt: new Date().toISOString(),
-    });
-    router.push(`/clinician/request?patientId=${patient.id}&assessmentId=${assessmentId}`);
-  }
+  }, [patientCvMetrics, patient?.id, id]);
 
   async function handleCopyLatestLink() {
     if (!latestRemoteAssessment || !patient) { alert("No remote assessment link available"); return; }
@@ -761,6 +545,9 @@ export default function PatientProfilePage() {
 
   const submittedRemote = remoteAssessments.filter((r) => r.status === "submitted");
   const pendingRemote   = remoteAssessments.filter((r) => r.status === "pending" || r.status === "in_progress");
+  const latestPendingRemote = [...pendingRemote].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )[0] ?? null;
   const clinicalSummaryAssessmentId = clinicalSummaryRow?.id ?? null;
   const primaryReportHref = clinicalSummaryAssessmentId
     ? `/clinician/assessment/report?patientId=${patient.id}&assessmentId=${clinicalSummaryAssessmentId}`
@@ -789,8 +576,6 @@ export default function PatientProfilePage() {
     : null;
   const showAdherenceQuickSummary =
     Boolean(treatmentPlan) && adherenceTotalSessions > 0;
-  const hasAnyAssessment =
-    supabaseAssessmentRows.length > 0 || submittedRemote.length > 0 || backendAssessmentHistory.length > 0;
   const forwardReachAssignmentHref = isUuidPatientId(patient.id)
     ? forwardReachAssignmentPatientRoute(patient.id)
     : null;
@@ -867,12 +652,6 @@ export default function PatientProfilePage() {
               </a>
               <Link href={`/clinician/patients/${patient.id}/outcomes`} className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
                 Outcomes
-              </Link>
-              <a href="#movement-tracking-sessions" className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
-                Movement tracking
-              </a>
-              <Link href="/clinician/results" className="rounded-[5px] border border-[#1E2D42] bg-[#0B1220] px-2.5 py-1 font-semibold text-white/45 transition hover:border-[#1D9E75]/25 hover:text-[#5DCAA5]">
-                Results
               </Link>
             </div>
           </div>
@@ -1132,307 +911,12 @@ export default function PatientProfilePage() {
               </div>
             )}
 
-            {/* Clinical Assessment Summary */}
-            <section id="clinical-assessment-summary" className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 scroll-mt-6">
-              <h2 className="text-lg font-bold text-white">Clinical Assessment Summary</h2>
-              <p className="mt-1 mb-5 text-xs text-white/35">
-                Remote and in-clinic assessments appear here. Session progress and review flags are on Results.
-              </p>
-
-              {clinicalSummary ? (
-                <div className="space-y-5">
-                  <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-white">{clinicalSummary.title}</p>
-                        <p className="mt-1 text-xs text-white/45">
-                          Submitted {new Date(clinicalSummary.submittedAt).toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {clinicalSummaryDetail?.type === "remote_questionnaire" && (
-                          <span className="rounded-[5px] border border-[#1E2D42] bg-[#0F1825] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white/45">
-                            Remote
-                          </span>
-                        )}
-                        <span className="rounded-[5px] border border-lime-300/20 bg-lime-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-lime-300">
-                          Submitted
-                        </span>
-                      </div>
-                    </div>
-
-                    {clinicalSummary.hasRedFlag && (
-                      <div className="mt-4 rounded-[7px] border border-amber-300/25 bg-amber-400/10 px-3 py-2.5">
-                        <p className="text-xs font-semibold text-amber-200">
-                          Patient reported a possible red flag — review before proceeding.
-                        </p>
-                      </div>
-                    )}
-
-                    {clinicalSummaryArabicNotice && (
-                      <div className="mt-4 rounded-[7px] border border-amber-300/25 bg-amber-400/10 px-3 py-2.5">
-                        <p className="text-xs leading-relaxed text-amber-100/90">
-                          {ARABIC_READABILITY_NOTICE}
-                        </p>
-                      </div>
-                    )}
-
-                    {clinicalFocusLabels && (
-                      <div className="mt-4 rounded-[8px] border border-cyan-400/20 bg-cyan-400/5 px-4 py-4">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-300/80">
-                          {FOCUS_SECTION_TITLE}
-                        </p>
-                        <p className="mt-2 text-xs leading-relaxed text-white/45">
-                          {FOCUS_PROFILE_DISCLAIMER}
-                        </p>
-                        <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                          <div className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
-                              {FOCUS_AREA_LABEL}
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-white">
-                              {clinicalFocusLabels.focusArea}
-                            </p>
-                          </div>
-                          <div className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
-                              {FOCUS_CATEGORY_LABEL}
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-white">
-                              {clinicalFocusLabels.clinicalCategory}
-                            </p>
-                          </div>
-                          <div className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5">
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
-                              {FOCUS_DIRECTION_LABEL}
-                            </p>
-                            <p className="mt-1 text-sm font-semibold text-white">
-                              {FOCUS_DIRECTION_VALUE}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {clinicalFocusLabels && (
-                      <div className="mt-4 rounded-[8px] border border-violet-400/20 bg-violet-400/5 px-4 py-4">
-                        <p className="text-[10px] font-bold uppercase tracking-widest text-violet-300/80">
-                          {PROGRAM_DIRECTION_PROFILE_TITLE}
-                        </p>
-                        <p className="mt-2 text-xs leading-relaxed text-white/45">
-                          {PROGRAM_DIRECTION_PROFILE_INTRO}
-                        </p>
-                        {clinicalSummary?.hasRedFlag && (
-                          <p className="mt-3 text-xs leading-relaxed text-amber-200/90">
-                            {PROGRAM_DIRECTION_RED_FLAG}
-                          </p>
-                        )}
-                        {programDirectionOptions.length === 0 ? (
-                          <p className="mt-3 text-sm leading-relaxed text-white/50">
-                            {PROGRAM_DIRECTION_NO_OPTIONS}
-                          </p>
-                        ) : (
-                          <ul className="mt-3 space-y-2">
-                            {programDirectionOptions.map((option) => (
-                              <li
-                                key={option.templateId}
-                                className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5"
-                              >
-                                <p className="text-sm font-semibold text-white">{option.title}</p>
-                                <p className="mt-0.5 text-[11px] text-white/40">
-                                  {option.conditionArea} · {option.level}
-                                </p>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                        <Link
-                          href={`/clinician/plans/new?patientId=${encodeURIComponent(patient.id)}`}
-                          className="mt-3 inline-flex text-xs font-semibold text-violet-300 transition hover:text-violet-200"
-                        >
-                          {PROGRAM_DIRECTION_CTA} →
-                        </Link>
-                        <p className="mt-3 text-[11px] leading-relaxed text-white/35">
-                          {PROGRAM_DIRECTION_FOOTER}
-                        </p>
-                      </div>
-                    )}
-
-                    {remoteQuestionnaireSummary?.clinicalTranslationWarning ? (
-                      <div className="mt-4 rounded-[7px] border border-amber-300/25 bg-amber-400/10 px-3 py-2.5">
-                        <p className="text-xs leading-relaxed text-amber-100/90">
-                          {remoteQuestionnaireSummary.clinicalTranslationWarning}
-                        </p>
-                      </div>
-                    ) : null}
-
-                    {clinicalSummaryDetail?.type === "remote_questionnaire" &&
-                    clinicalSummaryAssessmentId &&
-                    isStrokeClinicianData(clinicalSummaryDetail.structured_data) ? (
-                      <StrokeQuestionnaireClinicianPanel
-                        assessmentId={clinicalSummaryAssessmentId}
-                        structuredData={clinicalSummaryDetail.structured_data}
-                        patientId={patient.id}
-                        onStructuredDataUpdated={(next) =>
-                          setClinicalSummaryDetail((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  structured_data: next as StoredAssessmentPayload,
-                                }
-                              : current,
-                          )
-                        }
-                      />
-                    ) : clinicalSummaryDetail?.type === "remote_questionnaire" &&
-                    clinicalSummaryAssessmentId &&
-                    isRemoteQuestionnaireStructuredData(clinicalSummaryDetail.structured_data) ? (
-                      <RemoteQuestionnaireClinicianPanel
-                        assessmentId={clinicalSummaryAssessmentId}
-                        structuredData={clinicalSummaryDetail.structured_data}
-                        patientDraft={remoteQuestionnaireSummary!.patientDraft}
-                        patientId={patient.id}
-                        onStructuredDataUpdated={(next) =>
-                          setClinicalSummaryDetail((current) =>
-                            current
-                              ? {
-                                  ...current,
-                                  structured_data: next as StoredAssessmentPayload,
-                                }
-                              : current,
-                          )
-                        }
-                      />
-                    ) : null}
-
-                    {clinicalSummary.metrics.length > 0 && (
-                      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                        {clinicalSummary.metrics.map((metric) => {
-                          const bilingualMetric =
-                            remoteQuestionnaireSummary?.metrics.find(
-                              (candidate) => candidate.label === metric.label,
-                            ) ?? null;
-                          return (
-                          <div
-                            key={metric.label}
-                            className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5"
-                          >
-                            <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
-                              {metric.label}
-                            </p>
-                            {bilingualMetric?.originalValue &&
-                            bilingualMetric.originalValue !== bilingualMetric.value ? (
-                              <div className="mt-1">
-                                <PatientClinicalTranslationDisplay
-                                  originalText={bilingualMetric.originalValue}
-                                  clinicalEnglish={
-                                    bilingualMetric.clinicalEnglish ?? bilingualMetric.value
-                                  }
-                                  variant="screen"
-                                />
-                              </div>
-                            ) : (
-                              <p
-                                dir={valueTextDirection(metric.value)}
-                                className="mt-1 text-sm font-semibold text-white"
-                              >
-                                {metric.value}
-                              </p>
-                            )}
-                            {bilingualMetric?.translationMissing ? (
-                              <p className="mt-2 text-[10px] italic text-amber-200/90">
-                                Clinical English translation unavailable — therapist review required.
-                              </p>
-                            ) : null}
-                          </div>
-                          );
-                        })}
-                      </div>
-                    )}
-
-                    {clinicalSummary.rows.length > 0 && (
-                      <dl className="mt-4 divide-y divide-[#1E2D42] rounded-[7px] border border-[#1E2D42]">
-                        {clinicalSummary.rows.map((row) => {
-                          const bilingualRow =
-                            remoteQuestionnaireSummary?.rows.find(
-                              (candidate) => candidate.label === row.label,
-                            ) ?? null;
-                          return (
-                          <div key={row.label} className="px-3 py-2.5">
-                            <dt className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
-                              {row.label}
-                            </dt>
-                            <dd className="mt-0.5">
-                              {bilingualRow?.originalValue &&
-                              bilingualRow.originalValue !== bilingualRow.value ? (
-                                <PatientClinicalTranslationDisplay
-                                  originalText={bilingualRow.originalValue}
-                                  clinicalEnglish={bilingualRow.clinicalEnglish ?? bilingualRow.value}
-                                  variant="screen"
-                                />
-                              ) : (
-                                <p
-                                  dir={valueTextDirection(row.value)}
-                                  className="text-sm leading-relaxed text-white/80 whitespace-pre-wrap"
-                                >
-                                  {row.value}
-                                </p>
-                              )}
-                              {bilingualRow?.translationMissing ? (
-                                <p className="mt-2 text-[10px] italic text-amber-200/90">
-                                  Clinical English translation unavailable — therapist review required.
-                                </p>
-                              ) : null}
-                            </dd>
-                          </div>
-                          );
-                        })}
-                      </dl>
-                    )}
-
-                  </div>
-
-                  {clinicalSummaryAssessmentId && (
-                    <Link
-                      href={primaryReportHref}
-                      className="inline-flex rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-4 py-2.5 text-xs font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
-                    >
-                      Review assessment report →
-                    </Link>
-                  )}
-
-                </div>
-              ) : (
-                <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4">
-                  <p className="text-sm leading-relaxed text-white/50">
-                    No submitted assessment yet. Send a remote link or document an in-clinic assessment to begin.
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setSendModalOpen(true)}
-                      className="rounded-[7px] bg-[#1D9E75] px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-[#179165]"
-                    >
-                      Send remote assessment
-                    </button>
-                    <Link
-                      href={`/clinician/assessment/new?patientId=${patient.id}`}
-                      className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/60 transition hover:text-white"
-                    >
-                      Document in clinic
-                    </Link>
-                    {forwardReachAssignmentHref ? (
-                      <Link
-                        href={forwardReachAssignmentHref}
-                        className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/60 transition hover:text-white"
-                      >
-                        Assign Forward Reach Baseline
-                      </Link>
-                    ) : null}
-                  </div>
-                </div>
-              )}
-            </section>
+            <PatientAssessmentsSummary
+              patientId={patient.id}
+              assessments={supabaseAssessmentRows}
+              latestDetail={clinicalSummaryDetail}
+              objectiveWorkspaces={objectiveWorkspaces}
+            />
 
             {/* Rehabilitation Plan */}
             <TreatmentPlanSection
@@ -1458,35 +942,11 @@ export default function PatientProfilePage() {
               }}
             />
 
-            <AiClinicianSummaryCard
-              patientId={patient.id}
-              planId={planProgress?.planId ?? treatmentPlan?.id ?? null}
-            />
-
-            <XrSessionRecommendationsCard
-              patientId={patient.id}
-              diagnosis={patient.diagnosis}
-            />
-
-            <CvPatientCvMetricsSection patientId={patient.id} />
-
-            {(planProgress || adherence) && treatmentPlan ? (
-              <PatientAdherenceSummary
-                sessionsCompleted={
-                  planProgress?.sessionsCompleted ?? adherence?.sessionsCompleted ?? 0
-                }
-                totalSessions={planProgress?.totalSessions ?? adherence?.totalSessions ?? 0}
-                lastActivityAt={
-                  planProgress?.lastCompletedAt ?? adherence?.lastActiveAt ?? null
-                }
-              />
-            ) : null}
-
             <PatientJourneyTimeline
               events={rehabilitationTimelineEvents}
               patientName={patient.full_name}
+              initialVisible={5}
             />
-
             {/* Patient access link */}
             {treatmentPlan?.patientToken && (
               <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
@@ -1520,162 +980,6 @@ export default function PatientProfilePage() {
               </section>
             )}
 
-            {/* Clinical Documentation */}
-            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <h2 className="text-lg font-bold text-white">Clinical Documentation</h2>
-              <p className="mt-1 mb-6 text-xs text-white/35">SOAP notes and assessment archive.</p>
-
-              <div className="mb-6">
-                <h3 className="text-sm font-bold text-white">SOAP Documentation</h3>
-                <p className="text-xs text-white/45">Structured SOAP templates will be available in a future release.</p>
-                <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                  <SoapPlaceholderCard title="Subjective" />
-                  <SoapPlaceholderCard title="Objective" />
-                  <SoapPlaceholderCard title="Assessment" />
-                  <SoapPlaceholderCard title="Plan" />
-                </div>
-              </div>
-
-              {(backendAssessmentHistory.length > 0 || assessments.length > 0) && (
-                <div className="space-y-5 border-t border-[#1E2D42] pt-6">
-                  {backendAssessmentHistory.length > 0 && (
-                    <div id="assessment-timeline">
-                      <h3 className="text-sm font-bold text-white">Assessment archive</h3>
-                      <div className="mt-3 space-y-3">
-                        {backendAssessmentHistory.map((row) => {
-                          const matchedLocal = assessments.find((a) => a.id === String(row.id));
-                          const scoreDisplay =
-                            typeof matchedLocal?.score === "number" && Number.isFinite(matchedLocal.score)
-                              ? `${matchedLocal.score}%`
-                              : "—";
-                          return (
-                            <div
-                              key={`backend-${row.id}`}
-                              className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4"
-                            >
-                              <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div className="min-w-0 flex-1">
-                                  <p className="text-sm font-semibold text-white">{row.type || "Assessment"}</p>
-                                  <p className="mt-0.5 text-xs text-white/50">
-                                    {row.created_at ? new Date(row.created_at).toLocaleString() : "—"}
-                                  </p>
-                                </div>
-                                <ResultPill label={`Score: ${scoreDisplay}`} tone="score" />
-                              </div>
-                              <Link
-                                href={`/clinician/assessment/report?patientId=${patient.id}&assessmentId=${row.id}`}
-                                className="mt-3 inline-flex text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
-                              >
-                                View report →
-                              </Link>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {assessments.length > 0 && (
-                    <div>
-                      <h3 className="text-sm font-bold text-white">Local session archive</h3>
-                      <div className="mt-3 space-y-3">
-                        {assessments.map((item) => (
-                          <div key={item.id} className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
-                            <p className="text-sm font-semibold text-white">
-                              {item.sessionLabel?.trim() ||
-                                (item.mode === "remote" ? "Remote Assessment" : "In-Clinic Assessment")}
-                            </p>
-                            <p className="mt-0.5 text-xs text-white/50">
-                              {new Date(item.createdAt).toLocaleString()}
-                            </p>
-                            <Link
-                              href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
-                              className="mt-3 inline-flex text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
-                            >
-                              Open session record →
-                            </Link>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </section>
-
-            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <h2 className="text-lg font-bold text-white">Therapy Session Results</h2>
-                <p className="mt-1 text-sm text-white/50">
-                  Optional in-browser therapy sessions for this patient.
-                </p>
-
-              <div className="mt-6">
-                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
-                  Care flow
-                </p>
-                <TherapyProgressFlow nextActionLine={flowNextAction} />
-              </div>
-
-              <div className="mt-6">
-                <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
-                  Therapy trends
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  <InfoCard
-                    label="Latest total steps"
-                    value={
-                      therapyTrends.latestSteps != null ? String(therapyTrends.latestSteps) : "—"
-                    }
-                  />
-                  <InfoCard
-                    label="Latest symmetry"
-                    value={
-                      therapyTrends.latestSymmetry != null
-                        ? `${therapyTrends.latestSymmetry}%`
-                        : "—"
-                    }
-                  />
-                  <InfoCard
-                    label="Latest movement quality"
-                    value={
-                      therapyTrends.latestMovementQuality != null
-                        ? String(therapyTrends.latestMovementQuality)
-                        : "—"
-                    }
-                  />
-                  <InfoCard
-                    label="Best session (steps)"
-                    value={
-                      therapyTrends.bestSession
-                        ? `${therapyTrends.bestSession.totalSteps ?? "—"} reps · ${therapyTrends.bestSession.recordedAt ? new Date(therapyTrends.bestSession.recordedAt).toLocaleDateString() : "—"}`
-                        : "—"
-                    }
-                  />
-                  <InfoCard
-                    label="Logged therapy sessions"
-                    value={String(therapyTrends.count)}
-                  />
-                </div>
-              </div>
-
-              {therapyLoading && (
-                <div className="mt-5 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4 text-sm text-white/40">
-                  Loading therapy reports…
-                </div>
-              )}
-
-              <div className="mt-5 space-y-5">
-                {!therapyLoading && therapySessions.length > 0 ? (
-                  therapySessions.map((t) => (
-                    <TherapySessionHistoryEntry key={t.id} t={t} />
-                  ))
-                ) : !therapyLoading ? (
-                  <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-5 text-sm text-white/40">
-                    No therapy sessions logged yet.
-                  </div>
-                ) : null}
-              </div>
-            </section>
           </div>
 
           {/* Sidebar */}
@@ -1710,286 +1014,45 @@ export default function PatientProfilePage() {
                     Send first assessment →
                   </button>
                 </div>
-              ) : (
-                <div className="space-y-3">
-                  {remoteAssessments.slice(0, 5).map((ra) => {
-                    const isSubmitted = ra.status === "submitted";
-                    const isPending   = ra.status === "pending";
-                    const link = `${typeof window !== "undefined" ? window.location.origin : ""}/assessment/${ra.id}`;
-                    return (
-                      <div
-                        key={ra.id}
-                        className={`overflow-hidden rounded-[8px] border ${
-                          isSubmitted ? "border-[#1D9E75]/20 bg-[#1D9E75]/[0.04]" :
-                          isPending   ? "border-[#1E2D42] bg-[#0B1220]" :
-                          "border-amber-400/15 bg-amber-400/[0.03]"
-                        }`}
-                      >
-                        <div className="px-4 py-3">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex-1 min-w-0">
-                              <p className="truncate text-xs font-semibold text-white/80">
-                                {ASSESSMENT_TYPE_LABELS[ra.assessmentType]}
-                              </p>
-                              <p className="mt-0.5 text-[11px] text-white/40">
-                                {new Date(ra.createdAt).toLocaleDateString()} ·{" "}
-                                {ra.includedSections.length} sections
-                              </p>
-                            </div>
-                            <span className={`shrink-0 rounded-[4px] border px-2 py-0.5 text-[10px] font-bold ${
-                              isSubmitted ? "border-[#1D9E75]/30 bg-[#1D9E75]/10 text-[#5DCAA5]" :
-                              isPending   ? "border-[#1E2D42] bg-[#0B1220] text-white/40" :
-                              "border-amber-400/25 bg-amber-400/10 text-amber-300"
-                            }`}>
-                              {isSubmitted ? "Submitted" : isPending ? "Awaiting Completion" : "In Progress"}
-                            </span>
-                          </div>
-
-                          {!isSubmitted && (
-                            <p className="mt-1 text-[11px] text-white/30">
-                              Expires in {daysUntilExpiry(ra)} days
-                            </p>
-                          )}
-                          {isSubmitted && (
-                            <p className="mt-2 text-[11px] text-[#5DCAA5]/80">Ready for review in Clinical Assessment Summary.</p>
-                          )}
-                        </div>
-
-                        {/* Actions */}
-                        <div className="flex gap-px border-t border-[#1E2D42]">
-                          {!isSubmitted && (
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                try { await navigator.clipboard.writeText(link); } catch { /* ignore */ }
-                              }}
-                              className="flex-1 px-3 py-2.5 text-center text-[11px] font-semibold text-white/40 transition hover:bg-[#0B1220] hover:text-white/70"
-                            >
-                              Copy Link
-                            </button>
-                          )}
-                          {isSubmitted && ra.assessmentId ? (
-                            <Link
-                              href={`/clinician/assessment/report?patientId=${encodeURIComponent(patient.id)}&assessmentId=${encodeURIComponent(ra.assessmentId)}`}
-                              className="flex-1 px-3 py-2.5 text-center text-[11px] font-semibold text-[#5DCAA5] transition hover:bg-[#0B1220]"
-                            >
-                              Review submission
-                            </Link>
-                          ) : null}
-                        </div>
-                      </div>
-                    );
-                  })}
+              ) : latestPendingRemote ? (
+                <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3">
+                  <p className="text-xs font-semibold text-white/80">
+                    {ASSESSMENT_TYPE_LABELS[latestPendingRemote.assessmentType]}
+                  </p>
+                  <p className="mt-1 text-[11px] text-white/40">
+                    Awaiting completion · expires in {daysUntilExpiry(latestPendingRemote)} days
+                  </p>
+                  {pendingRemote.length > 1 ? (
+                    <p className="mt-1 text-[11px] text-white/35">
+                      {pendingRemote.length} pending links. Submitted reviews are in Assessments.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-[11px] text-white/35">
+                      Submitted reviews are in Assessments.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const link = `${window.location.origin}/assessment/${latestPendingRemote.id}`;
+                      try { await navigator.clipboard.writeText(link); } catch { /* ignore */ }
+                    }}
+                    className="mt-3 text-[11px] font-semibold text-[#5DCAA5] hover:text-white"
+                  >
+                    Copy latest link
+                  </button>
                 </div>
+              ) : (
+                <p className="text-xs text-white/45">
+                  {submittedRemote.length} submitted. Open reviews from Assessments.
+                </p>
               )}
             </section>
-
-            {/* Recent Results (local) */}
-            {recentAssessments.length > 0 && (
-              <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
-                <h2 className="text-base font-bold text-white">Recent sessions</h2>
-                <div className="mt-4 space-y-3">
-                  {recentAssessments.map((item) => (
-                    <div key={`${item.id}-recent`} className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
-                      <p className="text-xs text-white/50">{new Date(item.createdAt).toLocaleDateString()}</p>
-                      <p className="mt-1 text-sm font-semibold text-white">
-                        {item.mode === "remote" ? "Remote" : "In-clinic"} session
-                      </p>
-                      <Link
-                        href={`/results?patientId=${patient.id}&assessmentId=${item.id}`}
-                        className="mt-3 inline-flex text-[11px] font-semibold text-[#5DCAA5] hover:text-[#1D9E75]"
-                      >
-                        Open session record →
-                      </Link>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
           </aside>
         </section>
       </div>
     </main>
     </>
-  );
-}
-
-// ── Helpers ────────────────────────────────────────────────────────────
-
-/** Display-only: kebab slug → clinical title (e.g. strength-activation-session). */
-function formatSessionTypeLabel(slug: string): string {
-  const s = slug.trim();
-  if (!s) return s;
-  return s
-    .split("-")
-    .filter(Boolean)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ");
-}
-
-function TherapyProgressFlow({ nextActionLine }: { nextActionLine: string }) {
-  const steps: { label: string; detail: string }[] = [
-    { label: "Assessment", detail: "Structured capture & review" },
-    { label: "Recommended therapy", detail: "Program routing from results" },
-    { label: "Therapy session", detail: "In-browser stepping session (pilot)" },
-    { label: "Therapy result", detail: "Metrics saved to chart" },
-    {
-      label: "Next action",
-      detail: nextActionLine.length > 120 ? `${nextActionLine.slice(0, 117)}…` : nextActionLine,
-    },
-  ];
-  return (
-    <div className="overflow-x-auto pb-1">
-      <div className="flex min-w-[720px] items-stretch gap-1 md:gap-2">
-        {steps.map((s, i) => (
-          <Fragment key={s.label}>
-            <div className="min-w-0 flex-1 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-3 py-3">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-white/25">
-                {s.label}
-              </p>
-              <p className="mt-1.5 text-xs leading-snug text-white/70">{s.detail}</p>
-            </div>
-            {i < steps.length - 1 ? (
-              <span
-                className="flex shrink-0 items-center px-0.5 text-lg font-light text-white/20"
-                aria-hidden
-              >
-                →
-              </span>
-            ) : null}
-          </Fragment>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SoapPlaceholderCard({ title }: { title: string }) {
-  return (
-    <div className="rounded-[8px] border border-dashed border-[#1E2D42] bg-[#0B1220] p-4">
-      <p className="text-xs font-semibold text-white/70">{title}</p>
-      <p className="mt-2 text-[11px] leading-relaxed text-white/45">Not recorded yet.</p>
-    </div>
-  );
-}
-
-function TherapySessionHistoryEntry({ t }: { t: TherapySessionLog }) {
-  const rec = t.therapyRecommendation;
-  const programId = t.programId ?? DEFAULT_THERAPY_PROGRAM_ID;
-  const phase = t.phase ?? DEFAULT_THERAPY_PHASE;
-  const sessionType = t.sessionType ?? DEFAULT_THERAPY_SESSION_TYPE;
-  const left = t.leftKneeCount;
-  const right = t.rightKneeCount;
-  const symDisplay =
-    t.symmetryPct != null
-      ? `${t.symmetryPct}%`
-      : t.symmetry != null
-        ? `${t.symmetry}%`
-        : "—";
-
-  return (
-    <article
-      className={`rounded-[10px] border bg-[#0B1220] p-5 ${
-        t.assessmentId?.trim() ? "border-[#1D9E75]/20" : "border-[#1E2D42]"
-      }`}
-    >
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-white/8 pb-4">
-        <div>
-          <p className="text-lg font-semibold text-white">
-            {t.exerciseName?.trim() || t.programLabel || "Therapy session"}
-          </p>
-          <p className="mt-1 text-sm text-white/55">
-            {t.recordedAt ? new Date(t.recordedAt).toLocaleString() : "—"}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <ResultPill label={`Score: ${t.score ?? "—"}`} tone="score" />
-        </div>
-      </header>
-
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <InfoCard label="Programme" value={t.programLabel?.trim() || programId.replace(/-/g, " ")} />
-        <InfoCard label="Phase" value={phase.replace(/-/g, " ")} />
-        <InfoCard label="Session type" value={formatSessionTypeLabel(sessionType)} />
-      </div>
-
-      <p className="mb-2 mt-5 text-[10px] font-semibold uppercase tracking-widest text-slate-500">
-        Session metrics
-      </p>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <InfoCard label="Total steps" value={t.totalSteps != null ? String(t.totalSteps) : "—"} />
-        <InfoCard
-          label="Left / right steps"
-          value={`${left != null ? left : "—"} / ${right != null ? right : "—"}`}
-        />
-        <InfoCard label="Symmetry" value={symDisplay} />
-        <InfoCard
-          label="Movement quality"
-          value={t.movementQuality != null ? String(t.movementQuality) : "—"}
-        />
-        <InfoCard
-          label="Duration (s)"
-          value={t.duration != null && Number.isFinite(t.duration) ? String(t.duration) : "—"}
-        />
-        <InfoCard label="Score" value={t.score != null ? String(t.score) : "—"} />
-      </div>
-
-      {rec ? (
-        <div className="mt-5 rounded-[8px] border border-[#1D9E75]/20 bg-[#1D9E75]/[0.05] p-4">
-          <p className="text-[10px] font-bold uppercase tracking-widest text-white/30">
-            Clinical interpretation &amp; therapy guidance
-          </p>
-          <p className="mt-1 text-[10px] text-white/45">
-            Rule-based decision support captured at save time — not a medical diagnosis.
-          </p>
-          {rec.interpretation.length > 0 ? (
-            <div className="mt-3 border-t border-white/10 pt-3">
-              <p className="mb-2 text-[10px] font-medium uppercase tracking-widest text-slate-400">
-                Interpretation
-              </p>
-              <ul className="list-disc space-y-1.5 pl-4 text-xs leading-relaxed text-white/70">
-                {rec.interpretation.map((line, i) => (
-                  <li key={i}>{line}</li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <p className="mt-3 text-xs text-white/50">Interpretation: Not recorded.</p>
-          )}
-          <div className="mt-4 space-y-2 border-t border-white/10 pt-3 text-xs">
-            <p className="text-white/65">
-              <span className="font-semibold text-white/80">Recommendation — progression: </span>
-              {rec.progressionStatus}
-            </p>
-            <p className="text-white/65">
-              <span className="font-semibold text-white/80">Recommendation — next action: </span>
-              {rec.nextAction}
-            </p>
-            <p className="text-[11px] leading-relaxed text-white/60">
-              <span className="font-semibold text-white/75">Safety / intensity: </span>
-              {rec.intensityNote}
-            </p>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-5 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4 text-xs text-white/40">
-          <span className="font-semibold text-white/55">Clinical interpretation: </span>
-          Not recorded for this session.
-        </div>
-      )}
-
-      {t.therapyContextReason ? (
-        <p className="mt-4 text-xs leading-relaxed text-white/55">
-          <span className="font-medium text-white/65">Therapy context: </span>
-          {t.therapyContextReason}
-        </p>
-      ) : null}
-
-      <p className="mt-4 border-t border-white/8 pt-3 text-[10px] leading-relaxed text-slate-500">
-        Safety note: All metrics and guidance above are decision-support only and require qualified clinical judgment.
-        They do not constitute a diagnosis or treatment plan.
-      </p>
-    </article>
   );
 }
 
@@ -2174,6 +1237,7 @@ function TreatmentPlanSection({
   plan,
   loading,
 }: TreatmentPlanSectionProps) {
+  const [showSchedule, setShowSchedule] = useState(false);
   const structuredPlanHref = `/clinician/plans/new?patientId=${encodeURIComponent(patientId)}`;
   const { metrics: cvMetrics } = useCvSessionMetrics({ patientId, limit: 50 });
 
@@ -2238,28 +1302,45 @@ function TreatmentPlanSection({
           )}
 
           <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] p-4">
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
-              Session schedule ({plan.sessions.filter((s) => s.status !== "completed").length} remaining)
-            </p>
-            <SessionScheduleView
-              sessions={plan.sessions.map((s) => ({
-                id: s.id,
-                sessionNumber: s.sessionNumber,
-                title: s.title,
-                exercises: s.exercises,
-                status: s.status === "completed" ? "completed" : s.status,
-                scheduledAt: s.scheduledAt ?? null,
-                completedAt: s.completedAt ?? null,
-              }))}
-              sessionsPerWeek={plan.sessionsPerWeek}
-              variant="clinician"
-              getDisplayStatus={clinicianSessionDisplayStatus}
-              cvMetricsByPlanSessionId={cvMetricsByPlanSessionId}
-            />
-            <p className="mt-3 text-[10px] leading-relaxed text-white/30">
-              Camera status uses saved assistive metrics per session. Therapist review only · not
-              clinically validated · reps are assistive only.
-            </p>
+            <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/25">
+                Session schedule ({plan.sessions.filter((s) => s.status !== "completed").length} remaining)
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowSchedule((value) => !value)}
+                className="text-[11px] font-semibold text-[#5DCAA5] hover:text-white"
+              >
+                {showSchedule ? "Hide schedule" : "View session schedule"}
+              </button>
+            </div>
+            {showSchedule ? (
+              <>
+                <SessionScheduleView
+                  sessions={plan.sessions.map((s) => ({
+                    id: s.id,
+                    sessionNumber: s.sessionNumber,
+                    title: s.title,
+                    exercises: s.exercises,
+                    status: s.status === "completed" ? "completed" : s.status,
+                    scheduledAt: s.scheduledAt ?? null,
+                    completedAt: s.completedAt ?? null,
+                  }))}
+                  sessionsPerWeek={plan.sessionsPerWeek}
+                  variant="clinician"
+                  getDisplayStatus={clinicianSessionDisplayStatus}
+                  cvMetricsByPlanSessionId={cvMetricsByPlanSessionId}
+                />
+                <p className="mt-3 text-[10px] leading-relaxed text-white/30">
+                  Camera status uses saved assistive metrics per session. Therapist review only · not
+                  clinically validated · reps are assistive only.
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 text-xs text-white/45">
+                {plan.sessionsPerWeek} sessions/week · {plan.sessions.length} total sessions
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -2279,35 +1360,6 @@ function Field({ label, children, required }: { label: string; children: React.R
       {children}
     </label>
   );
-}
-
-function formatTestLabel(test: string) {
-  const map: Record<string, string> = {
-    posture: "Postural Assessment", gait: "Gait Assessment", balance: "Balance Assessment",
-    squat: "Squat Assessment", rom: "ROM Assessment", reach: "Reach Test",
-    sit_to_stand: "Sit-to-Stand", compensation: "Compensation Analysis", "ai-vision": "Body Axis AI",
-  };
-  return map[test] ?? test;
-}
-
-function formatStatusLabel(status: string) {
-  if (status === "completed") return "Session Completed";
-  if (status === "draft") return "Draft";
-  if (status === "pending") return "Awaiting Completion";
-  return status;
-}
-
-function ResultPill({ label, tone }: { label: string; tone: "score" | "good" | "neutral" }) {
-  const cls = tone === "good"
-    ? "border-[#1D9E75]/30 bg-[#1D9E75]/10 text-[#5DCAA5]"
-    : tone === "score"
-      ? "border-[#1D9E75]/20 bg-[#1D9E75]/8 text-[#5DCAA5]"
-      : "border-[#1E2D42] bg-[#0B1220] text-white/70";
-  return <span className={`rounded-[5px] border px-2.5 py-1 text-[11px] font-medium ${cls}`}>{label}</span>;
-}
-
-function Badge({ text }: { text: string }) {
-  return <span className="rounded-[5px] border border-[#1D9E75]/20 bg-[#1D9E75]/8 px-2.5 py-1 text-[11px] font-medium text-[#5DCAA5]">{text}</span>;
 }
 
 function InfoCard({ label, value }: { label: string; value: string }) {
