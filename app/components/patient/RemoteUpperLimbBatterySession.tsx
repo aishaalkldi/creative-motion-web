@@ -121,7 +121,8 @@ export function RemoteUpperLimbBatterySession({
   const lastProcessorRepRef = useRef(0);
   const lastMovementCueRef = useRef<string | null>(null);
   const finalizedTestIndexRef = useRef(-1);
-  const functionalReachArmedRef = useRef(false);
+  /** True once the active test's processor has been armed for test_active (#295 / CV-1). */
+  const movementArmedRef = useRef(false);
   const repositionCueSpokenRef = useRef(false);
   const onBatteryCompleteRef = useRef(onBatteryComplete);
 
@@ -173,6 +174,13 @@ export function RemoteUpperLimbBatterySession({
     };
   }, [bindPreviewProcessor]);
 
+  /**
+   * Bind the active test's processor UNARMED (#295 / CV-1).
+   *
+   * The processor sees positioning and countdown frames so tracking readiness
+   * keeps working, but its rep FSM stays frozen until `armActiveTestProcessor`
+   * runs at the transition into test_active.
+   */
   const switchToActiveTestProcessor = useCallback(
     (testId: ReturnType<typeof getActiveBatteryTestId>) => {
       const processor = createBatteryTestProcessor(testId, testedSide);
@@ -180,22 +188,33 @@ export function RemoteUpperLimbBatterySession({
       bindProcessor(processor);
       lastProcessorRepRef.current = 0;
       lastMovementCueRef.current = null;
-      functionalReachArmedRef.current = false;
+      movementArmedRef.current = false;
     },
     [bindProcessor, testedSide],
   );
 
-  const armFunctionalReachProcessor = useCallback(() => {
-    const processor = createBatteryTestProcessor("functionalReach", testedSide);
-    processor.reset();
-    bindProcessor(processor);
-    if ("beginMovementTracking" in processor && typeof processor.beginMovementTracking === "function") {
-      processor.beginMovementTracking();
-    }
-    lastProcessorRepRef.current = 0;
-    lastMovementCueRef.current = null;
-    functionalReachArmedRef.current = true;
-  }, [bindProcessor, testedSide]);
+  /**
+   * Arm the active test at test_active so only real test frames are measured.
+   *
+   * Functional reach is previewed through the positioning processor, so its
+   * real processor is created here; tests 1–3 are already bound and only need
+   * arming. `beginMovementTracking` resets measurement state either way, so no
+   * pre-start repetition or peak can survive into the persisted result.
+   */
+  const armActiveTestProcessor = useCallback(
+    (testId: ReturnType<typeof getActiveBatteryTestId>) => {
+      if (testId === "functionalReach") {
+        const processor = createBatteryTestProcessor("functionalReach", testedSide);
+        processor.reset();
+        bindProcessor(processor);
+      }
+      processorRef.current.beginMovementTracking();
+      lastProcessorRepRef.current = 0;
+      lastMovementCueRef.current = null;
+      movementArmedRef.current = true;
+    },
+    [bindProcessor, testedSide],
+  );
 
   const handleStartCamera = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current || cameraStarting || previewActive) return;
@@ -216,7 +235,7 @@ export function RemoteUpperLimbBatterySession({
     setAssessmentStarted(true);
     stableSinceRef.current = null;
     finalizedTestIndexRef.current = -1;
-    functionalReachArmedRef.current = false;
+    movementArmedRef.current = false;
     repositionCueSpokenRef.current = false;
     setRepositionReady(false);
     setOrchestrator(startBatteryAssessment(createBatteryOrchestratorState()));
@@ -231,7 +250,7 @@ export function RemoteUpperLimbBatterySession({
     setRepositionReady(false);
     repositionCueSpokenRef.current = false;
     lastProcessorRepRef.current = 0;
-    functionalReachArmedRef.current = false;
+    movementArmedRef.current = false;
     if (orchestrator.phase === "reposition_side") {
       finalizedTestIndexRef.current = 0;
       bindPreviewProcessor();
@@ -260,7 +279,7 @@ export function RemoteUpperLimbBatterySession({
     repositionCueSpokenRef.current = false;
     stableSinceRef.current = null;
     finalizedTestIndexRef.current = -1;
-    functionalReachArmedRef.current = false;
+    movementArmedRef.current = false;
     setOrchestrator(cancelBatteryAssessment(createBatteryOrchestratorState()));
     bindPreviewProcessor();
     onCancel?.();
@@ -349,10 +368,10 @@ export function RemoteUpperLimbBatterySession({
 
   useEffect(() => {
     if (!assessmentStarted) return;
-    if (orchestrator.phase !== "test_active" || activeTestId !== "functionalReach") return;
-    if (functionalReachArmedRef.current) return;
-    armFunctionalReachProcessor();
-  }, [activeTestId, armFunctionalReachProcessor, assessmentStarted, orchestrator.phase]);
+    if (orchestrator.phase !== "test_active") return;
+    if (movementArmedRef.current) return;
+    armActiveTestProcessor(activeTestId);
+  }, [activeTestId, armActiveTestProcessor, assessmentStarted, orchestrator.phase]);
 
   useEffect(() => {
     if (orchestrator.phase !== "test_active" || trackingLost) return;
@@ -395,9 +414,14 @@ export function RemoteUpperLimbBatterySession({
           })
         : buildRepTestResult({
             testId: activeTestId as "shoulderAbduction" | "shoulderFlexion" | "elbowFlexion",
-            repsCompleted: Math.max(orchestrator.repsCompleted, processor.repCount),
+            // CV-6: the orchestrator's gated count is the single source of truth.
+            // The previous Math.max let raw processor reps — including any the
+            // rep dispatch rejected while tracking was unusable — override it.
+            repsCompleted: orchestrator.repsCompleted,
             repsRequired: requiredReps,
-            peakAnglesDeg: processor.completedPeaksDeg,
+            // Keep one peak per persisted repetition so the therapist never sees
+            // more peaks than accepted reps.
+            peakAnglesDeg: processor.completedPeaksDeg.slice(0, orchestrator.repsCompleted),
             trackingQuality,
           });
 
@@ -415,7 +439,7 @@ export function RemoteUpperLimbBatterySession({
         const nextTestId = getActiveBatteryTestId(next);
         if (nextTestId === "functionalReach") {
           bindPreviewProcessor();
-          functionalReachArmedRef.current = false;
+          movementArmedRef.current = false;
         } else {
           switchToActiveTestProcessor(nextTestId);
         }
