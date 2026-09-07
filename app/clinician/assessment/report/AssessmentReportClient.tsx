@@ -352,7 +352,7 @@ const DOC_ICON = (
 
 function StructuredAssessmentReport({ data, notes }: { data: AssessmentData; notes: string | null }) {
   return (
-    <div className="mx-auto max-w-4xl space-y-5 px-6 py-8">
+    <div className="mx-auto w-full max-w-[1400px] space-y-5 px-6 py-8">
       <ReportSection id="overview" title="Patient & Assessment Overview" defaultOpen icon={DOC_ICON}>
         <div className="grid gap-3 sm:grid-cols-2">
           <InfoTile label="Assessment type" value="Structured assessment (clinician-entered)" />
@@ -519,7 +519,7 @@ function ReportScreenHeader({
 }) {
   return (
     <section className="screen-only border-b border-white/10 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.07),transparent_38%),linear-gradient(135deg,#071a2f_0%,#0d1f3c_55%,#0f1f45_100%)]">
-      <div className="mx-auto max-w-4xl px-6 py-10">
+      <div className="mx-auto w-full max-w-[1400px] px-6 py-10">
         <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">{CLINICAL_REPORT_TITLE}</p>
         <p className="mt-1 text-xs text-white/50">{CLINICAL_REPORT_SUBTITLE}</p>
         <p className="mt-2 text-xs text-white/45">{CLINICAL_REPORT_INTRO}</p>
@@ -1381,12 +1381,13 @@ export function AssessmentReportClient() {
           languageLabel={strokeSubmission.assessmentLanguage === "ar" ? "Arabic" : "English"}
           hasRiskFlags={strokeSubmission.safetyState !== "PASS"}
         />
-        <div className="print-report-body mx-auto max-w-4xl space-y-6 px-6 py-8">
+        <div className="print-report-body mx-auto w-full max-w-[1400px] space-y-6 px-6 py-8">
           <div className="print:hidden">
             <StrokeQuestionnaireClinicianPanel
               assessmentId={assessmentId}
               structuredData={strokeSubmission}
               patientId={patientId}
+              wideLayout
               onStructuredDataUpdated={(next) => {
                 if (isStrokeClinicianData(next)) setStrokeSubmission(next);
               }}
@@ -1557,7 +1558,7 @@ export function AssessmentReportClient() {
           languageLabel={patientAnsweredInArabic ? "Arabic" : "English"}
           hasRiskFlags={hasRedFlag}
         />
-        <div className="screen-only print-report-body mx-auto max-w-4xl px-6 py-8 space-y-6">
+        <div className="screen-only print-report-body mx-auto w-full max-w-[1400px] px-6 py-8 space-y-6">
           <ReportSection id="overview" title={SECTION_OVERVIEW} defaultOpen icon={DOC_ICON}>
             <div className="grid gap-3 sm:grid-cols-2">
               <InfoTile label="Patient reference" value={patient?.full_name ?? `#${patientId}`} />
@@ -1642,7 +1643,7 @@ export function AssessmentReportClient() {
     return (
       <main className="assessment-report-root print-report min-h-screen bg-[#0B1220] text-white">
         <header className="screen-only sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220]">
-          <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
+          <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between gap-4 px-6 py-3">
             <Link
               href={backHref}
               className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white"
@@ -1657,7 +1658,7 @@ export function AssessmentReportClient() {
           assessmentTypeLabel="Upper-Limb Motor Screen"
           sourceLabel="Camera-assisted observation"
         />
-        <div className="print-report-body mx-auto max-w-4xl px-6 py-8 space-y-6">
+        <div className="print-report-body mx-auto w-full max-w-[1400px] px-6 py-8 space-y-6">
           <RemoteUpperLimbBatteryResultsBlock battery={batteryPayload} />
           <ClinicalDisclaimerBlock />
         </div>
@@ -1677,7 +1678,7 @@ export function AssessmentReportClient() {
           sourceLabel="Mixed — clinician-entered"
         />
         <header className="screen-only sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220]">
-          <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
+          <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between gap-4 px-6 py-3">
             <Link href={patientId ? `/clinician/patients/${patientId}` : "/clinician/patients"}
               className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white">
               ← Patient
@@ -1699,7 +1700,7 @@ export function AssessmentReportClient() {
           assessmentTypeLabel="Structured assessment"
           sourceLabel="Mixed — clinician-entered"
         />
-        <div className="print-report-body mx-auto max-w-4xl px-6 py-8 space-y-6">
+        <div className="print-report-body mx-auto w-full max-w-[1400px] px-6 py-8 space-y-6">
         <StructuredAssessmentReport data={structuredData} notes={serverNotes} />
         <AssessmentFocusContextSection
           assessmentType="structured"
@@ -1766,7 +1767,7 @@ export function AssessmentReportClient() {
 
       {/* ── Sticky top bar ── */}
       <header className="screen-only sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220]">
-        <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
+        <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between gap-4 px-6 py-3">
           <div className="flex items-center gap-2">
             <Link href={`/clinician/patients/${patientId}`}
               className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white transition hover:text-white/80">
@@ -1817,7 +1818,7 @@ export function AssessmentReportClient() {
 
       {/* ── Section jump nav ── */}
       <div className="screen-only sticky top-[53px] z-20 border-b border-white/[0.06] bg-[#071a2f]/90 backdrop-blur-md">
-        <div className="mx-auto max-w-4xl overflow-x-auto px-6 py-2">
+        <div className="mx-auto w-full max-w-[1400px] overflow-x-auto px-6 py-2">
           <div className="flex min-w-max gap-1">
             {[
               { id: "overview", label: "Overview" },
@@ -1849,7 +1850,7 @@ export function AssessmentReportClient() {
       </div>
 
       {/* ── Report body ── */}
-      <div className="print-report-body mx-auto max-w-4xl space-y-5 px-6 py-8">
+      <div className="print-report-body mx-auto w-full max-w-[1400px] space-y-5 px-6 py-8">
 
         <ReportSection
           id="overview"

@@ -18,6 +18,7 @@ type Props = {
   structuredData: StrokeQuestionnaireSubmission;
   patientId?: string;
   onStructuredDataUpdated: (next: Record<string, unknown>) => void;
+  wideLayout?: boolean;
 };
 
 export function StrokeQuestionnaireClinicianPanel({
@@ -25,6 +26,7 @@ export function StrokeQuestionnaireClinicianPanel({
   structuredData,
   patientId,
   onStructuredDataUpdated,
+  wideLayout = false,
 }: Props) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -52,6 +54,25 @@ export function StrokeQuestionnaireClinicianPanel({
       ),
     [structuredData.responses],
   );
+  const groupedResponseRows = useMemo(() => {
+    const groups: { sectionId: string; title: string; rows: typeof responseRows }[] = [];
+    const indexBySection = new Map<string, number>();
+    for (const row of responseRows) {
+      const question = strokeQuestionById(row[0]);
+      const sectionId = question?.sectionId ?? "other";
+      const title = question
+        ? STROKE_SECTION_TITLES[question.sectionId].en
+        : "Other responses";
+      const existing = indexBySection.get(sectionId);
+      if (existing === undefined) {
+        indexBySection.set(sectionId, groups.length);
+        groups.push({ sectionId, title, rows: [row] });
+      } else {
+        groups[existing].rows.push(row);
+      }
+    }
+    return groups;
+  }, [responseRows]);
 
   useEffect(() => {
     setClinicalEnglishEdits(
@@ -103,19 +124,13 @@ export function StrokeQuestionnaireClinicianPanel({
     }
   }
 
-  return (
-    <section className="space-y-4 rounded-[10px] border border-[#1E2D42] bg-[#0B1220] p-5">
-      <div>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-[#5DCAA5]">
-          Remote Neurorehabilitation Intake
-        </p>
-        <h3 className="mt-1 text-base font-bold text-white">Stroke Questionnaire v1</h3>
-        <p className="mt-1 text-xs text-white/45">
-          Patient- and caregiver-reported information. Not objective examination findings.
-        </p>
-      </div>
-
-      <div className="grid gap-2 sm:grid-cols-3">
+  const workflowSidebar = (
+    <aside
+      className={`min-w-0 space-y-4 ${
+        wideLayout ? "xl:col-start-2 xl:row-start-1 xl:sticky xl:top-20" : ""
+      }`}
+    >
+      <div className="grid gap-2 sm:grid-cols-3 xl:grid-cols-1">
         <Status label="Safety gate" value={structuredData.safetyState} />
         <Status label="Clinical English" value={translationStatus} />
         <Status label="Stroke PT report" value={reportStatus} />
@@ -132,51 +147,6 @@ export function StrokeQuestionnaireClinicianPanel({
           PASS reflects the intake safety gate only and is not medical clearance for exercise.
         </p>
       )}
-
-      <details open className="border-t border-[#1E2D42] pt-3">
-        <summary className="cursor-pointer text-sm font-bold text-white">
-          Original responses and Clinical English
-        </summary>
-        <p className="mt-2 text-[10px] italic text-white/35">
-          AI-assisted Clinical English must preserve reporter provenance and requires clinician review.
-        </p>
-        <div className="mt-3 space-y-3">
-          {responseRows.map(([id, response]) => {
-            const question = strokeQuestionById(id);
-            return (
-              <div key={id} className="rounded-lg border border-[#1E2D42] p-3">
-                <p className="text-[10px] uppercase tracking-wider text-white/35">
-                  {question ? STROKE_SECTION_TITLES[question.sectionId].en : id} · {response.provenance}
-                </p>
-                <p className="mt-1 text-xs font-semibold text-white/75">{question?.en ?? id}</p>
-                <p className="mt-2 text-sm text-white/75">
-                  {Array.isArray(response.rawValue)
-                    ? response.rawValue.join(", ")
-                    : response.rawValue}
-                </p>
-                {clinicalEnglishForStrokeDisplay(id, response) ? (
-                  <textarea
-                    aria-label={`Clinical English for ${question?.en ?? id}`}
-                    value={
-                      clinicalEnglishEdits[id] ??
-                      clinicalEnglishForStrokeDisplay(id, response)
-                    }
-                    disabled={translationStatus === "approved"}
-                    onChange={(event) =>
-                      setClinicalEnglishEdits((current) => ({
-                        ...current,
-                        [id]: event.target.value,
-                      }))
-                    }
-                    rows={2}
-                    className="mt-2 w-full resize-y rounded-md border border-[#1D9E75]/30 bg-[#07111E] px-3 py-2 text-sm text-[#B8F0DC] disabled:opacity-80"
-                  />
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      </details>
 
       <div className="flex flex-wrap gap-2">
         {translationStatus !== "approved" ? (
@@ -267,15 +237,97 @@ export function StrokeQuestionnaireClinicianPanel({
           </a>
         ) : null}
       </div>
-
-      {reportEdit ? (
-        <StrokeReportDisplay
-          report={reportEdit}
-          editable={reportStatus === "draft_ready"}
-          onReportChange={setReportEdit}
-        />
-      ) : null}
       {error ? <p className="text-xs text-rose-300">{error}</p> : null}
+    </aside>
+  );
+
+  return (
+    <section className="space-y-4 overflow-x-hidden rounded-[10px] border border-[#1E2D42] bg-[#0B1220] p-5">
+      <div>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-[#5DCAA5]">
+          Remote Neurorehabilitation Intake
+        </p>
+        <h3 className="mt-1 text-base font-bold text-white">Stroke Questionnaire v1</h3>
+        <p className="mt-1 text-xs text-white/45">
+          Patient- and caregiver-reported information. Not objective examination findings.
+        </p>
+      </div>
+
+      <div
+        className={
+          wideLayout
+            ? "grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(240px,1fr)] xl:items-start"
+            : "space-y-4"
+        }
+      >
+        {workflowSidebar}
+
+        <div className={`min-w-0 space-y-4 ${wideLayout ? "xl:col-start-1 xl:row-start-1" : ""}`}>
+        <details open className="border-t border-[#1E2D42] pt-3">
+          <summary className="cursor-pointer text-sm font-bold text-white">
+            Original responses and Clinical English
+          </summary>
+          <p className="mt-2 text-[10px] italic text-white/35">
+            AI-assisted Clinical English must preserve reporter provenance and requires clinician review.
+          </p>
+          <div className="mt-3 space-y-5">
+            {groupedResponseRows.map((group) => (
+              <div key={group.sectionId} className="min-w-0">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-[#5DCAA5]/80">
+                  {group.title}
+                </h4>
+                <div className="mt-2 grid grid-cols-1 gap-3">
+                  {group.rows.map(([id, response]) => {
+                    const question = strokeQuestionById(id);
+                    return (
+                      <div key={id} className="min-w-0 rounded-lg border border-[#1E2D42] p-3">
+                        <p className="text-[10px] uppercase tracking-wider text-white/35">
+                          {response.provenance}
+                          {response.reporterRole ? ` · ${response.reporterRole}` : ""}
+                          {response.rawLanguage ? ` · ${response.rawLanguage}` : ""}
+                        </p>
+                        <p className="mt-1 text-xs font-semibold text-white/75">{question?.en ?? id}</p>
+                        <p className="mt-2 break-words text-sm text-white/75">
+                          {Array.isArray(response.rawValue)
+                            ? response.rawValue.join(", ")
+                            : response.rawValue}
+                        </p>
+                        {clinicalEnglishForStrokeDisplay(id, response) ? (
+                          <textarea
+                            aria-label={`Clinical English for ${question?.en ?? id}`}
+                            value={
+                              clinicalEnglishEdits[id] ??
+                              clinicalEnglishForStrokeDisplay(id, response)
+                            }
+                            disabled={translationStatus === "approved"}
+                            onChange={(event) =>
+                              setClinicalEnglishEdits((current) => ({
+                                ...current,
+                                [id]: event.target.value,
+                              }))
+                            }
+                            rows={3}
+                            className="mt-2 box-border w-full max-w-full resize-y rounded-md border border-[#1D9E75]/30 bg-[#07111E] px-3 py-2 text-sm text-[#B8F0DC] disabled:opacity-80"
+                          />
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
+
+        {reportEdit ? (
+          <StrokeReportDisplay
+            report={reportEdit}
+            editable={reportStatus === "draft_ready"}
+            onReportChange={setReportEdit}
+          />
+        ) : null}
+        </div>
+      </div>
     </section>
   );
 }

@@ -36,7 +36,7 @@ export function RemoteUpperLimbBatteryResultsBlock({
         Tested side: <span className="font-semibold text-white">{sideLabel}</span>
       </p>
 
-      <div className="mt-4 grid gap-3">
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
         {ROM_TESTS.map((item) => {
           const test = findBatteryRomTest(battery, item.testId);
           const peak = test ? peakObservedAngleDeg(test.peakAnglesDeg) : null;

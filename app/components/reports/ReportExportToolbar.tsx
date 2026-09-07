@@ -13,7 +13,7 @@ export function ReportExportToolbar({
 }: Props) {
   return (
     <header className="screen-only sticky top-0 z-30 border-b border-[#1E2D42] bg-[#0B1220]">
-      <div className="mx-auto flex max-w-4xl items-center justify-between gap-4 px-6 py-3">
+      <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between gap-4 px-6 py-3">
         <Link
           href={backHref}
           className="rounded-[6px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2 text-xs font-semibold text-white"

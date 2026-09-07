@@ -820,8 +820,8 @@ export default function PatientProfilePage() {
       />
     )}
 
-    <main className="min-h-screen bg-[#0B1220] px-6 py-8 text-white">
-      <div className="mx-auto max-w-7xl">
+    <main className="min-h-screen bg-[#0B1220] px-4 py-8 text-white sm:px-6">
+      <div className="mx-auto w-full max-w-[1400px]">
         <DemoOfflineBanner
           visible={demoMode || cvDemoMode}
           notice={demoNotice ?? cvDemoNotice}
@@ -1011,32 +1011,33 @@ export default function PatientProfilePage() {
           </section>
         )}
 
-        <section className="grid gap-6 xl:grid-cols-[1.35fr_0.85fr]">
-          <div className="space-y-6">
-            {/* Clinical Overview */}
-            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
-              <h2 className="text-lg font-bold text-white">Clinical Overview</h2>
-              <p className="mt-1 mb-5 text-xs text-white/35">Quick read on where this patient is in rehab.</p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <InfoCard label="Clinical Status" value={patient.status} />
-                <InfoCard label="Latest Assessment" value={overviewLatestAssessment} />
-                <InfoCard label="Current Plan" value={overviewCurrentPlan} />
-                <InfoCard label="Progress Snapshot" value={overviewProgressSnapshot} />
-              </div>
-              {showAdherenceQuickSummary && adherenceSessionsLine && adherenceLastSessionLine && (
-                <div className="mt-4 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3.5">
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
-                    Session activity
-                  </p>
-                  <p className="mt-2 text-sm text-white/75">{adherenceSessionsLine}</p>
-                  <p className="mt-1 text-sm text-white/60">{adherenceLastSessionLine}</p>
-                  <p className="mt-2 text-[10px] italic text-white/30">{OPERATIONAL_STATUS_ONLY}</p>
-                </div>
-              )}
-            </section>
+        <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6">
+          <h2 className="text-lg font-bold text-white">Clinical Overview</h2>
+          <p className="mt-1 mb-5 text-xs text-white/35">Quick read on where this patient is in rehab.</p>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <InfoCard label="Clinical Status" value={patient.status} />
+            <InfoCard label="Latest Assessment" value={overviewLatestAssessment} />
+            <InfoCard label="Current Plan" value={overviewCurrentPlan} />
+            <InfoCard label="Progress Snapshot" value={overviewProgressSnapshot} />
+          </div>
+          {showAdherenceQuickSummary && adherenceSessionsLine && adherenceLastSessionLine && (
+            <div className="mt-4 rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-3.5">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
+                Session activity
+              </p>
+              <p className="mt-2 text-sm text-white/75">{adherenceSessionsLine}</p>
+              <p className="mt-1 text-sm text-white/60">{adherenceLastSessionLine}</p>
+              <p className="mt-2 text-[10px] italic text-white/30">{OPERATIONAL_STATUS_ONLY}</p>
+            </div>
+          )}
+        </section>
 
-            <PatientObjectiveResultsSection patientId={patient.id} />
+        <div className="mt-6">
+          <PatientObjectiveResultsSection patientId={patient.id} />
+        </div>
 
+        <section className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(260px,1fr)]">
+          <div className="min-w-0 space-y-6">
             {/* Quick actions */}
             <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
               <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-white/25">
@@ -1678,7 +1679,7 @@ export default function PatientProfilePage() {
           </div>
 
           {/* Sidebar */}
-          <aside className="space-y-6">
+          <aside className="min-w-0 space-y-6 xl:sticky xl:top-6">
             {/* ── Remote Assessments panel ── */}
             <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-5">
               <div className="mb-4 flex items-center justify-between gap-2">
