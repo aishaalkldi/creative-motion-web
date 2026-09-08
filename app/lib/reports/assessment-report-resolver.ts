@@ -16,8 +16,14 @@ import {
   extractMotionInputSourceFromStructuredData,
   type MotionInputAdapterId,
 } from "@/app/lib/assessment-delivery/motion-input-registry";
+import { extractRemoteUpperLimbBatteryFromStructuredData } from "@/app/lib/remote-upper-limb-battery/extract-assessment-battery";
+import type { RemoteUpperLimbBatteryPayload } from "@/app/lib/remote-upper-limb-battery/types";
 
-export type AssessmentReportKind = "general_msk" | "remote_questionnaire" | "structured";
+export type AssessmentReportKind =
+  | "general_msk"
+  | "remote_questionnaire"
+  | "structured"
+  | "upper_limb_motor_screen";
 
 export type ResolvedAssessmentReport = {
   kind: AssessmentReportKind | null;
@@ -26,6 +32,7 @@ export type ResolvedAssessmentReport = {
   remoteSubmissionMeta: Record<string, unknown> | null;
   remoteIncludedSections: PatientSectionId[];
   structuredData: AssessmentData | null;
+  remoteUpperLimbBattery: RemoteUpperLimbBatteryPayload | null;
   patient: BackendPatient | null;
   resolvedPatientId: string;
   serverNotes: string | null;
@@ -46,6 +53,7 @@ export function resolveAssessmentReportFromDetail(
     remoteSubmissionMeta: null,
     remoteIncludedSections: [],
     structuredData: null,
+    remoteUpperLimbBattery: null,
     patient: {
       full_name: detail.patient.full_name,
       diagnosis: detail.patient.diagnosis,
@@ -81,6 +89,11 @@ export function resolveAssessmentReportFromDetail(
   const structured = extractStructuredData(detail.structured_data);
   if (structured) {
     return { ...base, kind: "structured", structuredData: structured };
+  }
+
+  const battery = extractRemoteUpperLimbBatteryFromStructuredData(detail.structured_data);
+  if (detail.type === "upper_limb_motor_screen" && battery) {
+    return { ...base, kind: "upper_limb_motor_screen", remoteUpperLimbBattery: battery };
   }
 
   return {
