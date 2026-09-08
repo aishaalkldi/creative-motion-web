@@ -51,9 +51,9 @@ function summarizeTest(result: RemoteUpperLimbBatteryTestResult): BatteryClinici
     return {
       testTitle: title,
       completion: `${result.attemptsCompleted} of ${result.attemptsRequired} attempt`,
-      observation: formatReachExtent(result.peakReachExtent),
+      observation: `Normalized reach displacement: ${formatReachExtent(result.peakReachExtent)}`,
       metricConvention:
-        "Camera-derived reach displacement from baseline (normalized units, not centimetres or goniometry)",
+        "Camera-derived displacement from baseline in normalized camera units, not centimetres or goniometry",
       trackingQuality: result.trackingQuality,
       reviewNote: result.therapistReviewNote,
     };

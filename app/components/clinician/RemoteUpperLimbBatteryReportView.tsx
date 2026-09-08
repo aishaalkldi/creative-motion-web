@@ -1,16 +1,26 @@
 "use client";
 
+import Link from "next/link";
 import type { BatteryClinicianSummary } from "@/app/lib/remote-upper-limb-battery/battery-clinician-summary";
 
 type RemoteUpperLimbBatteryReportViewProps = {
   summary: BatteryClinicianSummary;
+  profileHref: string;
 };
 
 export function RemoteUpperLimbBatteryReportView({
   summary,
+  profileHref,
 }: RemoteUpperLimbBatteryReportViewProps) {
   return (
     <div className="space-y-5">
+      <Link
+        href={profileHref}
+        className="inline-flex rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-4 py-2.5 text-xs font-semibold text-white/70 transition hover:text-white"
+      >
+        Back to Patient Profile
+      </Link>
+
       <div className="rounded-[8px] border border-amber-400/20 bg-amber-400/5 px-4 py-3.5">
         <p className="text-sm leading-relaxed text-amber-100/90">{summary.disclaimer}</p>
       </div>

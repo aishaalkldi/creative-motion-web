@@ -30,5 +30,6 @@ describe("patient profile battery card stays compact", () => {
     assert.match(source, /summary\.rows/);
     assert.match(source, /metricConvention/);
     assert.match(source, /disclaimer/);
+    assert.match(source, /Back to Patient Profile/);
   });
 });

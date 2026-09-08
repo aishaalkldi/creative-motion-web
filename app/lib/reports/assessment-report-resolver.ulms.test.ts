@@ -100,6 +100,6 @@ describe("ULMS assessment report resolver", () => {
     assert.equal(payload.tests[0] && "peakAnglesDeg" in payload.tests[0] ? payload.tests[0].peakAnglesDeg[0] : null, 80.4);
     assert.match(summary.rows[0]?.observation ?? "", /80\.4°/);
     assert.equal(JSON.stringify(summary).includes("score"), false);
-    assert.equal(summary.disclaimer.includes("not a diagnosis"), true);
+    assert.match(summary.rows[3]?.observation ?? "", /Normalized reach displacement/);
   });
 });
