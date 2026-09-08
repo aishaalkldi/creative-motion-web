@@ -121,7 +121,7 @@ export function RemoteUpperLimbBatterySession({
   const lastProcessorRepRef = useRef(0);
   const lastMovementCueRef = useRef<string | null>(null);
   const finalizedTestIndexRef = useRef(-1);
-  const functionalReachArmedRef = useRef(false);
+  const testProcessorArmedRef = useRef(false);
   const repositionCueSpokenRef = useRef(false);
   const onBatteryCompleteRef = useRef(onBatteryComplete);
 
@@ -173,29 +173,18 @@ export function RemoteUpperLimbBatterySession({
     };
   }, [bindPreviewProcessor]);
 
-  const switchToActiveTestProcessor = useCallback(
+  const armActiveTestProcessor = useCallback(
     (testId: ReturnType<typeof getActiveBatteryTestId>) => {
       const processor = createBatteryTestProcessor(testId, testedSide);
       processor.reset();
       bindProcessor(processor);
+      processor.beginMovementTracking();
       lastProcessorRepRef.current = 0;
       lastMovementCueRef.current = null;
-      functionalReachArmedRef.current = false;
+      testProcessorArmedRef.current = true;
     },
     [bindProcessor, testedSide],
   );
-
-  const armFunctionalReachProcessor = useCallback(() => {
-    const processor = createBatteryTestProcessor("functionalReach", testedSide);
-    processor.reset();
-    bindProcessor(processor);
-    if ("beginMovementTracking" in processor && typeof processor.beginMovementTracking === "function") {
-      processor.beginMovementTracking();
-    }
-    lastProcessorRepRef.current = 0;
-    lastMovementCueRef.current = null;
-    functionalReachArmedRef.current = true;
-  }, [bindProcessor, testedSide]);
 
   const handleStartCamera = useCallback(async () => {
     if (!videoRef.current || !canvasRef.current || cameraStarting || previewActive) return;
@@ -216,13 +205,13 @@ export function RemoteUpperLimbBatterySession({
     setAssessmentStarted(true);
     stableSinceRef.current = null;
     finalizedTestIndexRef.current = -1;
-    functionalReachArmedRef.current = false;
+    testProcessorArmedRef.current = false;
     repositionCueSpokenRef.current = false;
     setRepositionReady(false);
     setOrchestrator(startBatteryAssessment(createBatteryOrchestratorState()));
-    switchToActiveTestProcessor("shoulderAbduction");
+    bindPreviewProcessor();
     speakBatteryCue("get-ready", testedSide, "assessment");
-  }, [assessmentStarted, disabled, positionReady, switchToActiveTestProcessor, testedSide]);
+  }, [assessmentStarted, bindPreviewProcessor, disabled, positionReady, testedSide]);
 
   const handleRetryCurrentTest = useCallback(() => {
     resetBatterySpeechForTest();
@@ -231,26 +220,15 @@ export function RemoteUpperLimbBatterySession({
     setRepositionReady(false);
     repositionCueSpokenRef.current = false;
     lastProcessorRepRef.current = 0;
-    functionalReachArmedRef.current = false;
+    testProcessorArmedRef.current = false;
     if (orchestrator.phase === "reposition_side") {
       finalizedTestIndexRef.current = 0;
-      bindPreviewProcessor();
     } else {
       finalizedTestIndexRef.current = orchestrator.testIndex - 1;
-      if (activeTestId === "functionalReach") {
-        bindPreviewProcessor();
-      } else {
-        switchToActiveTestProcessor(activeTestId);
-      }
     }
+    bindPreviewProcessor();
     setOrchestrator((current) => retryCurrentBatteryTest(current));
-  }, [
-    activeTestId,
-    bindPreviewProcessor,
-    orchestrator.phase,
-    orchestrator.testIndex,
-    switchToActiveTestProcessor,
-  ]);
+  }, [bindPreviewProcessor, orchestrator.phase, orchestrator.testIndex]);
 
   const handleCancelAssessment = useCallback(() => {
     resetBatterySpeech();
@@ -260,7 +238,7 @@ export function RemoteUpperLimbBatterySession({
     repositionCueSpokenRef.current = false;
     stableSinceRef.current = null;
     finalizedTestIndexRef.current = -1;
-    functionalReachArmedRef.current = false;
+    testProcessorArmedRef.current = false;
     setOrchestrator(cancelBatteryAssessment(createBatteryOrchestratorState()));
     bindPreviewProcessor();
     onCancel?.();
@@ -297,7 +275,8 @@ export function RemoteUpperLimbBatterySession({
           setOrchestrator((current) => {
             if (current.phase !== "reposition_side") return current;
             const next = completeSideReposition(current);
-            switchToActiveTestProcessor(getActiveBatteryTestId(next));
+            bindPreviewProcessor();
+            testProcessorArmedRef.current = false;
             resetBatterySpeechForTest();
             stableSinceRef.current = null;
             setHoldStillVisible(false);
@@ -324,9 +303,9 @@ export function RemoteUpperLimbBatterySession({
   }, [
     activeTestId,
     assessmentStarted,
+    bindPreviewProcessor,
     cameraSnapshot,
     orchestrator.phase,
-    switchToActiveTestProcessor,
     testedSide,
     trackingLost,
   ]);
@@ -349,10 +328,10 @@ export function RemoteUpperLimbBatterySession({
 
   useEffect(() => {
     if (!assessmentStarted) return;
-    if (orchestrator.phase !== "test_active" || activeTestId !== "functionalReach") return;
-    if (functionalReachArmedRef.current) return;
-    armFunctionalReachProcessor();
-  }, [activeTestId, armFunctionalReachProcessor, assessmentStarted, orchestrator.phase]);
+    if (orchestrator.phase !== "test_active") return;
+    if (testProcessorArmedRef.current) return;
+    armActiveTestProcessor(activeTestId);
+  }, [activeTestId, armActiveTestProcessor, assessmentStarted, orchestrator.phase]);
 
   useEffect(() => {
     if (orchestrator.phase !== "test_active" || trackingLost) return;
@@ -405,20 +384,11 @@ export function RemoteUpperLimbBatterySession({
 
     setOrchestrator((current) => {
       const next = completeBatteryTest(current, result);
-      if (next.phase === "reposition_side") {
+      if (next.phase === "reposition_side" || next.phase === "positioning") {
         bindPreviewProcessor();
+        testProcessorArmedRef.current = false;
         repositionCueSpokenRef.current = false;
         setRepositionReady(false);
-        stableSinceRef.current = null;
-        setHoldStillVisible(false);
-      } else if (next.phase === "positioning") {
-        const nextTestId = getActiveBatteryTestId(next);
-        if (nextTestId === "functionalReach") {
-          bindPreviewProcessor();
-          functionalReachArmedRef.current = false;
-        } else {
-          switchToActiveTestProcessor(nextTestId);
-        }
         resetBatterySpeechForTest();
         stableSinceRef.current = null;
         setHoldStillVisible(false);
@@ -433,7 +403,6 @@ export function RemoteUpperLimbBatterySession({
     orchestrator.repsCompleted,
     orchestrator.testIndex,
     requiredReps,
-    switchToActiveTestProcessor,
     testedSide,
   ]);
 

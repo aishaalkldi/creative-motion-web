@@ -38,8 +38,19 @@ function ctx(frameIndex: number) {
 }
 
 describe("shoulder abduction battery processor", () => {
+  it("does not accumulate reps before movement tracking is armed", () => {
+    const processor = createShoulderAbductionProcessor("right");
+    const cycle: (0 | 90 | 180)[] = [0, 0, 90, 180, 180, 90, 0, 0];
+    for (const [index, angle] of cycle.entries()) {
+      const snapshot = processor.processFrame(withRightAbductionAngle(angle), ctx(index));
+      assert.equal(snapshot.repCount, 0);
+      assert.equal(processor.isMovementTrackingEnabled(), false);
+    }
+  });
+
   it("counts exactly three valid right-side reps", () => {
     const processor = createShoulderAbductionProcessor("right");
+    processor.beginMovementTracking();
     const cycle: (0 | 90 | 180)[] = [0, 0, 90, 180, 180, 90, 0, 0];
     let lastRepCount = 0;
 

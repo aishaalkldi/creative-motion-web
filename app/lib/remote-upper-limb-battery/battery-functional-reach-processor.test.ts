@@ -13,6 +13,7 @@ import {
   createPreviewPositionProcessor,
   resolveFunctionalReachCompletedAttempts,
 } from "./battery-frame-processors";
+import { FUNCTIONAL_REACH_TRACKING_LOSS_RESET_TICKS } from "./battery-reach-extent";
 import {
   completeBatteryTest,
   createBatteryOrchestratorState,
@@ -26,6 +27,8 @@ import {
 const BASELINE_MS = PATIENT_FUNCTIONAL_REACH_REP_CONFIG.baselineDurationMs;
 const R_SHOULDER = 12;
 const R_WRIST = 16;
+const L_SHOULDER = 11;
+const L_WRIST = 15;
 const SESSION = join(
   process.cwd(),
   "app/components/patient/RemoteUpperLimbBatterySession.tsx",
@@ -46,15 +49,38 @@ function rightReachLandmarks(reachExtent: number, vis = 0.85): PoseLandmark[] {
   return landmarks;
 }
 
+function leftReachLandmarks(normalizedExtent: number, vis = 0.85): PoseLandmark[] {
+  const landmarks = mockFunctionalReachLandmarks(Math.abs(normalizedExtent), vis);
+  landmarks[L_SHOULDER] = { x: 0.58, y: 0.32, visibility: vis };
+  landmarks[L_WRIST] = { x: 0.58 - normalizedExtent, y: 0.38, visibility: vis };
+  landmarks[R_SHOULDER] = { x: 0.42, y: 0.32, visibility: vis * 0.2 };
+  landmarks[R_WRIST] = { x: 0.38, y: 0.42, visibility: vis * 0.2 };
+  landmarks[23] = { x: 0.45, y: 0.55, visibility: vis };
+  landmarks[24] = { x: 0.55, y: 0.55, visibility: vis };
+  return landmarks;
+}
+
+function leftForwardReachLandmarks(forwardDelta: number, vis = 0.85): PoseLandmark[] {
+  const landmarks = mockFunctionalReachLandmarks(Math.abs(forwardDelta), vis);
+  landmarks[L_SHOULDER] = { x: 0.42, y: 0.32, visibility: vis };
+  landmarks[L_WRIST] = { x: 0.42 + forwardDelta, y: 0.38, visibility: vis };
+  landmarks[R_SHOULDER] = { x: 0.58, y: 0.32, visibility: vis * 0.2 };
+  landmarks[R_WRIST] = { x: 0.62, y: 0.42, visibility: vis * 0.2 };
+  landmarks[23] = { x: 0.45, y: 0.55, visibility: vis };
+  landmarks[24] = { x: 0.55, y: 0.55, visibility: vis };
+  return landmarks;
+}
+
 function feedExtent(
   processor: ReturnType<typeof createFunctionalReachProcessor>,
   extent: number,
   startMs: number,
   durationMs: number,
+  build = rightReachLandmarks,
 ) {
-  let snapshot = processor.processFrame(rightReachLandmarks(extent), ctx(startMs));
+  let snapshot = processor.processFrame(build(extent), ctx(startMs));
   for (let t = startMs + 33; t <= startMs + durationMs; t += 33) {
-    snapshot = processor.processFrame(rightReachLandmarks(extent), ctx(t));
+    snapshot = processor.processFrame(build(extent), ctx(t));
   }
   return snapshot;
 }
@@ -153,8 +179,86 @@ describe("functional reach battery processor", () => {
     const processor = createFunctionalReachProcessor("right");
     const snapshot = completeReachCycle(processor);
     assert.equal(snapshot.repCount, 1);
+    assert.ok(snapshot.peakReachExtent !== null);
+    assert.ok((snapshot.peakReachExtent as number) > 0.04);
+    assert.ok((snapshot.peakReachExtent as number) < 0.1);
     const after = feedExtent(processor, 0.1, BASELINE_MS + 3_000, 500);
     assert.equal(after.repCount, 1);
+  });
+
+  it("completes a left-side movement cycle using inverted forward reach", () => {
+    const processor = createFunctionalReachProcessor("left");
+    processor.beginMovementTracking();
+    feedExtent(processor, 0.1, 0, BASELINE_MS, leftForwardReachLandmarks);
+    feedExtent(processor, 0.26, BASELINE_MS + 900, 200, leftForwardReachLandmarks);
+    feedExtent(processor, 0.26, BASELINE_MS + 1_200, 200, leftForwardReachLandmarks);
+    const snapshot = feedExtent(
+      processor,
+      0.1,
+      BASELINE_MS + 1_600,
+      400,
+      leftForwardReachLandmarks,
+    );
+    assert.equal(snapshot.repCount, 1);
+    assert.ok(snapshot.peakReachExtent !== null);
+    assert.ok((snapshot.peakReachExtent as number) > 0.08);
+    assert.ok((snapshot.peakReachExtent as number) < 0.22);
+  });
+
+  it("completes a left-side cycle when landmarks are placed in normalized extent space", () => {
+    const processor = createFunctionalReachProcessor("left");
+    processor.beginMovementTracking();
+    feedExtent(processor, 0.1, 0, BASELINE_MS, leftReachLandmarks);
+    feedExtent(processor, 0.02, BASELINE_MS + 900, 200, leftReachLandmarks);
+    feedExtent(processor, 0.02, BASELINE_MS + 1_200, 200, leftReachLandmarks);
+    const snapshot = feedExtent(processor, 0.1, BASELINE_MS + 1_600, 400, leftReachLandmarks);
+    assert.equal(snapshot.repCount, 1);
+  });
+
+  it("does not advance baseline or FSM on unusable tracking frames", () => {
+    const processor = createFunctionalReachProcessor("right");
+    processor.beginMovementTracking();
+    feedExtent(processor, 0.1, 0, BASELINE_MS);
+    let snapshot = processor.processFrame(rightReachLandmarks(0.1), ctx(BASELINE_MS + 100));
+    assert.equal(snapshot.movementPhase, "rest");
+    assert.equal(snapshot.repCount, 0);
+
+    for (let i = 0; i < 5; i += 1) {
+      snapshot = processor.processFrame(
+        rightReachLandmarks(0.0, 0.05),
+        ctx(BASELINE_MS + 200 + i * 33),
+      );
+    }
+    assert.equal(snapshot.repCount, 0);
+    assert.equal(snapshot.movementPhase, "rest");
+  });
+
+  it("recalibrates after prolonged tracking loss and requires a new baseline", () => {
+    const processor = createFunctionalReachProcessor("right");
+    processor.beginMovementTracking();
+    feedExtent(processor, 0.1, 0, BASELINE_MS);
+
+    const lossStart = BASELINE_MS + 200;
+    let snapshot = processor.processFrame(rightReachLandmarks(0.1), ctx(lossStart));
+    for (let i = 0; i < FUNCTIONAL_REACH_TRACKING_LOSS_RESET_TICKS; i += 1) {
+      snapshot = processor.processFrame(
+        rightReachLandmarks(0.0, 0.05),
+        ctx(lossStart + (i + 1) * 33),
+      );
+    }
+    assert.equal(snapshot.repCount, 0);
+
+    const afterLoss = lossStart + (FUNCTIONAL_REACH_TRACKING_LOSS_RESET_TICKS + 2) * 33;
+    feedExtent(processor, 0.02, afterLoss, 200);
+    snapshot = feedExtent(processor, 0.1, afterLoss + 400, 300);
+    assert.equal(snapshot.repCount, 0);
+
+    const rebaselineStart = afterLoss + 800;
+    feedExtent(processor, 0.1, rebaselineStart, BASELINE_MS);
+    feedExtent(processor, 0.02, rebaselineStart + BASELINE_MS + 900, 200);
+    feedExtent(processor, 0.02, rebaselineStart + BASELINE_MS + 1_200, 200);
+    snapshot = feedExtent(processor, 0.1, rebaselineStart + BASELINE_MS + 1_600, 400);
+    assert.equal(snapshot.repCount, 1);
   });
 
   it("reset on retry clears functional reach attempt state", () => {
@@ -200,11 +304,13 @@ describe("functional reach battery completion wiring", () => {
 
   it("battery auto-submit guard remains single-fire", () => {
     const source = readFileSync(SESSION, "utf8");
-    assert.match(source, /functionalReachArmedRef/);
+    assert.match(source, /testProcessorArmedRef/);
     assert.match(source, /bindPreviewProcessor\(\)/);
-    assert.match(source, /armFunctionalReachProcessor/);
+    assert.match(source, /armActiveTestProcessor/);
     assert.match(source, /orchestrator\.phase !== "test_active"/);
     assert.match(source, /submitAttempted/);
+    assert.match(source, /processor\.beginMovementTracking\(\)/);
+    assert.equal(source.includes("switchToActiveTestProcessor"), false);
   });
 
   it("marks assessment completed only after functional reach rep is recorded in test_active", () => {
