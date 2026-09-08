@@ -274,6 +274,121 @@ describe("functional reach battery processor", () => {
   });
 });
 
+/**
+ * A completed Functional Reach attempt is final: requiredReps is 1, so once the
+ * attempt is observed there is nothing left to measure. Tracking dropping after
+ * that point — the patient relaxing or lowering the arm right after reaching —
+ * must not un-count the attempt or erase its recorded displacement.
+ */
+describe("functional reach completed attempt is final", () => {
+  function driveTrackingLoss(
+    processor: ReturnType<typeof createFunctionalReachProcessor>,
+    startMs: number,
+    build = rightReachLandmarks,
+  ) {
+    let snapshot = processor.processFrame(build(0.1, 0.05), ctx(startMs));
+    for (let i = 0; i < FUNCTIONAL_REACH_TRACKING_LOSS_RESET_TICKS + 2; i += 1) {
+      snapshot = processor.processFrame(build(0.1, 0.05), ctx(startMs + (i + 1) * 33));
+    }
+    return snapshot;
+  }
+
+  it("right side keeps the attempt through prolonged tracking loss", () => {
+    const processor = createFunctionalReachProcessor("right");
+    const completed = completeReachCycle(processor);
+    assert.equal(completed.repCount, 1);
+    const recordedPeak = completed.peakReachExtent;
+    assert.ok(recordedPeak !== null);
+
+    const lost = driveTrackingLoss(processor, BASELINE_MS + 2_200);
+    assert.equal(lost.repCount, 1);
+    assert.equal(lost.peakReachExtent, recordedPeak);
+
+    const recovered = feedExtent(processor, 0.1, BASELINE_MS + 3_000, 300);
+    assert.equal(recovered.repCount, 1);
+    assert.equal(recovered.peakReachExtent, recordedPeak);
+  });
+
+  it("left side keeps the attempt through prolonged tracking loss", () => {
+    const processor = createFunctionalReachProcessor("left");
+    processor.beginMovementTracking();
+    feedExtent(processor, 0.1, 0, BASELINE_MS, leftForwardReachLandmarks);
+    feedExtent(processor, 0.26, BASELINE_MS + 900, 200, leftForwardReachLandmarks);
+    feedExtent(processor, 0.26, BASELINE_MS + 1_200, 200, leftForwardReachLandmarks);
+    const completed = feedExtent(
+      processor,
+      0.1,
+      BASELINE_MS + 1_600,
+      400,
+      leftForwardReachLandmarks,
+    );
+    assert.equal(completed.repCount, 1);
+    const recordedPeak = completed.peakReachExtent;
+    assert.ok(recordedPeak !== null);
+
+    const lost = driveTrackingLoss(processor, BASELINE_MS + 2_200, leftForwardReachLandmarks);
+    assert.equal(lost.repCount, 1);
+    assert.equal(lost.peakReachExtent, recordedPeak);
+
+    const recovered = feedExtent(
+      processor,
+      0.1,
+      BASELINE_MS + 3_000,
+      300,
+      leftForwardReachLandmarks,
+    );
+    assert.equal(recovered.repCount, 1);
+    assert.equal(recovered.peakReachExtent, recordedPeak);
+  });
+
+  it("a further excursion after completion neither re-counts nor inflates the record", () => {
+    const processor = createFunctionalReachProcessor("right");
+    const completed = completeReachCycle(processor);
+    const recordedPeak = completed.peakReachExtent;
+    assert.equal(completed.repCount, 1);
+
+    // Deeper than the measured attempt — must not overwrite the recorded displacement.
+    const deeper = feedExtent(processor, -0.05, BASELINE_MS + 2_600, 300);
+    assert.equal(deeper.repCount, 1);
+    assert.equal(deeper.peakReachExtent, recordedPeak);
+
+    const backToRest = feedExtent(processor, 0.1, BASELINE_MS + 3_100, 400);
+    assert.equal(backToRest.repCount, 1);
+    assert.equal(backToRest.peakReachExtent, recordedPeak);
+  });
+
+  it("still recalibrates when tracking is lost BEFORE the attempt completes", () => {
+    const processor = createFunctionalReachProcessor("right");
+    processor.beginMovementTracking();
+    feedExtent(processor, 0.1, 0, BASELINE_MS);
+
+    const lost = driveTrackingLoss(processor, BASELINE_MS + 200);
+    assert.equal(lost.repCount, 0);
+
+    // Baseline was discarded, so a reach with no fresh baseline must not count.
+    const afterLoss = BASELINE_MS + 200 + (FUNCTIONAL_REACH_TRACKING_LOSS_RESET_TICKS + 4) * 33;
+    feedExtent(processor, 0.02, afterLoss, 200);
+    const noCount = feedExtent(processor, 0.1, afterLoss + 400, 300);
+    assert.equal(noCount.repCount, 0);
+  });
+
+  it("retry clears the finalized attempt so a new cycle can be measured", () => {
+    const processor = createFunctionalReachProcessor("right");
+    const first = completeReachCycle(processor);
+    assert.equal(first.repCount, 1);
+
+    processor.reset();
+    assert.equal(processor.isMovementTrackingEnabled(), false);
+    const afterReset = processor.processFrame(rightReachLandmarks(0.1), ctx(0));
+    assert.equal(afterReset.repCount, 0);
+    assert.equal(afterReset.peakReachExtent, null);
+
+    const second = completeReachCycle(processor);
+    assert.equal(second.repCount, 1);
+    assert.ok(second.peakReachExtent !== null);
+  });
+});
+
 describe("functional reach battery completion wiring", () => {
   it("entering functional reach positioning does not complete the battery", () => {
     let state = startBatteryAssessment(createBatteryOrchestratorState());
