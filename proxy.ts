@@ -1,6 +1,10 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import {
+  getProtectedRouteDecision,
+  resolveProxyAuthed,
+} from "./app/lib/proxy-auth";
 
 /**
  * Public routes that never require a session.
@@ -90,31 +94,25 @@ export async function proxy(request: NextRequest) {
     supabaseAuthed = Boolean(user);
   }
 
-  // ── FastAPI JWT gate (preserved for transition period) ─────────────────────
-  // cm_token holds the FastAPI JWT (set by auth.ts after login).
-  // The old cm_auth=logged_in flag cookie is intentionally ignored.
-  const token = request.cookies.get("cm_token")?.value;
-
-  // DEV-ONLY: Allow bypass with dev mock token
-  const isDevBypass =
-    process.env.NODE_ENV === "development" &&
-    token?.startsWith("dev_bypass_token_");
-
-  const cmAuthed = Boolean((token && token.length > 10) || isDevBypass);
-
-  // Authenticated if EITHER Supabase session OR legacy cm_token is valid.
-  const authed = supabaseAuthed || cmAuthed;
+  // cm_token may still be set for legacy FastAPI client calls, but proxy auth
+  // relies on validated Supabase sessions (or dev-only bypass tokens below).
+  const cmToken = request.cookies.get("cm_token")?.value;
+  const authed = resolveProxyAuthed({
+    supabaseAuthed,
+    cmToken,
+    nodeEnv: process.env.NODE_ENV,
+  });
 
   // Already authenticated — bounce away from auth pages
   if (authed && (pathname === "/login" || pathname === "/signup")) {
     return NextResponse.redirect(new URL("/clinician", request.url));
   }
 
-  // Protected route — redirect pages to /login; return 401 JSON for API routes
-  if (!isPublic(pathname) && !authed) {
-    if (pathname.startsWith("/api/")) {
-      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    }
+  const protectedDecision = getProtectedRouteDecision(pathname, authed, isPublic(pathname));
+  if (protectedDecision === "json-401") {
+    return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+  if (protectedDecision === "redirect-login") {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("returnTo", pathname);
     return NextResponse.redirect(loginUrl);

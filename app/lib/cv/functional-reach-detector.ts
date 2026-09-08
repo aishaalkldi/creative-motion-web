@@ -125,51 +125,16 @@ const REACH_SIDE_INDICES: Record<ReachExtentSide, { shoulder: number; wrist: num
   right: { shoulder: R_SHOULDER, wrist: R_WRIST },
 };
 
-export type ReachExtentForSideOptions = {
-  /** Battery side-view flow passes the tested-side gate so an unusable frame yields null, not 0. */
-  minVisibility?: number;
-};
-
-/**
- * Forward reach extent for a single tested arm (battery side-view flow).
- *
- * COORDINATE CONVENTION — traced, not assumed (#295)
- * -------------------------------------------------
- * The battery preview is NOT mirrored: `BatteryCameraSession` feeds the raw
- * `<video>` element to MediaPipe and draws it with `drawImage` under no
- * transform, and neither the video nor the canvas carries a `scaleX(-1)`.
- * Landmarks are therefore in raw (unmirrored) image space, where a patient
- * facing the camera has their ANATOMICAL RIGHT at LOW x — the same convention
- * documented in `interactive-shoulder/presentation-mirror.ts`, which had to
- * introduce an explicit mirror precisely because raw space works this way.
- *
- * The battery asks the patient to turn the TESTED side toward the camera
- * (`getSideRepositionInstruction`). Rotating a camera-facing patient so their
- * right side faces the camera leaves them facing +x; the left side mirrors it
- * and leaves them facing -x. Forward is therefore +x for a right-side test and
- * -x for a left-side test, so the raw `wrist.x - shoulder.x` used previously is
- * correct for the right side only and clamps to a permanent 0 on the left.
- *
- * Returns a POSITIVE extent that INCREASES with forward reach on both sides.
- */
+/** Forward reach extent for a single tested arm (battery side-view flow). */
 export function computeReachExtentForSide(
   landmarks: PoseLandmark[],
   side: ReachExtentSide,
-  options: ReachExtentForSideOptions = {},
 ): number | null {
   const indices = REACH_SIDE_INDICES[side];
   const shoulder = landmarks[indices.shoulder];
   const wrist = landmarks[indices.wrist];
   if (!shoulder || !wrist) return null;
-
-  const minVisibility = options.minVisibility ?? 0;
-  if (minVisibility > 0) {
-    if ((shoulder.visibility ?? 0) < minVisibility) return null;
-    if ((wrist.visibility ?? 0) < minVisibility) return null;
-  }
-
-  const forwardSign = side === "right" ? 1 : -1;
-  return Math.max(0, forwardSign * (wrist.x - shoulder.x));
+  return Math.max(0, wrist.x - shoulder.x);
 }
 
 export function reachLandmarksMeetMinVisibility(

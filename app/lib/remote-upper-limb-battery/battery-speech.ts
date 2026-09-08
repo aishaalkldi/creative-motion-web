@@ -1,5 +1,6 @@
 /**
- * Remote battery speech cues — one utterance per state transition.
+ * Remote battery speech cues — one utterance per current state.
+ * Previous speech is cancelled so cues cannot run ahead of the live phase.
  */
 
 import { formatBatteryArmLabel, getBatteryTestDefinition, type RemoteUpperLimbBatterySide, type RemoteUpperLimbBatteryTestId } from "./types";
@@ -81,6 +82,56 @@ function resolveText(cue: BatterySpeechCue, side: RemoteUpperLimbBatterySide): s
   }
 }
 
+export function resolveBatteryTestStartSpeechCue(
+  testId: RemoteUpperLimbBatteryTestId,
+): BatterySpeechCue {
+  switch (testId) {
+    case "shoulderAbduction":
+      return "abduction-raise";
+    case "shoulderFlexion":
+      return "flexion-raise";
+    case "elbowFlexion":
+      return "elbow-bend";
+    case "functionalReach":
+      return "functional-reach";
+  }
+}
+
+export function resolveBatteryMovementSpeechCue(input: {
+  testId: RemoteUpperLimbBatteryTestId;
+  phase: string;
+  hasReachedPeak?: boolean;
+}): BatterySpeechCue | null {
+  const { testId, phase, hasReachedPeak = false } = input;
+  if (testId === "shoulderAbduction") {
+    if (phase === "raising") return "abduction-raise";
+    if (phase === "lowering") return "abduction-return";
+  }
+  if (testId === "shoulderFlexion") {
+    if (phase === "raising") return "flexion-raise";
+    if (phase === "lowering") return "flexion-return";
+  }
+  if (testId === "elbowFlexion") {
+    if (phase === "flexing") return "elbow-bend";
+    if (phase === "extending") return "elbow-straighten";
+  }
+  if (testId === "functionalReach") {
+    if (phase === "peak") return "functional-reach";
+    if (phase === "rest" && hasReachedPeak) return "functional-return";
+  }
+  return null;
+}
+
+export function cancelBatterySpeech(): void {
+  if (typeof window !== "undefined" && typeof window.speechSynthesis !== "undefined") {
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      // ignore
+    }
+  }
+}
+
 export function speakBatteryTestCompleted(
   testId: RemoteUpperLimbBatteryTestId,
   side: RemoteUpperLimbBatterySide,
@@ -89,6 +140,7 @@ export function speakBatteryTestCompleted(
   const key = `${testId}:completed:${side}`;
   if (spokenKeys.has(key)) return;
   spokenKeys.add(key);
+  cancelBatterySpeech();
   try {
     const utterance = new SpeechSynthesisUtterance(
       `${getBatteryTestDefinition(testId).title} completed.`,
@@ -104,11 +156,15 @@ export function speakBatteryCue(
   cue: BatterySpeechCue,
   side: RemoteUpperLimbBatterySide,
   scope = "global",
+  options?: { allowRepeat?: boolean },
 ): void {
   if (typeof window === "undefined" || typeof window.speechSynthesis === "undefined") return;
   const key = `${scope}:${cue}:${side}`;
-  if (spokenKeys.has(key)) return;
-  spokenKeys.add(key);
+  if (!options?.allowRepeat) {
+    if (spokenKeys.has(key)) return;
+    spokenKeys.add(key);
+  }
+  cancelBatterySpeech();
   try {
     const utterance = new SpeechSynthesisUtterance(resolveText(cue, side));
     utterance.rate = 0.95;
@@ -120,15 +176,10 @@ export function speakBatteryCue(
 
 export function resetBatterySpeech(): void {
   spokenKeys.clear();
-  if (typeof window !== "undefined" && typeof window.speechSynthesis !== "undefined") {
-    try {
-      window.speechSynthesis.cancel();
-    } catch {
-      // ignore
-    }
-  }
+  cancelBatterySpeech();
 }
 
-export function resetBatterySpeechForTest(): void {
+export function resetBatterySpeechForTest(cancelQueued = true): void {
   spokenKeys.clear();
+  if (cancelQueued) cancelBatterySpeech();
 }

@@ -11,6 +11,8 @@ import {
 import type { SavedAssessment } from "../../../lib/mock-clinical-data";
 import type { AssessmentListRow, AssessmentRow } from "../../../api/assessments/route";
 import { pickPreferredAssessment } from "../../../lib/assessment-snapshot";
+import { RemoteUpperLimbBatteryResultsCard } from "../../../components/clinician/RemoteUpperLimbBatteryResultsCard";
+import { buildRemoteUpperLimbBatteryClinicianSummaryFromStructuredData } from "../../../lib/remote-upper-limb-battery/battery-clinician-summary";
 import {
   FOCUS_AREA_LABEL,
   FOCUS_CATEGORY_LABEL,
@@ -86,16 +88,15 @@ import {
   type RemoteQuestionnaireSummary,
 } from "../../../lib/remote-questionnaire-summary";
 import { PatientClinicalTranslationDisplay } from "@/app/components/reports/PatientClinicalTranslationDisplay";
+import { isStrokeClinicianData } from "@/app/components/clinician/StrokeQuestionnaireClinicianPanel";
 import { displayPatientFileHeader } from "../../../lib/patient-file-number";
 import { resolveCurrentAndPreviousPlans } from "../../../lib/clinician/resolve-current-plan";
 import { PreviousPlansSummary } from "../../../components/clinician/PreviousPlansSummary";
 import { DemoOfflineBanner } from "@/app/components/clinician/DemoOfflineBanner";
 import { extractDemoMeta } from "@/app/lib/api/demo-fallback-client";
 import {
-  isUuidPatientId,
   parseNumericDemoPatientId,
 } from "@/app/lib/api/patient-id-utils";
-import { forwardReachAssignmentPatientRoute } from "@/app/lib/upper-limb-motor-screen/forward-reach-assignment-client";
 
 export default function PatientProfilePage() {
   const params = useParams();
@@ -145,6 +146,7 @@ export default function PatientProfilePage() {
   const [rasqAssessments, setRasqAssessments] = useState<SavedAssessment[]>([]);
   const [supabaseAssessmentRows, setSupabaseAssessmentRows] = useState<AssessmentListRow[]>([]);
   const [clinicalSummaryDetail, setClinicalSummaryDetail] = useState<AssessmentRow | null>(null);
+  const [ulmsBatteryDetail, setUlmsBatteryDetail] = useState<AssessmentRow | null>(null);
 
   // Assessment-saved banner (shown when redirected from /clinician/assessment/new)
   const [showAssessmentBanner, setShowAssessmentBanner] = useState(
@@ -374,7 +376,9 @@ export default function PatientProfilePage() {
             ? "Remote Questionnaire Assessment"
             : r.type === "general_msk"
               ? "General MSK Assessment"
-              : r.type,
+              : r.type === "upper_limb_motor_screen"
+                ? "Remote Upper-Limb Battery"
+                : r.type,
         date: r.created_at.split("T")[0] ?? "",
         pain: 0,
         rom: 0,
@@ -390,15 +394,34 @@ export default function PatientProfilePage() {
       const preferred = pickPreferredAssessment(rows);
       if (!preferred) {
         setClinicalSummaryDetail(null);
+        setUlmsBatteryDetail(null);
         return;
       }
 
+      let preferredDetail: AssessmentRow | null = null;
       const detailRes = await fetch(`/api/assessments/${encodeURIComponent(preferred.id)}`);
-      if (!detailRes.ok) {
+      if (detailRes.ok) {
+        preferredDetail = (await detailRes.json()) as AssessmentRow;
+        setClinicalSummaryDetail(preferredDetail);
+      } else {
         setClinicalSummaryDetail(null);
+      }
+
+      const ulmsRow = rows.find((row) => row.type === "upper_limb_motor_screen");
+      if (!ulmsRow) {
+        setUlmsBatteryDetail(null);
         return;
       }
-      setClinicalSummaryDetail((await detailRes.json()) as AssessmentRow);
+      if (preferred.id === ulmsRow.id) {
+        setUlmsBatteryDetail(preferredDetail);
+        return;
+      }
+      const ulmsDetailRes = await fetch(`/api/assessments/${encodeURIComponent(ulmsRow.id)}`);
+      if (!ulmsDetailRes.ok) {
+        setUlmsBatteryDetail(null);
+        return;
+      }
+      setUlmsBatteryDetail((await ulmsDetailRes.json()) as AssessmentRow);
     } catch {
       /* silently ignore — empty state shown */
     }
@@ -465,6 +488,34 @@ export default function PatientProfilePage() {
   const clinicalSummary = useMemo(() => {
     if (!clinicalSummaryRow) return null;
     if (clinicalSummaryRow.type === "remote_questionnaire") {
+      const strokePayload = clinicalSummaryRow.structured_data as unknown;
+      if (isStrokeClinicianData(strokePayload)) {
+        const source = strokePayload.responses.sc_information_source;
+        return {
+          title: "Remote Neurorehabilitation Intake",
+          submittedAt: clinicalSummaryRow.created_at,
+          metrics: [
+            { label: "Safety gate", value: strokePayload.safetyState },
+            {
+              label: "Clinical English",
+              value: strokePayload.strokeWorkflow.translation.status,
+            },
+          ],
+          rows: [
+            ...(source
+              ? [
+                  {
+                    label: "Information source",
+                    value: Array.isArray(source.rawValue)
+                      ? source.rawValue.join(", ")
+                      : source.rawValue,
+                  },
+                ]
+              : []),
+          ],
+          hasRedFlag: strokePayload.safetyState !== "PASS",
+        };
+      }
       return buildRemoteQuestionnaireSummary(
         clinicalSummaryRow.structured_data,
         clinicalSummaryRow.created_at,
@@ -521,13 +572,26 @@ export default function PatientProfilePage() {
     return null;
   }, [clinicalSummaryRow]);
 
+  const ulmsBatterySummary = useMemo(
+    () =>
+      buildRemoteUpperLimbBatteryClinicianSummaryFromStructuredData(
+        ulmsBatteryDetail?.structured_data,
+        ulmsBatteryDetail?.created_at,
+      ),
+    [ulmsBatteryDetail],
+  );
+
   const remoteQuestionnaireSummary: RemoteQuestionnaireSummary | null =
-    clinicalSummaryRow?.type === "remote_questionnaire" && clinicalSummary
+    clinicalSummaryRow?.type === "remote_questionnaire" &&
+    !isStrokeClinicianData(clinicalSummaryRow.structured_data as unknown) &&
+    clinicalSummary
       ? (clinicalSummary as RemoteQuestionnaireSummary)
       : null;
 
   const clinicalFocusLabels = useMemo(() => {
     if (!clinicalSummaryRow) return null;
+    if (clinicalSummaryRow.type === "upper_limb_motor_screen") return null;
+    if (isStrokeClinicianData(clinicalSummaryRow.structured_data as unknown)) return null;
     return deriveClinicalFocusLabels(
       clinicalSummaryRow.type,
       clinicalSummaryRow.structured_data,
@@ -722,13 +786,18 @@ export default function PatientProfilePage() {
 
   const submittedRemote = remoteAssessments.filter((r) => r.status === "submitted");
   const pendingRemote   = remoteAssessments.filter((r) => r.status === "pending" || r.status === "in_progress");
-  const clinicalSummaryAssessmentId = clinicalSummaryRow?.id ?? null;
+  const clinicalSummaryAssessmentId =
+    clinicalSummaryRow && clinicalSummaryRow.type !== "upper_limb_motor_screen"
+      ? clinicalSummaryRow.id
+      : null;
   const primaryReportHref = clinicalSummaryAssessmentId
     ? `/clinician/assessment/report?patientId=${patient.id}&assessmentId=${clinicalSummaryAssessmentId}`
     : `/clinician/assessment/report?patientId=${patient.id}`;
   const overviewLatestAssessment = clinicalSummary
     ? `${clinicalSummary.title} · ${new Date(clinicalSummary.submittedAt).toLocaleDateString()}`
-    : "—";
+    : ulmsBatterySummary
+      ? `${ulmsBatterySummary.title} · ${new Date(ulmsBatterySummary.submittedAt).toLocaleDateString()}`
+      : "—";
   const overviewCurrentPlan = treatmentPlan?.programName ?? "—";
   const overviewProgressSnapshot = planProgress
     ? `${planProgress.sessionsCompleted}/${planProgress.totalSessions} sessions · ${planProgress.progressPct}%`
@@ -752,9 +821,6 @@ export default function PatientProfilePage() {
     Boolean(treatmentPlan) && adherenceTotalSessions > 0;
   const hasAnyAssessment =
     supabaseAssessmentRows.length > 0 || submittedRemote.length > 0 || backendAssessmentHistory.length > 0;
-  const forwardReachAssignmentHref = isUuidPatientId(patient.id)
-    ? forwardReachAssignmentPatientRoute(patient.id)
-    : null;
 
   return (
     <>
@@ -841,14 +907,6 @@ export default function PatientProfilePage() {
             >
               + New Assessment
             </Link>
-            {forwardReachAssignmentHref ? (
-              <Link
-                href={forwardReachAssignmentHref}
-                className="rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-4 py-2.5 text-sm font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
-              >
-                Forward Reach assignment
-              </Link>
-            ) : null}
             <button
               type="button"
               onClick={() => { setEditForm(patient); setEditOpen((o) => !o); setSaveError(""); }}
@@ -1018,14 +1076,6 @@ export default function PatientProfilePage() {
                 >
                   Send Remote Assessment
                 </button>
-                {forwardReachAssignmentHref ? (
-                  <Link
-                    href={forwardReachAssignmentHref}
-                    className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-2 text-xs font-semibold text-white/50 transition hover:border-[#1D9E75]/20 hover:text-white"
-                  >
-                    Forward Reach assignment
-                  </Link>
-                ) : null}
                 <button
                   type="button"
                   onClick={handleCopyLatestLink}
@@ -1086,6 +1136,13 @@ export default function PatientProfilePage() {
                 </button>
               </div>
             )}
+
+            {ulmsBatterySummary && ulmsBatteryDetail ? (
+              <RemoteUpperLimbBatteryResultsCard
+                summary={ulmsBatterySummary}
+                reportHref={`/clinician/assessment/report?patientId=${encodeURIComponent(patient.id)}&assessmentId=${encodeURIComponent(ulmsBatteryDetail.id)}`}
+              />
+            ) : null}
 
             {/* Clinical Assessment Summary */}
             <section id="clinical-assessment-summary" className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 scroll-mt-6">
@@ -1318,6 +1375,12 @@ export default function PatientProfilePage() {
                   )}
 
                 </div>
+              ) : ulmsBatterySummary ? (
+                <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4">
+                  <p className="text-sm leading-relaxed text-white/50">
+                    Remote Upper-Limb Battery results are shown above. Other clinical assessments will appear here when submitted.
+                  </p>
+                </div>
               ) : (
                 <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4">
                   <p className="text-sm leading-relaxed text-white/50">
@@ -1337,14 +1400,6 @@ export default function PatientProfilePage() {
                     >
                       Document in clinic
                     </Link>
-                    {forwardReachAssignmentHref ? (
-                      <Link
-                        href={forwardReachAssignmentHref}
-                        className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/60 transition hover:text-white"
-                      >
-                        Assign Forward Reach Baseline
-                      </Link>
-                    ) : null}
                   </div>
                 </div>
               )}
@@ -1684,6 +1739,14 @@ export default function PatientProfilePage() {
                               Copy Link
                             </button>
                           )}
+                          {isSubmitted && ra.assessmentId ? (
+                            <Link
+                              href={`/clinician/assessment/report?patientId=${encodeURIComponent(patient.id)}&assessmentId=${encodeURIComponent(ra.assessmentId)}`}
+                              className="flex-1 px-3 py-2.5 text-center text-[11px] font-semibold text-[#5DCAA5] transition hover:bg-[#0B1220]"
+                            >
+                              Review submission
+                            </Link>
+                          ) : null}
                         </div>
                       </div>
                     );

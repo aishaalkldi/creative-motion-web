@@ -40,8 +40,11 @@ import {
   getTrackingLostStatus,
 } from "@/app/lib/remote-upper-limb-battery/battery-patient-copy";
 import {
+  cancelBatterySpeech,
   resetBatterySpeech,
   resetBatterySpeechForTest,
+  resolveBatteryMovementSpeechCue,
+  resolveBatteryTestStartSpeechCue,
   speakBatteryCue,
   speakBatteryTestCompleted,
   type BatterySpeechCue,
@@ -77,24 +80,9 @@ function repSpeechCue(completed: number): BatterySpeechCue | null {
 function movementSpeechCue(
   testId: ReturnType<typeof getActiveBatteryTestId>,
   phase: string,
+  hasReachedPeak = false,
 ): BatterySpeechCue | null {
-  if (testId === "shoulderAbduction") {
-    if (phase === "raising") return "abduction-raise";
-    if (phase === "lowering") return "abduction-return";
-  }
-  if (testId === "shoulderFlexion") {
-    if (phase === "raising") return "flexion-raise";
-    if (phase === "lowering") return "flexion-return";
-  }
-  if (testId === "elbowFlexion") {
-    if (phase === "flexing") return "elbow-bend";
-    if (phase === "extending") return "elbow-straighten";
-  }
-  if (testId === "functionalReach") {
-    if (phase === "peak") return "functional-reach";
-    if (phase === "rest") return "functional-return";
-  }
-  return null;
+  return resolveBatteryMovementSpeechCue({ testId, phase, hasReachedPeak });
 }
 
 export function RemoteUpperLimbBatterySession({
@@ -121,8 +109,9 @@ export function RemoteUpperLimbBatterySession({
   const lastProcessorRepRef = useRef(0);
   const lastMovementCueRef = useRef<string | null>(null);
   const finalizedTestIndexRef = useRef(-1);
-  /** True once the active test's processor has been armed for test_active (#295 / CV-1). */
-  const movementArmedRef = useRef(false);
+  const testProcessorArmedRef = useRef(false);
+  const testStartCueSpokenRef = useRef(false);
+  const functionalReachPeakSeenRef = useRef(false);
   const repositionCueSpokenRef = useRef(false);
   const onBatteryCompleteRef = useRef(onBatteryComplete);
 
@@ -174,44 +163,21 @@ export function RemoteUpperLimbBatterySession({
     };
   }, [bindPreviewProcessor]);
 
-  /**
-   * Bind the active test's processor UNARMED (#295 / CV-1).
-   *
-   * The processor sees positioning and countdown frames so tracking readiness
-   * keeps working, but its rep FSM stays frozen until `armActiveTestProcessor`
-   * runs at the transition into test_active.
-   */
-  const switchToActiveTestProcessor = useCallback(
+  const armActiveTestProcessor = useCallback(
     (testId: ReturnType<typeof getActiveBatteryTestId>) => {
       const processor = createBatteryTestProcessor(testId, testedSide);
       processor.reset();
       bindProcessor(processor);
+      processor.beginMovementTracking();
       lastProcessorRepRef.current = 0;
       lastMovementCueRef.current = null;
-      movementArmedRef.current = false;
-    },
-    [bindProcessor, testedSide],
-  );
-
-  /**
-   * Arm the active test at test_active so only real test frames are measured.
-   *
-   * Functional reach is previewed through the positioning processor, so its
-   * real processor is created here; tests 1–3 are already bound and only need
-   * arming. `beginMovementTracking` resets measurement state either way, so no
-   * pre-start repetition or peak can survive into the persisted result.
-   */
-  const armActiveTestProcessor = useCallback(
-    (testId: ReturnType<typeof getActiveBatteryTestId>) => {
-      if (testId === "functionalReach") {
-        const processor = createBatteryTestProcessor("functionalReach", testedSide);
-        processor.reset();
-        bindProcessor(processor);
-      }
-      processorRef.current.beginMovementTracking();
-      lastProcessorRepRef.current = 0;
-      lastMovementCueRef.current = null;
-      movementArmedRef.current = true;
+      testProcessorArmedRef.current = true;
+      testStartCueSpokenRef.current = false;
+      functionalReachPeakSeenRef.current = false;
+      const startCue = resolveBatteryTestStartSpeechCue(testId);
+      speakBatteryCue(startCue, testedSide, `${testId}-start`);
+      lastMovementCueRef.current = `${testId}:${startCue}`;
+      testStartCueSpokenRef.current = true;
     },
     [bindProcessor, testedSide],
   );
@@ -235,13 +201,15 @@ export function RemoteUpperLimbBatterySession({
     setAssessmentStarted(true);
     stableSinceRef.current = null;
     finalizedTestIndexRef.current = -1;
-    movementArmedRef.current = false;
+    testProcessorArmedRef.current = false;
+    testStartCueSpokenRef.current = false;
+    functionalReachPeakSeenRef.current = false;
     repositionCueSpokenRef.current = false;
     setRepositionReady(false);
     setOrchestrator(startBatteryAssessment(createBatteryOrchestratorState()));
-    switchToActiveTestProcessor("shoulderAbduction");
+    bindPreviewProcessor();
     speakBatteryCue("get-ready", testedSide, "assessment");
-  }, [assessmentStarted, disabled, positionReady, switchToActiveTestProcessor, testedSide]);
+  }, [assessmentStarted, bindPreviewProcessor, disabled, positionReady, testedSide]);
 
   const handleRetryCurrentTest = useCallback(() => {
     resetBatterySpeechForTest();
@@ -250,26 +218,17 @@ export function RemoteUpperLimbBatterySession({
     setRepositionReady(false);
     repositionCueSpokenRef.current = false;
     lastProcessorRepRef.current = 0;
-    movementArmedRef.current = false;
+    testProcessorArmedRef.current = false;
+    testStartCueSpokenRef.current = false;
+    functionalReachPeakSeenRef.current = false;
     if (orchestrator.phase === "reposition_side") {
       finalizedTestIndexRef.current = 0;
-      bindPreviewProcessor();
     } else {
       finalizedTestIndexRef.current = orchestrator.testIndex - 1;
-      if (activeTestId === "functionalReach") {
-        bindPreviewProcessor();
-      } else {
-        switchToActiveTestProcessor(activeTestId);
-      }
     }
+    bindPreviewProcessor();
     setOrchestrator((current) => retryCurrentBatteryTest(current));
-  }, [
-    activeTestId,
-    bindPreviewProcessor,
-    orchestrator.phase,
-    orchestrator.testIndex,
-    switchToActiveTestProcessor,
-  ]);
+  }, [bindPreviewProcessor, orchestrator.phase, orchestrator.testIndex]);
 
   const handleCancelAssessment = useCallback(() => {
     resetBatterySpeech();
@@ -279,7 +238,9 @@ export function RemoteUpperLimbBatterySession({
     repositionCueSpokenRef.current = false;
     stableSinceRef.current = null;
     finalizedTestIndexRef.current = -1;
-    movementArmedRef.current = false;
+    testProcessorArmedRef.current = false;
+    testStartCueSpokenRef.current = false;
+    functionalReachPeakSeenRef.current = false;
     setOrchestrator(cancelBatteryAssessment(createBatteryOrchestratorState()));
     bindPreviewProcessor();
     onCancel?.();
@@ -296,6 +257,7 @@ export function RemoteUpperLimbBatterySession({
       stableSinceRef.current = null;
       setHoldStillVisible(false);
       setRepositionReady(false);
+      cancelBatterySpeech();
       return;
     }
 
@@ -316,7 +278,8 @@ export function RemoteUpperLimbBatterySession({
           setOrchestrator((current) => {
             if (current.phase !== "reposition_side") return current;
             const next = completeSideReposition(current);
-            switchToActiveTestProcessor(getActiveBatteryTestId(next));
+            bindPreviewProcessor();
+            testProcessorArmedRef.current = false;
             resetBatterySpeechForTest();
             stableSinceRef.current = null;
             setHoldStillVisible(false);
@@ -343,9 +306,9 @@ export function RemoteUpperLimbBatterySession({
   }, [
     activeTestId,
     assessmentStarted,
+    bindPreviewProcessor,
     cameraSnapshot,
     orchestrator.phase,
-    switchToActiveTestProcessor,
     testedSide,
     trackingLost,
   ]);
@@ -369,7 +332,7 @@ export function RemoteUpperLimbBatterySession({
   useEffect(() => {
     if (!assessmentStarted) return;
     if (orchestrator.phase !== "test_active") return;
-    if (movementArmedRef.current) return;
+    if (testProcessorArmedRef.current) return;
     armActiveTestProcessor(activeTestId);
   }, [activeTestId, armActiveTestProcessor, assessmentStarted, orchestrator.phase]);
 
@@ -377,6 +340,7 @@ export function RemoteUpperLimbBatterySession({
     if (orchestrator.phase !== "test_active" || trackingLost) return;
     const processor = cameraSnapshot?.processor;
     if (!processor) return;
+    if (processor.movementPhase === "preview" || processor.movementPhase === "idle") return;
 
     if (processor.repCount > lastProcessorRepRef.current) {
       const completed = processor.repCount;
@@ -386,12 +350,20 @@ export function RemoteUpperLimbBatterySession({
       setOrchestrator((current) => recordBatteryRepCompleted(current, processor.lastRepPeak));
     }
 
-    const movementCue = movementSpeechCue(activeTestId, processor.movementPhase);
+    if (processor.movementPhase === "peak") {
+      functionalReachPeakSeenRef.current = true;
+    }
+
+    const movementCue = movementSpeechCue(
+      activeTestId,
+      processor.movementPhase,
+      functionalReachPeakSeenRef.current,
+    );
     if (movementCue) {
       const key = `${activeTestId}:${movementCue}`;
       if (lastMovementCueRef.current !== key) {
         lastMovementCueRef.current = key;
-        speakBatteryCue(movementCue, testedSide, key);
+        speakBatteryCue(movementCue, testedSide, key, { allowRepeat: true });
       }
     }
   }, [activeTestId, cameraSnapshot?.processor, orchestrator.phase, testedSide, trackingLost]);
@@ -414,14 +386,9 @@ export function RemoteUpperLimbBatterySession({
           })
         : buildRepTestResult({
             testId: activeTestId as "shoulderAbduction" | "shoulderFlexion" | "elbowFlexion",
-            // CV-6: the orchestrator's gated count is the single source of truth.
-            // The previous Math.max let raw processor reps — including any the
-            // rep dispatch rejected while tracking was unusable — override it.
-            repsCompleted: orchestrator.repsCompleted,
+            repsCompleted: Math.max(orchestrator.repsCompleted, processor.repCount),
             repsRequired: requiredReps,
-            // Keep one peak per persisted repetition so the therapist never sees
-            // more peaks than accepted reps.
-            peakAnglesDeg: processor.completedPeaksDeg.slice(0, orchestrator.repsCompleted),
+            peakAnglesDeg: processor.completedPeaksDeg,
             trackingQuality,
           });
 
@@ -429,21 +396,14 @@ export function RemoteUpperLimbBatterySession({
 
     setOrchestrator((current) => {
       const next = completeBatteryTest(current, result);
-      if (next.phase === "reposition_side") {
+      if (next.phase === "reposition_side" || next.phase === "positioning") {
         bindPreviewProcessor();
+        testProcessorArmedRef.current = false;
+        testStartCueSpokenRef.current = false;
+        functionalReachPeakSeenRef.current = false;
         repositionCueSpokenRef.current = false;
         setRepositionReady(false);
-        stableSinceRef.current = null;
-        setHoldStillVisible(false);
-      } else if (next.phase === "positioning") {
-        const nextTestId = getActiveBatteryTestId(next);
-        if (nextTestId === "functionalReach") {
-          bindPreviewProcessor();
-          movementArmedRef.current = false;
-        } else {
-          switchToActiveTestProcessor(nextTestId);
-        }
-        resetBatterySpeechForTest();
+        resetBatterySpeechForTest(false);
         stableSinceRef.current = null;
         setHoldStillVisible(false);
       }
@@ -457,7 +417,6 @@ export function RemoteUpperLimbBatterySession({
     orchestrator.repsCompleted,
     orchestrator.testIndex,
     requiredReps,
-    switchToActiveTestProcessor,
     testedSide,
   ]);
 

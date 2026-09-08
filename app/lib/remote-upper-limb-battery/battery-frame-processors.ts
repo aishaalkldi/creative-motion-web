@@ -3,10 +3,7 @@
  */
 
 import { BLAZEPOSE_ACQUISITION_ADAPTER, type InputAcquisitionContext } from "@/app/lib/input-acquisition";
-import {
-  computeReachExtentForSide,
-  FunctionalReachRepCounter,
-} from "@/app/lib/cv/functional-reach-detector";
+import { FunctionalReachRepCounter } from "@/app/lib/cv/functional-reach-detector";
 import type { SagittalHipRepPhase } from "@/app/lib/cv/sagittal-hip-rep-core";
 import { PATIENT_FUNCTIONAL_REACH_REP_CONFIG } from "@/app/lib/cv/cv-patient-config";
 import type { PoseLandmark } from "@/app/lib/cv/pose-landmark-overlay";
@@ -16,11 +13,7 @@ import {
   updateShoulderAbductionReachDetector,
   type ShoulderAbductionReachDetectorState,
 } from "@/app/lib/shoulder-rehabilitation/shoulder-abduction-reach-detector";
-import {
-  DEFAULT_SHOULDER_ABDUCTION_REACH_THRESHOLDS,
-  type ShoulderAbductionReachSide,
-} from "@/app/lib/shoulder-rehabilitation/shoulder-abduction-reach-contract";
-import { computeShoulderAbductionReachSideMetrics } from "@/app/lib/shoulder-rehabilitation/shoulder-abduction-reach-metrics";
+import type { ShoulderAbductionReachSide } from "@/app/lib/shoulder-rehabilitation/shoulder-abduction-reach-contract";
 import {
   createShoulderFlexionPhaseState,
   tickShoulderFlexionPhase,
@@ -41,6 +34,11 @@ import {
   readArmVisibility,
   visibilityQualityFromValues,
 } from "./battery-tracking";
+import {
+  computeBatteryReachExtent,
+  computeReachDisplacementFromBaseline,
+  FUNCTIONAL_REACH_TRACKING_LOSS_RESET_TICKS,
+} from "./battery-reach-extent";
 import type { RemoteUpperLimbBatterySide } from "./types";
 
 export type BatteryTrackingQuality = "good" | "fair" | "poor" | "unknown";
@@ -61,18 +59,8 @@ export type BatteryFrameProcessorSnapshot = {
   peakReachExtent: number | null;
 };
 
-/**
- * Every battery processor is armed explicitly (#295 / CV-1).
- *
- * Frames keep flowing during positioning and countdown so the patient sees a
- * live preview and the orchestrator can gate on tracking readiness, but the
- * clinical rep FSM stays frozen until `beginMovementTracking()` is called at
- * the transition into `test_active`. Only frames captured during the actual
- * test may contribute a repetition or a completed peak.
- */
 export type BatteryTestProcessor = {
   reset: () => void;
-  /** Arm + reset the measurement state — call once, at the transition into test_active. */
   beginMovementTracking: () => void;
   isMovementTrackingEnabled: () => boolean;
   processFrame: (
@@ -81,7 +69,6 @@ export type BatteryTestProcessor = {
   ) => BatteryFrameProcessorSnapshot;
 };
 
-/** Functional reach shares the base contract; kept as a named alias for call sites. */
 export type BatteryFunctionalReachProcessor = BatteryTestProcessor;
 
 /**
@@ -135,19 +122,32 @@ function armTrackingSnapshot(input: {
   };
 }
 
+function idleMovementSnapshot(
+  tracking: ReturnType<typeof armTrackingSnapshot>,
+): BatteryFrameProcessorSnapshot {
+  return {
+    ...tracking,
+    repCount: 0,
+    lastRepPeak: null,
+    completedPeaksDeg: [],
+    movementPhase: "idle",
+    peakReachExtent: null,
+  };
+}
+
 export function createShoulderAbductionProcessor(side: RemoteUpperLimbBatterySide): BatteryTestProcessor {
   let state: ShoulderAbductionReachDetectorState = createShoulderAbductionReachDetectorState();
-  let movementTrackingEnabled = false;
   let lastRepCount = 0;
   let lastRepPeak: number | null = null;
   let completedPeaks: number[] = [];
+  let movementTrackingEnabled = false;
 
   const resetTrackingState = () => {
     state = createShoulderAbductionReachDetectorState();
-    movementTrackingEnabled = false;
     lastRepCount = 0;
     lastRepPeak = null;
     completedPeaks = [];
+    movementTrackingEnabled = false;
   };
 
   return {
@@ -158,35 +158,19 @@ export function createShoulderAbductionProcessor(side: RemoteUpperLimbBatterySid
     },
     isMovementTrackingEnabled: () => movementTrackingEnabled,
     processFrame(landmarks, context) {
-      const trackingQuality = visibilityQualityFromValues(
-        blazeIndicesForSide(side, ["shoulder", "elbow", "wrist"]).map(
-          (index) => landmarks[index]?.visibility ?? 0,
-        ),
-      );
-      const landmarkVisibility = buildLandmarkVisibilityDebug(landmarks, side);
-
       if (!movementTrackingEnabled) {
-        // Readiness only — the angle is read without advancing the rep FSM.
-        const frame = normalizeFrame(landmarks, context);
-        const angle = frame
-          ? computeShoulderAbductionReachSideMetrics(
-              frame,
-              mapSide(side),
-              DEFAULT_SHOULDER_ABDUCTION_REACH_THRESHOLDS.minJointConfidence,
-            ).abductionAngleDegrees
-          : null;
-        const previewReady = angle !== null;
-        return {
-          trackingReady: previewReady,
-          trackingQuality,
-          trackingRejectionReason: previewReady ? null : "abduction_angle_unavailable",
-          landmarkVisibility,
-          repCount: 0,
-          lastRepPeak: null,
-          completedPeaksDeg: [],
-          movementPhase: "idle",
-          peakReachExtent: null,
-        };
+        const quality = visibilityQualityFromValues(
+          blazeIndicesForSide(side, ["shoulder", "elbow", "wrist"]).map(
+            (index) => landmarks[index]?.visibility ?? 0,
+          ),
+        );
+        return idleMovementSnapshot({
+          trackingReady: quality !== "poor" && quality !== "unknown",
+          trackingQuality: quality,
+          trackingRejectionReason:
+            quality === "poor" || quality === "unknown" ? `visibility_${quality}` : null,
+          landmarkVisibility: buildLandmarkVisibilityDebug(landmarks, side),
+        });
       }
 
       const result = updateShoulderAbductionReachDetector(state, landmarks, context);
@@ -201,9 +185,13 @@ export function createShoulderAbductionProcessor(side: RemoteUpperLimbBatterySid
       }
       return {
         trackingReady,
-        trackingQuality,
+        trackingQuality: visibilityQualityFromValues(
+          blazeIndicesForSide(side, ["shoulder", "elbow", "wrist"]).map(
+            (index) => landmarks[index]?.visibility ?? 0,
+          ),
+        ),
         trackingRejectionReason: trackingReady ? null : "abduction_angle_unavailable",
-        landmarkVisibility,
+        landmarkVisibility: buildLandmarkVisibilityDebug(landmarks, side),
         repCount: primary.repCount,
         lastRepPeak,
         completedPeaksDeg: [...completedPeaks],
@@ -216,15 +204,15 @@ export function createShoulderAbductionProcessor(side: RemoteUpperLimbBatterySid
 
 export function createShoulderFlexionProcessor(side: RemoteUpperLimbBatterySide): BatteryTestProcessor {
   let state: ShoulderFlexionPhaseState = createShoulderFlexionPhaseState();
-  let movementTrackingEnabled = false;
   let lastRepCount = 0;
   let lastRepPeak: number | null = null;
+  let movementTrackingEnabled = false;
 
   const resetTrackingState = () => {
     state = createShoulderFlexionPhaseState();
-    movementTrackingEnabled = false;
     lastRepCount = 0;
     lastRepPeak = null;
+    movementTrackingEnabled = false;
   };
 
   return {
@@ -246,13 +234,6 @@ export function createShoulderFlexionProcessor(side: RemoteUpperLimbBatterySide)
           mapSide(side),
           DEFAULT_SHOULDER_FLEXION_THRESHOLDS.minJointConfidence,
         );
-      if (movementTrackingEnabled) {
-        tickShoulderFlexionPhase(state, elevation, DEFAULT_SHOULDER_FLEXION_THRESHOLDS);
-        if (state.repCount > lastRepCount) {
-          lastRepPeak = state.completedPeaksDeg.at(-1) ?? state.peakElevationDegrees;
-          lastRepCount = state.repCount;
-        }
-      }
       const tracking = armTrackingSnapshot({
         landmarks,
         side,
@@ -264,12 +245,21 @@ export function createShoulderFlexionProcessor(side: RemoteUpperLimbBatterySide)
             DEFAULT_SHOULDER_FLEXION_THRESHOLDS.minJointConfidence,
           ) || elevation !== null,
       });
+      if (!movementTrackingEnabled) {
+        return idleMovementSnapshot(tracking);
+      }
+
+      tickShoulderFlexionPhase(state, elevation, DEFAULT_SHOULDER_FLEXION_THRESHOLDS);
+      if (state.repCount > lastRepCount) {
+        lastRepPeak = state.completedPeaksDeg.at(-1) ?? state.peakElevationDegrees;
+        lastRepCount = state.repCount;
+      }
       return {
         ...tracking,
-        repCount: movementTrackingEnabled ? state.repCount : 0,
+        repCount: state.repCount,
         lastRepPeak,
-        completedPeaksDeg: movementTrackingEnabled ? [...state.completedPeaksDeg] : [],
-        movementPhase: movementTrackingEnabled ? state.phase : "idle",
+        completedPeaksDeg: [...state.completedPeaksDeg],
+        movementPhase: state.phase,
         peakReachExtent: null,
       };
     },
@@ -278,15 +268,15 @@ export function createShoulderFlexionProcessor(side: RemoteUpperLimbBatterySide)
 
 export function createElbowFlexionProcessor(side: RemoteUpperLimbBatterySide): BatteryTestProcessor {
   let state: ElbowFlexionPhaseState = createElbowFlexionPhaseState();
-  let movementTrackingEnabled = false;
   let lastRepCount = 0;
   let lastRepPeak: number | null = null;
+  let movementTrackingEnabled = false;
 
   const resetTrackingState = () => {
     state = createElbowFlexionPhaseState();
-    movementTrackingEnabled = false;
     lastRepCount = 0;
     lastRepPeak = null;
+    movementTrackingEnabled = false;
   };
 
   return {
@@ -305,25 +295,27 @@ export function createElbowFlexionProcessor(side: RemoteUpperLimbBatterySide): B
             DEFAULT_ELBOW_FLEXION_THRESHOLDS.minJointConfidence,
           )
         : null;
-      if (movementTrackingEnabled) {
-        tickElbowFlexionPhase(state, interiorAngle, DEFAULT_ELBOW_FLEXION_THRESHOLDS);
-        if (state.repCount > lastRepCount) {
-          lastRepPeak = state.completedPeaksDeg.at(-1) ?? state.peakFlexionAngleDegrees;
-          lastRepCount = state.repCount;
-        }
-      }
       const tracking = armTrackingSnapshot({
         landmarks,
         side,
         requiredParts: ["shoulder", "elbow", "wrist"],
         metricReady: interiorAngle !== null,
       });
+      if (!movementTrackingEnabled) {
+        return idleMovementSnapshot(tracking);
+      }
+
+      tickElbowFlexionPhase(state, interiorAngle, DEFAULT_ELBOW_FLEXION_THRESHOLDS);
+      if (state.repCount > lastRepCount) {
+        lastRepPeak = state.completedPeaksDeg.at(-1) ?? state.peakFlexionAngleDegrees;
+        lastRepCount = state.repCount;
+      }
       return {
         ...tracking,
-        repCount: movementTrackingEnabled ? state.repCount : 0,
+        repCount: state.repCount,
         lastRepPeak,
-        completedPeaksDeg: movementTrackingEnabled ? [...state.completedPeaksDeg] : [],
-        movementPhase: movementTrackingEnabled ? state.phase : "idle",
+        completedPeaksDeg: [...state.completedPeaksDeg],
+        movementPhase: state.phase,
         peakReachExtent: null,
       };
     },
@@ -336,16 +328,30 @@ export function createFunctionalReachProcessor(
   const counter = new FunctionalReachRepCounter(PATIENT_FUNCTIONAL_REACH_REP_CONFIG);
   let movementTrackingEnabled = false;
   let baselineStarted = false;
+  let minReachExtent: number | null = null;
   let peakReachExtent: number | null = null;
   let lastCompletedAttempts = 0;
+  let consecutiveUnusableFrames = 0;
 
   const resetTrackingState = () => {
     counter.resetBaseline();
     counter.resetReps();
     movementTrackingEnabled = false;
     baselineStarted = false;
+    minReachExtent = null;
     peakReachExtent = null;
     lastCompletedAttempts = 0;
+    consecutiveUnusableFrames = 0;
+  };
+
+  const recalibrateAfterTrackingLoss = () => {
+    counter.resetBaseline();
+    counter.resetReps();
+    baselineStarted = false;
+    minReachExtent = null;
+    peakReachExtent = null;
+    lastCompletedAttempts = 0;
+    consecutiveUnusableFrames = 0;
   };
 
   const beginMovementTracking = () => {
@@ -367,26 +373,34 @@ export function createFunctionalReachProcessor(
         testedVisibility.shoulder,
         testedVisibility.wrist,
       ]);
+      const reachExtent = computeBatteryReachExtent(landmarks, side);
+      const trackingUsable =
+        trackingReady && quality !== "poor" && quality !== "unknown" && reachExtent !== null;
 
-      // CV-3: an unusable frame must not begin or move the measurement. The
-      // baseline window, the rep FSM, and the peak all stay exactly where the
-      // last usable frame left them — a dropout is never a clinical zero.
-      if (movementTrackingEnabled && trackingReady) {
-        if (!baselineStarted) {
-          counter.startBaselineWindow(nowMs);
-          baselineStarted = true;
-        }
-        const reachExtent = computeReachExtentForSide(landmarks as PoseLandmark[], side, {
-          minVisibility: Math.min(
-            PATIENT_FUNCTIONAL_REACH_REP_CONFIG.minShoulderVisibility,
-            PATIENT_FUNCTIONAL_REACH_REP_CONFIG.minWristVisibility,
-          ),
-        });
-        const torsoSpan = computeTorsoSpan(landmarks as PoseLandmark[]);
-        if (reachExtent !== null) {
-          peakReachExtent =
-            peakReachExtent === null ? reachExtent : Math.max(peakReachExtent, reachExtent);
+      if (movementTrackingEnabled) {
+        if (!trackingUsable) {
+          consecutiveUnusableFrames += 1;
+          if (consecutiveUnusableFrames >= FUNCTIONAL_REACH_TRACKING_LOSS_RESET_TICKS) {
+            recalibrateAfterTrackingLoss();
+            movementTrackingEnabled = true;
+          }
+        } else {
+          consecutiveUnusableFrames = 0;
+          if (!baselineStarted) {
+            counter.startBaselineWindow(nowMs);
+            baselineStarted = true;
+          }
+          const torsoSpan = computeTorsoSpan(landmarks as PoseLandmark[]);
           counter.driveFrame(reachExtent, nowMs, torsoSpan);
+          const liveSnapshot = counter.getSnapshot();
+          if (liveSnapshot.baselineReachExtent !== null) {
+            minReachExtent =
+              minReachExtent === null ? reachExtent : Math.min(minReachExtent, reachExtent);
+            peakReachExtent = computeReachDisplacementFromBaseline(
+              liveSnapshot.baselineReachExtent,
+              minReachExtent,
+            );
+          }
         }
       }
 
@@ -425,7 +439,6 @@ export function createFunctionalReachProcessor(
 export function createPreviewPositionProcessor(side: RemoteUpperLimbBatterySide): BatteryTestProcessor {
   return {
     reset() {},
-    // Positioning preview only — it never measures, so arming is a no-op.
     beginMovementTracking() {},
     isMovementTrackingEnabled: () => false,
     processFrame(landmarks) {
