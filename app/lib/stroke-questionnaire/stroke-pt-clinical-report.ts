@@ -69,12 +69,6 @@ function rawText(response: StrokeResponse): string {
     : response.rawValue;
 }
 
-function sourcePrefix(response: StrokeResponse): string {
-  return response.provenance === "CAREGIVER_REPORTED"
-    ? "The caregiver reports"
-    : "The patient reports";
-}
-
 function compactTopicLabel(id: string): string {
   const question = strokeQuestionById(id);
   const en = question?.en ?? "";
@@ -114,7 +108,9 @@ function compactResponseText(id: string, response: StrokeResponse): string {
     return `${compactTopicLabel(id)}: ${formatStrokeResponseValue(id, response)} (${who}).`;
   }
   if (response.clinicalEnglish?.trim()) return response.clinicalEnglish.trim();
-  if (response.rawLanguage === "en") return `${sourcePrefix(response)} ${raw}`;
+  if (response.rawLanguage === "en") {
+    return `${compactTopicLabel(id)}: ${raw} (${who}).`;
+  }
   return "";
 }
 
@@ -241,11 +237,7 @@ export function buildStrokePtClinicalReport(
     (id) =>
       id === "sfp_sensation_change" ||
       id === "sfp_left_side_inattention_reported" ||
-      id === "sfp_other_symptoms" ||
-      id === "ul_stiffness_tightness" ||
-      id === "ul_movement_control" ||
-      id === "ul_movement_accuracy" ||
-      id === "ul_unintended_movement",
+      id === "sfp_other_symptoms",
   );
   const fatiguePain = linesFor(
     submission,
@@ -253,9 +245,7 @@ export function buildStrokePtClinicalReport(
       id === "sfp_fatigue_impact" ||
       id === "sfp_fatigue_details" ||
       id === "sfp_pain_present" ||
-      id === "sfp_pain_location_description" ||
-      id === "ul_pain" ||
-      id === "ul_swelling_sensitivity",
+      id === "sfp_pain_location_description",
   );
   const adl = linesFor(submission, (id) => id.startsWith("adl_"));
   const support = linesFor(submission, (id) => id.startsWith("support_"));
@@ -306,14 +296,18 @@ export function buildStrokePtClinicalReport(
     generationMethod: "structured_fallback",
     sections: [
       section("encounter_information_source", [informationSource]),
-      section("stroke_rehabilitation_context", context),
+      section("stroke_rehabilitation_context", [], context),
       section("patient_reported_motor_presentation", [
-        upperLimb.length
-          ? "The intake describes patient- or caregiver-reported upper-limb functional difficulty; objective motor findings have not been established."
-          : "",
-        transfers.length || gait.length
-          ? "The intake includes patient- or caregiver-reported mobility information that requires therapist review and objective assessment."
-          : "",
+        [
+          upperLimb.length
+            ? "The intake describes patient- or caregiver-reported upper-limb functional difficulty; objective motor findings have not been established."
+            : "",
+          transfers.length || gait.length
+            ? "The intake includes patient- or caregiver-reported mobility information that requires therapist review and objective assessment."
+            : "",
+        ]
+          .filter(Boolean)
+          .join(" "),
       ].filter(Boolean)),
       section("upper_limb_hand_function", [], upperLimb),
       section(
@@ -322,10 +316,7 @@ export function buildStrokePtClinicalReport(
         [...transfers, ...gait],
       ),
       section("sensation_fatigue_pain", [], [...sensation, ...fatiguePain]),
-      section("safety_considerations", [
-        ...safety,
-        ...linesFor(submission, (id) => id.startsWith("sg_")),
-      ]),
+      section("safety_considerations", safety, linesFor(submission, (id) => id.startsWith("sg_"))),
       section("functional_priorities", [], [...goals, ...adl, ...support]),
       section(
         "suggested_objective_assessment",

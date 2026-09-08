@@ -1376,7 +1376,7 @@ export function AssessmentReportClient() {
           languageLabel={strokeSubmission.assessmentLanguage === "ar" ? "Arabic" : "English"}
           hasRiskFlags={strokeSubmission.safetyState !== "PASS"}
         />
-        <div className="print-report-body mx-auto max-w-4xl space-y-6 px-6 py-8">
+        <div className="print-report-body mx-auto max-w-4xl space-y-6 px-6 py-8 print:space-y-2">
           <div className="print:hidden">
             <StrokeQuestionnaireClinicianPanel
               assessmentId={assessmentId}
@@ -1387,23 +1387,23 @@ export function AssessmentReportClient() {
               }}
             />
           </div>
-          <header className="hidden border-b border-gray-300 pb-5 print:block">
+          <header className="hidden border-b border-gray-300 pb-2 print:block">
             <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">
               RASQ Clinical Assessment Report
             </p>
-            <h1 className="mt-2 text-2xl font-bold text-gray-950">
+            <h1 className="mt-1 text-xl font-bold text-gray-950">
               {patient?.full_name ?? "Patient"}
             </h1>
-            <p className="mt-1 text-sm text-gray-600">
+            <p className="mt-0.5 text-sm text-gray-600">
               Remote Neurorehabilitation Intake · {reportDate.slice(0, 10)}
             </p>
-            <p className="mt-3 text-xs text-gray-600">
+            <p className="mt-1 text-xs text-gray-600">
               Patient- and/or caregiver-reported clinical decision-support information
               for physiotherapist review.
             </p>
           </header>
           {strokeReport ? (
-            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 print:border-0 print:bg-white print:text-gray-900">
+            <section className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 print:border-0 print:bg-white print:p-0 print:text-gray-900">
               <StrokeReportDisplay report={strokeReport} />
             </section>
           ) : (

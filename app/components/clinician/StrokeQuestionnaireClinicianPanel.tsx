@@ -368,7 +368,20 @@ export function StrokeReportDisplay({
     section: StrokePtClinicalReport["sections"][number],
     index: number,
     compact = true,
+    twoColumnPrint = false,
   ) {
+    const paragraphClass = compact
+      ? "mt-0.5 text-[13px] leading-snug text-white/80 print:text-[10pt] print:leading-snug print:text-gray-900"
+      : "mt-1 text-sm leading-relaxed text-white/80 print:text-gray-900";
+    const listClass = compact
+      ? `mt-0.5 list-outside list-disc space-y-0 pl-4 text-[13px] leading-snug text-white/80 print:text-[10pt] print:leading-snug print:text-gray-900${
+          twoColumnPrint ? " print:columns-2 print:gap-x-6" : ""
+        }`
+      : "mt-1 list-inside list-disc text-sm text-white/80 print:text-gray-900";
+    const inputClass = compact
+      ? "mt-0.5 w-full rounded-md border border-[#1E2D42] bg-[#07111E] px-2 py-1 text-[13px] leading-snug text-white/80 print:text-gray-900"
+      : "mt-1 w-full rounded-md border border-[#1E2D42] bg-[#07111E] px-2 py-1.5 text-sm text-white/80 print:text-gray-900";
+
     return (
       <>
         {section.paragraphs.map((paragraph, paragraphIndex) => (
@@ -381,12 +394,12 @@ export function StrokeReportDisplay({
                 updateSection(index, "paragraphs", paragraphIndex, event.target.value)
               }
               rows={2}
-              className="mt-1 w-full rounded-md border border-[#1E2D42] bg-[#07111E] px-2 py-1.5 text-sm text-white/80 print:text-gray-900"
+              className={inputClass}
             />
           ) : (
             <p
               key={`${section.id}-paragraph-${paragraphIndex}`}
-              className="mt-1 text-sm leading-relaxed text-white/80 print:text-gray-900"
+              className={paragraphClass}
             >
               {compact ? compactDisplayedStrokeLine(paragraph) : paragraph}
             </p>
@@ -394,7 +407,7 @@ export function StrokeReportDisplay({
         ))}
         {section.bullets.length > 0 ? (
           editable ? (
-            <div className="mt-1 space-y-1">
+            <div className="mt-0.5 space-y-1">
               {section.bullets.map((bullet, bulletIndex) => (
                 <textarea
                   key={`${section.id}-bullet-${bulletIndex}`}
@@ -404,21 +417,21 @@ export function StrokeReportDisplay({
                     updateSection(index, "bullets", bulletIndex, event.target.value)
                   }
                   rows={2}
-                  className="w-full rounded-md border border-[#1E2D42] bg-[#07111E] px-2 py-1.5 text-sm text-white/80 print:text-gray-900"
+                  className={inputClass}
                 />
               ))}
             </div>
           ) : (
-            <ul className="mt-1 list-inside list-disc text-sm text-white/80 print:text-gray-900">
+            <ul className={listClass}>
               {section.bullets.map((bullet) => (
-                <li key={bullet}>
+                <li key={bullet} className={compact ? "break-inside-avoid print:break-inside-avoid" : undefined}>
                   {compact ? compactDisplayedStrokeLine(bullet) : bullet}
                 </li>
               ))}
             </ul>
           )
         ) : section.id === "objective_examination" ? (
-          <p className="mt-1 text-sm italic text-white/35 print:text-gray-600">
+          <p className="mt-0.5 text-[13px] italic leading-snug text-white/35 print:text-[10pt] print:text-gray-600">
             No clinician-observed or objectively measured examination data recorded.
           </p>
         ) : null}
@@ -439,34 +452,43 @@ export function StrokeReportDisplay({
     </section>
   ) : null;
 
+  const visibleMainSections = mainSections.filter((section) => {
+    if (section.id === "objective_examination" || section.id === "clinical_disclaimer") {
+      return true;
+    }
+    return section.paragraphs.length > 0 || section.bullets.length > 0;
+  });
+
   return (
-    <div className="border-t border-[#1E2D42] pt-4 print:border-0 print:pt-0">
-      <h3 className="font-bold text-white print:text-gray-950">{report.title}</h3>
-      <p className="mt-1 text-xs text-white/45 print:text-gray-600">{report.disclaimer}</p>
-      <p className="mt-1 text-xs text-[#5DCAA5] print:text-gray-700">{report.lifecycleNote}</p>
-      <div className="mt-4 space-y-4">
-        {mainSections.map((section) => {
+    <div className="border-t border-[#1E2D42] pt-3 print:border-0 print:pt-0">
+      <h3 className="text-base font-bold text-white print:text-[13pt] print:text-gray-950">{report.title}</h3>
+      <div className="stroke-pt-main mt-2 space-y-2 print:mt-1.5 print:space-y-1.5">
+        {visibleMainSections.map((section) => {
           const index = report.sections.findIndex((item) => item.id === section.id);
+          const denseFacts =
+            section.id === "upper_limb_hand_function" ||
+            section.id === "mobility_transfers_balance_falls" ||
+            section.id === "sensation_fatigue_pain";
           return (
-            <section key={section.id} className="break-inside-avoid">
-              <h4 className="text-[10px] font-bold uppercase tracking-wider text-white/40 print:text-gray-500">
+            <section key={section.id} className={denseFacts ? "" : "print:break-inside-avoid"}>
+              <h4 className="text-[10px] font-bold uppercase tracking-wider text-white/40 print:mb-0.5 print:text-[8.5pt] print:text-gray-500">
                 {section.title}
               </h4>
-              {renderSectionBody(section, index)}
+              {renderSectionBody(section, index, true, denseFacts)}
             </section>
           );
         })}
-        {appendixBody && collapseAppendix ? (
-          <details className="rounded-lg border border-[#1E2D42] px-3 py-2 print:border-0 print:p-0">
-            <summary className="cursor-pointer text-sm font-bold text-white print:hidden">
-              {appendixSection?.title}
-            </summary>
-            <div className="mt-3 print:mt-0">{appendixBody}</div>
-          </details>
-        ) : (
-          appendixBody
-        )}
       </div>
+      {appendixBody && collapseAppendix ? (
+        <details className="mt-3 rounded-lg border border-[#1E2D42] px-3 py-2 print:mt-0 print:border-0 print:p-0">
+          <summary className="cursor-pointer text-sm font-bold text-white print:hidden">
+            {appendixSection?.title}
+          </summary>
+          <div className="mt-3 print:mt-0">{appendixBody}</div>
+        </details>
+      ) : (
+        appendixBody
+      )}
     </div>
   );
 }

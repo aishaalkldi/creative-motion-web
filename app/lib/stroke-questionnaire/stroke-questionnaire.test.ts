@@ -370,10 +370,11 @@ describe("Stroke report provenance and diagnostic safety", () => {
         ),
       }),
     );
+    const context = report.sections.find(
+      (section) => section.id === "stroke_rehabilitation_context",
+    );
     assert.match(
-      report.sections
-        .find((section) => section.id === "stroke_rehabilitation_context")
-        ?.paragraphs.join(" ") ?? "",
+      [...(context?.paragraphs ?? []), ...(context?.bullets ?? [])].join(" "),
       /caregiver reports/i,
     );
   });
@@ -442,6 +443,73 @@ describe("Stroke report provenance and diagnostic safety", () => {
       /How is reaching forward with the affected arm or hand/i,
     );
     assert.match(appendix?.bullets.join(" ") ?? "", /patient reported/i);
+  });
+
+  it("preserves every source response in the appendix without repeating facts in the main report", () => {
+    const source: StrokeQuestionnaireSubmission = {
+      ...realisticFullSubmission("en"),
+      strokeWorkflow: {
+        translation: { status: "approved" },
+        report: { status: "not_generated" },
+      },
+    };
+    const report = buildStrokePtClinicalReport(source);
+    const appendixText =
+      report.sections
+        .find((section) => section.id === "full_patient_reported_responses")
+        ?.bullets.join("\n") ?? "";
+    for (const [id, item] of Object.entries(source.responses)) {
+      const question = STROKE_QUESTIONS.find((entry) => entry.id === id);
+      if (!question || question.navigationOnly) continue;
+      const raw = Array.isArray(item.rawValue)
+        ? item.rawValue.join(", ")
+        : item.rawValue;
+      if (!raw.trim()) continue;
+      assert.match(
+        appendixText,
+        new RegExp(question.en.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")),
+      );
+    }
+    const focused = buildStrokePtClinicalReport(
+      submission({
+        ul_stiffness_tightness: {
+          rawValue: "yes",
+          rawLanguage: "en",
+          responseMethod: "selection",
+          provenance: "PATIENT_REPORTED",
+          reporterRole: "patient",
+        },
+        ul_pain: {
+          rawValue: "yes",
+          rawLanguage: "en",
+          responseMethod: "selection",
+          provenance: "PATIENT_REPORTED",
+          reporterRole: "patient",
+        },
+        sfp_pain_present: {
+          rawValue: "yes",
+          rawLanguage: "en",
+          responseMethod: "selection",
+          provenance: "PATIENT_REPORTED",
+          reporterRole: "patient",
+        },
+      }),
+    );
+    assert.match(
+      focused.sections.find((section) => section.id === "upper_limb_hand_function")
+        ?.bullets.join(" ") ?? "",
+      /stiffness/i,
+    );
+    assert.doesNotMatch(
+      focused.sections.find((section) => section.id === "sensation_fatigue_pain")
+        ?.bullets.join(" ") ?? "",
+      /stiffness/i,
+    );
+    assert.match(
+      focused.sections.find((section) => section.id === "sensation_fatigue_pain")
+        ?.bullets.join(" ") ?? "",
+      /pain currently affecting/i,
+    );
   });
 });
 
