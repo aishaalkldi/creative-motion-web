@@ -83,7 +83,9 @@ import type { PatientProgressSummary, PatientTimelineBundle } from "../../../api
 import { buildPatientTimeline } from "../../../lib/clinician/patient-timeline";
 import {
   buildRemoteQuestionnaireSummary,
+  type RemoteQuestionnaireSummary,
 } from "../../../lib/remote-questionnaire-summary";
+import { PatientClinicalTranslationDisplay } from "@/app/components/reports/PatientClinicalTranslationDisplay";
 import { displayPatientFileHeader } from "../../../lib/patient-file-number";
 import { resolveCurrentAndPreviousPlans } from "../../../lib/clinician/resolve-current-plan";
 import { PreviousPlansSummary } from "../../../components/clinician/PreviousPlansSummary";
@@ -518,6 +520,11 @@ export default function PatientProfilePage() {
     }
     return null;
   }, [clinicalSummaryRow]);
+
+  const remoteQuestionnaireSummary: RemoteQuestionnaireSummary | null =
+    clinicalSummaryRow?.type === "remote_questionnaire" && clinicalSummary
+      ? (clinicalSummary as RemoteQuestionnaireSummary)
+      : null;
 
   const clinicalFocusLabels = useMemo(() => {
     if (!clinicalSummaryRow) return null;
@@ -1206,9 +1213,22 @@ export default function PatientProfilePage() {
                       </div>
                     )}
 
+                    {remoteQuestionnaireSummary?.clinicalTranslationWarning ? (
+                      <div className="mt-4 rounded-[7px] border border-amber-300/25 bg-amber-400/10 px-3 py-2.5">
+                        <p className="text-xs leading-relaxed text-amber-100/90">
+                          {remoteQuestionnaireSummary.clinicalTranslationWarning}
+                        </p>
+                      </div>
+                    ) : null}
+
                     {clinicalSummary.metrics.length > 0 && (
                       <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                        {clinicalSummary.metrics.map((metric) => (
+                        {clinicalSummary.metrics.map((metric) => {
+                          const bilingualMetric =
+                            remoteQuestionnaireSummary?.metrics.find(
+                              (candidate) => candidate.label === metric.label,
+                            ) ?? null;
+                          return (
                           <div
                             key={metric.label}
                             className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3 py-2.5"
@@ -1216,32 +1236,73 @@ export default function PatientProfilePage() {
                             <p className="text-[10px] font-bold uppercase tracking-wider text-white/35">
                               {metric.label}
                             </p>
-                            <p
-                              dir={valueTextDirection(metric.value)}
-                              className="mt-1 text-sm font-semibold text-white"
-                            >
-                              {metric.value}
-                            </p>
+                            {bilingualMetric?.originalValue &&
+                            bilingualMetric.originalValue !== bilingualMetric.value ? (
+                              <div className="mt-1">
+                                <PatientClinicalTranslationDisplay
+                                  originalText={bilingualMetric.originalValue}
+                                  clinicalEnglish={
+                                    bilingualMetric.clinicalEnglish ?? bilingualMetric.value
+                                  }
+                                  variant="screen"
+                                />
+                              </div>
+                            ) : (
+                              <p
+                                dir={valueTextDirection(metric.value)}
+                                className="mt-1 text-sm font-semibold text-white"
+                              >
+                                {metric.value}
+                              </p>
+                            )}
+                            {bilingualMetric?.translationMissing ? (
+                              <p className="mt-2 text-[10px] italic text-amber-200/90">
+                                Clinical English translation unavailable — therapist review required.
+                              </p>
+                            ) : null}
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
 
                     {clinicalSummary.rows.length > 0 && (
                       <dl className="mt-4 divide-y divide-[#1E2D42] rounded-[7px] border border-[#1E2D42]">
-                        {clinicalSummary.rows.map((row) => (
+                        {clinicalSummary.rows.map((row) => {
+                          const bilingualRow =
+                            remoteQuestionnaireSummary?.rows.find(
+                              (candidate) => candidate.label === row.label,
+                            ) ?? null;
+                          return (
                           <div key={row.label} className="px-3 py-2.5">
                             <dt className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
                               {row.label}
                             </dt>
-                            <dd
-                              dir={valueTextDirection(row.value)}
-                              className="mt-0.5 text-sm leading-relaxed text-white/80 whitespace-pre-wrap"
-                            >
-                              {row.value}
+                            <dd className="mt-0.5">
+                              {bilingualRow?.originalValue &&
+                              bilingualRow.originalValue !== bilingualRow.value ? (
+                                <PatientClinicalTranslationDisplay
+                                  originalText={bilingualRow.originalValue}
+                                  clinicalEnglish={bilingualRow.clinicalEnglish ?? bilingualRow.value}
+                                  variant="screen"
+                                />
+                              ) : (
+                                <p
+                                  dir={valueTextDirection(row.value)}
+                                  className="text-sm leading-relaxed text-white/80 whitespace-pre-wrap"
+                                >
+                                  {row.value}
+                                </p>
+                              )}
+                              {bilingualRow?.translationMissing ? (
+                                <p className="mt-2 text-[10px] italic text-amber-200/90">
+                                  Clinical English translation unavailable — therapist review required.
+                                </p>
+                              ) : null}
                             </dd>
                           </div>
-                        ))}
+                          );
+                        })}
                       </dl>
                     )}
 
