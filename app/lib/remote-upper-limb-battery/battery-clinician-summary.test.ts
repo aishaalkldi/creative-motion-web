@@ -76,8 +76,8 @@ describe("remote upper-limb battery clinician summary", () => {
     assert.match(summary.rows[0]?.observation ?? "", /80°/);
     assert.match(summary.rows[0]?.metricConvention ?? "", /hip–shoulder–elbow/);
     assert.match(summary.rows[2]?.metricConvention ?? "", /interior elbow angle/);
-    assert.match(summary.rows[3]?.observation ?? "", /0\.080/);
-    assert.match(summary.rows[3]?.metricConvention ?? "", /normalized units/);
+    assert.match(summary.rows[3]?.observation ?? "", /Normalized reach displacement: 0\.080/);
+    assert.match(summary.rows[3]?.metricConvention ?? "", /normalized camera units/);
     assert.equal(summary.disclaimer.includes("not a diagnosis"), true);
     assert.equal(JSON.stringify(summary).includes("score"), false);
   });

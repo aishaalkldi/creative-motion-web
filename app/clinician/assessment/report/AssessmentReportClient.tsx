@@ -1513,7 +1513,7 @@ export function AssessmentReportClient() {
     const backHref = patientId ? `/clinician/patients/${patientId}` : "/clinician/patients";
     return (
       <main className="assessment-report-root print-report min-h-screen bg-[#0B1220] text-white">
-        <ReportExportToolbar backHref={backHref} />
+        <ReportExportToolbar backHref={backHref} backLabel="Back to Patient Profile" />
         <ReportScreenHeader
           patientName={patient?.full_name ?? "Patient"}
           displayDate={reportDate}
@@ -1521,7 +1521,7 @@ export function AssessmentReportClient() {
           sourceLabel="Camera-derived · remote"
         />
         <div className="print-report-body mx-auto max-w-4xl px-6 py-8 space-y-6">
-          <RemoteUpperLimbBatteryReportView summary={batterySummary} />
+          <RemoteUpperLimbBatteryReportView summary={batterySummary} profileHref={backHref} />
           <ClinicalDisclaimerBlock />
         </div>
       </main>
