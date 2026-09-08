@@ -11,6 +11,8 @@ import {
 import type { SavedAssessment } from "../../../lib/mock-clinical-data";
 import type { AssessmentListRow, AssessmentRow } from "../../../api/assessments/route";
 import { pickPreferredAssessment } from "../../../lib/assessment-snapshot";
+import { RemoteUpperLimbBatteryResultsCard } from "../../../components/clinician/RemoteUpperLimbBatteryResultsCard";
+import { buildRemoteUpperLimbBatteryClinicianSummaryFromStructuredData } from "../../../lib/remote-upper-limb-battery/battery-clinician-summary";
 import {
   FOCUS_AREA_LABEL,
   FOCUS_CATEGORY_LABEL,
@@ -145,6 +147,7 @@ export default function PatientProfilePage() {
   const [rasqAssessments, setRasqAssessments] = useState<SavedAssessment[]>([]);
   const [supabaseAssessmentRows, setSupabaseAssessmentRows] = useState<AssessmentListRow[]>([]);
   const [clinicalSummaryDetail, setClinicalSummaryDetail] = useState<AssessmentRow | null>(null);
+  const [ulmsBatteryDetail, setUlmsBatteryDetail] = useState<AssessmentRow | null>(null);
 
   // Assessment-saved banner (shown when redirected from /clinician/assessment/new)
   const [showAssessmentBanner, setShowAssessmentBanner] = useState(
@@ -374,7 +377,9 @@ export default function PatientProfilePage() {
             ? "Remote Questionnaire Assessment"
             : r.type === "general_msk"
               ? "General MSK Assessment"
-              : r.type,
+              : r.type === "upper_limb_motor_screen"
+                ? "Remote Upper-Limb Battery"
+                : r.type,
         date: r.created_at.split("T")[0] ?? "",
         pain: 0,
         rom: 0,
@@ -390,15 +395,34 @@ export default function PatientProfilePage() {
       const preferred = pickPreferredAssessment(rows);
       if (!preferred) {
         setClinicalSummaryDetail(null);
+        setUlmsBatteryDetail(null);
         return;
       }
 
+      let preferredDetail: AssessmentRow | null = null;
       const detailRes = await fetch(`/api/assessments/${encodeURIComponent(preferred.id)}`);
-      if (!detailRes.ok) {
+      if (detailRes.ok) {
+        preferredDetail = (await detailRes.json()) as AssessmentRow;
+        setClinicalSummaryDetail(preferredDetail);
+      } else {
         setClinicalSummaryDetail(null);
+      }
+
+      const ulmsRow = rows.find((row) => row.type === "upper_limb_motor_screen");
+      if (!ulmsRow) {
+        setUlmsBatteryDetail(null);
         return;
       }
-      setClinicalSummaryDetail((await detailRes.json()) as AssessmentRow);
+      if (preferred.id === ulmsRow.id) {
+        setUlmsBatteryDetail(preferredDetail);
+        return;
+      }
+      const ulmsDetailRes = await fetch(`/api/assessments/${encodeURIComponent(ulmsRow.id)}`);
+      if (!ulmsDetailRes.ok) {
+        setUlmsBatteryDetail(null);
+        return;
+      }
+      setUlmsBatteryDetail((await ulmsDetailRes.json()) as AssessmentRow);
     } catch {
       /* silently ignore — empty state shown */
     }
@@ -521,6 +545,15 @@ export default function PatientProfilePage() {
     return null;
   }, [clinicalSummaryRow]);
 
+  const ulmsBatterySummary = useMemo(
+    () =>
+      buildRemoteUpperLimbBatteryClinicianSummaryFromStructuredData(
+        ulmsBatteryDetail?.structured_data,
+        ulmsBatteryDetail?.created_at,
+      ),
+    [ulmsBatteryDetail],
+  );
+
   const remoteQuestionnaireSummary: RemoteQuestionnaireSummary | null =
     clinicalSummaryRow?.type === "remote_questionnaire" && clinicalSummary
       ? (clinicalSummary as RemoteQuestionnaireSummary)
@@ -528,6 +561,7 @@ export default function PatientProfilePage() {
 
   const clinicalFocusLabels = useMemo(() => {
     if (!clinicalSummaryRow) return null;
+    if (clinicalSummaryRow.type === "upper_limb_motor_screen") return null;
     return deriveClinicalFocusLabels(
       clinicalSummaryRow.type,
       clinicalSummaryRow.structured_data,
@@ -722,13 +756,18 @@ export default function PatientProfilePage() {
 
   const submittedRemote = remoteAssessments.filter((r) => r.status === "submitted");
   const pendingRemote   = remoteAssessments.filter((r) => r.status === "pending" || r.status === "in_progress");
-  const clinicalSummaryAssessmentId = clinicalSummaryRow?.id ?? null;
+  const clinicalSummaryAssessmentId =
+    clinicalSummaryRow && clinicalSummaryRow.type !== "upper_limb_motor_screen"
+      ? clinicalSummaryRow.id
+      : null;
   const primaryReportHref = clinicalSummaryAssessmentId
     ? `/clinician/assessment/report?patientId=${patient.id}&assessmentId=${clinicalSummaryAssessmentId}`
     : `/clinician/assessment/report?patientId=${patient.id}`;
   const overviewLatestAssessment = clinicalSummary
     ? `${clinicalSummary.title} · ${new Date(clinicalSummary.submittedAt).toLocaleDateString()}`
-    : "—";
+    : ulmsBatterySummary
+      ? `${ulmsBatterySummary.title} · ${new Date(ulmsBatterySummary.submittedAt).toLocaleDateString()}`
+      : "—";
   const overviewCurrentPlan = treatmentPlan?.programName ?? "—";
   const overviewProgressSnapshot = planProgress
     ? `${planProgress.sessionsCompleted}/${planProgress.totalSessions} sessions · ${planProgress.progressPct}%`
@@ -1087,6 +1126,13 @@ export default function PatientProfilePage() {
               </div>
             )}
 
+            {ulmsBatterySummary && ulmsBatteryDetail ? (
+              <RemoteUpperLimbBatteryResultsCard
+                summary={ulmsBatterySummary}
+                reportHref={`/clinician/assessment/report?patientId=${encodeURIComponent(patient.id)}&assessmentId=${encodeURIComponent(ulmsBatteryDetail.id)}`}
+              />
+            ) : null}
+
             {/* Clinical Assessment Summary */}
             <section id="clinical-assessment-summary" className="rounded-[10px] border border-[#1E2D42] bg-[#0F1825] p-6 scroll-mt-6">
               <h2 className="text-lg font-bold text-white">Clinical Assessment Summary</h2>
@@ -1317,6 +1363,12 @@ export default function PatientProfilePage() {
                     </Link>
                   )}
 
+                </div>
+              ) : ulmsBatterySummary ? (
+                <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4">
+                  <p className="text-sm leading-relaxed text-white/50">
+                    Remote Upper-Limb Battery results are shown above. Other clinical assessments will appear here when submitted.
+                  </p>
                 </div>
               ) : (
                 <div className="rounded-[8px] border border-[#1E2D42] bg-[#0B1220] px-4 py-4">

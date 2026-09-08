@@ -100,6 +100,10 @@ import {
 import { resolveProgramOptionsForFocus } from "@/app/lib/program-direction-options";
 import { buildAssessmentInterpretationDraft } from "@/app/lib/reports/assessment-interpretation-draft";
 import { resolveAssessmentReportFromDetail } from "@/app/lib/reports/assessment-report-resolver";
+import type { AssessmentReportKind } from "@/app/lib/reports/assessment-report-resolver";
+import type { RemoteUpperLimbBatteryPayload } from "@/app/lib/remote-upper-limb-battery/types";
+import { buildRemoteUpperLimbBatteryClinicianSummary } from "@/app/lib/remote-upper-limb-battery/battery-clinician-summary";
+import { RemoteUpperLimbBatteryReportView } from "@/app/components/clinician/RemoteUpperLimbBatteryReportView";
 
 // ── Constants & labels ─────────────────────────────────────────────────────────
 
@@ -1021,10 +1025,11 @@ export function AssessmentReportClient() {
 
   const [draft, setDraft] = useState<GeneralAssessmentDraft | null>(null);
   const [structuredData, setStructuredData] = useState<AssessmentData | null>(null);
+  const [remoteUpperLimbBattery, setRemoteUpperLimbBattery] = useState<RemoteUpperLimbBatteryPayload | null>(null);
   const [remoteQuestionnaireDraft, setRemoteQuestionnaireDraft] = useState<PatientAssessmentDraft | null>(null);
   const [remoteSubmissionMeta, setRemoteSubmissionMeta] = useState<Record<string, unknown> | null>(null);
   const [remoteIncludedSections, setRemoteIncludedSections] = useState<PatientSectionId[]>([]);
-  const [reportKind, setReportKind] = useState<"general_msk" | "structured" | "remote_questionnaire" | null>(null);
+  const [reportKind, setReportKind] = useState<AssessmentReportKind | null>(null);
   const [serverBacked, setServerBacked] = useState(false);
   const [resolvedPatientId, setResolvedPatientId] = useState(patientIdParam);
   const [serverNotes, setServerNotes] = useState<string | null>(null);
@@ -1135,6 +1140,7 @@ export function AssessmentReportClient() {
       setLoading(true);
       setLoadError("");
       setStructuredData(null);
+      setRemoteUpperLimbBattery(null);
       setRemoteQuestionnaireDraft(null);
       setRemoteSubmissionMeta(null);
       setRemoteIncludedSections([]);
@@ -1164,6 +1170,7 @@ export function AssessmentReportClient() {
           setRemoteSubmissionMeta(resolved.remoteSubmissionMeta);
           setRemoteIncludedSections(resolved.remoteIncludedSections);
           setStructuredData(resolved.structuredData);
+          setRemoteUpperLimbBattery(resolved.remoteUpperLimbBattery);
           setReportKind(resolved.kind);
           if (resolved.loadError) {
             setLoadError(resolved.loadError);
@@ -1493,6 +1500,29 @@ export function AssessmentReportClient() {
         />
         <ReportNextStepsFooter patientId={patientId} existingPlan={existingPlan} />
         <ClinicalDisclaimerBlock />
+        </div>
+      </main>
+    );
+  }
+
+  if (reportKind === "upper_limb_motor_screen" && remoteUpperLimbBattery) {
+    const batterySummary = buildRemoteUpperLimbBatteryClinicianSummary({
+      payload: remoteUpperLimbBattery,
+      submittedAt: reportDate,
+    });
+    const backHref = patientId ? `/clinician/patients/${patientId}` : "/clinician/patients";
+    return (
+      <main className="assessment-report-root print-report min-h-screen bg-[#0B1220] text-white">
+        <ReportExportToolbar backHref={backHref} />
+        <ReportScreenHeader
+          patientName={patient?.full_name ?? "Patient"}
+          displayDate={reportDate}
+          assessmentTypeLabel="Remote Upper-Limb Battery"
+          sourceLabel="Camera-derived · remote"
+        />
+        <div className="print-report-body mx-auto max-w-4xl px-6 py-8 space-y-6">
+          <RemoteUpperLimbBatteryReportView summary={batterySummary} />
+          <ClinicalDisclaimerBlock />
         </div>
       </main>
     );
