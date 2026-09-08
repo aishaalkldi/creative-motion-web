@@ -61,8 +61,8 @@ describe("Forward Reach assignment client", () => {
     assert.match(pageSource, /ForwardReachAssignmentClient/);
     assert.match(pageSource, /key=\{patient\.id\}/);
     const profileSource = readFileSync(join(ROOT, "app/clinician/patients/[id]/page.tsx"), "utf8");
-    assert.match(profileSource, /forwardReachAssignmentPatientRoute/);
-    assert.match(profileSource, /Forward Reach assignment/);
+    assert.equal(profileSource.includes("Forward Reach assignment"), false);
+    assert.equal(profileSource.includes("Assign Forward Reach Baseline"), false);
   });
 
   it("2. builds the exact allowlisted API payload expected by the assignment validator", () => {

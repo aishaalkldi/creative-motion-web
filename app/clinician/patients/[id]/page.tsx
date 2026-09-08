@@ -94,10 +94,8 @@ import { PreviousPlansSummary } from "../../../components/clinician/PreviousPlan
 import { DemoOfflineBanner } from "@/app/components/clinician/DemoOfflineBanner";
 import { extractDemoMeta } from "@/app/lib/api/demo-fallback-client";
 import {
-  isUuidPatientId,
   parseNumericDemoPatientId,
 } from "@/app/lib/api/patient-id-utils";
-import { forwardReachAssignmentPatientRoute } from "@/app/lib/upper-limb-motor-screen/forward-reach-assignment-client";
 
 export default function PatientProfilePage() {
   const params = useParams();
@@ -791,9 +789,6 @@ export default function PatientProfilePage() {
     Boolean(treatmentPlan) && adherenceTotalSessions > 0;
   const hasAnyAssessment =
     supabaseAssessmentRows.length > 0 || submittedRemote.length > 0 || backendAssessmentHistory.length > 0;
-  const forwardReachAssignmentHref = isUuidPatientId(patient.id)
-    ? forwardReachAssignmentPatientRoute(patient.id)
-    : null;
 
   return (
     <>
@@ -880,14 +875,6 @@ export default function PatientProfilePage() {
             >
               + New Assessment
             </Link>
-            {forwardReachAssignmentHref ? (
-              <Link
-                href={forwardReachAssignmentHref}
-                className="rounded-[7px] border border-[#1D9E75]/25 bg-[#1D9E75]/10 px-4 py-2.5 text-sm font-semibold text-[#5DCAA5] transition hover:bg-[#1D9E75]/15"
-              >
-                Forward Reach assignment
-              </Link>
-            ) : null}
             <button
               type="button"
               onClick={() => { setEditForm(patient); setEditOpen((o) => !o); setSaveError(""); }}
@@ -1057,14 +1044,6 @@ export default function PatientProfilePage() {
                 >
                   Send Remote Assessment
                 </button>
-                {forwardReachAssignmentHref ? (
-                  <Link
-                    href={forwardReachAssignmentHref}
-                    className="rounded-[7px] border border-[#1E2D42] bg-[#0B1220] px-3.5 py-2 text-xs font-semibold text-white/50 transition hover:border-[#1D9E75]/20 hover:text-white"
-                  >
-                    Forward Reach assignment
-                  </Link>
-                ) : null}
                 <button
                   type="button"
                   onClick={handleCopyLatestLink}
@@ -1389,14 +1368,6 @@ export default function PatientProfilePage() {
                     >
                       Document in clinic
                     </Link>
-                    {forwardReachAssignmentHref ? (
-                      <Link
-                        href={forwardReachAssignmentHref}
-                        className="rounded-[7px] border border-[#1E2D42] bg-[#0F1825] px-3.5 py-2 text-xs font-semibold text-white/60 transition hover:text-white"
-                      >
-                        Assign Forward Reach Baseline
-                      </Link>
-                    ) : null}
                   </div>
                 </div>
               )}
