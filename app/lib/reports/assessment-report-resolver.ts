@@ -18,12 +18,17 @@ import {
 } from "@/app/lib/assessment-delivery/motion-input-registry";
 import { extractRemoteUpperLimbBatteryFromStructuredData } from "@/app/lib/remote-upper-limb-battery/extract-assessment-battery";
 import type { RemoteUpperLimbBatteryPayload } from "@/app/lib/remote-upper-limb-battery/types";
+import {
+  isStrokeQuestionnaireData,
+  type StrokeQuestionnaireSubmission,
+} from "@/app/lib/stroke-questionnaire/stroke-questionnaire-schema";
 
 export type AssessmentReportKind =
   | "general_msk"
   | "remote_questionnaire"
   | "structured"
-  | "upper_limb_motor_screen";
+  | "upper_limb_motor_screen"
+  | "stroke_questionnaire";
 
 export type ResolvedAssessmentReport = {
   kind: AssessmentReportKind | null;
@@ -31,6 +36,7 @@ export type ResolvedAssessmentReport = {
   remoteQuestionnaireDraft: PatientAssessmentDraft | null;
   remoteSubmissionMeta: Record<string, unknown> | null;
   remoteIncludedSections: PatientSectionId[];
+  strokeSubmission: StrokeQuestionnaireSubmission | null;
   structuredData: AssessmentData | null;
   remoteUpperLimbBattery: RemoteUpperLimbBatteryPayload | null;
   patient: BackendPatient | null;
@@ -52,6 +58,7 @@ export function resolveAssessmentReportFromDetail(
     remoteQuestionnaireDraft: null,
     remoteSubmissionMeta: null,
     remoteIncludedSections: [],
+    strokeSubmission: null,
     structuredData: null,
     remoteUpperLimbBattery: null,
     patient: {
@@ -70,6 +77,18 @@ export function resolveAssessmentReportFromDetail(
   const general = extractGeneralDraft(detail.structured_data, detail.type);
   if (general) {
     return { ...base, kind: "general_msk", draft: general };
+  }
+
+  const structuredUnknown = detail.structured_data as unknown;
+  if (
+    detail.type === "remote_questionnaire" &&
+    isStrokeQuestionnaireData(structuredUnknown)
+  ) {
+    return {
+      ...base,
+      kind: "stroke_questionnaire",
+      strokeSubmission: structuredUnknown,
+    };
   }
 
   const remoteDraft = extractRemoteQuestionnaireDraft(detail.structured_data, detail.type);

@@ -88,6 +88,7 @@ import {
   type RemoteQuestionnaireSummary,
 } from "../../../lib/remote-questionnaire-summary";
 import { PatientClinicalTranslationDisplay } from "@/app/components/reports/PatientClinicalTranslationDisplay";
+import { isStrokeClinicianData } from "@/app/components/clinician/StrokeQuestionnaireClinicianPanel";
 import { displayPatientFileHeader } from "../../../lib/patient-file-number";
 import { resolveCurrentAndPreviousPlans } from "../../../lib/clinician/resolve-current-plan";
 import { PreviousPlansSummary } from "../../../components/clinician/PreviousPlansSummary";
@@ -487,6 +488,34 @@ export default function PatientProfilePage() {
   const clinicalSummary = useMemo(() => {
     if (!clinicalSummaryRow) return null;
     if (clinicalSummaryRow.type === "remote_questionnaire") {
+      const strokePayload = clinicalSummaryRow.structured_data as unknown;
+      if (isStrokeClinicianData(strokePayload)) {
+        const source = strokePayload.responses.sc_information_source;
+        return {
+          title: "Remote Neurorehabilitation Intake",
+          submittedAt: clinicalSummaryRow.created_at,
+          metrics: [
+            { label: "Safety gate", value: strokePayload.safetyState },
+            {
+              label: "Clinical English",
+              value: strokePayload.strokeWorkflow.translation.status,
+            },
+          ],
+          rows: [
+            ...(source
+              ? [
+                  {
+                    label: "Information source",
+                    value: Array.isArray(source.rawValue)
+                      ? source.rawValue.join(", ")
+                      : source.rawValue,
+                  },
+                ]
+              : []),
+          ],
+          hasRedFlag: strokePayload.safetyState !== "PASS",
+        };
+      }
       return buildRemoteQuestionnaireSummary(
         clinicalSummaryRow.structured_data,
         clinicalSummaryRow.created_at,
@@ -553,13 +582,16 @@ export default function PatientProfilePage() {
   );
 
   const remoteQuestionnaireSummary: RemoteQuestionnaireSummary | null =
-    clinicalSummaryRow?.type === "remote_questionnaire" && clinicalSummary
+    clinicalSummaryRow?.type === "remote_questionnaire" &&
+    !isStrokeClinicianData(clinicalSummaryRow.structured_data as unknown) &&
+    clinicalSummary
       ? (clinicalSummary as RemoteQuestionnaireSummary)
       : null;
 
   const clinicalFocusLabels = useMemo(() => {
     if (!clinicalSummaryRow) return null;
     if (clinicalSummaryRow.type === "upper_limb_motor_screen") return null;
+    if (isStrokeClinicianData(clinicalSummaryRow.structured_data as unknown)) return null;
     return deriveClinicalFocusLabels(
       clinicalSummaryRow.type,
       clinicalSummaryRow.structured_data,
@@ -1707,6 +1739,14 @@ export default function PatientProfilePage() {
                               Copy Link
                             </button>
                           )}
+                          {isSubmitted && ra.assessmentId ? (
+                            <Link
+                              href={`/clinician/assessment/report?patientId=${encodeURIComponent(patient.id)}&assessmentId=${encodeURIComponent(ra.assessmentId)}`}
+                              className="flex-1 px-3 py-2.5 text-center text-[11px] font-semibold text-[#5DCAA5] transition hover:bg-[#0B1220]"
+                            >
+                              Review submission
+                            </Link>
+                          ) : null}
                         </div>
                       </div>
                     );
