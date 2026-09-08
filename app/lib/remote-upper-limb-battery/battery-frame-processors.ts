@@ -39,7 +39,7 @@ import {
   computeReachDisplacementFromBaseline,
   FUNCTIONAL_REACH_TRACKING_LOSS_RESET_TICKS,
 } from "./battery-reach-extent";
-import type { RemoteUpperLimbBatterySide } from "./types";
+import { getBatteryTestDefinition, type RemoteUpperLimbBatterySide } from "./types";
 
 export type BatteryTrackingQuality = "good" | "fair" | "poor" | "unknown";
 
@@ -70,6 +70,23 @@ export type BatteryTestProcessor = {
 };
 
 export type BatteryFunctionalReachProcessor = BatteryTestProcessor;
+
+/** Attempts Functional Reach needs before the test is finished — product contract, not a threshold. */
+export const FUNCTIONAL_REACH_REQUIRED_ATTEMPTS =
+  getBatteryTestDefinition("functionalReach").requiredReps;
+
+/**
+ * Whether the single required attempt has been observed and its measurement is final.
+ *
+ * Recalibrating after tracking loss is correct only while an attempt is still in
+ * progress — a fresh baseline is needed before the patient can try again. Once the
+ * attempt is complete there is nothing left to measure, so a later tracking drop
+ * (the patient relaxing or lowering the arm right after reaching) must not be able
+ * to un-count it or erase its displacement.
+ */
+export function isFunctionalReachAttemptFinal(completedAttempts: number): boolean {
+  return completedAttempts >= FUNCTIONAL_REACH_REQUIRED_ATTEMPTS;
+}
 
 /**
  * Battery functional reach counts one attempt only after baseline + forward excursion + return.
@@ -332,6 +349,9 @@ export function createFunctionalReachProcessor(
   let peakReachExtent: number | null = null;
   let lastCompletedAttempts = 0;
   let consecutiveUnusableFrames = 0;
+  // Latched once the required attempt completes — see isFunctionalReachAttemptFinal.
+  let attemptFinalized = false;
+  let finalizedPeakReachExtent: number | null = null;
 
   const resetTrackingState = () => {
     counter.resetBaseline();
@@ -342,6 +362,8 @@ export function createFunctionalReachProcessor(
     peakReachExtent = null;
     lastCompletedAttempts = 0;
     consecutiveUnusableFrames = 0;
+    attemptFinalized = false;
+    finalizedPeakReachExtent = null;
   };
 
   const recalibrateAfterTrackingLoss = () => {
@@ -380,7 +402,10 @@ export function createFunctionalReachProcessor(
       if (movementTrackingEnabled) {
         if (!trackingUsable) {
           consecutiveUnusableFrames += 1;
-          if (consecutiveUnusableFrames >= FUNCTIONAL_REACH_TRACKING_LOSS_RESET_TICKS) {
+          if (
+            !attemptFinalized &&
+            consecutiveUnusableFrames >= FUNCTIONAL_REACH_TRACKING_LOSS_RESET_TICKS
+          ) {
             recalibrateAfterTrackingLoss();
             movementTrackingEnabled = true;
           }
@@ -416,6 +441,17 @@ export function createFunctionalReachProcessor(
       if (completedAttempts > lastCompletedAttempts) {
         lastCompletedAttempts = completedAttempts;
       }
+      if (!attemptFinalized && isFunctionalReachAttemptFinal(completedAttempts)) {
+        attemptFinalized = true;
+        finalizedPeakReachExtent = peakReachExtent;
+      }
+
+      const reportedAttempts = attemptFinalized
+        ? FUNCTIONAL_REACH_REQUIRED_ATTEMPTS
+        : completedAttempts;
+      const reportedPeakReachExtent = attemptFinalized
+        ? finalizedPeakReachExtent
+        : peakReachExtent;
 
       return {
         trackingReady,
@@ -426,11 +462,11 @@ export function createFunctionalReachProcessor(
             : null
           : "reach_landmarks_not_visible",
         landmarkVisibility: buildLandmarkVisibilityDebug(landmarks, side),
-        repCount: completedAttempts,
+        repCount: reportedAttempts,
         lastRepPeak,
-        completedPeaksDeg: peakReachExtent !== null ? [peakReachExtent] : [],
+        completedPeaksDeg: reportedPeakReachExtent !== null ? [reportedPeakReachExtent] : [],
         movementPhase: movementTrackingEnabled ? snapshot.repPhase : "idle",
-        peakReachExtent,
+        peakReachExtent: reportedPeakReachExtent,
       };
     },
   };
